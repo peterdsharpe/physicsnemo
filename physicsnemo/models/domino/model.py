@@ -30,7 +30,7 @@ from physicsnemo.models.layers.ball_query import BallQueryLayer
 
 def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """
-    Scale the signed distance function (SDF) to emphasize surface regions.
+    Scale a signed distance function (SDF) to emphasize surface regions.
 
     This function applies a non-linear scaling to the SDF values that compresses
     the range while preserving the sign, effectively giving more weight to points
@@ -50,10 +50,10 @@ class BQWarp(nn.Module):
 
     def __init__(
         self,
-        input_features,
-        grid_resolution=[256, 96, 64],
-        radius=0.25,
-        neighbors_in_radius=10,
+        input_features: int,
+        grid_resolution: list[int] = [256, 96, 64],
+        radius: float = 0.25,
+        neighbors_in_radius: int = 10,
     ):
         super().__init__()
         self.ball_query_layer = BallQueryLayer(neighbors_in_radius, radius)
@@ -279,7 +279,7 @@ class GeometryRep(nn.Module):
         mapping, k_long = self.bq_warp_long(x, p_grid)
         x_encoding_long = self.geo_conv_out(k_long)
 
-        # Scaled sdf to emphasis on surface
+        # Scaled sdf to emphasize near surface
         scaled_sdf = scale_sdf(sdf)
         # Binary sdf
         binary_sdf = torch.where(sdf >= 0, 0.0, 1.0)
