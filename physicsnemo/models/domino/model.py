@@ -45,7 +45,7 @@ def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     return sdf / (0.4 + torch.abs(sdf))
 
 
-def calculate_gradient(sdf):
+def calculate_gradient(sdf: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Function to calculate the gradients of SDF"""
     m, n, o = sdf.shape[2], sdf.shape[3], sdf.shape[4]
     sdf_x = sdf[:, :, 2:m, :, :] - sdf[:, :, 0 : m - 2, :, :]
@@ -62,7 +62,7 @@ def calculate_gradient(sdf):
     return sdf_x, sdf_y, sdf_z
 
 
-def binarize_sdf(sdf):
+def binarize_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """Function to calculate the binarize the SDF"""
     sdf = torch.where(sdf >= 0, 0.0, 1.0)
     return sdf
