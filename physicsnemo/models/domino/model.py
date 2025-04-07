@@ -21,6 +21,7 @@ volume quantities together as well as separately (controlled using
 the config.yaml file)
 """
 
+from typing import Sequence
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,7 +52,7 @@ class BQWarp(nn.Module):
     def __init__(
         self,
         input_features: int,
-        grid_resolution: list[int] = [256, 96, 64],
+        grid_resolution: Sequence[int, int, int] = [256, 96, 64],
         radius: float = 0.25,
         neighbors_in_radius: int = 10,
     ):
@@ -59,13 +60,31 @@ class BQWarp(nn.Module):
         self.ball_query_layer = BallQueryLayer(neighbors_in_radius, radius)
         self.grid_resolution = grid_resolution
 
-    def forward(self, x, p_grid, reverse_mapping=True):
+    def forward(self, x: torch.Tensor, p_grid: torch.Tensor, reverse_mapping: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Performs ball query operation to find neighboring points and their features.
+        
+        This method uses the Warp-accelerated ball query implementation to find points
+        within a specified radius. It can operate in two modes:
+        - Forward mapping: Find points from x that are near p_grid points (reverse_mapping=False)
+        - Reverse mapping: Find points from p_grid that are near x points (reverse_mapping=True)
+        
+        Args:
+            x: Tensor of shape (batch_size, num_points, 3+features) containing point coordinates
+               and their features
+            p_grid: Tensor of shape (batch_size, grid_x, grid_y, grid_z, 3) containing grid point
+                   coordinates
+            reverse_mapping: Boolean flag to control the direction of the mapping:
+                            - True: Find p_grid points near x points
+                            - False: Find x points near p_grid points
+                            
+        Returns:
+            tuple containing:
+                - mapping: Tensor containing indices of neighboring points
+                - outputs: Tensor containing coordinates of the neighboring points
+        """
         batch_size = x.shape[0]
-        nx, ny, nz = (
-            self.grid_resolution[0],
-            self.grid_resolution[1],
-            self.grid_resolution[2],
-        )
+        nx, ny, nz = self.grid_resolution
 
         p_grid = torch.reshape(p_grid, (batch_size, nx * ny * nz, 3))
         p1 = nx * ny * nz
