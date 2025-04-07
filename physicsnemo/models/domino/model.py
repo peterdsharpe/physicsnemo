@@ -49,8 +49,8 @@ def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
 class BQWarp(nn.Module):
     """
     Warp-based ball-query layer for finding neighboring points within a specified radius.
-    
-    This layer uses an accelerated ball query implementation to efficiently find points 
+
+    This layer uses an accelerated ball query implementation to efficiently find points
     within a specified radius of query points.
     """
 
@@ -63,7 +63,7 @@ class BQWarp(nn.Module):
     ):
         """
         Initialize the BQWarp layer.
-        
+
         Args:
             input_features: Number of feature dimensions for input points
             grid_resolution: Resolution of the grid in each dimension [nx, ny, nz]
@@ -75,19 +75,16 @@ class BQWarp(nn.Module):
         self.grid_resolution = grid_resolution
 
     def forward(
-        self, 
-        x: torch.Tensor, 
-        p_grid: torch.Tensor, 
-        reverse_mapping: bool = True
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, x: torch.Tensor, p_grid: torch.Tensor, reverse_mapping: bool = True
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Performs ball query operation to find neighboring points and their features.
-        
+
         This method uses the Warp-accelerated ball query implementation to find points
         within a specified radius. It can operate in two modes:
         - Forward mapping: Find points from x that are near p_grid points (reverse_mapping=False)
         - Reverse mapping: Find points from p_grid that are near x points (reverse_mapping=True)
-        
+
         Args:
             x: Tensor of shape (batch_size, num_points, 3+features) containing point coordinates
                and their features
@@ -96,7 +93,7 @@ class BQWarp(nn.Module):
             reverse_mapping: Boolean flag to control the direction of the mapping:
                             - True: Find p_grid points near x points
                             - False: Find x points near p_grid points
-                            
+
         Returns:
             tuple containing:
                 - mapping: Tensor containing indices of neighboring points
@@ -137,14 +134,14 @@ class GeoConvOut(nn.Module):
     """
 
     def __init__(
-        self, 
-        input_features: int, 
-        model_parameters, 
-        grid_resolution: Sequence[int] = [256, 96, 64]
+        self,
+        input_features: int,
+        model_parameters,
+        grid_resolution: Sequence[int] = [256, 96, 64],
     ):
         """
         Initialize the GeoConvOut layer.
-        
+
         Args:
             input_features: Number of input feature dimensions
             model_parameters: Configuration parameters for the model
@@ -161,7 +158,9 @@ class GeoConvOut(nn.Module):
 
         self.activation = F.relu
 
-    def forward(self, x: torch.Tensor, radius: float = 0.025, neighbors_in_radius: int = 10) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, radius: float = 0.025, neighbors_in_radius: int = 10
+    ) -> torch.Tensor:
         """
         Process and project geometric features onto a 3D grid.
         """
@@ -193,7 +192,7 @@ class GeoProcessor(nn.Module):
     def __init__(self, input_filters: int, model_parameters):
         """
         Initialize the GeoProcessor network.
-        
+
         Args:
             input_filters: Number of input channels
             model_parameters: Configuration parameters for the model
@@ -240,16 +239,16 @@ class GeoProcessor(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Process geometry information through the 3D CNN network.
-        
+
         The network follows an encoder-decoder architecture with skip connections:
         1. Downsampling path (encoder) with three levels of max pooling
         2. Processing loop in the bottleneck
         3. Upsampling path (decoder) with skip connections from the encoder
-        
+
         Args:
-            x: Input tensor containing grid-represented geometry of shape 
+            x: Input tensor containing grid-represented geometry of shape
                (batch_size, input_filters, nx, ny, nz)
-            
+
         Returns:
             Processed geometry features of shape (batch_size, 1, nx, ny, nz)
         """
@@ -309,12 +308,12 @@ class GeoProcessor(nn.Module):
 class GeometryRep(nn.Module):
     """
     Geometry representation module that processes STL geometry data.
-    
+
     This module constructs a multi-scale representation of geometry by:
     1. Computing short-range geometry encoding for local features
     2. Computing long-range geometry encoding for global context
     3. Processing signed distance field (SDF) data for surface information
-    
+
     The combined encoding enables the model to reason about both local and global
     geometric properties.
     """
@@ -322,7 +321,7 @@ class GeometryRep(nn.Module):
     def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
         """
         Initialize the GeometryRep module.
-        
+
         Args:
             input_features: Number of input feature dimensions
             model_parameters: Configuration parameters for the model
@@ -365,22 +364,19 @@ class GeometryRep(nn.Module):
         self.hops = geometry_rep.geo_conv.hops
 
     def forward(
-        self, 
-        x: torch.Tensor, 
-        p_grid: torch.Tensor, 
-        sdf: torch.Tensor
+        self, x: torch.Tensor, p_grid: torch.Tensor, sdf: torch.Tensor
     ) -> torch.Tensor:
         """
         Process geometry data to create a comprehensive representation.
-        
-        This method combines short-range, long-range, and SDF-based geometry 
+
+        This method combines short-range, long-range, and SDF-based geometry
         encodings to create a rich representation of the geometry.
-        
+
         Args:
             x: Input tensor containing geometric point data
             p_grid: Grid points for sampling
             sdf: Signed distance field tensor
-            
+
         Returns:
             Comprehensive geometry encoding that concatenates short-range,
             SDF-based, and long-range features
@@ -444,10 +440,10 @@ class NNBasisFunctions(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Transform point features into a basis function representation.
-        
+
         Args:
             x: Input tensor containing point features
-            
+
         Returns:
             Tensor containing basis function coefficients
         """
@@ -462,7 +458,7 @@ class NNBasisFunctions(nn.Module):
 class ParameterModel(nn.Module):
     """
     Neural network module to encode simulation parameters.
-    
+
     This module encodes physical parameters such as inlet velocity and air density
     into a learned latent representation that can be incorporated into the model's
     prediction process.
@@ -471,7 +467,7 @@ class ParameterModel(nn.Module):
     def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
         """
         Initialize the parameter encoding network.
-        
+
         Args:
             input_features: Number of input parameters to encode
             model_parameters: Configuration parameters for the model
@@ -492,10 +488,10 @@ class ParameterModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Encode physical parameters into a latent representation.
-        
+
         Args:
             x: Input tensor containing physical parameters (e.g., inlet velocity, air density)
-            
+
         Returns:
             Tensor containing encoded parameter representation
         """
@@ -510,22 +506,22 @@ class ParameterModel(nn.Module):
 class AggregationModel(nn.Module):
     """
     Neural network module to aggregate local geometry encoding with basis functions.
-    
+
     This module combines basis function representations with geometry encodings
     to predict the final output quantities. It serves as the final prediction layer
     that integrates all available information sources.
     """
 
     def __init__(
-        self, 
-        input_features: int, 
-        output_features: int, 
-        model_parameters: Optional[Any] = None, 
-        new_change: bool = True
+        self,
+        input_features: int,
+        output_features: int,
+        model_parameters=None,
+        new_change: bool = True,
     ):
         """
         Initialize the aggregation model.
-        
+
         Args:
             input_features: Number of input feature dimensions
             output_features: Number of output feature dimensions
@@ -551,14 +547,14 @@ class AggregationModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Process the combined input features to predict output quantities.
-        
+
         This method applies a series of fully connected layers to the input,
         which typically contains a combination of basis functions, geometry
         encodings, and potentially parameter encodings.
-        
+
         Args:
             x: Input tensor containing combined features
-            
+
         Returns:
             Tensor containing predicted output quantities
         """
@@ -592,21 +588,21 @@ class AggregationModel(nn.Module):
 class DoMINO(nn.Module):
     """
     DoMINO model architecture for predicting both surface and volume quantities.
-    
+
     The DoMINO (Deep Operational Modal Identification and Nonlinear Optimization) model
-    is designed to model both surface and volume physical quantities in aerodynamic 
+    is designed to model both surface and volume physical quantities in aerodynamic
     simulations. It can operate in three modes:
     1. Surface-only: Predicting only surface quantities
     2. Volume-only: Predicting only volume quantities
     3. Combined: Predicting both surface and volume quantities
-    
+
     The model uses a combination of:
     - Geometry representation modules
     - Neural network basis functions
     - Parameter encoding
     - Local and global geometry processing
     - Aggregation models for final prediction
-    
+
     Parameters
     ----------
     input_features : int
@@ -693,17 +689,17 @@ class DoMINO(nn.Module):
         input_features: int,
         output_features_vol: int | None = None,
         output_features_surf: int | None = None,
-        model_parameters = None,
+        model_parameters=None,
     ):
         """
         Initialize the DoMINO model.
-        
+
         Args:
             input_features: Number of input feature dimensions for point data
             output_features_vol: Number of output features for volume quantities (None for surface-only mode)
             output_features_surf: Number of output features for surface quantities (None for volume-only mode)
             model_parameters: Configuration parameters for the model
-        
+
         Raises:
             ValueError: If both output_features_vol and output_features_surf are None
         """
@@ -713,7 +709,9 @@ class DoMINO(nn.Module):
         self.output_features_surf = output_features_surf
 
         if self.output_features_vol is None and self.output_features_surf is None:
-            raise ValueError("At least one of `output_features_vol` or `output_features_surf` must be specified")
+            raise ValueError(
+                "At least one of `output_features_vol` or `output_features_surf` must be specified"
+            )
 
         self.num_variables_vol = output_features_vol
         self.num_variables_surf = output_features_surf
@@ -841,36 +839,31 @@ class DoMINO(nn.Module):
                 )
 
     def geometry_encoder(
-        self, 
-        geo_centers: torch.Tensor, 
-        p_grid: torch.Tensor, 
-        sdf: torch.Tensor
+        self, geo_centers: torch.Tensor, p_grid: torch.Tensor, sdf: torch.Tensor
     ) -> torch.Tensor:
         """
         Generate a geometry encoding from geometric centers, grid points, and SDF.
-        
+
         Args:
             geo_centers: Tensor containing geometry center coordinates
             p_grid: Tensor containing grid point coordinates
             sdf: Tensor containing signed distance function values
-            
+
         Returns:
             Tensor containing the geometry encoding
         """
         return self.geo_rep(geo_centers, p_grid, sdf)
 
     def position_encoder(
-        self, 
-        encoding_node: torch.Tensor, 
-        eval_mode: str = "volume"
+        self, encoding_node: torch.Tensor, eval_mode: str = "volume"
     ) -> torch.Tensor:
         """
         Compute positional encoding for input points.
-        
+
         Args:
             encoding_node: Tensor containing node position information
             eval_mode: Mode of evaluation, either "volume" or "surface"
-            
+
         Returns:
             Tensor containing positional encoding features
         """
@@ -883,22 +876,22 @@ class DoMINO(nn.Module):
         return x
 
     def geo_encoding_local_surface(
-        self, 
-        encoding_g: torch.Tensor, 
-        volume_mesh_centers: torch.Tensor, 
-        p_grid: torch.Tensor
+        self,
+        encoding_g: torch.Tensor,
+        volume_mesh_centers: torch.Tensor,
+        p_grid: torch.Tensor,
     ) -> torch.Tensor:
         """
         Generate local geometry encoding for surface points.
-        
+
         This method samples the global geometry encoding at positions corresponding
         to surface mesh centers, creating a local encoding for each surface point.
-        
+
         Args:
             encoding_g: Global geometry encoding tensor
             volume_mesh_centers: Surface mesh center coordinates
             p_grid: Grid point coordinates
-            
+
         Returns:
             Tensor containing local geometry encodings for surface points
         """
