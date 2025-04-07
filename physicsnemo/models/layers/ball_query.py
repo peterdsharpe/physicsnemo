@@ -34,18 +34,34 @@ class BallQuery(torch.autograd.Function):
         mapping: wp.array3d(dtype=wp.int32),
         num_neighbors: wp.array2d(dtype=wp.int32),
     ):
+        """
+        Performs ball query operation to find neighboring points within a specified radius.
+        
+        For each point in points1, finds up to k neighboring points from points2 that are
+        within the specified radius. Uses a hash grid for efficient spatial queries.
 
-        # Get index of point1
+        Note that the neighbors found are not strictly guaranteed to be the closest k neighbors,
+        in the event that more than k neighbors are found within the radius.
+        
+        Args:
+            points1: Array of query points
+            points2: Array of points to search
+            grid: Pre-computed hash grid for accelerated spatial queries
+            k: Maximum number of neighbors to find for each query point
+            radius: Maximum search radius for finding neighbors
+            mapping: Output array to store indices of neighboring points. Should be instantiated as zeros(1, len(points1), k)
+            num_neighbors: Output array to store the number of neighbors found for each query point. Should be instantiated as zeros(1, len(points1))
+        """
         tid = wp.tid()
 
         # Get position from points1
         pos = points1[tid]
 
         # particle contact
-        neighbors = wp.hash_grid_query(grid, pos, radius)
+        neighbors = wp.hash_grid_query(id=grid, point=pos, max_dist=radius)
 
         # Keep track of the number of neighbors found
-        nr_found = wp.int32(0)
+        neighbors_found = wp.int32(0)
 
         # loop through neighbors to compute density
         for index in neighbors:
@@ -55,18 +71,18 @@ class BallQuery(torch.autograd.Function):
                 continue
 
             # Add neighbor to the list
-            mapping[0, tid, nr_found] = index
+            mapping[0, tid, neighbors_found] = index
 
             # Increment the number of neighbors found
-            nr_found += 1
+            neighbors_found += 1
 
             # Break if we have found enough neighbors
-            if nr_found == k:
+            if neighbors_found == k:
                 num_neighbors[0, tid] = k
                 break
 
         # Set the number of neighbors
-        num_neighbors[0, tid] = nr_found
+        num_neighbors[0, tid] = neighbors_found
 
     @wp.kernel
     def sparse_ball_query(
