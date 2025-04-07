@@ -255,46 +255,48 @@ class GeoProcessor(nn.Module):
         """
         # Encoder
         x0 = x
+        x = self.conv1(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn1(self.conv1(x)))
-        else:
-            x = self.activation(self.conv1(x))
+            x = self.conv_bn1(x)
+        x = self.activation(x)
         x = self.max_pool(x)
+
         x1 = x
+        x = self.conv2(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn2(self.conv2(x)))
-        else:
-            x = self.activation((self.conv2(x)))
+            x = self.conv_bn2(x)
+        x = self.activation(x)
         x = self.max_pool(x)
 
         x2 = x
+        x = self.conv3(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn3(self.conv2(x)))
-        else:
-            x = self.activation((self.conv3(x)))
+            x = self.conv_bn3(x)
+        x = self.activation(x)
         x = self.max_pool(x)
 
         # Processor loop
         x = F.relu(self.conv3_1(x))
 
         # Decoder
+        x = self.conv4(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn4(self.conv4(x)))
-        else:
-            x = self.activation((self.conv4(x)))
+            x = self.conv_bn4(x)
+        x = self.activation(x)
         x = self.upsample(x)
         x = torch.cat((x, x2), axis=1)
 
+        x = self.conv5(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn5(self.conv5(x)))
-        else:
-            x = self.activation((self.conv5(x)))
+            x = self.conv_bn5(x)
+        x = self.activation(x)
         x = self.upsample(x)
         x = torch.cat((x, x1), axis=1)
+
+        x = self.conv6(x)
         if self.batch_norm:
-            x = self.activation(self.conv_bn6(self.conv6(x)))
-        else:
-            x = self.activation((self.conv6(x)))
+            x = self.conv_bn6(x)
+        x = self.activation(x)
         x = self.upsample(x)
         x = torch.cat((x, x0), axis=1)
 
