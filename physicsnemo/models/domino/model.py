@@ -307,9 +307,26 @@ class GeoProcessor(nn.Module):
 
 
 class GeometryRep(nn.Module):
-    """Geometry representation from STLs block"""
+    """
+    Geometry representation module that processes STL geometry data.
+    
+    This module constructs a multi-scale representation of geometry by:
+    1. Computing short-range geometry encoding for local features
+    2. Computing long-range geometry encoding for global context
+    3. Processing signed distance field (SDF) data for surface information
+    
+    The combined encoding enables the model to reason about both local and global
+    geometric properties.
+    """
 
-    def __init__(self, input_features, model_parameters=None):
+    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
+        """
+        Initialize the GeometryRep module.
+        
+        Args:
+            input_features: Number of input feature dimensions
+            model_parameters: Configuration parameters for the model
+        """
         super().__init__()
         geometry_rep = model_parameters.geometry_rep
 
@@ -347,7 +364,27 @@ class GeometryRep(nn.Module):
         self.radius_long = geometry_rep.geo_conv.radius_long
         self.hops = geometry_rep.geo_conv.hops
 
-    def forward(self, x, p_grid, sdf):
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        p_grid: torch.Tensor, 
+        sdf: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Process geometry data to create a comprehensive representation.
+        
+        This method combines short-range, long-range, and SDF-based geometry 
+        encodings to create a rich representation of the geometry.
+        
+        Args:
+            x: Input tensor containing geometric point data
+            p_grid: Grid points for sampling
+            sdf: Signed distance field tensor
+            
+        Returns:
+            Comprehensive geometry encoding that concatenates short-range,
+            SDF-based, and long-range features
+        """
         # Expand SDF
         sdf = torch.unsqueeze(sdf, 1)
 
@@ -423,9 +460,22 @@ class NNBasisFunctions(nn.Module):
 
 
 class ParameterModel(nn.Module):
-    """Layer to encode parameters such as inlet velocity and air density"""
+    """
+    Neural network module to encode simulation parameters.
+    
+    This module encodes physical parameters such as inlet velocity and air density
+    into a learned latent representation that can be incorporated into the model's
+    prediction process.
+    """
 
-    def __init__(self, input_features, model_parameters=None):
+    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
+        """
+        Initialize the parameter encoding network.
+        
+        Args:
+            input_features: Number of input parameters to encode
+            model_parameters: Configuration parameters for the model
+        """
         super(ParameterModel, self).__init__()
         self.input_features = input_features
 
@@ -458,11 +508,30 @@ class ParameterModel(nn.Module):
 
 
 class AggregationModel(nn.Module):
-    """Layer to aggregate local geometry encoding with basis functions"""
+    """
+    Neural network module to aggregate local geometry encoding with basis functions.
+    
+    This module combines basis function representations with geometry encodings
+    to predict the final output quantities. It serves as the final prediction layer
+    that integrates all available information sources.
+    """
 
     def __init__(
-        self, input_features, output_features, model_parameters=None, new_change=True
+        self, 
+        input_features: int, 
+        output_features: int, 
+        model_parameters: Optional[Any] = None, 
+        new_change: bool = True
     ):
+        """
+        Initialize the aggregation model.
+        
+        Args:
+            input_features: Number of input feature dimensions
+            output_features: Number of output feature dimensions
+            model_parameters: Configuration parameters for the model
+            new_change: Flag to enable newer implementation (default: True)
+        """
         super(AggregationModel, self).__init__()
         self.input_features = input_features
         self.output_features = output_features
@@ -479,7 +548,20 @@ class AggregationModel(nn.Module):
         self.bn4 = nn.BatchNorm1d(int(base_layer))
         self.activation = F.relu
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Process the combined input features to predict output quantities.
+        
+        This method applies a series of fully connected layers to the input,
+        which typically contains a combination of basis functions, geometry
+        encodings, and potentially parameter encodings.
+        
+        Args:
+            x: Input tensor containing combined features
+            
+        Returns:
+            Tensor containing predicted output quantities
+        """
         out = self.activation(self.fc1(x))
         out = self.activation(self.fc2(out))
         out = self.activation(self.fc3(out))
@@ -508,17 +590,33 @@ class AggregationModel(nn.Module):
 
 
 class DoMINO(nn.Module):
-    """DoMINO model architecture
+    """
+    DoMINO model architecture for predicting both surface and volume quantities.
+    
+    The DoMINO (Deep Operational Modal Identification and Nonlinear Optimization) model
+    is designed to model both surface and volume physical quantities in aerodynamic 
+    simulations. It can operate in three modes:
+    1. Surface-only: Predicting only surface quantities
+    2. Volume-only: Predicting only volume quantities
+    3. Combined: Predicting both surface and volume quantities
+    
+    The model uses a combination of:
+    - Geometry representation modules
+    - Neural network basis functions
+    - Parameter encoding
+    - Local and global geometry processing
+    - Aggregation models for final prediction
+    
     Parameters
     ----------
     input_features : int
         Number of point input features
-    output_features_vol : int
+    output_features_vol : int, optional
         Number of output features in volume
-    output_features_surf : int
+    output_features_surf : int, optional
         Number of output features on surface
-    model_parameters: dict
-        Dictionary of model parameters controlled by config.yaml
+    model_parameters
+        Model parameters controlled by config.yaml
 
     Example
     -------
@@ -556,7 +654,7 @@ class DoMINO(nn.Module):
     >>> surface_normals = torch.randn(bsize, 100, 3).to(device)
     >>> surface_neighbors_normals = torch.randn(bsize, 100, num_neigh, 3).to(device)
     >>> surface_sizes = torch.randn(bsize, 100, 3).to(device)
-    >>> surface_neighbors_sizes = torch.randn(bsize, 100, num_neigh, 3).to(device)
+    >>> surface_neighbors_areas = torch.randn(bsize, 100, num_neigh, 3).to(device)
     >>> volume_coordinates = torch.randn(bsize, 100, 3).to(device)
     >>> vol_grid_max_min = torch.randn(bsize, 2, 3).to(device)
     >>> surf_grid_max_min = torch.randn(bsize, 2, 3).to(device)
@@ -577,7 +675,7 @@ class DoMINO(nn.Module):
     ...            "surface_normals": surface_normals,
     ...            "surface_neighbors_normals": surface_neighbors_normals,
     ...            "surface_areas": surface_sizes,
-    ...            "surface_neighbors_areas": surface_neighbors_sizes,
+    ...            "surface_neighbors_areas": surface_neighbors_areas,
     ...            "volume_mesh_centers": volume_coordinates,
     ...            "volume_min_max": vol_grid_max_min,
     ...            "surface_min_max": surf_grid_max_min,
@@ -595,15 +693,27 @@ class DoMINO(nn.Module):
         input_features: int,
         output_features_vol: int | None = None,
         output_features_surf: int | None = None,
-        model_parameters: dict | None = None,
+        model_parameters = None,
     ):
+        """
+        Initialize the DoMINO model.
+        
+        Args:
+            input_features: Number of input feature dimensions for point data
+            output_features_vol: Number of output features for volume quantities (None for surface-only mode)
+            output_features_surf: Number of output features for surface quantities (None for volume-only mode)
+            model_parameters: Configuration parameters for the model
+        
+        Raises:
+            ValueError: If both output_features_vol and output_features_surf are None
+        """
         super().__init__()
         self.input_features = input_features
         self.output_features_vol = output_features_vol
         self.output_features_surf = output_features_surf
 
         if self.output_features_vol is None and self.output_features_surf is None:
-            raise ValueError("Need to specify number of volume or surface features")
+            raise ValueError("At least one of `output_features_vol` or `output_features_surf` must be specified")
 
         self.num_variables_vol = output_features_vol
         self.num_variables_surf = output_features_surf
@@ -730,12 +840,40 @@ class DoMINO(nn.Module):
                     )
                 )
 
-    def geometry_encoder(self, geo_centers, p_grid, sdf):
-        """Function to return local geometry encoding"""
+    def geometry_encoder(
+        self, 
+        geo_centers: torch.Tensor, 
+        p_grid: torch.Tensor, 
+        sdf: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Generate a geometry encoding from geometric centers, grid points, and SDF.
+        
+        Args:
+            geo_centers: Tensor containing geometry center coordinates
+            p_grid: Tensor containing grid point coordinates
+            sdf: Tensor containing signed distance function values
+            
+        Returns:
+            Tensor containing the geometry encoding
+        """
         return self.geo_rep(geo_centers, p_grid, sdf)
 
-    def position_encoder(self, encoding_node, eval_mode="volume"):
-        """Function to calculate positional encoding"""
+    def position_encoder(
+        self, 
+        encoding_node: torch.Tensor, 
+        eval_mode: str = "volume"
+    ) -> torch.Tensor:
+        """
+        Compute positional encoding for input points.
+        
+        Args:
+            encoding_node: Tensor containing node position information
+            eval_mode: Mode of evaluation, either "volume" or "surface"
+            
+        Returns:
+            Tensor containing positional encoding features
+        """
         if eval_mode == "volume":
             x = self.activation(self.fc_p_vol(encoding_node))
         elif eval_mode == "surface":
@@ -744,8 +882,26 @@ class DoMINO(nn.Module):
         x = self.fc_p2(x)
         return x
 
-    def geo_encoding_local_surface(self, encoding_g, volume_mesh_centers, p_grid):
-        """Function to calculate local geometry encoding from global encoding for surface"""
+    def geo_encoding_local_surface(
+        self, 
+        encoding_g: torch.Tensor, 
+        volume_mesh_centers: torch.Tensor, 
+        p_grid: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Generate local geometry encoding for surface points.
+        
+        This method samples the global geometry encoding at positions corresponding
+        to surface mesh centers, creating a local encoding for each surface point.
+        
+        Args:
+            encoding_g: Global geometry encoding tensor
+            volume_mesh_centers: Surface mesh center coordinates
+            p_grid: Grid point coordinates
+            
+        Returns:
+            Tensor containing local geometry encodings for surface points
+        """
         batch_size = volume_mesh_centers.shape[0]
         nx, ny, nz = (
             self.grid_resolution[0],
