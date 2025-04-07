@@ -93,11 +93,10 @@ class BallQuery(torch.autograd.Function):
         num_neighbors: wp.array2d(dtype=wp.int32),
         outputs: wp.array4d(dtype=wp.float32),
     ):
-        # Get index of point1
-        p1 = wp.tid()
+        tid = wp.tid()
 
         # Get number of neighbors
-        k = num_neighbors[0, p1]
+        k = num_neighbors[0, tid]
 
         # Loop through neighbors
         for _k in range(k):
@@ -108,21 +107,21 @@ class BallQuery(torch.autograd.Function):
             pos = points2[index]
 
             # Set the output
-            outputs[0, p1, _k, 0] = pos[0]
-            outputs[0, p1, _k, 1] = pos[1]
-            outputs[0, p1, _k, 2] = pos[2]
+            outputs[0, tid, _k, 0] = pos[0]
+            outputs[0, tid, _k, 1] = pos[1]
+            outputs[0, tid, _k, 2] = pos[2]
 
     @staticmethod
     def forward(
         ctx,
-        points1,
-        points2,
-        lengths1,
-        lengths2,
-        k,
-        radius,
-        hash_grid,
-    ):
+        points1: torch.Tensor,
+        points2: torch.Tensor,
+        lengths1: torch.Tensor,
+        lengths2: torch.Tensor,
+        k: int,
+        radius: float,
+        hash_grid: wp.HashGrid,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # Only works for batch size 1
         if points1.shape[0] != 1:
             raise AssertionError("nly works for batch size 1")
