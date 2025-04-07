@@ -217,7 +217,12 @@ class BallQuery(torch.autograd.Function):
         )
 
     @staticmethod
-    def backward(ctx, grad_mapping, grad_num_neighbors, grad_outputs):
+    def backward(
+        ctx, 
+        grad_mapping: torch.Tensor, 
+        grad_num_neighbors: torch.Tensor, 
+        grad_outputs: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, None, None, None, None, None]:
         # Map incoming torch grads to our output variable
         ctx.outputs.grad = wp.from_torch(grad_outputs, dtype=wp.float32)
 
