@@ -22,6 +22,7 @@ the config.yaml file)
 """
 
 from typing import Sequence
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -318,7 +319,7 @@ class GeometryRep(nn.Module):
     geometric properties.
     """
 
-    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
+    def __init__(self, input_features: int, model_parameters=None):
         """
         Initialize the GeometryRep module.
 
@@ -423,7 +424,7 @@ class GeometryRep(nn.Module):
 class NNBasisFunctions(nn.Module):
     """Basis function layer for point clouds"""
 
-    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
+    def __init__(self, input_features: int, model_parameters=None):
         super(NNBasisFunctions, self).__init__()
         self.input_features = input_features
 
@@ -464,7 +465,7 @@ class ParameterModel(nn.Module):
     prediction process.
     """
 
-    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
+    def __init__(self, input_features: int, model_parameters=None):
         """
         Initialize the parameter encoding network.
 
