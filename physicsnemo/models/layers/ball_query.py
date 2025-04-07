@@ -264,7 +264,7 @@ class BallQueryLayer(torch.nn.Module):
     Args:
         k (int): Number of neighbors.
         radius (float): Radius of influence.
-        grid_size (int): Resolution of the hash grid. (Note: uniform in all dimensions.)
+        grid_size (int): Resolution of the hash grid. (Assumed to be uniform in all dimensions.)
     """
 
     def __init__(self, k: int, radius: float, grid_size: int = 32):
