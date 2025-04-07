@@ -132,9 +132,24 @@ class BQWarp(nn.Module):
 
 
 class GeoConvOut(nn.Module):
-    """Geometry layer to project STLs on grids"""
+    """
+    Geometry layer to project STL geometry data onto regular grids.
+    """
 
-    def __init__(self, input_features, model_parameters, grid_resolution=[256, 96, 64]):
+    def __init__(
+        self, 
+        input_features: int, 
+        model_parameters, 
+        grid_resolution: Sequence[int] = [256, 96, 64]
+    ):
+        """
+        Initialize the GeoConvOut layer.
+        
+        Args:
+            input_features: Number of input feature dimensions
+            model_parameters: Configuration parameters for the model
+            grid_resolution: Resolution of the output grid [nx, ny, nz]
+        """
         super().__init__()
         base_neurons = model_parameters.base_neurons
 
@@ -146,7 +161,10 @@ class GeoConvOut(nn.Module):
 
         self.activation = F.relu
 
-    def forward(self, x, radius=0.025, neighbors_in_radius=10):
+    def forward(self, x: torch.Tensor, radius: float = 0.025, neighbors_in_radius: int = 10) -> torch.Tensor:
+        """
+        Process and project geometric features onto a 3D grid.
+        """
         batch_size = x.shape[0]
         nx, ny, nz = (
             self.grid_resolution[0],
