@@ -33,24 +33,6 @@ def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """Function to scale SDF"""
     return sdf / (0.4 + torch.abs(sdf))
 
-
-def calculate_gradient(sdf: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Function to calculate the gradients of SDF"""
-    m, n, o = sdf.shape[2], sdf.shape[3], sdf.shape[4]
-    sdf_x = sdf[:, :, 2:m, :, :] - sdf[:, :, 0 : m - 2, :, :]
-    sdf_y = sdf[:, :, :, 2:n, :] - sdf[:, :, :, 0 : n - 2, :]
-    sdf_z = sdf[:, :, :, :, 2:o] - sdf[:, :, :, :, 0 : o - 2]
-
-    sdf_x = F.pad(input=sdf_x, pad=(0, 0, 0, 0, 0, 1), mode="constant", value=0.0)
-    sdf_x = F.pad(input=sdf_x, pad=(0, 0, 0, 0, 1, 0), mode="constant", value=0.0)
-    sdf_y = F.pad(input=sdf_y, pad=(0, 0, 0, 1, 0, 0), mode="constant", value=0.0)
-    sdf_y = F.pad(input=sdf_y, pad=(0, 0, 1, 0, 0, 0), mode="constant", value=0.0)
-    sdf_z = F.pad(input=sdf_z, pad=(0, 1, 0, 0, 0, 0), mode="constant", value=0.0)
-    sdf_z = F.pad(input=sdf_z, pad=(1, 0, 0, 0, 0, 0), mode="constant", value=0.0)
-
-    return sdf_x, sdf_y, sdf_z
-
-
 def binarize_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """Function to calculate the binarize the SDF"""
     sdf = torch.where(sdf >= 0, 0.0, 1.0)
@@ -297,7 +279,8 @@ class GeometryRep(nn.Module):
         # Binary sdf
         binary_sdf = binarize_sdf(sdf)
         # Gradients of SDF
-        sdf_x, sdf_y, sdf_z = calculate_gradient(sdf)
+        sdf_x, sdf_y, sdf_z = torch.gradient(sdf, dim=[2, 3, 4])
+        # Note: sdf dimensions 2, 3, and 4 correspond to spatial x, y, and z, respectively.
 
         # Propagate information in the geometry enclosed BBox
         for _ in range(self.hops):
