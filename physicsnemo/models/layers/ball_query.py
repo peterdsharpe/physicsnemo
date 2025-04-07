@@ -22,6 +22,8 @@ import warp as wp
 class BallQuery(torch.autograd.Function):
     """
     Warp based Ball Query.
+
+    Note: only differentiable with respect to points1 and points2.
     """
 
     @wp.kernel
@@ -100,7 +102,7 @@ class BallQuery(torch.autograd.Function):
         # Loop through neighbors
         for _k in range(k):
             # Get point2 index
-            index = mapping[0, p1, _k]
+            index = mapping[0, tid, _k]
 
             # Get position from points2
             pos = points2[index]
