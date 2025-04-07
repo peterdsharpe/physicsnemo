@@ -47,20 +47,39 @@ def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
 
 
 class BQWarp(nn.Module):
-    """Warp based ball-query layer"""
+    """
+    Warp-based ball-query layer for finding neighboring points within a specified radius.
+    
+    This layer uses an accelerated ball query implementation to efficiently find points 
+    within a specified radius of query points.
+    """
 
     def __init__(
         self,
         input_features: int,
-        grid_resolution: Sequence[int, int, int] = [256, 96, 64],
+        grid_resolution: Sequence[int] = [256, 96, 64],
         radius: float = 0.25,
         neighbors_in_radius: int = 10,
     ):
+        """
+        Initialize the BQWarp layer.
+        
+        Args:
+            input_features: Number of feature dimensions for input points
+            grid_resolution: Resolution of the grid in each dimension [nx, ny, nz]
+            radius: Radius for ball query operation
+            neighbors_in_radius: Maximum number of neighbors to return within radius
+        """
         super().__init__()
         self.ball_query_layer = BallQueryLayer(neighbors_in_radius, radius)
         self.grid_resolution = grid_resolution
 
-    def forward(self, x: torch.Tensor, p_grid: torch.Tensor, reverse_mapping: bool = True) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, 
+        x: torch.Tensor, 
+        p_grid: torch.Tensor, 
+        reverse_mapping: bool = True
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Performs ball query operation to find neighboring points and their features.
         
