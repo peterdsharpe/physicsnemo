@@ -193,7 +193,22 @@ class GeoProcessor(nn.Module):
         self.activation = F.relu
         self.batch_norm = False
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Process geometry information through the 3D CNN network.
+        
+        The network follows an encoder-decoder architecture with skip connections:
+        1. Downsampling path (encoder) with three levels of max pooling
+        2. Processing loop in the bottleneck
+        3. Upsampling path (decoder) with skip connections from the encoder
+        
+        Args:
+            x: Input tensor containing grid-represented geometry of shape 
+               (batch_size, input_filters, nx, ny, nz)
+            
+        Returns:
+            Processed geometry features of shape (batch_size, 1, nx, ny, nz)
+        """
         # Encoder
         x0 = x
         if self.batch_norm:
