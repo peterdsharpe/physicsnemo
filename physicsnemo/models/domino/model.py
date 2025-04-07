@@ -45,12 +45,6 @@ def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     return sdf / (0.4 + torch.abs(sdf))
 
 
-def binarize_sdf(sdf: torch.Tensor) -> torch.Tensor:
-    """Function to calculate the binarize the SDF"""
-    sdf = torch.where(sdf >= 0, 0.0, 1.0)
-    return sdf
-
-
 class BQWarp(nn.Module):
     """Warp based ball-query layer"""
 
@@ -288,7 +282,7 @@ class GeometryRep(nn.Module):
         # Scaled sdf to emphasis on surface
         scaled_sdf = scale_sdf(sdf)
         # Binary sdf
-        binary_sdf = binarize_sdf(sdf)
+        binary_sdf = torch.where(sdf >= 0, 0.0, 1.0)
         # Gradients of SDF
         sdf_x, sdf_y, sdf_z = torch.gradient(sdf, dim=[2, 3, 4])
         # Note: sdf dimensions 2, 3, and 4 correspond to spatial x, y, and z, respectively.
