@@ -264,17 +264,43 @@ class BallQueryLayer(torch.nn.Module):
     Args:
         k (int): Number of neighbors.
         radius (float): Radius of influence.
-        grid_size (int): Uniform grid resolution
+        grid_size (int): Resolution of the hash grid. (Note: uniform in all dimensions.)
     """
 
-    def __init__(self, k, radius, grid_size=32):
+    def __init__(self, k: int, radius: float, grid_size: int = 32):
         super().__init__()
         wp.init()
         self.k = k
         self.radius = radius
         self.hash_grid = wp.HashGrid(grid_size, grid_size, grid_size)
 
-    def forward(self, points1, points2, lengths1, lengths2):
+    def forward(
+        self, 
+        points1: torch.Tensor, 
+        points2: torch.Tensor, 
+        lengths1: torch.Tensor, 
+        lengths2: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Performs ball query operation to find neighboring points within a specified radius.
+        
+        For each point in points1, finds up to k neighboring points from points2 that are
+        within the specified radius. Uses a hash grid for efficient spatial queries.
+        
+        Args:
+            points1: Tensor of shape (batch_size, num_points1, 3) containing query points
+            points2: Tensor of shape (batch_size, num_points2, 3) containing points to search
+            lengths1: Tensor of shape (batch_size,) containing the actual number of points in each
+                      batch element of points1
+            lengths2: Tensor of shape (batch_size,) containing the actual number of points in each
+                      batch element of points2
+                      
+        Returns:
+            tuple containing:
+                - mapping: Tensor containing indices of neighboring points
+                - num_neighbors: Tensor containing the number of neighbors found for each query point
+                - outputs: Tensor containing features or coordinates of the neighboring points
+        """
         return BallQuery.apply(
             points1,
             points2,
