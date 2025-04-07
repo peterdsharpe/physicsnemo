@@ -388,7 +388,7 @@ class GeometryRep(nn.Module):
 class NNBasisFunctions(nn.Module):
     """Basis function layer for point clouds"""
 
-    def __init__(self, input_features, model_parameters=None):
+    def __init__(self, input_features: int, model_parameters: Optional[Any] = None):
         super(NNBasisFunctions, self).__init__()
         self.input_features = input_features
 
@@ -402,7 +402,16 @@ class NNBasisFunctions(nn.Module):
 
         self.activation = F.relu
 
-    def forward(self, x, padded_value=-10):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Transform point features into a basis function representation.
+        
+        Args:
+            x: Input tensor containing point features
+            
+        Returns:
+            Tensor containing basis function coefficients
+        """
         facets = x
         facets = self.activation(self.fc1(facets))
         facets = self.activation(self.fc2(facets))
@@ -428,7 +437,16 @@ class ParameterModel(nn.Module):
 
         self.activation = F.relu
 
-    def forward(self, x, padded_value=-10):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Encode physical parameters into a latent representation.
+        
+        Args:
+            x: Input tensor containing physical parameters (e.g., inlet velocity, air density)
+            
+        Returns:
+            Tensor containing encoded parameter representation
+        """
         params = x
         params = self.activation(self.fc1(params))
         params = self.activation(self.fc2(params))
