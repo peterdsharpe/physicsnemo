@@ -21,8 +21,6 @@ volume quantities together as well as separately (controlled using
 the config.yaml file)
 """
 
-# from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,9 +40,9 @@ def calculate_pos_encoding(nx, d=8):
     return vec
 
 
-def scale_sdf(sdf):
+def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """Function to scale SDF"""
-    return sdf / (0.4 + abs(sdf))
+    return sdf / (0.4 + torch.abs(sdf))
 
 
 def calculate_gradient(sdf):
@@ -519,10 +517,10 @@ class DoMINO(nn.Module):
 
     def __init__(
         self,
-        input_features,
-        output_features_vol=None,
-        output_features_surf=None,
-        model_parameters=None,
+        input_features: int,
+        output_features_vol: int | None = None,
+        output_features_surf: int | None = None,
+        model_parameters: dict | None = None,
     ):
         super(DoMINO, self).__init__()
         self.input_features = input_features
