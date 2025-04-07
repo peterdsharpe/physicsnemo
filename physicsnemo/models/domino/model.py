@@ -27,17 +27,6 @@ import torch.nn.functional as F
 
 from physicsnemo.models.layers.ball_query import BallQueryLayer
 
-# from physicsnemo.models.meta import ModelMetaData
-# from physicsnemo.models.module import Module
-
-
-def calculate_pos_encoding(nx, d=8):
-    """Function to caluculate positional encoding"""
-    vec = []
-    for k in range(int(d / 2)):
-        vec.append(torch.sin(nx / 10000 ** (2 * (k) / d)))
-        vec.append(torch.cos(nx / 10000 ** (2 * (k) / d)))
-    return vec
 
 
 def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
