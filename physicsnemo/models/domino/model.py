@@ -31,18 +31,19 @@ from physicsnemo.models.layers.ball_query import BallQueryLayer
 def scale_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """
     Scale the signed distance function (SDF) to emphasize surface regions.
-    
+
     This function applies a non-linear scaling to the SDF values that compresses
     the range while preserving the sign, effectively giving more weight to points
     near surfaces where |SDF| is small.
-    
+
     Args:
         sdf: Tensor containing signed distance function values
-        
+
     Returns:
         Tensor with scaled SDF values in range [-1, 1]
     """
     return sdf / (0.4 + torch.abs(sdf))
+
 
 def binarize_sdf(sdf: torch.Tensor) -> torch.Tensor:
     """Function to calculate the binarize the SDF"""
@@ -273,7 +274,6 @@ class GeometryRep(nn.Module):
         self.hops = geometry_rep.geo_conv.hops
 
     def forward(self, x, p_grid, sdf):
-
         # Expand SDF
         sdf = torch.unsqueeze(sdf, 1)
 
