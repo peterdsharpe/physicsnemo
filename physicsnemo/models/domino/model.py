@@ -190,7 +190,14 @@ class GeoConvOut(nn.Module):
 class GeoProcessor(nn.Module):
     """Geometry processing layer using CNNs"""
 
-    def __init__(self, input_filters, model_parameters):
+    def __init__(self, input_filters: int, model_parameters):
+        """
+        Initialize the GeoProcessor network.
+        
+        Args:
+            input_filters: Number of input channels
+            model_parameters: Configuration parameters for the model
+        """
         super().__init__()
         base_filters = model_parameters.base_filters
         self.conv1 = nn.Conv3d(
