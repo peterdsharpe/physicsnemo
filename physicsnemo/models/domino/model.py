@@ -505,7 +505,7 @@ class DoMINO(nn.Module):
         output_features_surf: int | None = None,
         model_parameters: dict | None = None,
     ):
-        super(DoMINO, self).__init__()
+        super().__init__()
         self.input_features = input_features
         self.output_features_vol = output_features_vol
         self.output_features_surf = output_features_surf
