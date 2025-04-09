@@ -38,13 +38,13 @@ class BallQuery(torch.autograd.Function):
     ):
         """
         Performs ball query operation to find neighboring points within a specified radius.
-        
+
         For each point in points1, finds up to k neighboring points from points2 that are
         within the specified radius. Uses a hash grid for efficient spatial queries.
 
         Note that the neighbors found are not strictly guaranteed to be the closest k neighbors,
         in the event that more than k neighbors are found within the radius.
-        
+
         Args:
             points1: Array of query points
             points2: Array of points to search
@@ -218,10 +218,10 @@ class BallQuery(torch.autograd.Function):
 
     @staticmethod
     def backward(
-        ctx, 
-        grad_mapping: torch.Tensor, 
-        grad_num_neighbors: torch.Tensor, 
-        grad_outputs: torch.Tensor
+        ctx,
+        grad_mapping: torch.Tensor,
+        grad_num_neighbors: torch.Tensor,
+        grad_outputs: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, None, None, None, None, None]:
         # Map incoming torch grads to our output variable
         ctx.outputs.grad = wp.from_torch(grad_outputs, dtype=wp.float32)
@@ -275,18 +275,18 @@ class BallQueryLayer(torch.nn.Module):
         self.hash_grid = wp.HashGrid(grid_size, grid_size, grid_size)
 
     def forward(
-        self, 
-        points1: torch.Tensor, 
-        points2: torch.Tensor, 
-        lengths1: torch.Tensor, 
-        lengths2: torch.Tensor
+        self,
+        points1: torch.Tensor,
+        points2: torch.Tensor,
+        lengths1: torch.Tensor,
+        lengths2: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Performs ball query operation to find neighboring points within a specified radius.
-        
+
         For each point in points1, finds up to k neighboring points from points2 that are
         within the specified radius. Uses a hash grid for efficient spatial queries.
-        
+
         Args:
             points1: Tensor of shape (batch_size, num_points1, 3) containing query points
             points2: Tensor of shape (batch_size, num_points2, 3) containing points to search
@@ -294,7 +294,7 @@ class BallQueryLayer(torch.nn.Module):
                       batch element of points1
             lengths2: Tensor of shape (batch_size,) containing the actual number of points in each
                       batch element of points2
-                      
+
         Returns:
             tuple containing:
                 - mapping: Tensor containing indices of neighboring points
