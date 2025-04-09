@@ -58,7 +58,7 @@ class BQWarp(nn.Module):
     def __init__(
         self,
         input_features: int,
-        grid_resolution: Sequence[int] = [256, 96, 64],
+        grid_resolution=None,
         radius: float = 0.25,
         neighbors_in_radius: int = 10,
     ):
@@ -72,6 +72,8 @@ class BQWarp(nn.Module):
             neighbors_in_radius: Maximum number of neighbors to return within radius
         """
         super().__init__()
+        if grid_resolution is None:
+            grid_resolution = [256, 96, 64]
         self.ball_query_layer = BallQueryLayer(neighbors_in_radius, radius)
         self.grid_resolution = grid_resolution
 
@@ -138,7 +140,7 @@ class GeoConvOut(nn.Module):
         self,
         input_features: int,
         model_parameters,
-        grid_resolution: Sequence[int] = [256, 96, 64],
+        grid_resolution=None,
     ):
         """
         Initialize the GeoConvOut layer.
@@ -149,6 +151,8 @@ class GeoConvOut(nn.Module):
             grid_resolution: Resolution of the output grid [nx, ny, nz]
         """
         super().__init__()
+        if grid_resolution is None:
+            grid_resolution = [256, 96, 64]
         base_neurons = model_parameters.base_neurons
 
         self.fc1 = nn.Linear(input_features, base_neurons)
