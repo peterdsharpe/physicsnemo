@@ -839,22 +839,6 @@ class DoMINO(nn.Module):
                     )
                 )
 
-    def geometry_encoder(
-        self, geo_centers: torch.Tensor, p_grid: torch.Tensor, sdf: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Generate a geometry encoding from geometric centers, grid points, and SDF.
-
-        Args:
-            geo_centers: Tensor containing geometry center coordinates
-            p_grid: Tensor containing grid point coordinates
-            sdf: Tensor containing signed distance function values
-
-        Returns:
-            Tensor containing the geometry encoding
-        """
-        return self.geo_rep(geo_centers, p_grid, sdf)
-
     def position_encoder(
         self, encoding_node: torch.Tensor, eval_mode: str = "volume"
     ) -> torch.Tensor:
