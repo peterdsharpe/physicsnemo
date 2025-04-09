@@ -316,7 +316,7 @@ class GeometryRep(nn.Module):
     """
     Geometry representation module that processes STL geometry data.
 
-    This module constructs a multi-scale representation of geometry by:
+    This module constructs a multiscale representation of geometry by:
     1. Computing short-range geometry encoding for local features
     2. Computing long-range geometry encoding for global context
     3. Processing signed distance field (SDF) data for surface information
@@ -391,7 +391,7 @@ class GeometryRep(nn.Module):
         # Expand SDF
         sdf = torch.unsqueeze(sdf, 1)
 
-        # Calculate short-range geoemtry dependency
+        # Calculate short-range geometry dependency
         mapping, k_short = self.bq_warp_short(x, p_grid)
         x_encoding_short = self.geo_conv_out(k_short)
 
