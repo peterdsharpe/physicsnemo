@@ -27,6 +27,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from typing import Literal
+
 from physicsnemo.models.layers.ball_query import BallQueryLayer
 
 
@@ -844,7 +846,9 @@ class DoMINO(nn.Module):
                 )
 
     def position_encoder(
-        self, encoding_node: torch.Tensor, eval_mode: str = "volume"
+        self,
+        encoding_node: torch.Tensor,
+        eval_mode: Literal["surface", "volume"] = "volume",
     ) -> torch.Tensor:
         """
         Compute positional encoding for input points.
@@ -860,6 +864,10 @@ class DoMINO(nn.Module):
             x = self.activation(self.fc_p_vol(encoding_node))
         elif eval_mode == "surface":
             x = self.activation(self.fc_p_surf(encoding_node))
+        else:
+            raise ValueError(
+                f"`eval_mode` must be 'surface' or 'volume', got {eval_mode=}"
+            )
         x = self.activation(self.fc_p1(x))
         x = self.fc_p2(x)
         return x
