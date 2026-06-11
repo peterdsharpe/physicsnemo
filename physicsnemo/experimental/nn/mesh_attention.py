@@ -252,9 +252,18 @@ class MeshAttention(nn.Module):
     positions : Float[torch.Tensor, "n_src n_dims"]
         Source point coordinates, shape :math:`(N_s, D)`.
     areas : Float[torch.Tensor, "n_src"] | None, optional
-        Per-source quadrature weights, shape :math:`(N_s,)`. Defaults to ones.
+        Per-source quadrature weights (cell areas), shape :math:`(N_s,)`. These
+        should be the *true* quadrature weights: they are what make this an
+        integral operator with the advertised discretization-invariance. The
+        ``None`` default (all ones) is only appropriate for uniform/test data -
+        on a non-uniform mesh it breaks discretization-invariance and, in the
+        pure-unnormalized default (``mass_normalize=False``), makes the output
+        magnitude scale with the local point density.
     source_tree, target_tree : ClusterTree | None, optional
-        Precomputed source/target trees. Built on the fly if ``None``.
+        Precomputed source/target trees. Built on the fly if ``None``. A
+        precomputed ``source_tree`` must be built with the *same* ``areas``
+        passed here, because the far-field cluster centroid is normalized by
+        the tree's build-time total area.
     plan : DualInteractionPlan | None, optional
         Precomputed dual-tree plan. Computed on the fly if ``None``.
     query_scalars : Float[torch.Tensor, "n_tgt scalar_dim"] | None, optional
@@ -276,6 +285,18 @@ class MeshAttention(nn.Module):
     tuple[Float[torch.Tensor, "n_tgt out_scalar_dim"], Float[torch.Tensor, "n_tgt out_vector_dim n_dims"] | None]
         The output scalar features and (if ``out_vector_dim > 0``) vector
         features at the query points; the vector output is ``None`` otherwise.
+
+    Notes
+    -----
+    - Trees and the interaction plan depend only on geometry and are built in a
+      ``no_grad``, ``@torch.compiler.disable`` helper. To use ``torch.compile``,
+      precompute ``source_tree``/``target_tree``/``plan`` and pass them in;
+      building them inside a compiled region is unsupported, and full
+      end-to-end compilation of the layer is currently untested.
+    - The hierarchical accumulation uses ``index_add_``, which is
+      non-deterministic on CUDA (atomic adds). Set
+      ``torch.use_deterministic_algorithms(True)`` for bitwise-reproducible
+      (slower) runs.
 
     Examples
     --------
@@ -581,11 +602,15 @@ class MeshAttention(nn.Module):
         device = query_positions.device
         Fv = value.shape[-1]
 
-        # Augment the value with a per-head unit column so the same baseline
-        # accumulation also yields the envelope mass Z = sum_j g_h * alpha.
-        ones_col = areas.new_ones(n_src, H, 1)
-        value_aug = torch.cat([value, ones_col], dim=-1)  # (N_s, H, Fv+1)
-        Fa = Fv + 1
+        # When mass-normalizing, append a per-head unit column so the same
+        # baseline accumulation also yields the envelope mass Z = sum_j g_h*alpha.
+        # Otherwise skip it: the mass is unused, so carrying the extra channel
+        # through every gather/scatter/aggregate would be pure waste.
+        if self.mass_normalize:
+            value_aug = torch.cat([value, areas.new_ones(n_src, H, 1)], dim=-1)
+        else:
+            value_aug = value
+        Fa = value_aug.shape[-1]  # Fv (+1 when mass-normalizing)
 
         # Per-node area-weighted source aggregates (centroids + value means).
         if source_aggregates is None:
@@ -612,13 +637,23 @@ class MeshAttention(nn.Module):
                 source_data=None,
             ).node_centroid
 
-        # Flat accumulation buffers (index_add_ wants 2D).
-        buf_baseline = query_positions.new_zeros(n_tgt, H * Fa)
-        buf_content = query_positions.new_zeros(n_tgt, H * Fv)
+        # Flat accumulation buffers (index_add_ wants 2D). Accumulate in a
+        # dtype at least as wide as float32: this avoids index_add_ dtype
+        # mismatches when positions/values are bf16/fp16 (the decay runs in
+        # >= fp32 via its fp32 length-scale parameter), and accumulating the
+        # unnormalized sums in >= fp32 is numerically safer.
+        acc_dtype = torch.promote_types(
+            torch.promote_types(value.dtype, query_positions.dtype), torch.float32
+        )
+        buf_baseline = query_positions.new_zeros(n_tgt, H * Fa, dtype=acc_dtype)
+        buf_content = query_positions.new_zeros(n_tgt, H * Fv, dtype=acc_dtype)
 
         def _scatter(buf: torch.Tensor, tgt_ids: torch.Tensor, contrib: torch.Tensor):
-            # contrib: (n, H, F) -> (n, H*F); accumulate at tgt_ids.
-            buf.index_add_(0, tgt_ids, contrib.reshape(contrib.shape[0], -1))
+            # contrib: (n, H, F) -> (n, H*F); cast to the buffer dtype so
+            # index_add_ never hits a dtype mismatch.
+            buf.index_add_(
+                0, tgt_ids, contrib.reshape(contrib.shape[0], -1).to(buf.dtype)
+            )
 
         # --- Phase: near (exact individual pairs) -------------------------
         # Carries BOTH the baseline (g*alpha*v) and the content correction
@@ -678,18 +713,57 @@ class MeshAttention(nn.Module):
         baseline = buf_baseline.reshape(n_tgt, H, Fa)
         content = buf_content.reshape(n_tgt, H, Fv)
         base_value = baseline[..., :Fv]  # (N_t, H, Fv)
-        mass = baseline[..., Fv:]  # (N_t, H, 1) = sum_j g_h * alpha
         out = (
             self.content_gain[None, :, None] * content
             + self.baseline_gain[None, :, None] * base_value
         )
         if self.mass_normalize:
+            mass = baseline[..., Fv:]  # (N_t, H, 1) = sum_j g_h * alpha
             out = out / (mass + self.eps)
         return out
 
     # ------------------------------------------------------------------
     # Public forward
     # ------------------------------------------------------------------
+
+    @torch.compiler.disable
+    def _build_trees_and_plan(
+        self,
+        positions: Float[torch.Tensor, "n_src n_dims"],
+        areas: Float[torch.Tensor, " n_src"],
+        query_positions: Float[torch.Tensor, "n_tgt n_dims"],
+        self_attention: bool,
+        theta: float,
+        source_tree: ClusterTree | None,
+        target_tree: ClusterTree | None,
+        plan: DualInteractionPlan | None,
+    ) -> tuple[ClusterTree, ClusterTree, DualInteractionPlan]:
+        r"""Build any missing spatial structures (source/target trees, plan).
+
+        Wrapped in :func:`torch.no_grad` and decorated with
+        ``@torch.compiler.disable`` because tree construction and the dual-tree
+        traversal are combinatorial (Morton codes, AABB propagation,
+        data-dependent control flow): they carry no useful gradient and are not
+        traceable by ``torch.compile``.  Geometry gradients still flow through
+        the differentiable ``r_sq`` and ``compute_source_aggregates`` evaluated
+        in :meth:`_hierarchical_weighted_values`, which runs outside this helper.
+        Mirrors GLOBE's ``_build_trees_and_plans``.  Only the arguments that are
+        ``None`` are built; precomputed structures are passed through unchanged.
+        """
+        with torch.no_grad():
+            if source_tree is None:
+                source_tree = ClusterTree.from_points(positions, areas=areas)
+            if target_tree is None:
+                target_tree = (
+                    source_tree
+                    if self_attention
+                    else ClusterTree.from_points(query_positions)
+                )
+            if plan is None:
+                plan = source_tree.find_dual_interaction_pairs(
+                    target_tree=target_tree, theta=theta
+                )
+        return source_tree, target_tree, plan
 
     def forward(
         self,
@@ -745,19 +819,11 @@ class MeshAttention(nn.Module):
         q, k = self._project_qk(aug_query, key_scalars=aug_key)
         value = self._project_value(aug_key, vectors)
 
-        # Build spatial structures on the fly if not provided.
-        if source_tree is None:
-            source_tree = ClusterTree.from_points(positions, areas=areas)
-        if target_tree is None:
-            target_tree = (
-                source_tree
-                if self_attention
-                else ClusterTree.from_points(query_positions)
-            )
-        if plan is None:
-            plan = source_tree.find_dual_interaction_pairs(
-                target_tree=target_tree, theta=theta
-            )
+        # Build any missing spatial structures (no-grad, compile-disabled).
+        source_tree, target_tree, plan = self._build_trees_and_plan(
+            positions, areas, query_positions, self_attention, theta,
+            source_tree, target_tree, plan,
+        )
 
         out = self._hierarchical_weighted_values(
             q, k, value, query_positions, positions, areas,

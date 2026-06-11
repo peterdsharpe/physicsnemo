@@ -176,6 +176,47 @@ def test_hierarchical_accuracy_improves_as_theta_decreases(device):
     assert errs[-1] < 0.15
 
 
+def test_far_field_phases_exact_with_constant_envelope(device):
+    """Validate the nf/fn/far broadcast phases, which theta=0 never exercises.
+
+    At theta=0 every interaction is near, so the convergence test above only
+    covers the near phase. Here we make the cluster monopole *exact* by using a
+    constant envelope (a huge length scale => g == 1 everywhere) and dropping
+    the content term (content_gain_init=0, the only thing the far field omits).
+    The hierarchical forward must then equal the dense reference at theta>0,
+    which routes through - and so validates - the (near,far), (far,near), and
+    (far,far) broadcasts plus the source-coverage / no-double-count property.
+    """
+    torch.manual_seed(0)
+    layer = (
+        MeshAttention(
+            scalar_dim=10,
+            vector_dim=2,
+            heads=4,
+            dim_head=8,
+            content_gain_init=0.0,  # a = 0 -> far field drops nothing
+            baseline_gain_init=1.0,
+            lengthscale_init=1e11,  # g == 1 exactly in fp64 -> monopole exact
+        )
+        .double()
+        .to(device)
+    )
+    s, v, p, a = _inputs(160, 10, 2, 3, device, torch.float64)
+    ref_s, ref_v = layer.forward_reference(s, v, p, a)
+
+    tree = ClusterTree.from_points(p, areas=a)
+    saw_far = False
+    for theta in (0.5, 1.0, 2.0):
+        plan = tree.find_dual_interaction_pairs(target_tree=tree, theta=theta)
+        saw_far = saw_far or (plan.n_far_nodes + plan.n_nf + plan.n_fn) > 0
+        out_s, out_v = layer(
+            s, v, p, a, source_tree=tree, target_tree=tree, plan=plan
+        )
+        assert (out_s - ref_s).abs().max() < 1e-9, theta
+        assert (out_v - ref_v).abs().max() < 1e-9, theta
+    assert saw_far, "no far-field phase was exercised; increase N or theta"
+
+
 # ---------------------------------------------------------------------------
 # Equivariance (exact, on the dense path)
 # ---------------------------------------------------------------------------
