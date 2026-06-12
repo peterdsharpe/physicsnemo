@@ -288,8 +288,12 @@ class Mesh:
     recomputation from raw vertex data.
 
     Slicing operations (``slice_cells``, ``slice_points``) produce new
-    ``Mesh`` instances with topology caches cleared (since connectivity has
-    changed) but cell-level geometric caches sliced in lockstep.
+    ``Mesh`` instances with topology and all point-level caches cleared, and
+    only the purely-local per-cell geometric caches (centroids, areas, normals)
+    carried forward (sliced in lockstep). Non-local caches -- point normals,
+    curvatures, and per-cell quantities derived from neighbours (e.g.
+    ``gaussian_curvature``) -- are dropped so they recompute correctly for the
+    new connectivity.
 
     Access cached values directly via nested keys::
 
@@ -1022,6 +1026,12 @@ class Mesh:
                 )
                 weights = weights * area_weights
 
+        else:
+            raise ValueError(
+                f"Invalid {weighting=!r}. Must be one of: "
+                f"'unweighted', 'area', 'angle', 'angle_area'."
+            )
+
         ### Apply weights and accumulate
         normals_to_accumulate = cell_normals_flat * weights.unsqueeze(-1)
 
@@ -1230,14 +1240,24 @@ class Mesh:
                     raise ValueError(
                         f"All meshes must have the same {name}. Got:\n{values=}"
                     )
-            ref_keys = set(
-                meshes[0].cell_data.keys(include_nested=True, leaves_only=True)
-            )
-            if not all(
-                set(m.cell_data.keys(include_nested=True, leaves_only=True)) == ref_keys
-                for m in meshes
-            ):
-                raise ValueError("All meshes must have the same cell_data keys.")
+            for field_name in ("point_data", "cell_data", "global_data"):
+                ref_keys = set(
+                    getattr(meshes[0], field_name).keys(
+                        include_nested=True, leaves_only=True
+                    )
+                )
+                if not all(
+                    set(
+                        getattr(m, field_name).keys(
+                            include_nested=True, leaves_only=True
+                        )
+                    )
+                    == ref_keys
+                    for m in meshes
+                ):
+                    raise ValueError(
+                        f"All meshes must have the same {field_name} keys."
+                    )
 
         ### Merge the meshes
 
@@ -1299,6 +1319,13 @@ class Mesh:
         Mesh
             New Mesh with subset of points. Cells that reference any removed
             points are also removed, and remaining cell indices are remapped.
+
+        Notes
+        -----
+        The no-op selections ``None`` / ``Ellipsis`` return this mesh itself,
+        and ``global_data`` is shared with the source by reference rather than
+        copied. Mutating shared data on the result therefore also mutates the
+        source; clone first if you need an independent copy.
 
         Examples
         --------
@@ -1384,14 +1411,38 @@ class Mesh:
         -------
         Mesh
             New Mesh with subset of cells.
+
+        Notes
+        -----
+        Slicing shares unsliced data with the source by reference rather than
+        copying: the returned mesh shares ``points``, ``point_data``, and
+        ``global_data`` with this mesh, and the no-op selections ``None`` /
+        ``Ellipsis`` return this mesh itself. Mutating any shared field on the
+        result therefore also mutates the source; clone first if you need an
+        independent copy.
         """
+        ### Handle no-op cases: None or Ellipsis means keep all cells (returns self),
+        # matching slice_points and the documented type hint (which previously raised
+        # on None and silently no-op'd on Ellipsis).
+        if indices is None or indices is ...:
+            return self
+
         if isinstance(indices, int):
             indices = torch.tensor([indices], device=self.cells.device)
         new_cell_data = cast(TensorDict, self.cell_data[indices])
+        # Only purely-local per-cell geometry caches survive a cell slice: each
+        # cell's centroid/area/normal depends solely on that cell's own vertices.
+        # Non-local cell caches (e.g. "gaussian_curvature", computed from adjacent
+        # cell centroids) and ALL point-level caches (point_normals / curvatures
+        # depend on each point's incident-cell set, which slicing changes) are
+        # dropped so they recompute lazily and correctly on the sliced mesh.
+        local_cell_cache = self._cache["cell"].select(
+            "centroids", "areas", "normals", strict=False
+        )
         new_cache = TensorDict(
             {
-                "cell": self._cache["cell"][indices],
-                "point": self._cache["point"],
+                "cell": local_cell_cache[indices],
+                "point": TensorDict({}, batch_size=torch.Size([self.n_points])),
                 "topology": TensorDict({}),
             },
             device=self.points.device,
@@ -1556,6 +1607,13 @@ class Mesh:
         ValueError
             If a cell_data key already exists in point_data and overwrite_keys=False.
 
+        Notes
+        -----
+        Cell fields are averaged in floating point, so an integer or boolean
+        cell field is returned as a ``torch.float64`` point field (the per-point
+        mean of integers is generally non-integral and is not truncated). See
+        ``scatter_aggregate`` for the underlying dtype-promotion rule.
+
         Examples
         --------
         >>> mesh = Mesh(points, cells, cell_data={"pressure": cell_pressures})  # doctest: +SKIP
@@ -1609,7 +1667,10 @@ class Mesh:
             point_data=new_point_data,
             cell_data=self.cell_data,
             global_data=self.global_data,
-            _cache=self._cache,
+            # Shallow-copy so the derived mesh has its own cache container
+            # (geometry is unchanged, so the cached tensors stay valid) rather
+            # than aliasing the source mesh's mutable _cache.
+            _cache=self._cache.copy(),
         )
 
     def point_data_to_cell_data(self, overwrite_keys: bool = False) -> "Mesh":
@@ -1668,7 +1729,10 @@ class Mesh:
             point_data=self.point_data,
             cell_data=new_cell_data,
             global_data=self.global_data,
-            _cache=self._cache,
+            # Shallow-copy so the derived mesh has its own cache container
+            # (geometry is unchanged, so the cached tensors stay valid) rather
+            # than aliasing the source mesh's mutable _cache.
+            _cache=self._cache.copy(),
         )
 
     def get_facet_mesh(
@@ -1676,7 +1740,8 @@ class Mesh:
         manifold_codimension: int = 1,
         data_source: Literal["points", "cells"] = "cells",
         data_aggregation: Literal["mean", "area_weighted", "inverse_distance"] = "mean",
-        target_counts: "list[int] | Literal['boundary', 'shared', 'interior', 'all']" = "all",
+        target_counts: list[int]
+        | Literal["boundary", "shared", "interior", "all"] = "all",
     ) -> "Mesh":
         """Extract k-codimension facet mesh from this n-dimensional mesh.
 
@@ -1906,7 +1971,7 @@ class Mesh:
         )
 
     def to_point_cloud(
-        self, point_source: "Literal['vertices', 'cell_centroids']" = "vertices"
+        self, point_source: Literal["vertices", "cell_centroids"] = "vertices"
     ) -> "Mesh[0, ...]":
         r"""Return a 0D Mesh (point cloud) with no cell connectivity.
 
@@ -2025,9 +2090,16 @@ class Mesh:
     def _cached_adjacency(self, cache_key: str, compute_fn, **kwargs):
         r"""Look up or compute-and-cache a topological adjacency.
 
-        All four ``get_*_adjacency`` methods delegate here. The
-        ``offsets`` and ``indices`` tensors are stored as a sub-TensorDict
-        under ``_cache["topology", "{cache_key}"]``.
+        All four ``get_*_adjacency`` methods delegate here. The ``Adjacency``
+        object (itself a tensorclass) is stored directly under
+        ``_cache["topology", "{cache_key}"]``.
+
+        The object is cached as-is rather than as its raw ``offsets``/``indices``
+        tensors: reconstructing ``Adjacency(...)`` on every cache hit re-ran its
+        ``__post_init__`` validation, which performs host-device syncs (``.item()``)
+        on every lookup. ``Adjacency`` is effectively immutable and used read-only,
+        so sharing the cached instance is safe (and mirrors how the cell/point
+        geometry caches share their tensors).
 
         Parameters
         ----------
@@ -2044,18 +2116,11 @@ class Mesh:
         Adjacency
             Cached or freshly computed adjacency.
         """
-        from physicsnemo.mesh.neighbors import Adjacency
-
         cached = self._cache.get(("topology", cache_key), None)
         if cached is not None:
-            return Adjacency(
-                offsets=cached["offsets"],
-                indices=cached["indices"],
-            )
+            return cached
         result = compute_fn(self, **kwargs)
-        self._cache["topology", cache_key] = TensorDict(
-            {"offsets": result.offsets, "indices": result.indices},
-        )
+        self._cache["topology", cache_key] = result
         return result
 
     def get_point_to_cells_adjacency(self):
@@ -3379,3 +3444,72 @@ def _mesh_repr(self) -> str:
 
 
 Mesh.__repr__ = _mesh_repr  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+
+
+### Override the tensorclass ``to`` so a floating/complex dtype is applied only to
+# floating tensors. The generated tensorclass ``to`` casts *every* leaf -- including
+# the integer ``cells`` -- which then fails ``__post_init__``'s int-dtype check, so
+# ``mesh.to(torch.float64)`` was broken for any mesh with cells. Only an explicitly
+# requested floating/complex dtype takes the cells-safe path; device-only moves and
+# non-float dtypes are delegated unchanged to the generated ``to`` so device metadata,
+# ``non_blocking``, etc. behave exactly as before. Reassigned after the class because
+# @tensorclass overrides a body-defined ``to`` (same reason as ``__repr__`` above).
+def _requested_float_dtype(
+    args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> torch.dtype | None:
+    """Return the explicitly requested dtype iff it is floating/complex, else ``None``.
+
+    Detects the dtype across torch's ``Tensor.to`` overloads -- ``to(dtype, ...)``,
+    ``to(device, dtype, ...)``, ``to(other, ...)`` (a tensor whose dtype is copied),
+    and ``to(..., dtype=...)``. A device-only move (no dtype) or an integer dtype
+    returns ``None``. Crucially the result does not depend on the caller's current
+    dtype, so re-casting to the dtype a tensor already has (e.g. ``float64 ->
+    float64``) still routes through the cells-safe path rather than the generated
+    ``to`` that would cast the integer cells and raise.
+    """
+    dtype = kwargs.get("dtype")
+    if dtype is None:
+        for arg in args:
+            if isinstance(arg, torch.dtype):
+                dtype = arg
+                break
+            if isinstance(arg, torch.Tensor):  # ``to(other)`` copies other's dtype
+                dtype = arg.dtype
+                break
+    if isinstance(dtype, torch.dtype) and (dtype.is_floating_point or dtype.is_complex):
+        return dtype
+    return None
+
+
+def _mesh_to(self, *args: Any, **kwargs: Any) -> "Mesh":
+    cast_dtype = _requested_float_dtype(args, kwargs)
+    if cast_dtype is None:
+        # Device move and/or non-float dtype: the generated tensorclass ``to`` is
+        # correct (it never turns the integer cells into a float dtype), preserves
+        # per-leaf dtypes, and forwards device/``non_blocking``/etc. unchanged.
+        return _tensorclass_mesh_to(self, *args, **kwargs)
+
+    # Floating/complex dtype cast. Resolve the target device by probing a zero-length
+    # slice of the (always-floating) points -- this reuses torch's own ``.to`` overload
+    # parsing without copying data. Move every leaf to that device with the generated
+    # ``to`` (cells-safe, forwarding all transfer options except ``dtype``), then cast
+    # only the floating leaves so the integer cells (and any integer data) are never
+    # cast to a float dtype.
+    probe = self.points[:0].to(*args, **kwargs)
+    transfer_kwargs = {k: v for k, v in kwargs.items() if k != "dtype"}
+    transfer_kwargs["device"] = probe.device
+    moved = _tensorclass_mesh_to(self, **transfer_kwargs)
+
+    def _cast(t: torch.Tensor) -> torch.Tensor:
+        return t.to(cast_dtype) if (t.is_floating_point() or t.is_complex()) else t
+
+    moved.points = _cast(moved.points)
+    moved.point_data = moved.point_data.apply(_cast)
+    moved.cell_data = moved.cell_data.apply(_cast)
+    moved.global_data = moved.global_data.apply(_cast)
+    moved._cache = moved._cache.apply(_cast)
+    return moved
+
+
+_tensorclass_mesh_to = Mesh.to  # the generated tensorclass ``to``
+Mesh.to = _mesh_to  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]

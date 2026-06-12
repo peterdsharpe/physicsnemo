@@ -18,7 +18,8 @@
 
 ClusterTree was historically exercised only indirectly, through GLOBE's
 BarnesHutKernel tests and the mesh-attention tests. These tests pin down its
-own contracts:
+own contracts, so the shared-LBVH-build refactor (and future changes) have a
+safety net:
 
 - **Coverage / no-double-count**: a dual-tree plan's four interaction streams
   ((near,near), (near,far), (far,near), (far,far)) together cover every
@@ -27,8 +28,10 @@ own contracts:
   every downstream kernel/attention evaluation relies on.
 - **Tree structure**: leaves partition the morton-sorted order, subtree ranges
   nest correctly, AABBs contain their points, and per-node total areas are
-  exact sums.
-- **Aggregates**: per-node area-weighted means match a brute-force reference.
+  exact sums - down to degenerate trees (n = 1, 2).
+- **Aggregates**: per-node area-weighted means match a brute-force reference,
+  including in fp32 on offset (all-positive) coordinates - the catastrophic-
+  cancellation regime the internal fp64 prefix-sum path exists to handle.
 - **Edge cases**: empty and single-point trees.
 """
 
@@ -47,6 +50,17 @@ from physicsnemo.mesh.spatial._ragged import _ragged_arange
 def _points(n, n_dims, device, seed=0, dtype=torch.float32):
     g = torch.Generator(device="cpu").manual_seed(seed)
     return torch.randn(n, n_dims, generator=g, dtype=dtype).to(device)
+
+
+def _offset_points(n, n_dims, device, seed=0, dtype=torch.float32):
+    """Offset (all-positive-ish) coordinates.
+
+    This is the regime the aggregate prefix-sum path is most sensitive to:
+    range sums of a long same-sign cumsum suffer catastrophic cancellation
+    unless accumulated in fp64 internally.
+    """
+    g = torch.Generator(device="cpu").manual_seed(seed)
+    return (torch.rand(n, n_dims, generator=g, dtype=dtype) * 10.0 - 3.0).to(device)
 
 
 def _areas(n, device, seed=1, dtype=torch.float32):
@@ -156,11 +170,17 @@ def test_theta_zero_is_all_near(device):
     assert plan.n_far_nodes == 0 and plan.n_nf == 0 and plan.n_fn == 0
 
 
-def test_plan_validate_passes(device):
-    """The plan's own internal-consistency check passes on real plans."""
+def test_plan_validates_and_far_field_engages(device):
+    """plan.validate() passes, and theta=1 actually produces far-field work.
+
+    The second assertion guards against a regression where everything is
+    classified near (which would make the far-field machinery dead code while
+    all exactness tests still pass).
+    """
     tree = ClusterTree.from_points(_points(80, 3, device, seed=6))
     plan = tree.find_dual_interaction_pairs(target_tree=tree, theta=1.0)
     plan.validate()  # raises on inconsistency
+    assert plan.n_far_nodes + plan.n_nf + plan.n_fn > 0
 
 
 # ---------------------------------------------------------------------------
@@ -168,18 +188,19 @@ def test_plan_validate_passes(device):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("leaf_size", [1, 3, 8])
+@pytest.mark.parametrize("n", [1, 2, 7, 100])
+@pytest.mark.parametrize("leaf_size", [1, 4])
 @pytest.mark.parametrize("n_dims", [2, 3])
-def test_tree_structure_invariants(device, leaf_size, n_dims):
+def test_tree_structure_invariants(device, n, leaf_size, n_dims):
     """Leaves partition the sorted order; ranges nest; AABBs contain points."""
-    n = 100
     pts = _points(n, n_dims, device, seed=7)
     areas = _areas(n, device)
     tree = ClusterTree.from_points(pts, leaf_size=leaf_size, areas=areas)
 
-    ### Root covers everything.
+    ### Root covers everything, with the full area.
     assert int(tree.node_range_start[0]) == 0
     assert int(tree.node_range_count[0]) == n
+    assert torch.isclose(tree.node_total_area[0], areas.sum(), rtol=1e-5)
 
     ### Leaves: occupancy <= leaf_size, and they partition [0, n).
     is_leaf = tree.leaf_count > 0
@@ -192,13 +213,18 @@ def test_tree_structure_invariants(device, leaf_size, n_dims):
     assert (starts[1:] == (starts[:-1] + counts[:-1])).all()
     assert int(starts[-1] + counts[-1]) == n
 
-    ### Internal nodes: children partition the parent's range; leaves have no
-    ### children.
+    ### Leaf/internal bookkeeping is mutually consistent.
     is_internal = tree.node_left_child >= 0
     assert (is_internal == (tree.node_right_child >= 0)).all()
     assert not (is_leaf & is_internal).any()
+    assert (tree.leaf_count[is_internal] == 0).all()
+    assert torch.equal(tree.node_range_count[is_leaf], tree.leaf_count[is_leaf])
+
+    ### Internal nodes: child ids are valid, and children partition the
+    ### parent's range (left first, right immediately after).
     left = tree.node_left_child[is_internal]
     right = tree.node_right_child[is_internal]
+    assert (left < tree.n_nodes).all() and (right < tree.n_nodes).all()
     assert (
         tree.node_range_count[is_internal]
         == tree.node_range_count[left] + tree.node_range_count[right]
@@ -271,6 +297,31 @@ def test_source_aggregates_match_bruteforce(device):
             assert (got - ref).abs().max() < 1e-10
 
 
+def test_fp32_aggregates_accurate_on_offset_coordinates(device):
+    """fp32 centroids stay accurate on offset (all-positive) coordinates.
+
+    Range sums extracted from a long same-sign cumsum suffer catastrophic
+    cancellation in fp32; the implementation accumulates in fp64 internally to
+    avoid this. This test pins that behavior at the fp32 public interface, in
+    the coordinate regime (offset coordinates, small leaves) where plain fp32
+    prefix sums were measurably wrong.
+    """
+    n = 200
+    pts = _offset_points(n, 3, device, seed=12)
+    areas = _areas(n, device)
+    tree = ClusterTree.from_points(pts, leaf_size=1, areas=areas)
+    agg = tree.compute_source_aggregates(source_points=pts, areas=areas)
+
+    pts64, areas64 = pts.double(), areas.double()
+    for node in range(tree.n_nodes):
+        ids = _subtree_point_ids(tree, node)
+        w = areas64[ids]
+        ref = (pts64[ids] * w[:, None]).sum(0) / w.sum()
+        assert (agg.node_centroid[node].double() - ref).abs().max() < 1e-5, (
+            f"node {node} centroid mismatch"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Edge cases
 # ---------------------------------------------------------------------------
@@ -289,6 +340,8 @@ def test_empty_tree_and_plan(device):
 def test_single_point_self_plan(device):
     pts = _points(1, 3, device, seed=13)
     tree = ClusterTree.from_points(pts)
+    assert tree.n_sources == 1
+    assert tree.sorted_source_order.tolist() == [0]
     plan = tree.find_dual_interaction_pairs(target_tree=tree, theta=1.0)
     count = _coverage_counts(plan, tree, tree, 1, 1)
     assert (count == 1).all()
