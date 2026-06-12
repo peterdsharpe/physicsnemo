@@ -23,17 +23,24 @@ machinery:
 
 - The attention weight between two tokens decays with physical distance via a
   learnable radial envelope, so the interaction matrix is hierarchically
-  low-rank off-diagonal and can be evaluated in :math:`O(N \log N)` using the
-  same :class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` dual-tree
-  traversal that powers GLOBE.
+  low-rank off-diagonal and can be evaluated in near-linear time (an
+  :math:`O(N \log N)` tree build plus :math:`O(N)` far-field node
+  interactions) using the same
+  :class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` dual-tree
+  traversal that powers GLOBE.  At ``theta > 0`` the far field carries only
+  the content-free baseline term, so the hierarchical operator is a
+  *truncation* of the dense one rather than a numerically-controlled
+  approximation of it; see :class:`MeshAttention` for the implications.
 - The operator is **unnormalized** (no softmax): it is a learnable integral
   operator ``o(x_i) = sum_j w_ij v_j``, the physically-correct object for
   PDE-operator learning (cf. the Galerkin Transformer, Cao NeurIPS 2021).
-- It is **equivariant** by construction: attention logits are built from
-  invariants (a content dot-product of scalar features plus a distance decay),
-  and values carry a separate scalar (invariant) and vector (equivariant) path,
-  so scalar outputs are invariant and vector outputs are rotation/parity
-  equivariant.
+- It is **equivariant** by construction on the exact path: attention logits
+  are built from invariants (a content dot-product of scalar features plus a
+  distance decay), and values carry a separate scalar (invariant) and vector
+  (equivariant) path, so scalar outputs are invariant and vector outputs are
+  rotation/parity equivariant.  At ``theta > 0`` equivariance holds only up
+  to the hierarchical approximation error, because the Morton-code tree (and
+  hence the near/far partition) is orientation-dependent.
 
 The near-field-exact / far-field-low-rank decomposition follows the
 fast-multipole family of efficient transformers (FMMformer, H-Transformer,
@@ -60,13 +67,13 @@ import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import TensorDict
 
-from physicsnemo.nn import Mlp
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import (
     ClusterTree,
     DualInteractionPlan,
     SourceAggregates,
 )
+from physicsnemo.nn import Mlp
 
 QKNorm = Literal["layernorm", "cosine", "none"]
 FarField = Literal["m0", "m0+m1"]
@@ -183,13 +190,29 @@ class MeshAttention(nn.Module):
     of ``vectors``); because :math:`w^h_{ij}` is invariant, scalar outputs are
     invariant and vector outputs are equivariant.
 
-    The sum is evaluated in :math:`O(N \log N)` via a dual-tree Barnes-Hut
+    The sum is evaluated in near-linear time via a dual-tree Barnes-Hut
     traversal: near pairs are exact and carry the full (content + baseline)
     weight, while far interactions keep only the content-free baseline term and
     are approximated by area-weighted cluster monopoles (``far_field="m0"``).
     Setting ``theta=0`` (or calling :meth:`forward_reference`) makes every
     interaction exact and recovers dense attention; this is the correctness
     oracle.
+
+    .. important::
+
+        Dropping the far-field content term is a *truncation*, not a
+        numerically-controlled approximation: ``theta`` bounds the geometric
+        (monopole) error of the envelope, but the relative size of the dropped
+        content term is :math:`a_h \langle \phi(q), \phi(k) \rangle / b_h` -
+        independent of ``theta``, and free to grow during training since
+        :math:`a_h, b_h` are learnable.  Consequently, at ``theta > 0`` the
+        layer computes a *different operator* than
+        :meth:`forward_reference` ("near-field content attention plus global
+        learned smoothing"), and ``theta`` is part of the model definition:
+        a checkpoint trained at one ``theta`` evaluated at another is a
+        different model, not the same model at different accuracy.  Monitor
+        :attr:`content_to_baseline_ratio` during training to track how much
+        the truncation discards.
 
     Parameters
     ----------
@@ -241,16 +264,22 @@ class MeshAttention(nn.Module):
         Initial value of the per-head baseline gain :math:`b_h`.
     eps : float, optional, default=1e-6
         Numerical floor used by ``cosine`` normalization and ``mass_normalize``.
+    leaf_size : int, optional, default=1
+        Maximum sources per leaf for trees built on the fly (see
+        :meth:`ClusterTree.from_points`). Larger leaves give a smaller
+        interaction plan at the cost of more exact near-field pairs per leaf
+        hit; this is the main plan-size/near-pair-count trade-off. Ignored
+        when precomputed trees are supplied.
 
     Forward
     -------
     scalars : Float[torch.Tensor, "n_src scalar_dim"]
         Source (key/value) scalar features, shape :math:`(N_s, C_s)`.
+    positions : Float[torch.Tensor, "n_src n_dims"]
+        Source point coordinates, shape :math:`(N_s, D)`.
     vectors : Float[torch.Tensor, "n_src vector_dim n_dims"] | None
         Source vector features, shape :math:`(N_s, V, D)`, or ``None`` if
         ``vector_dim == 0``.
-    positions : Float[torch.Tensor, "n_src n_dims"]
-        Source point coordinates, shape :math:`(N_s, D)`.
     areas : Float[torch.Tensor, "n_src"] | None, optional
         Per-source quadrature weights (cell areas), shape :math:`(N_s,)`. These
         should be the *true* quadrature weights: they are what make this an
@@ -277,8 +306,16 @@ class MeshAttention(nn.Module):
         Query coordinates for cross-attention. Defaults to ``positions``.
     theta : float, optional, default=1.0
         Barnes-Hut opening angle (larger = more far-field approximation).
+        Because the far field truncates the content term (see above), ``theta``
+        is part of the model definition and must match between training and
+        evaluation.
     source_aggregates : SourceAggregates | None, optional
         Precomputed per-node source aggregates. Computed on the fly if ``None``.
+        Must be built by :meth:`compute_source_aggregates` with the *same*
+        inputs, ``source_tree``, and current parameters as this call - the
+        aggregates embed this layer's value projection, so they are only valid
+        within a single step (e.g. several query sets attending to one source
+        set), never across optimizer steps.
 
     Outputs
     -------
@@ -297,6 +334,16 @@ class MeshAttention(nn.Module):
       non-deterministic on CUDA (atomic adds). Set
       ``torch.use_deterministic_algorithms(True)`` for bitwise-reproducible
       (slower) runs.
+    - Equivariance is exact on the dense path (:meth:`forward_reference`,
+      or ``theta = 0``). At ``theta > 0`` the Morton-code tree build is
+      orientation- and translation-dependent, so the near/far partition (and
+      hence the output) changes slightly under rigid motions: equivariance
+      holds only up to the hierarchical approximation error.
+    - Peak memory of the near phase is :math:`O(n_\text{near} \cdot H \cdot
+      (d + F_v))`: the per-pair ``q``/``k``/``value`` gathers are materialized
+      at once, without chunking. ``n_near`` grows with ``theta`` small,
+      ``leaf_size`` small, and point density; at the ~1M-token scale this term
+      dominates and may require a larger ``leaf_size`` or chunking.
 
     Examples
     --------
@@ -307,7 +354,7 @@ class MeshAttention(nn.Module):
     >>> scalars = torch.randn(n, 16)
     >>> vectors = torch.randn(n, 2, d)
     >>> positions = torch.randn(n, d)
-    >>> out_s, out_v = layer(scalars, vectors, positions)
+    >>> out_s, out_v = layer(scalars, positions, vectors)
     >>> out_s.shape, out_v.shape
     (torch.Size([200, 16]), torch.Size([200, 2, 3]))
     """
@@ -329,8 +376,12 @@ class MeshAttention(nn.Module):
         content_gain_init: float = 0.1,
         baseline_gain_init: float = 1.0,
         eps: float = 1e-6,
+        leaf_size: int = 1,
     ) -> None:
         super().__init__()
+
+        if leaf_size < 1:
+            raise ValueError(f"leaf_size must be >= 1, got {leaf_size=!r}")
 
         if out_scalar_dim is None:
             out_scalar_dim = scalar_dim
@@ -364,6 +415,7 @@ class MeshAttention(nn.Module):
         self.far_field = far_field
         self.mass_normalize = mass_normalize
         self.eps = eps
+        self.leaf_size = leaf_size
 
         inner_dim = heads * dim_head
 
@@ -422,6 +474,21 @@ class MeshAttention(nn.Module):
         else:
             self.register_parameter("vec_out", None)
 
+    @property
+    def content_to_baseline_ratio(self) -> torch.Tensor:
+        r"""Per-head :math:`|a_h / b_h|` - the size of the far-field truncation.
+
+        The far field drops the content term, whose relative magnitude versus
+        the kept baseline is governed by this ratio (not by ``theta``).  Log it
+        during training: values drifting well above :math:`O(1)` mean the
+        hierarchical forward is discarding an increasingly large fraction of
+        the operator at range.  Detached; shape ``(heads,)``.
+        """
+        return (
+            self.content_gain.detach().abs()
+            / self.baseline_gain.detach().abs().clamp_min(self.eps)
+        )
+
     # ------------------------------------------------------------------
     # Projections
     # ------------------------------------------------------------------
@@ -450,9 +517,7 @@ class MeshAttention(nn.Module):
         invariant under any orthogonal transform of the spatial axes.
         """
         gram = torch.einsum("nvd,nwd->nvw", vectors, vectors)  # (n, V, V)
-        iu = torch.triu_indices(
-            self.vector_dim, self.vector_dim, device=vectors.device
-        )
+        iu = torch.triu_indices(self.vector_dim, self.vector_dim, device=vectors.device)
         return gram[:, iu[0], iu[1]]  # (n, V*(V+1)/2)
 
     def _augment(
@@ -512,6 +577,23 @@ class MeshAttention(nn.Module):
             v_vector = torch.einsum("hv,nvd->nhd", self.vec_value, key_vectors)
             return torch.cat([v_scalar, v_vector], dim=-1)
         return v_scalar
+
+    def _augment_value_with_mass(
+        self, value: Float[torch.Tensor, "n_src heads value_dim"]
+    ) -> Float[torch.Tensor, "n_src heads value_aug_dim"]:
+        """Append the per-head unit mass column when mass-normalizing.
+
+        The unit column rides the baseline accumulation so the same pass also
+        yields the envelope mass ``Z = sum_j g_h * alpha_j``. Skipped when
+        ``mass_normalize`` is off: the mass would be unused, so carrying the
+        extra channel through every gather/scatter/aggregate is pure waste.
+        Shared by the hierarchical forward and
+        :meth:`compute_source_aggregates` so the value packing cannot diverge.
+        """
+        if self.mass_normalize:
+            ones = value.new_ones(*value.shape[:-1], 1)
+            return torch.cat([value, ones], dim=-1)
+        return value
 
     def _split_output(
         self, out: Float[torch.Tensor, "n_tgt heads value_dim"]
@@ -602,14 +684,7 @@ class MeshAttention(nn.Module):
         device = query_positions.device
         Fv = value.shape[-1]
 
-        # When mass-normalizing, append a per-head unit column so the same
-        # baseline accumulation also yields the envelope mass Z = sum_j g_h*alpha.
-        # Otherwise skip it: the mass is unused, so carrying the extra channel
-        # through every gather/scatter/aggregate would be pure waste.
-        if self.mass_normalize:
-            value_aug = torch.cat([value, areas.new_ones(n_src, H, 1)], dim=-1)
-        else:
-            value_aug = value
+        value_aug = self._augment_value_with_mass(value)
         Fa = value_aug.shape[-1]  # Fv (+1 when mass-normalizing)
 
         # Per-node area-weighted source aggregates (centroids + value means).
@@ -621,6 +696,20 @@ class MeshAttention(nn.Module):
                     {"value": value_aug}, batch_size=[n_src], device=device
                 ),
             )
+        elif not torch.compiler.is_compiling():
+            node_data = source_aggregates.node_source_data
+            expected = (source_tree.n_nodes, H, Fa)
+            if (
+                node_data is None
+                or "value" not in node_data.keys()
+                or tuple(node_data["value"].shape) != expected
+            ):
+                raise ValueError(
+                    "source_aggregates does not match this layer/tree: expected "
+                    f"node_source_data['value'] of shape {expected}. Build it "
+                    "with MeshAttention.compute_source_aggregates using the "
+                    "same inputs, source_tree, and current parameters."
+                )
         src_centroids = source_aggregates.node_centroid  # (n_src_nodes, D)
         # node_source_data holds the area-weighted MEAN; multiply by total area
         # to recover the area-weighted SUM (the M0 monopole moment).
@@ -720,7 +809,12 @@ class MeshAttention(nn.Module):
         if self.mass_normalize:
             mass = baseline[..., Fv:]  # (N_t, H, 1) = sum_j g_h * alpha
             out = out / (mass + self.eps)
-        return out
+        # Cast back from the (>= fp32) accumulation dtype so the downstream
+        # output projections see the module's working dtype - without this,
+        # a pure-bf16/fp16 module would crash on the fp32-vs-half mm in
+        # ``to_out_scalar`` (autocast would mask it; plain .half()/.bfloat16()
+        # does not).
+        return out.to(value.dtype)
 
     # ------------------------------------------------------------------
     # Public forward
@@ -752,12 +846,16 @@ class MeshAttention(nn.Module):
         """
         with torch.no_grad():
             if source_tree is None:
-                source_tree = ClusterTree.from_points(positions, areas=areas)
+                source_tree = ClusterTree.from_points(
+                    positions, areas=areas, leaf_size=self.leaf_size
+                )
             if target_tree is None:
                 target_tree = (
                     source_tree
                     if self_attention
-                    else ClusterTree.from_points(query_positions)
+                    else ClusterTree.from_points(
+                        query_positions, leaf_size=self.leaf_size
+                    )
                 )
             if plan is None:
                 plan = source_tree.find_dual_interaction_pairs(
@@ -768,8 +866,8 @@ class MeshAttention(nn.Module):
     def forward(
         self,
         scalars: Float[torch.Tensor, "n_src scalar_dim"],
+        positions: Float[torch.Tensor, "n_src n_dims"],
         vectors: Float[torch.Tensor, "n_src vector_dim n_dims"] | None = None,
-        positions: Float[torch.Tensor, "n_src n_dims"] = None,  # ty: ignore[invalid-parameter-default]
         areas: Float[torch.Tensor, " n_src"] | None = None,
         *,
         source_tree: ClusterTree | None = None,
@@ -786,7 +884,7 @@ class MeshAttention(nn.Module):
     ]:
         r"""Evaluate mesh attention (hierarchical dual-tree).
 
-        With only ``scalars``/``vectors``/``positions`` given, performs
+        With only ``scalars``/``positions``/``vectors`` given, performs
         self-attention. Provide ``query_scalars``/``query_positions`` (and
         optionally a distinct ``target_tree``) for cross-attention to a separate
         set of query points. Trees and the interaction plan are built on the fly
@@ -794,12 +892,13 @@ class MeshAttention(nn.Module):
 
         See the class docstring for parameter and output details.
         """
-        if positions is None:
-            raise ValueError("positions is required")
-        self._validate_inputs(scalars, vectors, positions)
+        self._validate_inputs(scalars, vectors, positions, areas)
+        self._validate_queries(query_scalars, query_vectors, query_positions, positions)
 
         if areas is None:
             areas = positions.new_ones(positions.shape[0])
+        if source_tree is not None and not torch.compiler.is_compiling():
+            self._check_tree_areas(source_tree, areas)
         self_attention = query_scalars is None
         if query_scalars is None:
             query_scalars = scalars
@@ -812,30 +911,42 @@ class MeshAttention(nn.Module):
         # identical and computed once.
         aug_key = self._augment(scalars, vectors)
         aug_query = (
-            aug_key
-            if self_attention
-            else self._augment(query_scalars, query_vectors)
+            aug_key if self_attention else self._augment(query_scalars, query_vectors)
         )
         q, k = self._project_qk(aug_query, key_scalars=aug_key)
         value = self._project_value(aug_key, vectors)
 
         # Build any missing spatial structures (no-grad, compile-disabled).
         source_tree, target_tree, plan = self._build_trees_and_plan(
-            positions, areas, query_positions, self_attention, theta,
-            source_tree, target_tree, plan,
+            positions,
+            areas,
+            query_positions,
+            self_attention,
+            theta,
+            source_tree,
+            target_tree,
+            plan,
         )
 
         out = self._hierarchical_weighted_values(
-            q, k, value, query_positions, positions, areas,
-            source_tree, target_tree, plan, source_aggregates,
+            q,
+            k,
+            value,
+            query_positions,
+            positions,
+            areas,
+            source_tree,
+            target_tree,
+            plan,
+            source_aggregates,
         )
         return self._split_output(out)
 
     def forward_reference(
         self,
         scalars: Float[torch.Tensor, "n_src scalar_dim"],
+        positions: Float[torch.Tensor, "n_src n_dims"],
         vectors: Float[torch.Tensor, "n_src vector_dim n_dims"] | None = None,
-        positions: Float[torch.Tensor, "n_src n_dims"] = None,  # ty: ignore[invalid-parameter-default]
         areas: Float[torch.Tensor, " n_src"] | None = None,
         *,
         query_scalars: Float[torch.Tensor, "n_tgt scalar_dim"] | None = None,
@@ -850,9 +961,8 @@ class MeshAttention(nn.Module):
         Computes the exact attention with no tree approximation, equal to
         :meth:`forward` at ``theta = 0``. Intended for tests and small inputs.
         """
-        if positions is None:
-            raise ValueError("positions is required")
-        self._validate_inputs(scalars, vectors, positions)
+        self._validate_inputs(scalars, vectors, positions, areas)
+        self._validate_queries(query_scalars, query_vectors, query_positions, positions)
         if areas is None:
             areas = positions.new_ones(positions.shape[0])
         self_attention = query_scalars is None
@@ -863,9 +973,7 @@ class MeshAttention(nn.Module):
 
         aug_key = self._augment(scalars, vectors)
         aug_query = (
-            aug_key
-            if self_attention
-            else self._augment(query_scalars, query_vectors)
+            aug_key if self_attention else self._augment(query_scalars, query_vectors)
         )
         q, k = self._project_qk(aug_query, key_scalars=aug_key)
         value = self._project_value(aug_key, vectors)
@@ -879,6 +987,7 @@ class MeshAttention(nn.Module):
         scalars: torch.Tensor,
         vectors: torch.Tensor | None,
         positions: torch.Tensor,
+        areas: torch.Tensor | None = None,
     ) -> None:
         """Eager-mode shape/feature validation (skipped under torch.compile)."""
         if torch.compiler.is_compiling():
@@ -888,9 +997,15 @@ class MeshAttention(nn.Module):
                 f"Expected scalars of shape (N, {self.scalar_dim}), "
                 f"got {tuple(scalars.shape)}"
             )
-        if positions.ndim != 2:
+        if positions.ndim != 2 or positions.shape[0] != scalars.shape[0]:
             raise ValueError(
-                f"Expected positions of shape (N, D), got {tuple(positions.shape)}"
+                f"Expected positions of shape ({scalars.shape[0]}, D), "
+                f"got {tuple(positions.shape)}"
+            )
+        if areas is not None and areas.shape != (positions.shape[0],):
+            raise ValueError(
+                f"Expected areas of shape ({positions.shape[0]},), "
+                f"got {tuple(areas.shape)}"
             )
         if self.vector_dim > 0:
             if vectors is None:
@@ -914,6 +1029,124 @@ class MeshAttention(nn.Module):
                 "non-None vectors."
             )
 
+    def _validate_queries(
+        self,
+        query_scalars: torch.Tensor | None,
+        query_vectors: torch.Tensor | None,
+        query_positions: torch.Tensor | None,
+        positions: torch.Tensor,
+    ) -> None:
+        """Validate the cross-attention query inputs (eager mode only).
+
+        In particular, reject ``query_positions``/``query_vectors`` without
+        ``query_scalars``: self- vs cross-attention is keyed on
+        ``query_scalars``, so that call would silently be treated as
+        self-attention and pair target indices from the *source* tree with the
+        given query positions - wrong results when the counts happen to match,
+        index errors otherwise.
+        """
+        if torch.compiler.is_compiling():
+            return
+        if query_scalars is None:
+            if query_positions is not None or query_vectors is not None:
+                raise ValueError(
+                    "query_positions/query_vectors were given without "
+                    "query_scalars. Cross-attention requires query_scalars "
+                    "(the query points' invariant features); without it this "
+                    "call would be treated as self-attention over the source "
+                    "points and silently produce wrong results."
+                )
+            return
+        if query_scalars.ndim != 2 or query_scalars.shape[-1] != self.scalar_dim:
+            raise ValueError(
+                f"Expected query_scalars of shape (N_tgt, {self.scalar_dim}), "
+                f"got {tuple(query_scalars.shape)}"
+            )
+        n_tgt = query_scalars.shape[0]
+        n_dims = positions.shape[-1]
+        if query_positions is None:
+            if n_tgt != positions.shape[0]:
+                raise ValueError(
+                    "query_positions is required when query_scalars has a "
+                    f"different length ({n_tgt}) than the sources "
+                    f"({positions.shape[0]})."
+                )
+        elif query_positions.shape != (n_tgt, n_dims):
+            raise ValueError(
+                f"Expected query_positions of shape ({n_tgt}, {n_dims}), "
+                f"got {tuple(query_positions.shape)}"
+            )
+        if query_vectors is not None and query_vectors.shape != (
+            n_tgt,
+            self.vector_dim,
+            n_dims,
+        ):
+            raise ValueError(
+                f"Expected query_vectors of shape ({n_tgt}, {self.vector_dim}, "
+                f"{n_dims}), got {tuple(query_vectors.shape)}"
+            )
+
+    def _check_tree_areas(
+        self, source_tree: ClusterTree, areas: Float[torch.Tensor, " n_src"]
+    ) -> None:
+        """Catch precomputed source trees built with different areas.
+
+        The far field recovers the area-weighted sum (monopole) by multiplying
+        the per-node mean by the tree's *build-time* ``node_total_area``; a
+        tree built with different quadrature weights silently mis-scales the
+        entire far field. The root (node 0) total area must therefore match
+        ``areas.sum()``. Costs one host sync in eager mode (consistent with
+        ``plan.validate()``); callers skip it under ``torch.compile``.
+        """
+        if source_tree.n_nodes == 0:
+            return
+        tree_total = source_tree.node_total_area[0]
+        total = areas.sum().to(tree_total.dtype)
+        # Loose rtol: the tree accumulates bottom-up while areas.sum() is a
+        # flat reduction, so fp32 rounding differs; real mismatches (e.g. a
+        # tree built with default ones) are orders of magnitude apart.
+        if not torch.isclose(tree_total, total, rtol=1e-3):
+            raise ValueError(
+                f"source_tree was built with different areas: tree root total "
+                f"area is {tree_total.item():.6g} but areas.sum() is "
+                f"{total.item():.6g}. Rebuild it with "
+                "ClusterTree.from_points(positions, areas=areas)."
+            )
+
+    def compute_source_aggregates(
+        self,
+        scalars: Float[torch.Tensor, "n_src scalar_dim"],
+        positions: Float[torch.Tensor, "n_src n_dims"],
+        vectors: Float[torch.Tensor, "n_src vector_dim n_dims"] | None = None,
+        areas: Float[torch.Tensor, " n_src"] | None = None,
+        *,
+        source_tree: ClusterTree,
+    ) -> SourceAggregates:
+        r"""Build per-node source aggregates valid for :meth:`forward`.
+
+        The aggregates embed this layer's *current* value projection of these
+        inputs (including the mass column when ``mass_normalize`` is on), so a
+        correct one cannot be constructed externally. Use this to amortize the
+        per-node aggregation across several :meth:`forward` calls within one
+        step - e.g. multiple query sets cross-attending to one source set.
+        The result is invalidated by any parameter update or change to the
+        inputs, ``areas``, or ``source_tree``.
+        """
+        self._validate_inputs(scalars, vectors, positions, areas)
+        if areas is None:
+            areas = positions.new_ones(positions.shape[0])
+        aug_key = self._augment(scalars, vectors)
+        value_aug = self._augment_value_with_mass(self._project_value(aug_key, vectors))
+        return source_tree.compute_source_aggregates(
+            source_points=positions,
+            areas=areas,
+            source_data=TensorDict(
+                {"value": value_aug},
+                batch_size=[positions.shape[0]],
+                device=positions.device,
+            ),
+        )
+
 
 class MeshTransformerBlock(nn.Module):
     r"""Pre-norm transformer block built on :class:`MeshAttention`.
@@ -932,6 +1165,18 @@ class MeshTransformerBlock(nn.Module):
     residual, so the whole block is :math:`O(D)`-equivariant. The spatial tree
     and interaction plan depend only on geometry, so they can be built once and
     shared across a stack of blocks.
+
+    .. note::
+
+        Known limitation: there is no scale control on the equivariant path.
+        The vector stream receives residual updates from an *unnormalized*
+        integral operator with no norm of its own, and the vector-derived Gram
+        invariants entering attention are unnormalized quadratic features
+        concatenated onto layer-normed scalars. In deep stacks the vector
+        magnitudes (and with them the Gram features) can drift or grow;
+        monitor them, and consider an equivariant vector norm (PaiNN-style:
+        rescale each vector channel by the RMS of its norms) if this becomes
+        a problem in practice.
 
     Parameters
     ----------
@@ -957,15 +1202,17 @@ class MeshTransformerBlock(nn.Module):
         Initial per-head decay length scale(s).
     mass_normalize : bool, optional, default=False
         Whether attention divides by the content-free envelope mass.
+    leaf_size : int, optional, default=1
+        Leaf size for trees built on the fly (see :class:`MeshAttention`).
 
     Forward
     -------
     scalars : Float[torch.Tensor, "n scalar_dim"]
         Scalar token features.
-    vectors : Float[torch.Tensor, "n vector_dim n_dims"] | None
-        Vector token features, or ``None`` when ``vector_dim == 0``.
     positions : Float[torch.Tensor, "n n_dims"]
         Token coordinates (cell centroids).
+    vectors : Float[torch.Tensor, "n vector_dim n_dims"] | None
+        Vector token features, or ``None`` when ``vector_dim == 0``.
     areas : Float[torch.Tensor, "n"] | None, optional
         Per-token quadrature weights. Defaults to ones.
     source_tree : ClusterTree | None, optional
@@ -993,7 +1240,7 @@ class MeshTransformerBlock(nn.Module):
     >>> s = torch.randn(128, 16)
     >>> v = torch.randn(128, 2, 3)
     >>> p = torch.randn(128, 3)
-    >>> s_out, v_out = block(s, v, p)
+    >>> s_out, v_out = block(s, p, v)
     >>> s_out.shape, v_out.shape
     (torch.Size([128, 16]), torch.Size([128, 2, 3]))
     """
@@ -1011,6 +1258,7 @@ class MeshTransformerBlock(nn.Module):
         decay_p: float = 2.0,
         lengthscale_init: float | Sequence[float] = 1.0,
         mass_normalize: bool = False,
+        leaf_size: int = 1,
     ) -> None:
         super().__init__()
         self.ln_attn = nn.LayerNorm(scalar_dim)
@@ -1026,6 +1274,7 @@ class MeshTransformerBlock(nn.Module):
             decay_p=decay_p,
             lengthscale_init=lengthscale_init,
             mass_normalize=mass_normalize,
+            leaf_size=leaf_size,
         )
         self.ln_mlp = nn.LayerNorm(scalar_dim)
         self.mlp = Mlp(
@@ -1038,8 +1287,8 @@ class MeshTransformerBlock(nn.Module):
     def forward(
         self,
         scalars: Float[torch.Tensor, "n scalar_dim"],
+        positions: Float[torch.Tensor, "n n_dims"],
         vectors: Float[torch.Tensor, "n vector_dim n_dims"] | None = None,
-        positions: Float[torch.Tensor, "n n_dims"] = None,  # ty: ignore[invalid-parameter-default]
         areas: Float[torch.Tensor, " n"] | None = None,
         *,
         source_tree: ClusterTree | None = None,
@@ -1050,16 +1299,13 @@ class MeshTransformerBlock(nn.Module):
         Float[torch.Tensor, "n vector_dim n_dims"] | None,
     ]:
         r"""Apply the block (self-attention + MLP) with residual connections."""
-        if positions is None:
-            raise ValueError("positions is required")
-
         # Self-attention on the pre-normalized scalar stream (queries == keys ==
         # values == this token set). Vectors are passed raw; the attention layer
         # forms its own equivariant value and invariants from them.
         attn_scalars, attn_vectors = self.attn(
             self.ln_attn(scalars),
-            vectors,
             positions,
+            vectors,
             areas,
             source_tree=source_tree,
             plan=plan,
