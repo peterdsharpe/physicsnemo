@@ -29,15 +29,20 @@ from .block import (
     NonlinearZeroMeshFieldBlock,
     PointwiseGeometryBlock,
 )
+from .model import EncodedBoundary, FieldMode, FieldRoleRanks, MeshTransformer
 
 __all__ = [
     "AttentionMoments",
+    "FieldMode",
+    "FieldRoleRanks",
     "GeometryConditionedLinear",
     "LinearMeshFieldBlock",
     "MeshAttention",
     "MeshOperatorBlock",
+    "MeshTransformer",
     "NonlinearZeroMeshFieldBlock",
     "PointwiseGeometryBlock",
+    "EncodedBoundary",
     "ScalarVectorState",
     "TypedProjection",
 ]

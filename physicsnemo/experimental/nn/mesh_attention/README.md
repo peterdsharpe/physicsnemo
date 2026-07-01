@@ -1,394 +1,807 @@
-# Mesh Attention and the Mesh Transformer
+# Mesh Attention: an Exact Global Signed Galerkin Operator
 
-A design summary of `MeshAttention`, `RadialDecay`, and `MeshTransformerBlock`
-(in [attention.py](attention.py) and [block.py](block.py)),
-covering **how it works**, the **motivation**, and the **major engineering and
-theoretical tradeoffs** made in the design.
+Mesh attention is a global, quadrature-aware, O(\(D\))-equivariant operator for
+boundary-driven PDE surrogates. It encodes the boundaries of a
+[`DomainMesh`](../../../mesh/domain_mesh.py), propagates physical driving
+fields through a separate field stream, and evaluates predictions at arbitrary
+query points.
 
-> Status: `MeshAttention` (the layer), `RadialDecay` (its envelope), and
-> `MeshTransformerBlock` (a pre-norm transformer block) exist and are tested.
-> A full end-to-end *Mesh Transformer model* (encoder stack + decode to query
-> points) is the intended next step and does not yet exist as a single class;
-> where this document says "mesh transformer" it refers to the block plus the
-> roadmap for that model.
+The central layer is a **finite-rank separable signed integral operator**. Its
+production path evaluates exact source moments in
+\(O(N_{source}+N_{query})\) work per layer for fixed channel and rank sizes. It
+does not materialize an all-pairs attention matrix. A dense
+`forward_reference` evaluates the identical operator in
+\(O(N_{source}N_{query})\) work and exists only as a correctness and gradient
+oracle.
 
----
+There is no softmax, graph neighborhood, distance cutoff, near/far truncation,
+or spatial tree in the operator.
 
-## 1. Motivation
+## 1. PDE motivation and scope
 
-### 1.1 The problem
+Many elliptic and approximately elliptic problems are strongly driven by their
+boundary data. For Laplace's equation, Green's representation has the form
 
-We want ML surrogates for PDE-governed systems (the immediate target being
-external aerodynamics: surface pressure, wall shear stress, volume fields), and
-we want them to be **foundation-model-grade**: accurate, performant on large
-meshes, and able to generalize across geometries, boundary conditions, scales,
-and discretizations. PDE training data is scarce and expensive (each sample is a
-CFD/FEM solve), which inverts the usual "bitter lesson" calculus: we cannot rely
-on scale alone to wash out poor inductive biases, so **inductive biases that
-encode the exact symmetries of the physics are data-efficiency multipliers** and
-are worth building in - *but only where they are genuinely exact*.
+\[
+u(x)=\int_{\partial\Omega}
+\left[G(x,y)\,\partial_{n_y}u(y)
+-u(y)\,\partial_{n_y}G(x,y)\right]dS_y.
+\]
 
-### 1.2 The two families this unifies
+This identity motivates three architectural choices:
 
-Two lines of work each had half of what we want:
+1. every boundary source may influence every other source and every query;
+2. source contributions are integrated against the boundary measure; and
+3. an encoded boundary can be reused at many independent query points.
 
-- **GLOBE** ([physicsnemo/experimental/models/globe](../../models/globe)) is a
-  learnable Green's-function / boundary-integral operator. It is **mesh-native**
-  (operates on `Mesh` objects with rank-typed semantic fields), **exactly
-  equivariant** (translation / rotation / parity, jointly over geometry and
-  boundary-condition vectors), **discretization- and units-invariant**, and it
-  scales to large meshes via a dual-tree Barnes-Hut acceleration. But its
-  "tokens" only carry a *positional* query - there is no learned, content-based
-  routing.
-- **Transolver / GeoTransolver / FLARE** are transformer attention models. They
-  have flexible, content-based, scalable attention, but operate on flat
-  `(B, N, C)` tensors with no equivariance and no mesh structure.
+The implementation is nevertheless a learned general operator, not a literal
+boundary-element solver. It does not assume one analytic Green function or
+hard-code a distance-decay law. In particular, it does not automatically
+enforce harmonicity, a boundary jump relation, conservation, a maximum
+principle, or a compatibility condition.
 
-### 1.3 The key insight
+The distinction between geometry and physical driving data is important for
+linear PDEs. At fixed geometry and coefficients, a linear boundary-value
+problem obeys
 
-Attention `softmax(QKᵀ)V` is O(N²). But for a physical operator the interaction
-between two tokens should **decay with distance** - so the attention matrix is
-*hierarchically low-rank off-diagonal*, exactly the structure that the Fast
-Multipole Method exploits. If you build a distance-decaying attention score you
-would "absolutely build a dual-tree traversal to approximate it." This is
-precisely GLOBE's machinery: **GLOBE's `BarnesHutKernel` is already ~90% of a
-mesh-attention engine.** The missing 10% is a *learned content term* in the
-score (GLOBE's target side is content-free).
+\[
+\mathcal N_\Gamma(\alpha b_1+\beta b_2)
+=\alpha\mathcal N_\Gamma(b_1)+\beta\mathcal N_\Gamma(b_2).
+\]
 
-`MeshAttention` is the result: **attention whose tokens are mesh cells, whose
-weights are a content score times a learnable physical distance-decay, evaluated
-in near-linear time on GLOBE's dual tree, and equivariant by construction.** It
-is the FMM-attention family (FMMformer, H-Transformer, Fast Multipole Attention)
-generalized for the first time to 3D unstructured meshes with a physically
-grounded, equivariant score.
+The model provides a `linear` field mode that preserves this law exactly and a
+`zero_preserving_nonlinear` mode for problems where content-dependent
+nonlinearity is desired.
 
----
+## 2. `DomainMesh` data contract
 
-## 2. How it works
+The source and query roles are taken from a `DomainMesh`:
 
-### 2.1 Tokens and the rank-typed state
+- `domain.boundaries` are the source meshes. Each declared boundary must be a
+  nonempty codimension-one mesh. Boundary fields are read from `cell_data`.
+- `domain.interior.points` are the default query locations. Data already
+  attached to the interior are not read as model inputs.
+- `domain.global_data` hold declared domain-level fields and, optionally, the
+  reference length.
 
-Tokens are mesh cells (or arbitrary points). Each token carries:
+The names in `domain.boundaries` must exactly match the names in
+`boundary_field_ranks`. Named boundaries are merged in a deterministic order;
+a boundary one-hot feature preserves their BC identity.
 
-- a **position** `x_i` (cell centroid),
-- a **quadrature weight** `alpha_i` (cell area), and
-- a **rank-typed feature state**: `scalars` (rotation-invariant, `(N, C_s)`) and
-  optional `vectors` (rotation-equivariant, `(N, V, D)`).
+### 2.1 Field roles
 
-The scalar/vector split is inherited from GLOBE's `physical`/`latent` namespaces
-and from the geometric-vector-perceptron (GVP) / Vector-Neurons line: it is the
-"type system" that makes per-field equivariance tractable.
+The implemented schema has two input roles:
 
-### 2.2 The operator
+- **`operator`** fields describe geometry, material properties, PDE
+  coefficients, or other data that may change the learned operator. They may
+  affect the result only by conditioning the geometry/operator stream.
+- **`drive`** fields are the boundary or global physical data on which the
+  solution depends. Setting every declared drive field to zero defines the
+  homogeneous zero-input test.
 
-For attention heads `h = 1..H` with head dimension `d`, the layer computes an
-**unnormalized integral operator**:
+Both roles may contain rank-0 invariant scalars and rank-1 polar vectors.
+Boundary role fields are declared separately for each named boundary;
+domain-level role fields are declared by `global_field_ranks` and read from
+`global_data`. At least one boundary or global drive field is required.
+A field path cannot be assigned both `operator` and `drive` roles on the same
+boundary, and a global field cannot have both roles. The constructor rejects
+either ambiguity rather than allowing one value to enter both streams.
 
-```text
-o_{i,h} = sum_j  w^h_{ij} * v_{j,h}
+Prediction names and types are declared by `output_field_ranks`. Predictions
+are returned in the query mesh's `point_data`. Existing interior target data
+cannot leak into a forward pass because the query mesh is stored without its
+point or cell data during encoding.
 
-w^h_{ij} = ( a_h * <phi(q^h_i), phi(k^h_j)>  +  b_h ) * g_h(||x_i - x_j||) * alpha_j
+For example, a schema may conceptually distinguish wall roughness as an
+operator scalar, prescribed velocity as a drive vector, Reynolds number as a
+global operator scalar, and freestream velocity as a global drive vector.
+
+All declared fields are expected to be nondimensional before entering the
+model. `reference_length_key` nondimensionalizes coordinates and geometric
+measure only; it is not a general units system and does not rescale physical
+input or output fields.
+
+Mesh coordinates and declared fields must share a device and use `float32` or
+`float64`. Mixed-precision learned layers are supported through autocast, but
+geometry, centering, normals, measures, and moment reductions retain at least
+FP32 precision; reduced-precision mesh coordinates are rejected.
+
+### 2.2 Minimal API example
+
+Suppose `domain` has `"wall"` and `"farfield"` boundary meshes, the declared
+boundary fields in each mesh's `cell_data`, and the declared global fields plus
+`reference_length` in `domain.global_data`:
+
+```python
+import torch
+
+from physicsnemo.experimental.nn import MeshTransformer
+from physicsnemo.mesh import Mesh
+
+model = MeshTransformer(
+    n_spatial_dims=3,
+    output_field_ranks={"pressure": 0, "velocity": 1},
+    boundary_field_ranks={
+        "wall": {
+            "operator": {"roughness": 0},
+            "drive": {"wall_velocity": 1},
+        },
+        "farfield": {
+            "operator": {},
+            "drive": {"boundary_velocity": 1},
+        },
+    },
+    global_field_ranks={
+        "operator": {"reynolds_number": 0},
+        "drive": {"freestream_velocity": 1},
+    },
+    # domain.global_data["reference_length"] is used only to normalize
+    # coordinates and cell measures, so it is absent from both role schemas.
+    reference_length_key="reference_length",
+    field_mode="linear",
+)
+
+# forward predicts at domain.interior.points and returns a Mesh.
+prediction: Mesh = model(domain)
+pressure = prediction.point_data["pressure"]
+
+# Encode one boundary once, then reuse it at another query mesh.
+encoded = model.encode(domain)
+query_mesh = Mesh(
+    points=torch.randn(
+        4096,
+        3,
+        device=domain.interior.points.device,
+        dtype=domain.interior.points.dtype,
+    )
+)
+new_prediction: Mesh = model.decode(encoded, query_mesh)
+velocity = new_prediction.point_data["velocity"]
 ```
 
-- `q, k` are projected from the (invariant) scalar features, so the content
-  score `<phi(q), phi(k)>` is invariant. `phi` is a per-token normalization set
-  by `qk_norm` (see Tradeoff T3).
-- `g_h` is a learnable **radial decay envelope** (`RadialDecay`):
-  `g_h(r) = (1 + (r/ell_h)^2)^(-p)`, with `g_h(0)=1` (strong local attention) and
-  algebraic far-field decay. Each head has its **own** length scale `ell_h`
-  ("heads as scales" - see T6).
-- `a_h` (content gain) and `b_h` (baseline gain) are learnable per head. The
-  `b_h` term is a content-free geometric smoother; the `a_h` term is the
-  content-selective attention.
-- `alpha_j` is the area / quadrature weight; it is what makes this a
-  *discretization-invariant integral*, not a sum that grows with mesh density.
-- `v_{j,h}` is a packed value with a **scalar part** (a linear projection of the
-  scalar features, dimension `d`) and an **equivariant vector part** (a bias-free
-  linear combination of the token's input vectors, dimension `D`).
+Changing `field_mode` to `"zero_preserving_nonlinear"` keeps the same schemas
+and API while changing the field-dependence guarantee described in Section 9.
 
-Because every `w^h_{ij}` is an invariant scalar, the scalar output is invariant
-and the vector output (an invariant-weighted sum of equivariant vectors) is
-equivariant.
+The implementation defaults are deliberately modest capacity settings, not
+physical constants:
 
-### 2.3 Equivariance, concretely
+| Setting | Default |
+| --- | ---: |
+| Operator scalar / vector channels | 32 / 8 |
+| Drive scalar / vector channels | 64 / 16 |
+| Operator / boundary-drive blocks | 3 / 2 |
+| Query blocks | 1 (`linear`), 2 (nonlinear) |
+| Heads | 4 |
+| Scalar / vector separable rank | 8 / 4 |
+| Query / attention projection chunk | 65,536 / 65,536 |
+
+Changing these values changes finite-rank capacity or execution memory, not
+the symmetry group, quadrature semantics, or any physical interaction length.
+
+## 3. Boundary quadrature
+
+For ambient dimension \(D\), each codimension-one boundary contributes cell
+quadrature tuples
+
+\[
+Q_\Gamma=\{(x_j,w_j,n_j,r_j)\}_{j=1}^{N_s},
+\]
+
+where \(x_j\) is the cell centroid, \(w_j\) is its
+\((D-1)\)-dimensional measure, \(n_j\) is its cell normal, and \(r_j\) contains
+the declared cell fields and boundary identity. The discrete source measure is
+
+\[
+\mu_h=\sum_{j=1}^{N_s}w_j\delta_{(x_j,n_j)}.
+\]
+
+Every source contraction includes `source_mesh.cell_areas`. Unit weights are
+not substituted. Query points are evaluated pointwise and therefore do not
+need target quadrature weights.
+
+The current interface is cell-quadrature based. Point-associated boundary
+fields, higher-order panel quadrature, and already-integrated face totals must
+be converted to the expected cell-value convention before calling the model.
+Multiplying an already-integrated face total by cell area again would be a
+units error.
+
+If one quadrature sample is replaced by identical samples whose weights sum to
+the original weight, the moment operator is algebraically unchanged. This is
+not a proof of convergence under an actual remesh: geometric quadrature, field
+sampling, and the learned finite-rank kernel must all converge.
+
+## 4. Centering, scale, and similarity covariance
+
+The source origin is the boundary-measure centroid
+
+\[
+c=\frac{\sum_j w_jx_j}{\sum_jw_j}.
+\]
+
+It is computed from the union of all source boundaries. Query points do not
+affect it, and separate boundary patches are not centered independently.
+
+The scale \(L\) is **not** estimated from the geometry:
+
+- if `reference_length_key` is a string, that nested `global_data` leaf must
+  be a finite positive scalar and supplies \(L\);
+- if `reference_length_key is None`, the model uses \(L=1\) and interprets the
+  coordinates as already dimensionless.
+
+There is no fitted RMS radius or other data-dependent length. The normalized
+source and query coordinates are
+
+\[
+z_j=\frac{x_j-c}{L},\qquad
+\zeta_i=\frac{q_i-c}{L}.
+\]
+
+The merged source `Mesh` is rebuilt from normalized vertices, so its cell
+weights are automatically
+
+\[
+\omega_j=\frac{w_j}{L^{D-1}}.
+\]
+
+Consider the physical similarity action
+
+\[
+x'=sRx+t,\qquad s>0,\qquad R\in O(D).
+\]
+
+If the supplied reference length transforms as \(L'=sL\), then
+
+\[
+c'=sRc+t,\qquad z_j'=Rz_j,qquad
+\zeta_i'=R\zeta_i,qquad \omega_j'=\omega_j.
+\]
+
+Thus the model is translation invariant, O(\(D\))-covariant, and
+positive-scale covariant under the full declared problem transformation. The
+caller must transform every polar-vector field by \(R\), keep dimensionless
+scalar parameters consistent, and update the explicit reference length. With
+`reference_length_key=None`, no automatic scale covariance is inferred from
+newly rescaled coordinates; that option means the caller has already performed
+nondimensionalization.
+
+The reference-length leaf is reserved exclusively for geometric
+nondimensionalization. The constructor rejects a `reference_length_key` that
+is also declared as a global `operator` or `drive` field, because exposing the
+dimensional length to a learned path would defeat the similarity contract.
+
+Scaling geometry alone is not necessarily a symmetry of a PDE. For example,
+holding dimensional viscosity and velocity fixed while changing length changes
+Reynolds number. The architectural statement applies only when the complete
+nondimensional physical problem is transformed consistently.
+
+Normals are treated as polar vectors. Under a reflection, a physical outward
+normal must transform as \(Rn\). Reflecting triangle vertices while preserving
+their ordering can reverse the computed orientation, so reflected meshes must
+retain or restore the outward-normal convention.
+
+## 5. Supported geometric types
+
+`ScalarVectorState` contains only:
+
+- invariant scalar channels with shape `(N, C_s)`; and
+- polar-vector channels with shape `(N, C_v, D)`.
+
+All vector channel mixing uses the same coefficients for every Cartesian
+component. Vector Gram matrices and query/key vector dot products supply
+invariant scalars. `GeometryConditionedLinear` additionally permits the two
+elementary geometry-mediated type changes:
+
+- a field vector dotted with a geometry vector produces a scalar; and
+- a field scalar multiplying a geometry vector produces a polar vector.
+
+It also contains the direct equivariant dyad branch
+
+\[
+v_o^{out}\supset
+\sum_{f,a,b}C_{ofab}\,(v_f\cdot g_a)g_b,
+\]
+
+where \(g_a,g_b\) are geometry-vector channels. This remains linear in the
+field at fixed geometry and represents anisotropic maps such as normal
+projection \((v\cdot n)n\) and, together with the direct vector path,
+tangential projection.
+
+This allows, for example, a scalar drive to produce a vector output using
+normalized position or surface normal as a geometric basis.
+
+Pseudoscalars, axial vectors, symmetric tensors, and higher O(\(D\)) irreducible
+representations are not supported. They must not be encoded as ordinary scalar
+or vector channels. In particular, vorticity-like axial vectors need a future
+representation extension.
+
+Here `scalar_rank` and `vector_rank` refer to the finite separable query/key
+feature dimensions. They are not physical tensor ranks.
+
+## 6. Exact signed Galerkin attention
+
+For head \(h\), let the projected queries and keys be
+
+\[
+q^0_{ihr},\;k^0_{jhr}\in\mathbb R,
+\qquad
+q^1_{ihrd},\;k^1_{jhrd}\in\mathbb R^D,
+\]
+
+with scalar feature rank \(R_0\), vector feature rank \(R_1\), and Cartesian
+index \(d\). The invariant signed coefficient is
+
+\[
+a_{ijh}
+=\frac{1}{\sqrt{R_0+DR_1}}
+\left(
+\sum_{r=1}^{R_0}q^0_{ihr}k^0_{jhr}
++\sum_{r=1}^{R_1}\sum_{d=1}^{D}
+q^1_{ihrd}k^1_{jhrd}
+\right).
+\]
+
+The scale is applied to the projected queries in code. The coefficient is a
+joint O(\(D\)) invariant: geometry and every polar-vector input transform
+together. It is unconstrained and signed. There is no exponential, softmax,
+absolute value, distance envelope, or positivity constraint.
+
+Let \(v^0_{jhf}\) and \(v^1_{jhfe}\) be projected scalar and polar-vector values.
+Before the final typed output projection, dense attention would compute
+
+\[
+o^0_{ihf}=\sum_j\omega_j a_{ijh}v^0_{jhf},
+\qquad
+o^1_{ihfe}=\sum_j\omega_j a_{ijh}v^1_{jhfe}.
+\]
+
+This is the exact signed Galerkin/linear-attention formula implemented by
+`MeshAttention`. "Galerkin" refers to the quadrature-weighted query/key/value
+pairing; because predictions are collocated at query points, the evaluation is
+also naturally viewed as a Nyström discretization rather than a finite-element
+Galerkin method with explicit trial and test bases.
+
+### 6.1 Exact source moments
+
+Separability permits the source sum to be reassociated. The implementation
+builds four typed moments:
+
+\[
+M^{00}_{hrf}=\sum_j\omega_jk^0_{jhr}v^0_{jhf},
+\]
+
+\[
+M^{10}_{hrdf}=\sum_j\omega_jk^1_{jhrd}v^0_{jhf},
+\]
+
+\[
+M^{01}_{hrfe}=\sum_j\omega_jk^0_{jhr}v^1_{jhfe},
+\]
+
+\[
+M^{11}_{hrdfe}=\sum_j\omega_jk^1_{jhrd}v^1_{jhfe}.
+\]
+
+Each receiver then contracts its query with these moments:
+
+\[
+o^0_{ihf}
+=\sum_rq^0_{ihr}M^{00}_{hrf}
++\sum_{r,d}q^1_{ihrd}M^{10}_{hrdf},
+\]
+
+\[
+o^1_{ihfe}
+=\sum_rq^0_{ihr}M^{01}_{hrfe}
++\sum_{r,d}q^1_{ihrd}M^{11}_{hrdfe}.
+\]
+
+These are algebraic rearrangements of the dense formula, not a numerical
+approximation. Every source contributes to every moment, and every receiver
+reads those global moments. The layer therefore has global all-to-all semantics
+despite never constructing an \(N_q\times N_s\) matrix.
+
+The four reductions use the mesh-native `integrate_moment(mesh, left, right)`
+functional from `physicsnemo.mesh.calculus`.
+Attention heads are declared as aligned moment groups, so head \(h\) contracts
+only with head \(h\) while the `Mesh` owns geometric measure, NaN policy, and
+accumulation precision.
+
+Moment accumulation is promoted to at least fp32 by default and never
+downcasts fp64 inputs. Results are cast back to the working dtype before the
+typed output projection.
+
+### 6.2 Dense oracle
+
+`MeshAttention.forward_reference` explicitly forms the signed pair scores and
+evaluates the same quadrature sum in \(O(N_sN_q)\) work. It is intended for:
+
+- fast-path versus dense value tests;
+- fast-path versus dense parameter and input-gradient tests; and
+- diagnosing a change to the moment contractions.
+
+It is not the production execution path or a more expressive model.
+
+## 7. Finite-rank separability: benefit and tradeoff
+
+Per head, the effective score matrix has rank at most
+
+\[
+R_0+DR_1.
+\]
+
+This is the mathematical definition of the layer and the source of its exact
+linear complexity. It is not a low-rank approximation chosen at inference
+time.
+
+The benefits are:
+
+- exact global communication at linear cost in source and query count;
+- no graph, cutoff, or tree-dependent change of semantics;
+- reusable source moments for independent query chunks; and
+- exact agreement with a simple dense oracle.
+
+The corresponding capacity limitation is real. At fixed ranks, one layer
+cannot represent an arbitrary full-rank pair kernel, pair-specific radial
+function, sharp local selector, or singular Green kernel. Coordinate dependence
+enters through learned per-token query and key embeddings, not through an
+arbitrary nonlinear function evaluated jointly on each pair.
+
+The nonlinear global operator stream makes each source embedding depend on the
+whole boundary before it is used by later field and query layers. Increasing
+`scalar_rank`, `vector_rank`, heads, channel multiplicities, or depth increases
+capacity while retaining linear complexity in \(N\), but none of these choices
+turns the model into an exact boundary-integral solver.
+
+Heads and separable ranks are capacity parameters, not physical length scales
+or additional invariance assumptions.
+
+## 8. Two-stream model
+
+The model deliberately separates a nonlinear operator stream from the physical
+drive stream:
 
 ```mermaid
 flowchart LR
-    s["scalars (invariant)"] --> qk["q, k  (phi-normed)"]
-    v["vectors (equivariant)"] --> inv["Gram invariants"]
-    inv --> qk
-    s --> vs["scalar value"]
-    v --> vv["vector value (no-bias linear)"]
-    qk --> score["content score (invariant)"]
-    pos["positions"] --> decay["radial decay g_h (invariant)"]
-    score --> w["weight w_ij  (invariant)"]
-    decay --> w
-    w --> os["out scalar = sum w * v_scalar  (invariant)"]
-    w --> ov["out vector = sum w * v_vector  (equivariant)"]
+    D["DomainMesh boundaries"] --> Q["cell quadrature"]
+    Q --> C["boundary-measure center"]
+    L["explicit reference length"] --> C
+    C --> G["nonlinear global operator stream"]
+    B["operator fields + position + normal + BC identity"] --> G
+    R["drive fields"] --> F["field-mode blocks"]
+    G --> F
+    F --> E["EncodedBoundary"]
+    E --> M["exact source moments"]
+    I["query points"] --> X["shared pointwise query operator state"]
+    E --> X
+    M --> Y["query field blocks"]
+    X --> Y
+    Y --> O["typed point predictions"]
 ```
 
-Vectors influence the scalar/attention path **without breaking equivariance** by
-contributing their rotation-invariant Gram dot-products (`<v_c, v_c'>`) as extra
-scalar features (`vector_invariants=True`). This is GVP's trick (extract vector
-norms as invariant scalars), generalized to the full Gram upper triangle.
+### 8.1 Operator stream
 
-### 2.4 Near-linear evaluation: the dual tree
+The source operator state is lifted from:
 
-Materializing the `(N_t, N_s, H)` weight matrix is O(N²). Instead, because the
-score decays with distance, the layer reuses GLOBE's
-[`ClusterTree`](../../../mesh/spatial/cluster_tree.py) dual-tree Barnes-Hut
-traversal (promoted into `physicsnemo.mesh.spatial`). The traversal classifies
-every source-target interaction into four categories, and the operator is
-split into two pieces so that the code is clean *and* the `theta=0` limit is
-exactly the dense operator:
+- declared boundary and global `operator` fields;
+- normalized cell centroid;
+- cell normal;
+- boundary-name one-hot values; and
+- a source/query association indicator.
 
-- a **content-free baseline** `B_i = sum_j g_h(r_ij) * alpha_j * v_j`, evaluated
-  over *all* sources via the four dual-tree phases (near exact; far via
-  area-weighted cluster monopoles `M0`), and
-- a **near-only content correction**
-  `C_i = sum_{j near i} <phi(q_i),phi(k_j)> g_h(r_ij) alpha_j v_j`.
+Immediately after `operator_lift`, source and query tokens pass through the
+same `PointwiseGeometryBlock`. This is a nonlinear typed residual feature map
+with no interaction, neighborhood, or cutoff. Sharing it enriches the
+finite-rank coordinate basis consistently on both sides of attention before
+the source operator state enters its global blocks.
 
-The output is `a_h * C + b_h * B` (optionally divided by the envelope mass).
+`MeshOperatorBlock` applies nonlinear typed RMS normalization, exact global
+moment attention, an equivariant pointwise feed-forward network, residual
+connections, and learned per-channel layer scales. Biases and nonlinearities
+are allowed here because this stream describes the operator rather than the
+physical solution amplitude.
 
-```mermaid
-flowchart TB
-    root["dual-tree traversal (theta)"] --> near["near: exact pairs, full content + baseline"]
-    root --> nf["near tgt / far src node: baseline via source monopole M0"]
-    root --> far["far tgt node / far src node: monopole, broadcast"]
-    root --> fn["far tgt node / near src: at target centroid, broadcast"]
-    near --> out["scatter-add into per-target buffers"]
-    nf --> out
-    far --> out
-    fn --> out
-```
+Normalized coordinates are carried as polar-vector channels. Raw Cartesian
+components are not passed independently through a scalar MLP. There are no
+Fourier coordinate features, graph eigenvectors, PCA frames, vertex-index
+embeddings, pair distances, or radial cutoffs.
 
-- **Cost**: an `O(N log N)` tree build plus `O(N)` far-field node interactions;
-  near pairs are exact.
-- **Monopole `M0`**: a far source cluster contributes its area-weighted *sum* of
-  values at its centroid (recovered as `node_mean * node_total_area`).
-- **`theta=0`** makes every interaction near/exact, so the hierarchical forward
-  reproduces `forward_reference` (the brute-force O(N²) dense path) to machine
-  precision. This is the correctness oracle.
+### 8.2 Drive lift and boundary propagation
 
-### 2.5 The block and the (future) model
+Declared boundary and global `drive` fields are packed separately. A
+`GeometryConditionedLinear` lift maps them into the drive latent using the
+operator state. This map may convert scalar and vector types through geometry,
+but it remains exactly linear in the drive argument at fixed operator state.
 
-`MeshTransformerBlock` is a standard pre-norm transformer block over the
-**scalar** stream, with the equivariant vector stream carried through the
-attention residual:
+The selected field block then performs global boundary-to-boundary propagation.
+The implementation uses different block classes for the two field modes so a
+normalization, bias, or activation added to nonlinear mode cannot silently
+invalidate the linear-mode proof.
 
-```text
-s <- s + MeshAttn(LN(s), v)_scalar
-v <- v + MeshAttn(LN(s), v)_vector
-s <- s + MLP(LN(s))
-```
+### 8.3 Reusable boundary encoding and queries
 
-The MLP and LayerNorms touch only the invariant scalar stream, so the whole
-block is `O(D)`-equivariant. The tree and plan depend only on geometry, so they
-are built once and shared across a stack of blocks.
+`MeshTransformer.encode` returns an `EncodedBoundary` containing the
+dimensionless source mesh, operator and drive states, center, reference length,
+global operator and drive states, the source moments for every query block, and
+the default query mesh. It contains no neighborhood, tree, or query-dependent
+interaction plan.
 
-The intended full **Mesh Transformer model** stacks these blocks as an encoder
-over boundary tokens and then uses `MeshAttention` in **cross-attention** mode
-(`query_*` arguments / a distinct `target_tree`) to decode fields at arbitrary
-query points - the GLOBE-style boundary -> volume evaluation. The layer already
-supports this; the orchestrating model class is future work.
+`MeshTransformer.decode` may evaluate the default interior points or another
+query `Mesh` with the same spatial dimension, device, and dtype. Query operator
+tokens contain normalized query position, global operator data, and a query
+association indicator. Boundary-only fields, BC one-hot values, and query
+normal are zero at ordinary query points. A declared global drive, such as a
+prescribed far field, is also lifted directly at each query; this gives it a
+pointwise path in addition to its geometry-dependent boundary-integral path.
+That path remains linear in `linear` mode and zero-preserving in both modes.
 
----
+Each query field block constructs its source moments during `encode`. They are
+reused over all `query_chunk_size` chunks and subsequent `decode` calls. Query
+points do not interact with one another, so changing query chunking or query
+order does not change the mathematical operator beyond floating-point ordering
+effects. The output projection is geometry-conditioned and typed; predictions
+are written to query `point_data`. An encoding is tied to the model parameters
+that produced it and must be rebuilt after an optimizer update.
 
-## 3. Major tradeoffs
+Within every attention block, `attention_chunk_size` also bounds the number of
+entities passed through a typed query/key/value projection at once. Source
+chunks are integrated immediately into the four small moment tensors rather
+than retained and concatenated. Under `torch.no_grad()`, this bounds live
+Gram/projection workspace. With autograd enabled, PyTorch retains each chunk's
+saved activations for backward, so total training activation memory remains
+linear in entity count; chunking does not by itself bound that saved memory.
+This does not change the mathematical kernel, and changing chunk size may
+change only ordinary floating-point summation order.
 
-### Theoretical
+## 9. Field modes
 
-**T1 - Unnormalized (no softmax).** The operator is `sum_j w_ij v_j` with no
-softmax partition function. This is the physically correct object for
-PDE-operator learning: a Green's-function/boundary integral `u(x) = integral
-G(x,y) f(y) dy` is *not* normalized, and the Galerkin Transformer (Cao,
-NeurIPS 2021) proves softmax is "sufficient but not necessary" - softmax-free
-attention is provably comparable to a Petrov-Galerkin projection and empirically
-*better* on PDE benchmarks. Softmax was deliberately rejected: it is a different
-axis (a cross-key normalization of `exp`-scores, not a per-token transform), it
-**breaks the exact far-field factorization** (forcing Performer/KDE-style
-approximations, as in FMMformer/KDEformer), and it needs a second hierarchical
-reduction (the partition function). The price of going unnormalized is the known
-expressivity gap of linear/bilinear attention (non-injectivity, weak locality);
-but our **distance-decay envelope and exact near field directly supply the
-locality** that the linear-attention literature (cosFormer, "Bridging the
-Divide") identifies as the missing ingredient, so the gap is largely closed in
-this setting.
+The canonical modes are `linear` and `zero_preserving_nonlinear`.
 
-**T2 - The far field is a truncation, not a controlled approximation (the
-central honest tradeoff).** With `far_field="m0"`, far interactions keep only the
-content-free baseline; the content term is dropped at range. Crucially, `theta`
-bounds the *geometric* (monopole) error of the envelope, but it does **not**
-bound the dropped content term, whose relative size is
-`a_h * <phi(q),phi(k)> / b_h` - independent of `theta` and free to grow during
-training. Consequences, all documented in the class docstring:
+### 9.1 `linear`
 
-- At `theta > 0` the layer computes a *different operator* than the dense
-  reference ("near-field content attention plus global learned smoothing"), so
-  `theta` is **part of the model definition** - a checkpoint trained at one
-  `theta` and evaluated at another is a different model.
-- A `content_to_baseline_ratio` property (`|a_h / b_h|`) is exposed to monitor
-  how much of the operator the truncation discards.
-- The principled fix (a content-carrying far field, `far_field="m0+m1"`, which
-  would add a per-cluster content moment) is reserved but **not yet
-  implemented**, because of its `d x F_v` per-node memory cost.
+`LinearMeshFieldBlock` obtains queries and keys only from the operator state.
+Values come from the drive state through bias-free projections with vector Gram
+invariants disabled. Its pointwise map and final output map are
+geometry-conditioned but linear and bias-free in the field.
 
-This was chosen over the alternatives (content-blind everywhere, or a full M1
-far field) as the right v1 inductive bias: *fine content selection is local;
-at range you receive a region's bulk signal.*
+For fixed geometry and fixed operator-role data, the entire drive-to-output map
+therefore satisfies, up to floating-point arithmetic,
 
-**T3 - Q/K normalization (`qk_norm`), and a corrected justification.** The score
-uses a per-token transform `phi(q), phi(k)`: `layernorm` (default), `cosine`
-(Swin V2, hard-bounded to `[-1,1]`), or `none` (raw). LayerNorm is the default
-because the closest precedent - the Galerkin Transformer for *softmax-free PDE
-attention* - uses Q/K LayerNorm to let a learnable scale propagate across layers,
-which cosine's hard bound would destroy. An earlier design rationale claimed
-cosine was needed to make the far field factorize; that was **wrong** and has
-been corrected: factorization follows from a bilinear-in-transformed-features
-score plus query-independent values, and holds for *any* per-token `phi`. So
-`qk_norm` is purely a stability/expressivity knob, kept configurable.
+\[
+\mathcal N_\Gamma(0)=0,
+\qquad
+\mathcal N_\Gamma(\alpha b_1+\beta b_2)
+=\alpha\mathcal N_\Gamma(b_1)+\beta\mathcal N_\Gamma(b_2).
+\]
 
-**T4 - Equivariance scope.** Equivariance is **exact on the dense path**
-(`forward_reference`, or `theta=0`) - verified to ~1e-15 for translation,
-rotation, and reflection. At `theta > 0` the Morton-code tree build (and hence
-the near/far partition) is orientation- and translation-dependent, so the output
-changes slightly under rigid motions: **equivariance holds only up to the
-hierarchical approximation error**. This is an honest, documented limitation
-shared with all Barnes-Hut/FMM methods. The equivariance is *joint* over
-geometry and input vectors (rotate positions and vectors together), which is
-what lets an exactly-equivariant model still represent anisotropic physics
-(freestream direction, gravity) by treating those as co-transforming input
-vectors.
+The operator stream may remain nonlinear in geometry and material parameters;
+that does not violate field superposition at fixed operator state.
 
-**T5 - The equivariant path is intentionally minimal.** The vector value is a
-*linear*, bias-free combination of input vectors (no GVP-style vector gating or
-nonlinearity), the vector invariants are the *raw* Gram (not L2-norm or
-`smooth_log`), and the block has **no scale control on the equivariant path** -
-the vector stream gets residual updates from an unnormalized operator with no
-norm of its own. In deep stacks vector magnitudes (and the Gram features) can
-drift; the block docstring flags this and suggests a PaiNN-style equivariant
-vector norm (rescale each channel by the RMS of its norms) if it becomes a
-problem. These were left as minimal-but-correct v1 choices rather than
-unvalidated architecture additions.
+The linear field path contains no field-amplitude normalization, activation,
+content-dependent score, or additive field bias. Query/key scalar biases are
+permitted because those projections read only the operator state.
 
-**T6 - Heads as scales.** Each head has its own learnable decay length scale,
-initialized across a geometric range. This replaces GLOBE's explicit multiscale
-kernel *branches* with a single mechanism: different heads specialize to
-different spatial scales (boundary layer vs. wake) for free.
+### 9.2 `zero_preserving_nonlinear`
 
-### Engineering
+`NonlinearZeroMeshFieldBlock` concatenates operator and field states when
+forming queries and keys. Its value projection may include invariant vector
+Gram features, and its pointwise feed-forward update uses content-dependent
+gates. These operations make the field map nonlinear while retaining the same
+separable moment structure and linear complexity in entity count.
 
-**E1 - Reuse GLOBE's dual tree, and the content/baseline decomposition.** Rather
-than reimplement spatial acceleration, `ClusterTree` / `DualInteractionPlan` /
-`SourceAggregates` were *promoted* out of GLOBE into
-[physicsnemo.mesh.spatial](../../../mesh/spatial/cluster_tree.py) so both GLOBE and
-this layer depend on a shared, battle-tested structure (avoiding a backwards
-`nn -> models` dependency). Splitting the operator into a content-free baseline
-(all four phases) plus a near-only content correction keeps the four-phase
-plumbing identical to GLOBE's and makes the `theta=0` oracle exact.
+Bias-free field values and structurally multiplicative updates ensure
 
-**E2 - Trees built `no_grad` + `@torch.compiler.disable`.** Tree construction and
-the dual traversal are combinatorial (Morton codes, AABB propagation,
-data-dependent control flow): they carry no useful gradient and are not
-traceable by `torch.compile`. They are built in a `no_grad`, compile-disabled
-helper (mirroring GLOBE). Geometry gradients still flow through the
-differentiable `r_sq` and aggregate computations done outside that helper. The
-practical implication: **to use `torch.compile`, precompute trees/plan and pass
-them in**; full end-to-end compilation of the layer is untested.
+\[
+\mathcal N_\Gamma(0)=0.
+\]
 
-**E3 - Accumulation dtype and determinism.** The hierarchical scatter
-accumulates in a dtype at least as wide as fp32 (the decay runs in >= fp32 via
-its fp32 length-scale parameter), avoiding `index_add_` dtype mismatches under
-bf16/fp16 and improving sum precision; the result is then cast back to the
-working dtype so downstream projections behave. Note that `index_add_` is
-**non-deterministic on CUDA** (atomic adds); set
-`torch.use_deterministic_algorithms(True)` for reproducible (slower) runs.
+This mode does not guarantee homogeneity or superposition. It is appropriate
+only when that loss of linear-PDE structure is intentional.
 
-**E4 - The `areas` footgun and the prebuilt-tree contract.** `areas` defaults to
-ones for convenience, but on a non-uniform mesh that **breaks
-discretization-invariance** and (in the pure-unnormalized default) makes output
-magnitude scale with local point density - so callers should pass true cell
-areas. Relatedly, the far field recovers the area-weighted sum using the tree's
-*build-time* total area, so a precomputed `source_tree` must be built with the
-same `areas`; this contract is now **enforced** by `_check_tree_areas` (a cheap
-root-total-area check), not merely documented.
+If a nonzero far field or forcing should generate a solution when local
+boundary values are zero, it must be declared as a global or boundary `drive`
+field. The zero-input statement zeros all drive-role fields; it does not erase
+geometry or operator-role conditioning.
 
-**E5 - No chunking/checkpointing yet (the scale ceiling).** The near phase
-materializes the per-pair `q`/`k`/`value` gathers at once (peak memory
-`O(n_near * H * (d + F_v))`). `n_near` grows as `theta` and `leaf_size` shrink
-and with point density. A `leaf_size` knob trades plan size against near-pair
-count, but at the ~1M-token scale this term dominates and GLOBE-style
-gather-inside-checkpoint + auto-chunking is the main deferred performance work.
+### 9.3 Shared implementation and guarantees
 
-**E6 - API and amortization.** The forward is rank-typed and self/cross-attention
-aware: `forward(scalars, positions, vectors=None, areas=None, *, query_*, trees,
-plan, theta, source_aggregates)`. `compute_source_aggregates` lets callers
-amortize the per-node aggregation across several forwards within one step (e.g.
-many query sets attending to one source set), with validation that a supplied
-aggregate matches the layer/tree. Input validation is thorough but skipped under
-`torch.compile`.
+Both modes share:
 
-**E7 - Placement.** `MeshAttention` / `MeshTransformerBlock` subclass
-`nn.Module` (not `physicsnemo.Module`), consistent with the existing attention
-*layer* precedent (`FLARE`, `PhysicsAttention`); the eventual full model would be
-a `physicsnemo.Module`. They live under `physicsnemo.experimental.nn` since the
-APIs are still evolving.
+- boundary cell quadrature;
+- boundary-measure centering and explicit coordinate scaling;
+- the nonlinear operator stream;
+- scalar/polar-vector typed projections;
+- exact signed source moments;
+- query chunking and decoding; and
+- the bias-free geometry-conditioned output projection.
 
----
+They differ only in field-dependent hooks:
 
-## 4. Correctness and validation
+| Property | `linear` | `zero_preserving_nonlinear` |
+| --- | --- | --- |
+| Query/key may read the field | No | Yes |
+| Value dependence on field | Linear | Nonlinear, zero at zero |
+| Pointwise field update | Linear, bias-free | Nonlinear, zero-preserving |
+| Exact zero-input behavior | Yes | Yes |
+| Exact fixed-operator superposition | Yes | No |
 
-The test suite ([test/experimental/nn/test_mesh_attention.py](../../../../test/experimental/nn/test_mesh_attention.py))
-covers:
+## 10. Why there are no neighborhoods or trees
 
-- **Convergence oracle**: hierarchical `theta=0` equals the dense reference to
-  ~1e-8 across all `qk_norm` / `mass_normalize` / `vector_invariants` settings.
-- **Far-field exactness**: with a constant envelope (huge length scale =>
-  `g == 1`) and `content_gain=0`, the cluster monopole is exact, so the
-  hierarchical forward must equal the dense reference at `theta > 0`. This is the
-  only test that routes through - and so validates - the `(near,far)`,
-  `(far,near)`, and `(far,far)` broadcast phases and the source-coverage /
-  no-double-count property (which `theta=0` never exercises).
-- **Equivariance**: translation, rotation, and reflection on the dense path
-  (scalars invariant, vectors equivariant) to ~1e-15.
-- **Discretization-invariance**: splitting sources into equal-area copies leaves
-  the (cross-attention) output unchanged.
-- **Gradients**: parameter gradients of the tree forward match the dense
-  reference at `theta=0`; gradients flow finitely under AMP.
+Mesh connectivity is used to compute cell centroids, measures, and normals. It
+does not define learned one-ring messages. The model has no kNN graph, radius
+graph, local-content mask, compact support, or near/far split.
 
----
+Local graph semantics are undesirable for this boundary operator because:
 
-## 5. Lineage and prior art
+- a one-ring physical radius shrinks under refinement;
+- kNN and radius graphs change discontinuously as geometry moves;
+- a fixed number of graph layers has no resolution-independent receptive
+  field; and
+- a local/far rule can suppress the distant boundary data that elliptic
+  problems require.
 
-- **GLOBE** - the boundary-integral, equivariant, dual-tree operator this is
-  built on; supplies the `ClusterTree`, the equivariant feature recipe, and the
-  rank-typed-field philosophy.
-- **FMMformer / H-Transformer-1D / Fast Multipole Attention** - the
-  near-field-exact / far-field-low-rank decomposition (FMMformer even *beats*
-  dense attention on Long Range Arena); here generalized to 3D meshes with a
-  physical, equivariant score.
-- **Galerkin Transformer (Cao, 2021)** - the justification for softmax-free
-  attention and Q/K LayerNorm in PDE-operator learning.
-- **Swin Transformer V2** - the scaled-cosine option for bounded scores.
-- **Geometric Vector Perceptrons / Vector Neurons / PaiNN** - rank-typed
-  scalar+vector features, invariant-from-vector extraction, and equivariant
-  vector normalization.
-- **Transolver / GeoTransolver / FLARE** - the physics-attention family this
-  complements; `FLARE` lives in the same package as a different (global-query
-  routing) linear-cost attention.
+A tree is also unnecessary for the implemented kernel. Exact finite-rank
+separability already reduces the global sum to source moments in linear time.
+The moment path retains every source contribution and is exactly equivalent to
+the dense all-pairs formula.
 
----
+## 11. Complexity and memory
 
-## 6. Roadmap
+Let
 
-Deferred, in rough priority order:
+- \(H\) be the number of heads;
+- \(R_0,R_1\) the scalar and vector query/key ranks;
+- \(F_0,F_1\) the scalar and vector value dimensions; and
+- \(D\) the spatial dimension.
 
-1. The full **Mesh Transformer model** (encoder stack + cross-attention decode at
-   query points, GLOBE-style multi-BC handling and `global_data` conditioning).
-2. **Gradient checkpointing + chunking** for the near phase (the main scale
-   ceiling).
-3. The **`m0+m1` content-carrying far field** (smooths the content truncation of
-   T2; pays a `d x F_v` per-node memory cost).
-4. **Equivariant vector normalization / gating** for deep-stack stability and
-   vector expressivity (T5).
-5. Verified **`torch.compile`** support end to end.
+The four moment families have a fixed feature cost proportional to
+
+\[
+C_{moment}
+=H\left(R_0F_0+R_1DF_0+R_0F_1D+R_1F_1D^2\right).
+\]
+
+With these architecture sizes fixed, one cross layer costs
+
+\[
+O(N_s C_{moment}+N_q C_{moment})
+=O(N_s+N_q)
+\]
+
+in entity count, plus linear-cost projections and pointwise maps. A self layer
+has \(N_q=N_s\) and remains \(O(N_s)\).
+
+For \(L_o\) operator blocks, \(L_d\) boundary drive blocks, and \(L_q\) query
+blocks, the model's entity-count scaling is
+
+\[
+O\left((L_o+L_d)N_s+L_q(N_s+N_q)\right),
+\]
+
+with feature-dependent constants omitted.
+
+The moment tensors are independent of \(N_s,N_q\). Runtime memory never stores
+the quadratic source-query matrix. With autograd enabled, saved activations are
+linear in total source and query count; under `torch.no_grad()`, live projection
+workspace is bounded by the configured chunks. Larger ranks and vector value
+sizes increase the constant substantially, especially the \(R_1F_1D^2\)
+vector-key/vector-value moment.
+
+`query_chunk_size` is an execution setting, not a model-semantic cutoff. Source
+moments are reused across chunks and across different query meshes evaluated
+from the same `EncodedBoundary`.
+
+`attention_chunk_size` is likewise an exact live-workspace setting, not a
+semantic cutoff. It is especially relevant to no-grad evaluation in
+`zero_preserving_nonlinear` mode, where invariant Gram features of the combined
+operator/field vectors would otherwise create a large temporary tensor over
+the complete source mesh. Training-time activation checkpointing or custom
+recomputation is a possible future optimization, not part of this interface.
+
+## 12. Dense oracle and future acceleration policy
+
+The source-moment path is not an approximation backend. It is the exact
+implementation of the model's separable kernel. Changing chunk size does not
+change its rank or interaction semantics.
+
+`forward_reference` is the required dense oracle and should remain simple. Any
+future change to query/key contractions or typed moments must compare both
+values and gradients against it.
+
+A future **nonseparable** pair kernel would be a different mathematical layer;
+the present four moments could not evaluate it exactly. If such a layer later
+uses low-rank, hierarchical, or multipole acceleration, it must provide:
+
+1. a dense oracle for the same nonseparable formula;
+2. no silently dropped field/content term;
+3. a convergence or error-control test; and
+4. an explicit statement when rotations or other invariances become only
+   approximate.
+
+An axis-aligned spatial tree is not part of the current model or its cache
+contract.
+
+## 13. Guaranteed properties and capacity choices
+
+Subject to correctly typed inputs and consistent normal orientation, the model
+is designed to guarantee:
+
+- permutation/reindexing equivariance of source and query order;
+- global all-to-all source semantics;
+- translation invariance from boundary-measure centering;
+- O(\(D\)) covariance for invariant scalars and polar vectors;
+- positive-scale covariance when the explicit reference length and complete
+  nondimensional problem transform consistently;
+- quadrature-weighted source aggregation;
+- exact equality of fast moments and the dense formula, up to floating-point
+  contraction order;
+- exact zero-drive output in both field modes; and
+- exact fixed-operator superposition in `linear` mode.
+
+The following are capacity choices, not stronger physical guarantees:
+
+- scalar and vector latent channel counts;
+- head count;
+- `scalar_rank` and `vector_rank`;
+- numbers of operator, drive, and query blocks;
+- nonlinear operator feed-forward width;
+- field mode; and
+- query chunk size, which changes memory use only.
+
+The architecture does not by itself guarantee:
+
+- satisfaction of a PDE residual or boundary condition;
+- conservation, reciprocity, coercivity, positivity, or a maximum principle;
+- Neumann compatibility or gauge fixing;
+- an analytic Green-function singularity, jump relation, or far-field decay;
+- convergence under arbitrary remeshing;
+- accuracy on unseen geometry families; or
+- stability at arbitrary depth or separable rank.
+
+Those properties require an analytic kernel, constrained operator, compatible
+discretization, loss, or solver designed for the particular PDE.
+
+## 14. Validation contract
+
+Tests should distinguish exact algebraic properties from empirical convergence:
+
+- compare moment evaluation and `forward_reference` values and gradients;
+- permute boundary cells, named-boundary ordering, and query points;
+- translate, rotate, and reflect coordinates, normals, all polar-vector fields,
+  and vector outputs together;
+- uniformly scale geometry and the explicit reference length together, checking
+  the normalized cell measures;
+- verify that `reference_length_key=None` performs no data-dependent scale fit;
+- split identical quadrature samples with conserved measure and separately test
+  convergence under genuine surface refinement;
+- verify that data attached only to `domain.interior` cannot affect output;
+- verify zero output with all drive-role fields zero;
+- verify superposition in `linear` mode and deliberately avoid claiming it in
+  `zero_preserving_nonlinear` mode;
+- compare query results across chunk sizes and across reused boundary encodings;
+  and
+- reject rank specifications other than invariant scalar or polar vector.
+
+The dense oracle tests separable algebra. It does not validate PDE fidelity or
+OOD-geometry accuracy.
+
+## 15. Limitations
+
+The current model is intentionally narrow:
+
+- sources are codimension-one boundary cells with cell-centered fields;
+- the caller is responsible for a valid, consistently oriented boundary union;
+  `forward` does not perform an expensive watertightness check;
+- queries are mesh points and do not interact with one another;
+- only invariant scalars and polar vectors are represented;
+- all physical fields must be nondimensionalized by the caller;
+- body/volume forcing has no separate source mesh;
+- analytic singular and nearly singular boundary quadrature is not provided;
+- interior connectivity is preserved in the returned mesh but is not used by
+  the pointwise decoder; and
+- finite-rank separability may be a bottleneck for sharp, highly local, or
+  singular operators.
+
+These limitations make the reference semantics precise: a global signed
+operator with exact quadrature moments, exact linear entity-count scaling, and
+clear linear versus zero-preserving nonlinear field guarantees. More specialized
+physics and broader geometric types can be added without redefining that core.
