@@ -58,7 +58,8 @@ nonlinearity is desired.
 The source and query roles are taken from a `DomainMesh`:
 
 - `domain.boundaries` are the source meshes. Each declared boundary must be a
-  nonempty codimension-one mesh. Boundary fields are read from `cell_data`.
+  nonempty codimension-one mesh whose cells all have finite positive measure.
+  Boundary fields are read from `cell_data`.
 - `domain.interior.points` are the default query locations. Data already
   attached to the interior are not read as model inputs.
 - `domain.global_data` hold declared domain-level fields and, optionally, the
@@ -400,11 +401,22 @@ approximation. Every source contributes to every moment, and every receiver
 reads those global moments. The layer therefore has global all-to-all semantics
 despite never constructing an \(N_q\times N_s\) matrix.
 
-The four reductions use the mesh-native `integrate_moment(mesh, left, right)`
-functional from `physicsnemo.mesh.calculus`.
-Attention heads are declared as aligned moment groups, so head \(h\) contracts
-only with head \(h\) while the `Mesh` owns geometric measure, NaN policy, and
-accumulation precision.
+In code, scalar and Cartesian-flattened vector key features are concatenated,
+as are scalar and Cartesian-flattened vector values. One mesh-native
+`integrate_moment(mesh, key_features, value_features)` call constructs the
+joint block matrix
+
+\[
+M_h\in\mathbb R^{(R_0+DR_1)\times(F_0+DF_1)}.
+\]
+
+The four tensors above are views of its typed blocks. This packing is only a
+batched-matrix-multiplication optimization: it neither mixes transformation
+types in learned layers nor changes the mathematical contractions. It can
+change ordinary floating-point reduction order relative to four separate
+matrix multiplications. Attention heads are aligned moment groups, so head
+\(h\) contracts only with head \(h\), while the `Mesh` owns geometric measure,
+NaN policy, and accumulation precision.
 
 Moment accumulation is promoted to at least fp32 by default and never
 downcasts fp64 inputs. Results are cast back to the working dtype before the
@@ -492,7 +504,9 @@ Immediately after `operator_lift`, source and query tokens pass through the
 same `PointwiseGeometryBlock`. This is a nonlinear typed residual feature map
 with no interaction, neighborhood, or cutoff. Sharing it enriches the
 finite-rank coordinate basis consistently on both sides of attention before
-the source operator state enters its global blocks.
+the source operator state enters its global blocks. Like later operator and
+field residual branches, it uses small LayerScale initialization for depth
+stability.
 
 `MeshOperatorBlock` applies nonlinear typed RMS normalization, exact global
 moment attention, an equivariant pointwise feed-forward network, residual
@@ -529,10 +543,14 @@ interaction plan.
 query `Mesh` with the same spatial dimension, device, and dtype. Query operator
 tokens contain normalized query position, global operator data, and a query
 association indicator. Boundary-only fields, BC one-hot values, and query
-normal are zero at ordinary query points. A declared global drive, such as a
-prescribed far field, is also lifted directly at each query; this gives it a
-pointwise path in addition to its geometry-dependent boundary-integral path.
-That path remains linear in `linear` mode and zero-preserving in both modes.
+normal are zero at ordinary query points. The first cross-attention message is
+a read-in rather than a perturbative residual update, so its learnable
+per-channel scale is initialized to one. Later cross messages and all
+pointwise residual updates retain small LayerScale initialization. A declared
+global drive, such as a prescribed far field, is lifted directly at each query
+before cross-attention; this gives it a pointwise path in addition to its
+geometry-dependent boundary-integral path. That path remains linear in
+`linear` mode and zero-preserving in both modes.
 
 Each query field block constructs its source moments during `encode`. They are
 reused over all `query_chunk_size` chunks and subsequent `decode` calls. Query
@@ -543,14 +561,15 @@ are written to query `point_data`. An encoding is tied to the model parameters
 that produced it and must be rebuilt after an optimizer update.
 
 Within every attention block, `attention_chunk_size` also bounds the number of
-entities passed through a typed query/key/value projection at once. Source
-chunks are integrated immediately into the four small moment tensors rather
-than retained and concatenated. Under `torch.no_grad()`, this bounds live
-Gram/projection workspace. With autograd enabled, PyTorch retains each chunk's
-saved activations for backward, so total training activation memory remains
-linear in entity count; chunking does not by itself bound that saved memory.
-This does not change the mathematical kernel, and changing chunk size may
-change only ordinary floating-point summation order.
+entities passed through a typed query/key/value projection at once. Scalar and
+vector features are packed only within each source chunk, integrated
+immediately into the joint moment, and then accumulated into the four typed
+blocks. Under `torch.no_grad()`, this bounds live Gram/projection/packing
+workspace. With autograd enabled, PyTorch retains each chunk's saved
+activations for backward, so total training activation memory remains linear
+in entity count; chunking does not by itself bound that saved memory. This does
+not change the mathematical kernel, and changing chunk size may change only
+ordinary floating-point summation order.
 
 ## 9. Field modes
 
@@ -778,19 +797,71 @@ Tests should distinguish exact algebraic properties from empirical convergence:
 - verify superposition in `linear` mode and deliberately avoid claiming it in
   `zero_preserving_nonlinear` mode;
 - compare query results across chunk sizes and across reused boundary encodings;
-  and
+- reject degenerate or nonfinite-measure boundary cells; and
 - reject rank specifications other than invariant scalar or polar vector.
 
 The dense oracle tests separable algebra. It does not validate PDE fidelity or
 OOD-geometry accuracy.
 
-## 15. Limitations
+## 15. Empirical status
+
+The exact conformal-Laplace benchmark in
+[`examples/cfd/laplace_mesh_transformer`](../../../../examples/cfd/laplace_mesh_transformer)
+tests this distinction directly. It uses analytic labels on certified smooth
+variable domains, balanced boundary modes, fresh paired geometry-OOD splits,
+physical-area losses, continuous maximum-principle enclosures, Laplacian
+diagnostics, and boundary-resolution studies. The checked-in
+[reference summary](../../../../examples/cfd/laplace_mesh_transformer/results/reference_2026-07-01.json)
+contains the exact source fingerprint and a compact, machine-readable subset
+of the measurements.
+
+With 1,000 online updates and three seeds, the reference linear
+`MeshTransformer` obtains \(0.458 \pm 0.002\) ID relative \(L^2\), versus
+\(0.800\) for a boundary-mean baseline. Its error on unseen geometry modes is
+\(0.487 \pm 0.001\), so this controlled geometry shift adds little penalty
+relative to its absolute approximation error. A dense \(O(2)\)-invariant pair
+kernel reaches \(0.107 \pm 0.025\), demonstrating that the task contains much
+more learnable structure than this trained reference model captures.
+
+Pure-mode probes localize the observed gap. Although modes 1--4 all occur in
+training, the reference model learns modes 1--2 and leaves modes 3--4 near unit
+relative error. Equal boundary-mode variance does not equalize the supervised
+interior energy: on the disk, harmonic mode \(k\) is weighted proportionally to
+\(1/(k+1)\) by the area loss. A one-seed three-query-block ablation did not move
+the validation ceiling, but it does not distinguish representation rank from
+optimization or objective weighting. The Laplace-specific constant lift makes
+mode zero exact but improves aggregate ID error by only about 0.006. The
+current evidence therefore supports the layer as a geometry-generalizing,
+low-order global operator—not yet as a sufficiently accurate general elliptic
+surrogate.
+
+This result should guide the next controlled experiment: first equalize
+solution-space energy or train pure modes, then test whether explicit
+higher-order \(O(D)\) representations or a controlled nonseparable kernel close
+the remaining gap. Raw absolute coordinates, Cartesian Fourier features, or a
+fitted locality radius would obscure rather than clarify that diagnosis.
+
+The packed joint-moment implementation was also compared directly in a one-off
+ablation with the pre-change four-reduction path at 65,536 sources and identical
+weights. It was 3.88× faster in linear mode and 3.41× faster in
+zero-preserving nonlinear mode; only aggregate ablation values were retained,
+so these speedups are directional rather than a reproducible performance
+contract.
+Linear-mode temporary workspace rises from 24.5 to 38.5 MiB; nonlinear
+workspace remains 56.0 MiB. At 262,144 sources, linear moment build takes 33.0
+ms and source workspace remains near 38 MiB with 65,536-entity chunking.
+These timings use the explicit small microbenchmark architecture documented in
+the example, not the 135,945-parameter accuracy model. Training activations
+remain linear rather than chunk-bounded, as stated above.
+
+## 16. Limitations
 
 The current model is intentionally narrow:
 
 - sources are codimension-one boundary cells with cell-centered fields;
 - the caller is responsible for a valid, consistently oriented boundary union;
-  `forward` does not perform an expensive watertightness check;
+  degenerate cells are rejected, but `forward` does not perform an expensive
+  watertightness or self-intersection check;
 - queries are mesh points and do not interact with one another;
 - only invariant scalars and polar vectors are represented;
 - all physical fields must be nondimensionalized by the caller;

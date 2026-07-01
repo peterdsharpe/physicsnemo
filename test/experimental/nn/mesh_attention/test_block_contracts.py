@@ -1,5 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Algebraic contracts for the typed mesh-transformer blocks."""
 
@@ -245,6 +258,61 @@ def test_nonlinear_field_block_is_exactly_zero_preserving(device):
     _assert_close(cross_without_seed, _zeros_like(cross_without_seed), exact=True)
     _assert_close(cross_with_zero_seed, _zeros_like(cross_with_zero_seed), exact=True)
     _assert_close(self_output, _zeros_like(self_output), exact=True)
+
+
+@pytest.mark.parametrize(
+    "block_type", [LinearMeshFieldBlock, NonlinearZeroMeshFieldBlock]
+)
+def test_cross_attention_read_in_scale_is_live_without_receiver_seed(
+    device, block_type
+):
+    r"""The first read-in is order one but still uses trainable scale parameters."""
+    layer = _use_float64_moments(
+        block_type(
+            3,
+            2,
+            2,
+            2,
+            heads=2,
+            scalar_rank=3,
+            vector_rank=2,
+            message_layer_scale=1.0,
+        ).to(device=device, dtype=torch.float64)
+    )
+    mesh = _mesh(device)
+    source_geometry = _state(mesh.n_cells, 3, 2, device, seed=51)
+    query_geometry = _state(6, 3, 2, device, seed=52)
+    source_field = _state(mesh.n_cells, 2, 2, device, seed=53)
+    zero_query = ScalarVectorState.zeros(6, 2, 2, 3, device=device, dtype=torch.float64)
+    moments = layer.build_source_moments(mesh, source_geometry, source_field)
+    attention_query = (
+        query_geometry
+        if block_type is LinearMeshFieldBlock
+        else query_geometry.cat(zero_query)
+    )
+    with torch.no_grad():
+        layer.pointwise_scale.scalar_scale.zero_()
+        layer.pointwise_scale.vector_scale.zero_()
+
+    expected_initial = layer.message_scale(
+        layer.attention.evaluate_moments(attention_query, moments)
+    )
+    initialized = layer.evaluate_cross(query_geometry, moments)
+    residual_update = layer.evaluate_cross(query_geometry, moments, zero_query)
+
+    _assert_close(initialized, expected_initial, exact=True)
+    _assert_close(residual_update, expected_initial, exact=True)
+
+    loss = initialized.scalars.square().sum() + initialized.vectors.square().sum()
+    gradients = torch.autograd.grad(
+        loss,
+        (
+            layer.message_scale.scalar_scale,
+            layer.message_scale.vector_scale,
+        ),
+    )
+    assert all(torch.isfinite(gradient).all() for gradient in gradients)
+    assert all(torch.count_nonzero(gradient) > 0 for gradient in gradients)
 
 
 @pytest.mark.parametrize("reflection", [False, True])

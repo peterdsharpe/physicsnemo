@@ -1,6 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Mathematical contracts for global, typed Galerkin mesh attention."""
 
@@ -479,6 +491,53 @@ def _scalar_state(values: torch.Tensor, spatial_dim: int) -> ScalarVectorState:
         values[:, None],
         values.new_empty(values.shape[0], 0, spatial_dim),
     )
+
+
+def test_controlled_kernel_has_dense_source_to_query_jacobian(device):
+    r"""Every source atom has an explicit path to every receiver.
+
+    With one scalar rank and every projection set to the identity, the layer is
+
+    .. math::
+
+        y_i = q_i \sum_j w_j k_j v_j,
+
+    so its value Jacobian is the dense matrix
+    :math:`\partial y_i/\partial v_j = q_i k_j w_j`.  This guards the global
+    information-flow contract independently of the factorized and dense code
+    paths, which could otherwise acquire the same accidental mask.
+    """
+    layer = _scalar_integral_layer(device)
+    mesh = _source_mesh(device, torch.float64)
+    queries = torch.tensor([1.25, -0.4, 2.1], device=device, dtype=torch.float64)
+    keys = torch.tensor(
+        [0.7, -1.1, 0.3, 1.4, -0.8, 0.55],
+        device=device,
+        dtype=torch.float64,
+    )
+    values = torch.tensor(
+        [-0.2, 0.9, 1.7, -0.6, 0.1, 1.2],
+        device=device,
+        dtype=torch.float64,
+        requires_grad=True,
+    )
+
+    output = layer(
+        mesh,
+        _scalar_state(queries, 3),
+        _scalar_state(keys, 3),
+        _scalar_state(values, 3),
+    ).scalars[:, 0]
+    jacobian = torch.stack(
+        [
+            torch.autograd.grad(output[index], values, retain_graph=True)[0]
+            for index in range(output.shape[0])
+        ]
+    )
+    expected = queries[:, None] * keys[None, :] * mesh.cell_areas[None, :]
+
+    torch.testing.assert_close(jacobian, expected, rtol=2.0e-14, atol=2.0e-14)
+    assert torch.count_nonzero(jacobian).item() == jacobian.numel()
 
 
 def test_conserved_measure_splitting_is_exact(device):

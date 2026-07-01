@@ -1,5 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 r"""Global, rank-typed Galerkin attention on a boundary mesh.
 
@@ -416,30 +429,68 @@ class MeshAttention(nn.Module):
             values: TypedValues,
             weights: torch.Tensor | None,
         ) -> AttentionMoments:
-            def _moment(left: torch.Tensor, right: torch.Tensor) -> torch.Tensor:
-                if weights is None:
-                    return integrate_moment(
-                        source_mesh,
-                        left,
-                        right,
-                        aligned_dims=1,
-                        accumulation_dtype=self.accumulation_dtype,
-                        nan_policy="propagate",
-                    )
-                return _integrate_weighted_moment(
-                    left,
-                    right,
+            # Cartesian components are independently varying finite-rank
+            # features in the signed kernel. Flatten them next to the scalar
+            # features so all four typed key/value moments share one weighted
+            # matrix multiplication. Slicing the joint moment back into typed
+            # blocks preserves the public representation and evaluation math.
+            key_features = torch.cat(
+                (keys.scalars, keys.vectors.flatten(start_dim=2)), dim=-1
+            )
+            value_features = torch.cat(
+                (values.scalars, values.vectors.flatten(start_dim=2)), dim=-1
+            )
+            if weights is None:
+                joint_moment = integrate_moment(
+                    source_mesh,
+                    key_features,
+                    value_features,
+                    aligned_dims=1,
+                    accumulation_dtype=self.accumulation_dtype,
+                    nan_policy="propagate",
+                )
+            else:
+                joint_moment = _integrate_weighted_moment(
+                    key_features,
+                    value_features,
                     weights,
                     aligned_dims=1,
                     accumulation_dtype=self.accumulation_dtype,
                     nan_policy="propagate",
                 )
 
+            scalar_rank = self.scalar_rank
+            scalar_value_dim = self.scalar_value_dim
+            spatial_dim = keys.vectors.shape[-1]
             return AttentionMoments(
-                scalar_key_scalar_value=_moment(keys.scalars, values.scalars),
-                vector_key_scalar_value=_moment(keys.vectors, values.scalars),
-                scalar_key_vector_value=_moment(keys.scalars, values.vectors),
-                vector_key_vector_value=_moment(keys.vectors, values.vectors),
+                scalar_key_scalar_value=joint_moment[
+                    :, :scalar_rank, :scalar_value_dim
+                ],
+                vector_key_scalar_value=joint_moment[
+                    :, scalar_rank:, :scalar_value_dim
+                ].reshape(
+                    self.heads,
+                    self.vector_rank,
+                    spatial_dim,
+                    self.scalar_value_dim,
+                ),
+                scalar_key_vector_value=joint_moment[
+                    :, :scalar_rank, scalar_value_dim:
+                ].reshape(
+                    self.heads,
+                    self.scalar_rank,
+                    self.vector_value_dim,
+                    spatial_dim,
+                ),
+                vector_key_vector_value=joint_moment[
+                    :, scalar_rank:, scalar_value_dim:
+                ].reshape(
+                    self.heads,
+                    self.vector_rank,
+                    spatial_dim,
+                    self.vector_value_dim,
+                    spatial_dim,
+                ),
             )
 
         chunk_size = self.entity_chunk_size

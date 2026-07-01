@@ -1,5 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 r"""A mesh-native global transformer for boundary-driven PDE surrogates."""
 
@@ -408,6 +421,8 @@ class MeshTransformer(Module):
         global_drive_vectors = sum(
             rank == 1 for _, _, rank in self._global_entries["drive"]
         )
+        self._global_drive_scalars = global_drive_scalars
+        self._global_drive_vectors = global_drive_vectors
         raw_drive_scalars = boundary_drive_scalars + global_drive_scalars
         raw_drive_vectors = boundary_drive_vectors + global_drive_vectors
         if raw_drive_scalars + raw_drive_vectors == 0:
@@ -442,7 +457,17 @@ class MeshTransformer(Module):
             [block_type(**block_kwargs) for _ in range(drive_layers)]
         )
         self.query_blocks = nn.ModuleList(
-            [block_type(**block_kwargs) for _ in range(query_layers)]
+            [
+                block_type(
+                    **block_kwargs,
+                    # The first boundary-to-query operation is a read-in, not
+                    # a perturbative residual update. Its learnable scale
+                    # starts at one; later cross messages retain the small
+                    # residual initialization used throughout the stack.
+                    message_layer_scale=1.0 if index == 0 else None,
+                )
+                for index in range(query_layers)
+            ]
         )
 
         self.output_layout = FieldLayout(output_field_ranks, n_spatial_dims)
@@ -683,10 +708,18 @@ class MeshTransformer(Module):
         with torch.autocast(device_type=merged.points.device.type, enabled=False):
             weights = merged.cell_areas
             total_measure = weights.sum()
-        if not torch.compiler.is_compiling() and (
-            not torch.isfinite(total_measure).item() or total_measure.item() <= 0.0
-        ):
-            raise ValueError("Boundary measure must be finite and positive")
+        if not torch.compiler.is_compiling():
+            cells_are_valid = torch.isfinite(weights).all() & (weights > 0.0).all()
+            total_is_valid = torch.isfinite(total_measure) & (total_measure > 0.0)
+            # Keep valid execution to one host synchronization. The individual
+            # predicate is inspected only on the exceptional path so the error
+            # still identifies degenerate cells versus an overflowing total.
+            if not (cells_are_valid & total_is_valid).item():
+                if not cells_are_valid.item():
+                    raise ValueError(
+                        "Every boundary cell must have finite positive measure"
+                    )
+                raise ValueError("Boundary measure must be finite and positive")
         with torch.autocast(device_type=merged.points.device.type, enabled=False):
             center = torch.einsum("n,nd->d", weights, merged.cell_centroids)
             center = center / total_measure
@@ -817,34 +850,36 @@ class MeshTransformer(Module):
                 )
             )
             n_chunk = normalized_points.shape[0]
-            raw_query_drive = ScalarVectorState(
-                torch.cat(
-                    (
-                        normalized_points.new_zeros(
-                            n_chunk, self._boundary_drive_scalars
-                        ),
-                        encoded.global_drive_state.scalars.expand(n_chunk, -1),
-                    ),
-                    dim=-1,
-                ),
-                torch.cat(
-                    (
-                        normalized_points.new_zeros(
-                            n_chunk,
-                            self._boundary_drive_vectors,
-                            self.n_spatial_dims,
-                        ),
-                        encoded.global_drive_state.vectors.expand(n_chunk, -1, -1),
-                    ),
-                    dim=1,
-                ),
-            )
             # Global drive quantities (for example a prescribed far field)
             # are legitimate pointwise query inputs as well as boundary
-            # inputs.  Boundary-only drive channels remain exactly zero here.
-            query_drive: ScalarVectorState | None = self.drive_lift(
-                query_operator, raw_query_drive
-            )
+            # inputs. With boundary-only drives there is no receiver field to
+            # update residually: the first cross-attention message initializes
+            # it directly and therefore must not be LayerScale-suppressed.
+            query_drive: ScalarVectorState | None = None
+            if self._global_drive_scalars + self._global_drive_vectors:
+                raw_query_drive = ScalarVectorState(
+                    torch.cat(
+                        (
+                            normalized_points.new_zeros(
+                                n_chunk, self._boundary_drive_scalars
+                            ),
+                            encoded.global_drive_state.scalars.expand(n_chunk, -1),
+                        ),
+                        dim=-1,
+                    ),
+                    torch.cat(
+                        (
+                            normalized_points.new_zeros(
+                                n_chunk,
+                                self._boundary_drive_vectors,
+                                self.n_spatial_dims,
+                            ),
+                            encoded.global_drive_state.vectors.expand(n_chunk, -1, -1),
+                        ),
+                        dim=1,
+                    ),
+                )
+                query_drive = self.drive_lift(query_operator, raw_query_drive)
             for block, source_moments in zip(
                 self.query_blocks, encoded.query_moments, strict=True
             ):

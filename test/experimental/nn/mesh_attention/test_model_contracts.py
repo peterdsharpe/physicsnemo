@@ -1,5 +1,18 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Integration contracts for the boundary-driven mesh transformer."""
 
@@ -409,6 +422,8 @@ def test_none_reference_length_means_already_dimensionless(device):
     ).to(device=device, dtype=torch.float64)
 
     encoded = model.encode(_domain(device))
+    scale = 3.1
+    scaled = model.encode(_domain(device, scale=scale))
 
     torch.testing.assert_close(
         encoded.reference_length,
@@ -416,6 +431,87 @@ def test_none_reference_length_means_already_dimensionless(device):
         rtol=0,
         atol=0,
     )
+    torch.testing.assert_close(
+        scaled.reference_length,
+        torch.ones((), device=device, dtype=torch.float64),
+        rtol=0,
+        atol=0,
+    )
+    # ``None`` means the coordinates already have their final units. It must
+    # not trigger an implicit diameter, bounding-box, or RMS normalization.
+    torch.testing.assert_close(
+        scaled.center,
+        scale * encoded.center,
+        rtol=2.0e-14,
+        atol=2.0e-14,
+    )
+    torch.testing.assert_close(
+        scaled.source_mesh.points,
+        scale * encoded.source_mesh.points,
+        rtol=2.0e-14,
+        atol=2.0e-14,
+    )
+    torch.testing.assert_close(
+        scaled.source_mesh.cell_areas,
+        scale ** (model.n_spatial_dims - 1) * encoded.source_mesh.cell_areas,
+        rtol=3.0e-14,
+        atol=3.0e-14,
+    )
+
+
+@pytest.mark.parametrize("length", [0.0, float("nan"), float("inf"), -float("inf")])
+def test_reference_length_rejects_nonpositive_or_nonfinite_values(device, length):
+    model = _model(device)
+    domain = _domain(device)
+    domain.global_data["reference", "length"] = torch.tensor(
+        length, device=device, dtype=torch.float64
+    )
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        model.encode(domain)
+
+
+def test_reference_length_rejects_nonscalar_or_mismatched_dtype(device):
+    model = _model(device)
+    domain = _domain(device)
+    domain.global_data["reference", "length"] = torch.ones(
+        2, device=device, dtype=torch.float64
+    )
+    with pytest.raises(ValueError, match="must be scalar"):
+        model.encode(domain)
+
+    domain = _domain(device)
+    domain.global_data["reference", "length"] = torch.tensor(
+        2.3, device=device, dtype=torch.float32
+    )
+    with pytest.raises(ValueError, match="share mesh device and dtype"):
+        model.encode(domain)
+
+
+@pytest.mark.parametrize("failure", ["zero_measure", "nonfinite_measure"])
+def test_boundary_cells_require_finite_positive_measure(device, failure):
+    model = _model(device)
+    domain = _domain(device)
+    boundary = domain.boundaries["wall"]
+    points = boundary.points.clone()
+    cells = boundary.cells.clone()
+    if failure == "zero_measure":
+        cells[0] = cells[0, 0]
+    else:
+        points[0, 0] = float("nan")
+    invalid_boundary = Mesh(
+        points=points,
+        cells=cells,
+        cell_data=boundary.cell_data,
+    )
+    invalid_domain = DomainMesh(
+        interior=domain.interior,
+        boundaries={"wall": invalid_boundary},
+        global_data=domain.global_data,
+    )
+
+    with pytest.raises(ValueError, match="finite positive measure"):
+        model.encode(invalid_domain)
 
 
 def test_vector_only_output_schema(device):
@@ -590,6 +686,129 @@ def test_nonlinear_mode_is_exactly_zero_preserving(device):
     assert torch.count_nonzero(zero.point_data["velocity"]).item() == 0
 
 
+def test_full_model_backward_reaches_geometry_fields_and_parameters(device):
+    """Training gradients reach every physical input path and model parameter."""
+    model = _model(device, field_mode="linear", query_chunk_size=2)
+    domain = _domain(device)
+    boundary = domain.boundaries["wall"]
+    differentiable_inputs = {
+        "boundary_points": boundary.points,
+        "query_points": domain.interior.points,
+        "material": boundary.cell_data["material"],
+        "forcing": boundary.cell_data["forcing"],
+        "traction": boundary.cell_data["traction"],
+        "reynolds": domain.global_data["reynolds"],
+        "flow_direction": domain.global_data["flow_direction"],
+        "source_strength": domain.global_data["source_strength"],
+        "reference_length": domain.global_data["reference", "length"],
+    }
+    for tensor in differentiable_inputs.values():
+        tensor.requires_grad_()
+
+    output = model(domain)
+    pressure_cotangent = torch.linspace(
+        0.7,
+        1.3,
+        output.n_points,
+        device=device,
+        dtype=torch.float64,
+    )
+    velocity_cotangent = torch.linspace(
+        -0.8,
+        1.1,
+        output.n_points * model.n_spatial_dims,
+        device=device,
+        dtype=torch.float64,
+    ).reshape(output.n_points, model.n_spatial_dims)
+    loss = (output.point_data["pressure"] * pressure_cotangent).sum() + (
+        output.point_data["velocity"] * velocity_cotangent
+    ).sum()
+    loss.backward()
+
+    for name, tensor in differentiable_inputs.items():
+        assert tensor.grad is not None, f"no gradient reached {name}"
+        assert torch.isfinite(tensor.grad).all(), f"nonfinite gradient for {name}"
+        assert torch.count_nonzero(tensor.grad).item(), f"zero gradient for {name}"
+
+    for name, parameter in model.named_parameters():
+        assert parameter.grad is not None, f"no gradient reached parameter {name}"
+        assert torch.isfinite(parameter.grad).all(), (
+            f"nonfinite gradient for parameter {name}"
+        )
+
+
+def test_query_read_in_and_residual_scales_have_distinct_initialization(device):
+    """The decoder begins with an order-one read, then small residual updates."""
+    model = MeshTransformer(
+        n_spatial_dims=3,
+        output_field_ranks={"pressure": 0},
+        boundary_field_ranks={"wall": {"drive": {"forcing": 0}}},
+        field_mode="linear",
+        operator_scalar_dim=4,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        operator_layers=1,
+        drive_layers=1,
+        query_layers=2,
+        heads=1,
+        scalar_rank=2,
+        vector_rank=1,
+    ).to(device=device, dtype=torch.float64)
+
+    for scale in (
+        model.query_blocks[0].message_scale.scalar_scale,
+        model.query_blocks[0].message_scale.vector_scale,
+    ):
+        torch.testing.assert_close(scale, torch.ones_like(scale))
+    for scale in (
+        model.query_blocks[1].message_scale.scalar_scale,
+        model.query_blocks[1].message_scale.vector_scale,
+        model.query_blocks[0].pointwise_scale.scalar_scale,
+        model.query_blocks[0].pointwise_scale.vector_scale,
+        model.drive_blocks[0].message_scale.scalar_scale,
+        model.drive_blocks[0].message_scale.vector_scale,
+        model.operator_input_block.scale.scalar_scale,
+        model.operator_input_block.scale.vector_scale,
+    ):
+        torch.testing.assert_close(scale, torch.full_like(scale, 1.0e-2))
+
+
+def test_global_only_drive_uses_every_decoder_parameter(device):
+    """A pointwise global seed must not bypass the order-one query read path."""
+    torch.manual_seed(733)
+    model = MeshTransformer(
+        n_spatial_dims=3,
+        output_field_ranks={"pressure": 0},
+        boundary_field_ranks={"wall": {"operator": {"material": 0}}},
+        global_field_ranks={"drive": {"source_strength": 0}},
+        reference_length_key="reference.length",
+        field_mode="linear",
+        operator_scalar_dim=4,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        operator_layers=1,
+        drive_layers=1,
+        query_layers=2,
+        heads=1,
+        scalar_rank=2,
+        vector_rank=1,
+        query_chunk_size=3,
+    ).to(device=device, dtype=torch.float64)
+    domain = _domain(device)
+    domain.global_data["source_strength"].requires_grad_()
+
+    output = model(domain)
+    output.point_data["pressure"].square().sum().backward()
+
+    assert domain.global_data["source_strength"].grad is not None
+    assert torch.count_nonzero(domain.global_data["source_strength"].grad)
+    for name, parameter in model.named_parameters():
+        assert parameter.grad is not None, f"no gradient reached parameter {name}"
+        assert torch.isfinite(parameter.grad).all(), name
+
+
 def test_amp_preserves_mesh_geometry_precision(device):
     model = _model(device, dtype=torch.float32)
     domain = _domain(device, dtype=torch.float32)
@@ -633,6 +852,53 @@ def test_model_is_o3_equivariant_with_consistent_orientation(device, reflection)
     )
 
 
+def test_encoded_frame_uses_boundary_measure_and_explicit_length(device):
+    r"""Centering and normalized quadrature follow the declared measure.
+
+    An unweighted average of cell centroids would retain translation and
+    similarity covariance, yet vary under nonuniform remeshing.  Assert the
+    stronger quadrature contract directly rather than inferring it from model
+    outputs.
+    """
+    model = _model(device)
+    domain = _domain(device)
+    boundary = domain.boundaries["wall"]
+    length = domain.global_data["reference", "length"].reshape(())
+    physical_areas = boundary.cell_areas
+    expected_center = (
+        torch.einsum("n,nd->d", physical_areas, boundary.cell_centroids)
+        / physical_areas.sum()
+    )
+
+    encoded = model.encode(domain)
+
+    torch.testing.assert_close(
+        encoded.center, expected_center, rtol=2.0e-14, atol=2.0e-14
+    )
+    torch.testing.assert_close(
+        encoded.source_mesh.points,
+        (boundary.points - expected_center) / length,
+        rtol=2.0e-14,
+        atol=2.0e-14,
+    )
+    torch.testing.assert_close(
+        encoded.source_mesh.cell_areas,
+        physical_areas / length ** (model.n_spatial_dims - 1),
+        rtol=3.0e-14,
+        atol=3.0e-14,
+    )
+    torch.testing.assert_close(
+        torch.einsum(
+            "n,nd->d",
+            encoded.source_mesh.cell_areas,
+            encoded.source_mesh.cell_centroids,
+        ),
+        torch.zeros(model.n_spatial_dims, device=device, dtype=torch.float64),
+        rtol=0,
+        atol=2.0e-15,
+    )
+
+
 def test_similarity_and_source_query_permutation_contracts(device):
     model = _model(device)
     original = model(_domain(device))
@@ -664,6 +930,112 @@ def test_similarity_and_source_query_permutation_contracts(device):
         rtol=2.0e-10,
         atol=2.0e-11,
     )
+
+
+def _smooth_circle_domain(
+    n_cells: int,
+    device: torch.device | str,
+    *,
+    graded: bool = False,
+) -> DomainMesh:
+    """Unit-circle boundary with smooth, resolution-independent field data."""
+    dtype = torch.float64
+    parameter = torch.arange(n_cells, device=device, dtype=dtype) / n_cells
+    angles = 2.0 * torch.pi * parameter
+    if graded:
+        # A fixed smooth reparameterization with derivative
+        # 2*pi*(1 + 0.35*cos(2*pi*s)) > 0 gives nonuniform nested panel
+        # families without changing the represented circle.
+        angles = angles + 0.35 * torch.sin(2.0 * torch.pi * parameter)
+    points = torch.stack((torch.cos(angles), torch.sin(angles)), dim=-1)
+    indices = torch.arange(n_cells, device=device)
+    # Clockwise edge orientation makes the 2D cell normals point outward.
+    cells = torch.stack((torch.roll(indices, -1), indices), dim=-1)
+    centroids = 0.5 * (points + torch.roll(points, -1, dims=0))
+    phase = torch.atan2(centroids[:, 1], centroids[:, 0])
+    boundary = Mesh(
+        points=points,
+        cells=cells,
+        cell_data={
+            "coefficient": 0.3 + centroids[:, 0] - 0.2 * centroids[:, 1],
+            "boundary_value": torch.cos(2.0 * phase) + 0.25 * torch.sin(3.0 * phase),
+        },
+    )
+    query = Mesh(
+        points=torch.tensor(
+            [[0.0, 0.0], [0.2, -0.1], [0.65, 0.15], [0.85, 0.1]],
+            device=device,
+            dtype=dtype,
+        )
+    )
+    return DomainMesh(interior=query, boundaries={"wall": boundary})
+
+
+@pytest.mark.parametrize("field_mode", ["linear", "zero_preserving_nonlinear"])
+@pytest.mark.parametrize("graded", [False, True])
+def test_mesh_transformer_converges_under_smooth_boundary_refinement(
+    device, field_mode, graded
+):
+    r"""The learned operator has a stable continuum quadrature limit.
+
+    This is not a PDE-accuracy assertion: one frozen randomized operator is
+    evaluated on increasingly fine discretizations of the same smooth
+    boundary data.  Its discretization error should contract at the expected
+    midpoint-panel rate instead of depending on entity count or tessellation.
+    """
+    torch.manual_seed(918)
+    model = MeshTransformer(
+        n_spatial_dims=2,
+        output_field_ranks={"potential": 0, "flux": 1},
+        boundary_field_ranks={
+            "wall": {
+                "operator": {"coefficient": 0},
+                "drive": {"boundary_value": 0},
+            }
+        },
+        reference_length_key=None,
+        field_mode=field_mode,
+        operator_scalar_dim=4,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        operator_layers=1,
+        drive_layers=1,
+        query_layers=1,
+        heads=1,
+        scalar_rank=2,
+        vector_rank=1,
+        query_chunk_size=8,
+        attention_chunk_size=None,
+    ).to(device=device, dtype=torch.float64)
+    for module in model.modules():
+        if hasattr(module, "accumulation_dtype"):
+            module.accumulation_dtype = torch.float64
+    with torch.no_grad():
+        for parameter in model.parameters():
+            if parameter.numel():
+                parameter.uniform_(-0.3, 0.3)
+    model.eval()
+
+    def packed_output(n_cells: int) -> torch.Tensor:
+        output = model(_smooth_circle_domain(n_cells, device, graded=graded))
+        return torch.cat(
+            (
+                output.point_data["potential"][:, None],
+                output.point_data["flux"],
+            ),
+            dim=-1,
+        )
+
+    with torch.no_grad():
+        reference = packed_output(256)
+        errors = [
+            (packed_output(n_cells) - reference).abs().max() for n_cells in (16, 32, 64)
+        ]
+
+    roundoff = 20.0 * torch.finfo(torch.float64).eps
+    assert errors[1] <= torch.maximum(0.45 * errors[0], errors[0].new_tensor(roundoff))
+    assert errors[2] <= torch.maximum(0.45 * errors[1], errors[1].new_tensor(roundoff))
 
 
 @pytest.mark.parametrize("field_mode", ["linear", "zero_preserving_nonlinear"])
