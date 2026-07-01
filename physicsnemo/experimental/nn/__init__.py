@@ -21,9 +21,19 @@ that are under active development. These components may have breaking API
 changes between releases.
 """
 
+from .diffusion_unet_3d_blocks import Conv3D, GroupNorm3D, UNetAttention3D, UNetBlock3D
 from .flare_attention import FLARE
-from .diffusion_unet_3d_blocks import UNetBlock3D, Conv3D, GroupNorm3D, UNetAttention3D
-from .mesh_attention import MeshAttention, MeshTransformerBlock, RadialDecay
+from .mesh_attention import (
+    AttentionMoments,
+    GeometryConditionedLinear,
+    LinearMeshFieldBlock,
+    MeshAttention,
+    MeshOperatorBlock,
+    NonlinearZeroMeshFieldBlock,
+    PointwiseGeometryBlock,
+    ScalarVectorState,
+    TypedProjection,
+)
 
 __all__ = [
     "FLARE",
@@ -32,6 +42,12 @@ __all__ = [
     "GroupNorm3D",
     "UNetAttention3D",
     "MeshAttention",
-    "MeshTransformerBlock",
-    "RadialDecay",
+    "AttentionMoments",
+    "GeometryConditionedLinear",
+    "LinearMeshFieldBlock",
+    "MeshOperatorBlock",
+    "NonlinearZeroMeshFieldBlock",
+    "PointwiseGeometryBlock",
+    "ScalarVectorState",
+    "TypedProjection",
 ]

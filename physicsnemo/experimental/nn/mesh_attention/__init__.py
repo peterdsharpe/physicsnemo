@@ -14,21 +14,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Mesh attention building blocks.
+r"""Global, quadrature-aware, O(D)-equivariant mesh operator layers."""
 
-This subpackage provides a hierarchical, equivariant, distance-decaying
-attention mechanism whose tokens are mesh cells:
+from .attention import (
+    AttentionMoments,
+    MeshAttention,
+    ScalarVectorState,
+    TypedProjection,
+)
+from .block import (
+    GeometryConditionedLinear,
+    LinearMeshFieldBlock,
+    MeshOperatorBlock,
+    NonlinearZeroMeshFieldBlock,
+    PointwiseGeometryBlock,
+)
 
-- :class:`~physicsnemo.experimental.nn.mesh_attention.attention.MeshAttention` -
-  the attention layer (and :class:`RadialDecay`, its learnable radial envelope).
-- :class:`~physicsnemo.experimental.nn.mesh_attention.block.MeshTransformerBlock`
-  - a pre-norm transformer block built on it.
-
-See ``README.md`` in this directory for the full design write-up: how it works,
-the motivation, and the engineering/theoretical tradeoffs.
-"""
-
-from .attention import MeshAttention, RadialDecay
-from .block import MeshTransformerBlock
-
-__all__ = ["RadialDecay", "MeshAttention", "MeshTransformerBlock"]
+__all__ = [
+    "AttentionMoments",
+    "GeometryConditionedLinear",
+    "LinearMeshFieldBlock",
+    "MeshAttention",
+    "MeshOperatorBlock",
+    "NonlinearZeroMeshFieldBlock",
+    "PointwiseGeometryBlock",
+    "ScalarVectorState",
+    "TypedProjection",
+]
