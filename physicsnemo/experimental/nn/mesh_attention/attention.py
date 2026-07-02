@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Global, rank-typed Galerkin attention on a boundary mesh.
+r"""Global, rank-typed signed moment attention on a boundary mesh.
 
 The mathematical operator in this module is deliberately small.  A source
 ``Mesh`` supplies the quadrature measure and scalar/vector key and value
@@ -214,7 +214,7 @@ class TypedProjection(nn.Module):
 
 
 class MeshAttention(nn.Module):
-    r"""Exact global Galerkin attention for scalar and polar-vector fields.
+    r"""Exact global signed moment attention for scalar and polar-vector fields.
 
     Queries and keys may contain rank-0 and rank-1 channels.  The invariant
     pair coefficient is

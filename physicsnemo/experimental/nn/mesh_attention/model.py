@@ -138,7 +138,7 @@ class MeshTransformer(Module):
 
     The source tokens are codimension-one boundary cells with geometric
     measure.  The query tokens are ``domain.interior.points``.  All learned
-    interactions are signed, separable Galerkin integrals; no graph edge,
+    interactions are signed, separable moment integrals; no graph edge,
     neighbour radius, Fourier coordinate, or absolute Cartesian component is
     part of the model.
 
@@ -393,7 +393,7 @@ class MeshTransformer(Module):
         # A shared nonlinear typed feature map gives source and query
         # coordinates a rich finite-rank basis before global interaction.
         # It is pointwise (not a neighbourhood heuristic); boundary-wide
-        # information still enters only through the Galerkin moments below.
+        # information still enters only through the signed moments below.
         self.operator_input_block = PointwiseGeometryBlock(
             operator_scalar_dim, operator_vector_dim
         )

@@ -1,10 +1,11 @@
-# Mesh Attention: an Exact Global Signed Galerkin Operator
+# Mesh Attention: an Exact Global Signed Moment Operator
 
-Mesh attention is a global, quadrature-aware, O(\(D\))-equivariant operator for
-boundary-driven PDE surrogates. It encodes the boundaries of a
+Mesh attention is a reusable global, quadrature-aware,
+O(\(D\))-equivariant primitive for boundary-driven models. It encodes the
+boundaries of a
 [`DomainMesh`](../../../mesh/domain_mesh.py), propagates physical driving
 fields through a separate field stream, and evaluates predictions at arbitrary
-query points.
+query points. It is not, by itself, a general PDE solver.
 
 The central layer is a **finite-rank separable signed integral operator**. Its
 production path evaluates exact source moments in
@@ -318,7 +319,7 @@ representation extension.
 Here `scalar_rank` and `vector_rank` refer to the finite separable query/key
 feature dimensions. They are not physical tensor ranks.
 
-## 6. Exact signed Galerkin attention
+## 6. Exact signed moment attention
 
 For head \(h\), let the projected queries and keys be
 
@@ -355,11 +356,12 @@ o^0_{ihf}=\sum_j\omega_j a_{ijh}v^0_{jhf},
 o^1_{ihfe}=\sum_j\omega_j a_{ijh}v^1_{jhfe}.
 \]
 
-This is the exact signed Galerkin/linear-attention formula implemented by
-`MeshAttention`. "Galerkin" refers to the quadrature-weighted query/key/value
-pairing; because predictions are collocated at query points, the evaluation is
-also naturally viewed as a Nyström discretization rather than a finite-element
-Galerkin method with explicit trial and test bases.
+This is the exact signed, quadrature-weighted separable integral formula
+implemented by `MeshAttention`, using linear-attention-style source moments.
+It is not a Galerkin discretization of a PDE: it defines no trial or test
+space, imposes no weak residual, and supplies no consistency, stability, or
+coercivity theorem. "Moment operator" describes the implemented mathematics
+without importing those stronger numerical-analysis claims.
 
 ### 6.1 Exact source moments
 
@@ -422,7 +424,50 @@ Moment accumulation is promoted to at least fp32 by default and never
 downcasts fp64 inputs. Results are cast back to the working dtype before the
 typed output projection.
 
-### 6.2 Dense oracle
+### 6.2 Scalar-output angular ceiling in `linear` mode
+
+The feature rank above and the physical tensor order of the query decoder are
+different notions. The current state contains only invariant scalars and polar
+vectors; `scalar_rank` and `vector_rank` add feature multiplicity, not
+higher-order O(\(D\)) irreducible representations.
+
+For a precise two-dimensional consequence, fix an encoded boundary, use
+`field_mode="linear"`, and request a scalar output. Assume that the centered
+query position \(x\) is the only query-side polar vector: there is no physical
+global operator-role vector or other preferred direction. Then the decoder can
+produce only
+
+\[
+u(x)=c(|x|^2)+b(|x|^2)\mathbin{\cdot}x
+     +x^\mathsf{T}A(|x|^2)x,
+\]
+
+where \(c\), \(b\), and \(A\) depend on the encoded boundary and remain linear
+in the drive at fixed geometry. Additional pairs of the same query vector
+reduce to powers of the invariant \(|x|^2\). On every circle centered at the
+model origin, the angular response therefore contains only Fourier orders
+\(m=0,1,2\). The boundary-to-one-ring matrix has rank at most five: one
+monopole, two dipoles, and two quadrupoles.
+
+Width, heads, separable feature rank, source depth, and query depth can enrich
+channel multiplicity, source processing, and radial dependence, but cannot
+create an \(m\geq3\) irrep under these assumptions. Important limits of the
+statement are:
+
+- it concerns `linear` mode and scalar output;
+- a genuine physical operator vector can introduce additional directional
+  invariants, whereas fabricating a Cartesian axis would violate the intended
+  coordinate-frame independence;
+- nonlinear field mode can form higher products, but gives up exact drive
+  superposition and is not a systematic typed-irrep construction;
+- the rank-five bound is per fixed-radius ring; several radii can have distinct
+  radial profiles and a larger combined matrix rank; and
+- \(M^{11}\) is a reducible rank-two Cartesian tensor. Its norm includes trace,
+  symmetric-trace-free, and possibly antisymmetric pieces; a nonzero norm does
+  not certify a pure order-two channel or its successful transmission to the
+  output.
+
+### 6.3 Dense oracle
 
 `MeshAttention.forward_reference` explicitly forms the signed pair scores and
 evaluates the same quadrature sum in \(O(N_sN_q)\) work. It is intended for:
@@ -461,8 +506,10 @@ arbitrary nonlinear function evaluated jointly on each pair.
 The nonlinear global operator stream makes each source embedding depend on the
 whole boundary before it is used by later field and query layers. Increasing
 `scalar_rank`, `vector_rank`, heads, channel multiplicities, or depth increases
-capacity while retaining linear complexity in \(N\), but none of these choices
-turns the model into an exact boundary-integral solver.
+source-side, radial, and multiplicity capacity while retaining linear
+complexity in \(N\). It does not add higher physical irreducible
+representations to the boundary-only scalar decoder, nor turn the model into
+an exact boundary-integral solver.
 
 Heads and separable ranks are capacity parameters, not physical length scales
 or additional invariance assumptions.
@@ -736,6 +783,16 @@ uses low-rank, hierarchical, or multipole acceleration, it must provide:
 4. an explicit statement when rotations or other invariances become only
    approximate.
 
+These backends should be named by what they compute. A Barnes--Hut-style tree
+replaces a distant cluster by a low-order aggregate selected by an opening
+criterion. A fast multipole method transports controlled multipole and local
+expansions between a hierarchy of boxes. Neither is the same as the present
+exact separable reassociation, and an opening angle is not automatically a
+certified error tolerance. Approximate backends may preserve the physical
+symmetry to controlled floating-point or truncation error without being
+algebraically exact; their convergence must be measured against the dense
+formula they claim to accelerate.
+
 An axis-aligned spatial tree is not part of the current model or its cache
 contract.
 
@@ -803,7 +860,7 @@ Tests should distinguish exact algebraic properties from empirical convergence:
 The dense oracle tests separable algebra. It does not validate PDE fidelity or
 OOD-geometry accuracy.
 
-## 15. Empirical status
+## 15. Empirical and diagnostic status
 
 The exact conformal-Laplace benchmark in
 [`examples/cfd/laplace_mesh_transformer`](../../../../examples/cfd/laplace_mesh_transformer)
@@ -812,8 +869,11 @@ variable domains, balanced boundary modes, fresh paired geometry-OOD splits,
 physical-area losses, continuous maximum-principle enclosures, Laplacian
 diagnostics, and boundary-resolution studies. The checked-in
 [reference summary](../../../../examples/cfd/laplace_mesh_transformer/results/reference_2026-07-01.json)
-contains the exact source fingerprint and a compact, machine-readable subset
-of the measurements.
+preserves the exploratory measurements. The subsequent
+[architectural-ablation artifact](../../../../examples/cfd/laplace_mesh_transformer/results/architectural_ablation_2026-07-01.json)
+records the prespecified one-seed eliminations, three-seed finalist study,
+spectral extractions, gate decisions, external controls, and exact relevant
+source fingerprint.
 
 With 1,000 online updates and three seeds, the reference linear
 `MeshTransformer` obtains \(0.458 \pm 0.002\) ID relative \(L^2\), versus
@@ -827,19 +887,46 @@ Pure-mode probes localize the observed gap. Although modes 1--4 all occur in
 training, the reference model learns modes 1--2 and leaves modes 3--4 near unit
 relative error. Equal boundary-mode variance does not equalize the supervised
 interior energy: on the disk, harmonic mode \(k\) is weighted proportionally to
-\(1/(k+1)\) by the area loss. A one-seed three-query-block ablation did not move
-the validation ceiling, but it does not distinguish representation rank from
-optimization or objective weighting. The Laplace-specific constant lift makes
-mode zero exact but improves aggregate ID error by only about 0.006. The
-current evidence therefore supports the layer as a geometry-generalizing,
-low-order global operator—not yet as a sufficiently accurate general elliptic
-surrogate.
+\(1/(k+1)\) by the area loss. More importantly, the proposition in Section 6.2
+now identifies a representation nullspace, rather than merely an optimization
+failure. Random-weight tests scan every resolvable disk mode and confirm that
+changing width, heads, feature rank, or query depth does not create order three
+or above. Basis-response extraction separately exposes the learned operator's
+singular spectrum and signed Fourier transfer.
 
-This result should guide the next controlled experiment: first equalize
-solution-space energy or train pure modes, then test whether explicit
-higher-order \(O(D)\) representations or a controlled nonseparable kernel close
-the remaining gap. Raw absolute coordinates, Cartesian Fourier features, or a
-fitted locality radius would obscure rather than clarify that diagnosis.
+The completed factorial confirms that source-query factorization is the main
+failure. Replacing moments by a dense relative pair decoder improves one-seed
+ID error by 0.341 with minimal boundary processing and 0.386 with the global
+encoder. The global encoder itself changes the moment result by only 0.00026,
+but improves the pair model by 23.7% once relative geometry is available.
+Neither dense pair is harmonic: their normalized Laplacian residuals are 2.53
+and 3.52.
+
+Typed physical order works as predicted. A 9,880-parameter planar STF model
+through order four reaches 0.132 ID error, compared with 0.531 for a
+9,934-parameter scalar/vector widening control. It exposes modes three and
+four, but still misses the mode-four gate and remains poor under stronger
+deformation and frequency OOD. This is evidence for systematic irreps, not a
+claim that one small fixed order is sufficient.
+
+The only eligible architecture to pass every early and three-seed finalist
+gate is PDE-specific: an eight-parameter, eight-step linear Richardson
+boundary-density processor followed by the analytic Laplace double-layer
+kernel. On the 32-case-per-split finalist bank it obtains
+\(0.023453\pm0.000001\) ID relative \(L^2\),
+\(0.018954\pm0.000001\) unseen-geometry error, mode-3/mode-4 errors
+\(0.0792/0.1021\), trace error \(4.23\times10^{-4}\), and normalized
+Laplacian residual \(4.46\times10^{-5}\). It retains superposition,
+similarity, zero-drive, and finite-refinement contracts.
+
+The resulting scope is explicit. This layer is a geometry-generalizing
+low-order global moment primitive, not a sufficiently expressive general
+elliptic surrogate. For Laplace-type problems, a boundary-density solve plus a
+PDE-conforming propagator is preferred. Where no analytic kernel is available,
+higher typed irreps are the principled linear-time extension; a nonseparable
+signed pair kernel needs its own dense semantics and controlled hierarchy.
+Raw absolute coordinates, Cartesian Fourier features, and fitted locality
+radii remain excluded because they would obscure the physical diagnosis.
 
 The packed joint-moment implementation was also compared directly in a one-off
 ablation with the pre-change four-reduction path at 65,536 sources and identical
@@ -869,8 +956,10 @@ The current model is intentionally narrow:
 - analytic singular and nearly singular boundary quadrature is not provided;
 - interior connectivity is preserved in the returned mesh but is not used by
   the pointwise decoder; and
-- finite-rank separability may be a bottleneck for sharp, highly local, or
-  singular operators.
+- finite-rank separability cannot represent a general nonseparable or singular
+  pair kernel; and
+- under the assumptions in Section 6.2, the scalar/vector linear decoder has
+  an exact low-order angular ceiling.
 
 These limitations make the reference semantics precise: a global signed
 operator with exact quadrature moments, exact linear entity-count scaling, and
