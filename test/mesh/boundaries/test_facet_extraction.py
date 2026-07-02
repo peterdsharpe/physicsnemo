@@ -23,6 +23,7 @@ dimensions, and compute backends, with data aggregation strategies.
 import pytest
 import torch
 
+from physicsnemo.mesh.boundaries import categorize_facets_by_count
 from physicsnemo.mesh.mesh import Mesh
 
 ### Helper Functions ###
@@ -99,6 +100,36 @@ def assert_on_device(tensor: torch.Tensor, expected_device: str) -> None:
     actual_device = tensor.device.type
     assert actual_device == expected_device, (
         f"Device mismatch: tensor is on {actual_device!r}, expected {expected_device!r}"
+    )
+
+
+def test_categorize_facets_preserves_ordered_compact_remapping(device):
+    """A noncontiguous count filter must remap kept and rejected candidates."""
+    candidate_facets = torch.tensor(
+        [
+            [2, 3],
+            [0, 1],
+            [1, 2],
+            [0, 1],
+            [4, 5],
+            [1, 2],
+            [4, 5],
+            [4, 5],
+        ],
+        device=device,
+    )
+
+    facets, inverse, counts = categorize_facets_by_count(
+        candidate_facets,
+        target_counts=[1, 3],
+        index_bound=6,
+    )
+
+    assert torch.equal(facets, candidate_facets.new_tensor([[2, 3], [4, 5]]))
+    assert torch.equal(counts, candidate_facets.new_tensor([1, 3]))
+    assert torch.equal(
+        inverse,
+        candidate_facets.new_tensor([0, -1, -1, -1, 1, -1, 1, 1]),
     )
 
 

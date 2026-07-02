@@ -107,9 +107,10 @@ def get_cell_to_cells_adjacency(
     # inverse_indices maps candidates to unique shared facets (or -1 if not shared)
     candidate_is_shared = inverse_indices >= 0
 
-    # Extract only the parent cells and inverse indices for shared facets
-    shared_parent_cells = parent_cell_indices[candidate_is_shared]
-    shared_inverse = inverse_indices[candidate_is_shared]
+    # Compact once and reuse the ordered indices for both aligned arrays.
+    shared_idx = candidate_is_shared.nonzero(as_tuple=True)[0]
+    shared_parent_cells = parent_cell_indices[shared_idx]
+    shared_inverse = inverse_indices[shared_idx]
 
     ### Handle case where no cells share facets
     if len(shared_parent_cells) == 0:
@@ -143,33 +144,18 @@ def get_cell_to_cells_adjacency(
     # Shape: (n_unique_shared_facets,)
     facet_sizes = facet_changes[1:] - facet_changes[:-1]
 
-    ### Filter to only facets shared by 2+ cells (can form pairs)
-    # Single-cell facets cannot form pairs
-    multi_cell_facet_mask = facet_sizes > 1
-
-    if not multi_cell_facet_mask.any():
-        # No facets shared by multiple cells
-        return Adjacency(
-            offsets=torch.zeros(
-                mesh.n_cells + 1, dtype=torch.int64, device=mesh.cells.device
-            ),
-            indices=torch.zeros(0, dtype=torch.int64, device=mesh.cells.device),
-        )
-
     ### Build arrays for vectorized pair generation
     # For each facet, we'll generate all directed pairs (i, j) where i != j
     # Fully vectorized - no Python loops whatsoever
 
-    # Get sizes only for facets with multiple cells
-    valid_facet_sizes = facet_sizes[multi_cell_facet_mask]
-    n_valid_facets = len(valid_facet_sizes)
-
-    # Filter facet_changes to only include valid facets
-    valid_facet_starts = facet_changes[:-1][multi_cell_facet_mask]
+    # ``target_counts="shared"`` above guarantees that every facet represented
+    # here belongs to at least two cells, so no second mask/filter pass is needed.
+    n_valid_facets = len(facet_sizes)
+    valid_facet_starts = facet_changes[:-1]
 
     ### Extract all cells belonging to valid facets (those with 2+ cells)
     # Fully vectorized - no Python loops or .tolist() calls
-    total_cells_in_valid_facets = valid_facet_sizes.sum()
+    total_cells_in_valid_facets = len(sorted_cells)
 
     # Generate indices into sorted_cells for all cells in valid facets
     # For each facet: [start, start+1, ..., end-1]
@@ -189,13 +175,13 @@ def get_cell_to_cells_adjacency(
     facet_cumulative_starts = torch.cat(
         [
             torch.tensor([0], dtype=torch.int64, device=mesh.cells.device),
-            torch.cumsum(valid_facet_sizes[:-1], dim=0),
+            torch.cumsum(facet_sizes[:-1], dim=0),
         ]
     )
 
     # Expand starts to match each cell position
     start_indices_per_cell = torch.repeat_interleave(
-        facet_cumulative_starts, valid_facet_sizes
+        facet_cumulative_starts, facet_sizes
     )
 
     # Local index = cumulative_idx - start_of_its_group
@@ -204,7 +190,7 @@ def get_cell_to_cells_adjacency(
     # Generate indices into sorted_cells
     # Start indices in sorted_cells repeated by facet size + local offset
     valid_facet_starts_expanded = torch.repeat_interleave(
-        valid_facet_starts, valid_facet_sizes
+        valid_facet_starts, facet_sizes
     )
     cell_indices_into_sorted = valid_facet_starts_expanded + local_indices
 
@@ -215,12 +201,12 @@ def get_cell_to_cells_adjacency(
     # Shape: (total_cells_in_valid_facets,)
     facet_ids_per_cell = torch.repeat_interleave(
         torch.arange(n_valid_facets, dtype=torch.int64, device=mesh.cells.device),
-        valid_facet_sizes,
+        facet_sizes,
     )
 
     ### Generate all directed pairs (i, j) where i != j
     # Each cell needs (facet_size - 1) pairs
-    facet_sizes_per_cell = valid_facet_sizes[facet_ids_per_cell]
+    facet_sizes_per_cell = facet_sizes[facet_ids_per_cell]
     n_pairs_per_cell = facet_sizes_per_cell - 1
 
     # Repeat source cells by (facet_size - 1)
@@ -269,7 +255,7 @@ def get_cell_to_cells_adjacency(
     facet_cumsum = torch.cat(
         [
             torch.tensor([0], dtype=torch.int64, device=mesh.cells.device),
-            torch.cumsum(valid_facet_sizes, dim=0)[:-1],
+            torch.cumsum(facet_sizes, dim=0)[:-1],
         ]
     )
     target_global_positions = facet_cumsum[source_facet_ids] + target_local_indices

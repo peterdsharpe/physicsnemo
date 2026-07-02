@@ -172,18 +172,16 @@ def categorize_facets_by_count(
         )
 
     ### Filter facets and update inverse indices
-    filtered_facets = unique_facets[mask]
-    filtered_counts = counts[mask]
+    # Compact the mask once, then reuse the ordered indices. Each boolean-indexing
+    # operation performs its own dynamic-shape ``nonzero`` on CUDA.
+    keep_idx = mask.nonzero(as_tuple=True)[0]
+    filtered_facets = unique_facets[keep_idx]
+    filtered_counts = counts[keep_idx]
 
     # Update inverse indices to point to filtered facets
     # Create mapping from old unique indices to new filtered indices
     # For facets that don't pass the filter, map to -1
-    old_to_new = torch.full(
-        (len(unique_facets),), -1, dtype=torch.int64, device=unique_facets.device
-    )
-    old_to_new[mask] = torch.arange(
-        mask.sum(), dtype=torch.int64, device=unique_facets.device
-    )
+    old_to_new = torch.where(mask, mask.cumsum(dim=0) - 1, -1)
 
     # Remap inverse indices
     filtered_inverse = old_to_new[inverse_indices]
