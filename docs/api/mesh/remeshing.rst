@@ -8,7 +8,7 @@ clustering algorithm. Given a target number of clusters, the algorithm
 redistributes mesh vertices to produce a more uniform cell distribution.
 
 The current implementation wraps ``pyacvd`` and therefore supports only
-triangle surfaces (2D manifolds) embedded in 3D:
+triangle surfaces (2D manifolds) embedded in 2D or 3D:
 
 1. Weight vertices by incident cell areas
 2. Initialize clusters via area-based region growing
