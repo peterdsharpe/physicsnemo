@@ -43,6 +43,9 @@ from physicsnemo.mesh.transformations.geometric import (
 )
 from physicsnemo.mesh.utilities._padding import _pad_by_tiling_last, _pad_with_value
 from physicsnemo.mesh.utilities._scatter_ops import scatter_aggregate
+from physicsnemo.mesh.utilities._serialization import (
+    _load_memmap_with_empty_tensors,
+)
 from physicsnemo.mesh.utilities.mesh_repr import format_mesh_repr
 from physicsnemo.mesh.visualization.draw_mesh import draw_mesh
 
@@ -3581,3 +3584,30 @@ def _mesh_to(self, *args: Any, **kwargs: Any) -> "Mesh":
 
 _tensorclass_mesh_to = Mesh.to  # the generated tensorclass ``to``
 Mesh.to = _mesh_to  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+
+
+def _mesh_load_memmap(
+    cls,
+    prefix: Path,
+    metadata: dict[str, Any],
+    *,
+    robust_key: bool | None,
+    **kwargs: Any,
+):
+    """Load a Mesh while retaining metadata-declared zero-element tensors."""
+    # Topology caches can contain Adjacency tensorclasses. Importing the class
+    # registers it with TensorDict before the recursive memmap load begins.
+    from physicsnemo.mesh.neighbors._adjacency import Adjacency  # noqa: F401
+
+    return _load_memmap_with_empty_tensors(
+        cls,
+        prefix,
+        metadata,
+        robust_key=robust_key,
+        **kwargs,
+    )
+
+
+Mesh._load_memmap = classmethod(  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
+    _mesh_load_memmap
+)
