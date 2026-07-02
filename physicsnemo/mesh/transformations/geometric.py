@@ -34,6 +34,8 @@ import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import TensorDict
 
+from physicsnemo.mesh.utilities._tolerances import safe_normalize
+
 if TYPE_CHECKING:
     from physicsnemo.mesh.mesh import Mesh
 
@@ -525,7 +527,7 @@ def transform(
                     norm_scale = transformed.norm(dim=-1)
                     if (areas := mesh._cache.get(("cell", "areas"), None)) is not None:
                         new_cache["cell", "areas"] = areas * det_abs * norm_scale
-                    new_cache["cell", "normals"] = det_sign * F.normalize(
+                    new_cache["cell", "normals"] = det_sign * safe_normalize(
                         transformed, dim=-1
                     )
 
@@ -548,7 +550,7 @@ def transform(
                     )
                 ):
                     transformed = torch.linalg.solve(matrix.T, v.T).T
-                    new_cache["point", "normals"] = det_sign * F.normalize(
+                    new_cache["point", "normals"] = det_sign * safe_normalize(
                         transformed, dim=-1
                     )
 

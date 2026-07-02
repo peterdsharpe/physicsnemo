@@ -22,7 +22,9 @@ coordinates live at a scale far from unity.  For float64 in particular,
 results on micro- or nanoscale geometries.
 
 This module provides :func:`safe_eps`, which returns a floor value derived
-from the dtype alone, chosen so that:
+from the dtype alone, and :func:`safe_normalize`, which handles exact zero
+vectors without shortening small nonzero directions. ``safe_eps`` is chosen
+so that:
 
 - It is small enough to never activate on any physically meaningful mesh.
 - ``1 / safe_eps(dtype)`` does not overflow in the dtype's arithmetic.
@@ -76,3 +78,22 @@ def safe_eps(dtype: torch.dtype) -> float:
     """
     info = torch.finfo(dtype)
     return min(info.tiny**0.25, info.eps)
+
+
+def safe_normalize(vectors: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    """Normalize vectors without changing small nonzero directions.
+
+    ``torch.nn.functional.normalize`` clamps the norm to ``eps``. Its default
+    epsilon underflows to zero in ``float16``, while a representable replacement
+    such as :func:`safe_eps` is large enough to shorten valid small vectors.
+    Scaling by the largest component first keeps the norm calculation in range;
+    only an exactly zero vector uses a unit denominator and remains zero.
+    """
+    if vectors.shape[dim] == 0:
+        return vectors
+
+    scale = vectors.abs().amax(dim=dim, keepdim=True)
+    is_zero = scale == 0
+    scaled = vectors / scale.masked_fill(is_zero, 1)
+    norm = scaled.norm(dim=dim, keepdim=True)
+    return scaled / norm.masked_fill(is_zero, 1)

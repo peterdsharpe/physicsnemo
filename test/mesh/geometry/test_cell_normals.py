@@ -48,6 +48,33 @@ def _relative_vectors(vertices: list[list[float]]) -> torch.Tensor:
     return (pts[1:] - pts[0]).unsqueeze(0)
 
 
+@pytest.mark.parametrize(
+    "vectors",
+    [
+        torch.zeros((1, 1, 2), dtype=torch.float16),
+        torch.zeros((1, 2, 3), dtype=torch.float16),
+    ],
+)
+def test_degenerate_float16_cell_has_zero_normal(vectors):
+    """Exactly degenerate reduced-precision cells have finite zero normals."""
+    result = compute_cell_normals(vectors)
+
+    assert result.isfinite().all()
+    assert torch.equal(result, torch.zeros_like(result))
+
+
+def test_small_float16_cell_normal_remains_unit_length():
+    """A zero guard must not shorten representable nonzero normals."""
+    vectors = torch.tensor([[[1.0e-4, 0.0]]], dtype=torch.float16)
+
+    result = compute_cell_normals(vectors)
+
+    torch.testing.assert_close(
+        result,
+        torch.tensor([[0.0, 1.0]], dtype=torch.float16),
+    )
+
+
 ### Branch 1: _normals_2d (edges in 2D) ###
 
 
