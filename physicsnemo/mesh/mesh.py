@@ -69,6 +69,18 @@ MeshFieldAssociation: TypeAlias = Literal["point_data", "cell_data", "global_dat
 MESH_FIELD_ASSOCIATIONS: tuple[MeshFieldAssociation, ...] = get_args(
     MeshFieldAssociation
 )
+_INTEGER_DTYPES = frozenset(
+    {
+        torch.uint8,
+        torch.uint16,
+        torch.uint32,
+        torch.uint64,
+        torch.int8,
+        torch.int16,
+        torch.int32,
+        torch.int64,
+    }
+)
 
 
 @tensorclass(tensor_only=True, shadow=True)
@@ -165,7 +177,8 @@ class Mesh:
     Parameters
     ----------
     points : torch.Tensor
-        Vertex coordinates with shape :math:`(N_p, D_s)`. Must be floating-point.
+        Vertex coordinates with shape :math:`(N_p, D_s)`. Must be floating-point
+        or complex.
     cells : torch.Tensor, optional
         Cell connectivity with shape :math:`(N_c, D_m + 1)`. Each row contains
         indices into ``points`` defining one simplex. Must be integer dtype.
@@ -180,10 +193,11 @@ class Mesh:
     Raises
     ------
     ValueError
-        If ``points`` is not 2D, ``cells`` is not 2D, or manifold dimension
-        exceeds spatial dimension.
+        If ``points`` or ``cells`` is not 2D, cells have no vertex column, or
+        manifold dimension exceeds spatial dimension.
     TypeError
-        If ``cells`` has a floating-point dtype (indices must be integers).
+        If coordinates are not floating-point/complex or cell indices are not
+        integers.
 
     Examples
     --------
@@ -410,19 +424,35 @@ class Mesh:
                 raise ValueError(
                     f"`cells` must have shape (n_cells, n_manifold_dimensions + 1), but got {self.cells.shape=}."
                 )
+            if not (self.points.is_floating_point() or self.points.is_complex()):
+                raise TypeError(
+                    "`points` must have a floating-point or complex dtype, "
+                    f"but got {self.points.dtype=}."
+                )
+            if self.cells.shape[1] == 0:
+                raise ValueError(
+                    "`cells` must contain at least one vertex index per cell, "
+                    f"but got {self.cells.shape=}."
+                )
             if self.n_manifold_dims > self.n_spatial_dims:
                 raise ValueError(
                     f"`n_manifold_dims` must be <= `n_spatial_dims`, but got {self.n_manifold_dims=} > {self.n_spatial_dims=}."
                 )
-            if torch.is_floating_point(self.cells):
+            if self.cells.dtype not in _INTEGER_DTYPES:
                 raise TypeError(
-                    f"`cells` must have an int-like dtype, but got {self.cells.dtype=}."
+                    f"`cells` must have an integer dtype, but got {self.cells.dtype=}."
                 )
             if self.points.device != self.cells.device:
                 raise ValueError(
                     f"`points` and `cells` must be on the same device, "
                     f"but got {self.points.device=} and {self.cells.device=}."
                 )
+
+        # PyTorch advanced indexing accepts int32 and int64. Normalize smaller
+        # integer connectivity so every successfully-created Mesh is immediately
+        # usable by geometry operations.
+        if self.cells.dtype in _INTEGER_DTYPES - {torch.int32, torch.int64}:
+            self.cells = self.cells.to(torch.int64)
 
     @classmethod
     def from_polygons(
@@ -594,7 +624,7 @@ class Mesh:
             device : torch.device, optional
                 The desired device of the mesh.
             dtype : torch.dtype, optional
-                The desired floating point or complex dtype of the mesh tensors.
+                The desired floating-point or complex dtype of the mesh tensors.
             non_blocking : bool, optional
                 Whether the operations should be non-blocking.
             memory_format : torch.memory_format, optional
@@ -3515,46 +3545,38 @@ Mesh.__repr__ = _mesh_repr  # type: ignore[method-assign]  # ty: ignore[invalid-
 
 
 ### Override the tensorclass ``to`` so a floating/complex dtype is applied only to
-# floating tensors. The generated tensorclass ``to`` casts *every* leaf -- including
-# the integer ``cells`` -- which then fails ``__post_init__``'s int-dtype check, so
-# ``mesh.to(torch.float64)`` was broken for any mesh with cells. Only an explicitly
-# requested floating/complex dtype takes the cells-safe path; device-only moves and
-# non-float dtypes are delegated unchanged to the generated ``to`` so device metadata,
-# ``non_blocking``, etc. behave exactly as before. Reassigned after the class because
-# @tensorclass overrides a body-defined ``to`` (same reason as ``__repr__`` above).
-def _requested_float_dtype(
+# floating/complex tensors. The generated tensorclass ``to`` casts *every* leaf --
+# including integer connectivity -- while integer coordinate requests would violate
+# the Mesh geometry contract. Device-only moves still delegate unchanged so per-leaf
+# dtypes and transfer options retain tensorclass behavior. Reassigned after the class
+# because @tensorclass overrides a body-defined ``to`` (same reason as ``__repr__``).
+def _requested_dtype(
     args: tuple[Any, ...], kwargs: dict[str, Any]
 ) -> torch.dtype | None:
-    """Return the explicitly requested dtype iff it is floating/complex, else ``None``.
-
-    Detects the dtype across torch's ``Tensor.to`` overloads -- ``to(dtype, ...)``,
-    ``to(device, dtype, ...)``, ``to(other, ...)`` (a tensor whose dtype is copied),
-    and ``to(..., dtype=...)``. A device-only move (no dtype) or an integer dtype
-    returns ``None``. Crucially the result does not depend on the caller's current
-    dtype, so re-casting to the dtype a tensor already has (e.g. ``float64 ->
-    float64``) still routes through the cells-safe path rather than the generated
-    ``to`` that would cast the integer cells and raise.
-    """
+    """Return the dtype requested through any supported ``Tensor.to`` overload."""
     dtype = kwargs.get("dtype")
     if dtype is None:
         for arg in args:
             if isinstance(arg, torch.dtype):
-                dtype = arg
-                break
-            if isinstance(arg, torch.Tensor):  # ``to(other)`` copies other's dtype
-                dtype = arg.dtype
-                break
-    if isinstance(dtype, torch.dtype) and (dtype.is_floating_point or dtype.is_complex):
-        return dtype
-    return None
+                return arg
+            if isinstance(arg, torch.Tensor):
+                return arg.dtype
+    return dtype if isinstance(dtype, torch.dtype) else None
 
 
 def _mesh_to(self, *args: Any, **kwargs: Any) -> "Mesh":
-    cast_dtype = _requested_float_dtype(args, kwargs)
+    requested_dtype = _requested_dtype(args, kwargs)
+    if requested_dtype is not None and not (
+        requested_dtype.is_floating_point or requested_dtype.is_complex
+    ):
+        raise TypeError(
+            "Mesh coordinates must remain floating point or complex; "
+            f"cannot convert a Mesh to {requested_dtype}."
+        )
+    cast_dtype = requested_dtype
     if cast_dtype is None:
-        # Device move and/or non-float dtype: the generated tensorclass ``to`` is
-        # correct (it never turns the integer cells into a float dtype), preserves
-        # per-leaf dtypes, and forwards device/``non_blocking``/etc. unchanged.
+        # For a device-only move, the generated tensorclass ``to`` preserves
+        # per-leaf dtypes and forwards ``non_blocking``/etc. unchanged.
         return _tensorclass_mesh_to(self, *args, **kwargs)
 
     # Floating/complex dtype cast. Resolve the target device by probing a zero-length
