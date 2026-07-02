@@ -612,7 +612,10 @@ def compute_cotan_weights_fem(
 
     ### Invert Gram matrix
     # G_inv: (n_cells, n_manifold_dims, n_manifold_dims)
-    G_inv = torch.linalg.inv(G)
+    # ``G`` is guaranteed invertible after the regularization above.  Use the
+    # non-checking ``inv_ex`` variant so CUDA callers do not pay a device-to-host
+    # synchronization solely for error reporting.
+    G_inv = torch.linalg.inv_ex(G, check_errors=False).inverse
 
     ### Build the gradient dot product matrix C = H @ G_inv @ H^T
     # H: (n_verts_per_cell, n_manifold_dims) = [[-1,...,-1]; I_n]

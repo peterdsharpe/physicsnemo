@@ -521,7 +521,9 @@ def transform(
             elif mesh.codimension == 1:
                 ### Cell (face) normals: the inverse-transpose law is exact per face.
                 if (v := mesh._cache.get(("cell", "normals"), None)) is not None:
-                    transformed = torch.linalg.solve(matrix.T, v.T).T
+                    transformed = torch.linalg.solve_ex(
+                        matrix.T, v.T, check_errors=False
+                    ).result.T
                     norm_scale = transformed.norm(dim=-1)
                     if (areas := mesh._cache.get(("cell", "areas"), None)) is not None:
                         new_cache["cell", "areas"] = areas * det_abs * norm_scale
@@ -547,7 +549,9 @@ def transform(
                         and _is_similarity_transform(matrix)
                     )
                 ):
-                    transformed = torch.linalg.solve(matrix.T, v.T).T
+                    transformed = torch.linalg.solve_ex(
+                        matrix.T, v.T, check_errors=False
+                    ).result.T
                     new_cache["point", "normals"] = det_sign * F.normalize(
                         transformed, dim=-1
                     )
