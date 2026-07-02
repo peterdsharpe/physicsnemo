@@ -76,11 +76,12 @@ def scatter_aggregate(
 
     Notes
     -----
-    The output dtype follows ``src_data``, with one exception: a ``"mean"`` of
-    an integer or boolean ``src_data`` is promoted to ``torch.float64``. A mean
-    of integers is generally non-integral, so computing it in the source integer
-    dtype would truncate (e.g. ``(1 + 2) // 2 == 1``); promoting to a floating
-    dtype avoids this. A ``"sum"`` always preserves the source dtype.
+    The output dtype follows ``src_data``, including for complex data, with one
+    exception: a ``"mean"`` of an integer or boolean ``src_data`` is promoted
+    to ``torch.float64``. A mean of integers is generally non-integral, so
+    computing it in the source integer dtype would truncate (e.g.
+    ``(1 + 2) // 2 == 1``); promoting to a floating dtype avoids this. A
+    ``"sum"`` always preserves the source dtype.
 
     Examples
     --------
@@ -103,10 +104,17 @@ def scatter_aggregate(
     ### floating dtype: integer division truncates (e.g. (1 + 2) // 2 == 1), and the
     ### division guard ``safe_eps()`` -> ``torch.finfo`` raises on integer dtypes. A
     ### "sum" preserves the native (possibly integer) dtype.
-    if aggregation == "mean" and not torch.is_floating_point(src_data):
+    if aggregation == "mean" and not (
+        src_data.is_floating_point() or src_data.is_complex()
+    ):
         compute_dtype = torch.float64
     else:
         compute_dtype = dtype
+
+    # Aggregation weights are real even when the values are complex. Keeping
+    # their sums real makes the zero guard well-defined and avoids discarding
+    # the imaginary component of the source data.
+    weight_dtype = src_data.real.dtype if compute_dtype.is_complex else compute_dtype
 
     ### Fast path: unweighted sum is a single scatter_add_ with no extra work
     if weights is None and aggregation == "sum":
@@ -119,13 +127,13 @@ def scatter_aggregate(
 
     ### Initialize weights if not provided
     if weights is None:
-        weights = torch.ones(
-            len(src_to_dst_mapping), dtype=compute_dtype, device=device
-        )
+        weights = torch.ones(len(src_to_dst_mapping), dtype=weight_dtype, device=device)
+    elif weights.is_complex():
+        raise TypeError(f"weights must be real-valued, got {weights.dtype=}")
 
     ### Ensure weights share the compute dtype (avoid dtype mismatch in multiplication)
-    if weights.dtype != compute_dtype:
-        weights = weights.to(compute_dtype)
+    if weights.dtype != weight_dtype:
+        weights = weights.to(weight_dtype)
 
     ### Weight the source data
     # Broadcast weights to match data shape: (n_src, *data_shape)
@@ -153,7 +161,7 @@ def scatter_aggregate(
     ### Normalize weighted sum to weighted mean
     if aggregation == "mean":
         ### Compute sum of weights at each destination
-        weight_sums = torch.zeros(n_dst, dtype=compute_dtype, device=device)
+        weight_sums = torch.zeros(n_dst, dtype=weight_dtype, device=device)
         weight_sums.scatter_add_(
             dim=0,
             index=src_to_dst_mapping,

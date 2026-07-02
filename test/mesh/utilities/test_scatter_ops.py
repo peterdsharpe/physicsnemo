@@ -27,6 +27,7 @@ data between mesh entities (points, cells, facets), including:
 import pytest
 import torch
 
+from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.utilities._scatter_ops import scatter_aggregate
 
 
@@ -294,6 +295,60 @@ class TestScatterAggregateDtypes:
 
         assert result.dtype == torch.int64
         assert torch.equal(result, torch.tensor([3, 3], dtype=torch.int64))
+
+    @pytest.mark.parametrize("dtype", [torch.complex64, torch.complex128])
+    def test_complex_mean_preserves_dtype_and_imaginary_part(self, dtype):
+        src_data = torch.tensor([1 + 2j, 3 + 6j, 5 - 4j], dtype=dtype)
+        src_to_dst = torch.tensor([0, 0, 1])
+
+        result = scatter_aggregate(src_data, src_to_dst, n_dst=2)
+
+        expected = torch.tensor([2 + 4j, 5 - 4j], dtype=dtype)
+        assert result.dtype == dtype
+        torch.testing.assert_close(result, expected)
+
+    def test_complex_weighted_mean_uses_real_weights(self):
+        src_data = torch.tensor([1 + 2j, 3 + 6j], dtype=torch.complex64)
+        src_to_dst = torch.tensor([0, 0])
+        weights = torch.tensor([1.0, 3.0])
+
+        result = scatter_aggregate(src_data, src_to_dst, n_dst=1, weights=weights)
+
+        torch.testing.assert_close(result, torch.tensor([2.5 + 5j]))
+
+    def test_complex_weighted_sum_preserves_imaginary_part(self):
+        src_data = torch.tensor([1 + 2j, 3 + 6j], dtype=torch.complex64)
+        src_to_dst = torch.tensor([0, 0])
+
+        result = scatter_aggregate(
+            src_data,
+            src_to_dst,
+            n_dst=1,
+            weights=torch.tensor([2.0, 0.5]),
+            aggregation="sum",
+        )
+
+        torch.testing.assert_close(result, torch.tensor([3.5 + 7j]))
+
+    def test_complex_weights_rejected(self):
+        with pytest.raises(TypeError, match="weights must be real-valued"):
+            scatter_aggregate(
+                torch.tensor([1 + 2j]),
+                torch.tensor([0]),
+                n_dst=1,
+                weights=torch.tensor([1 + 0j]),
+            )
+
+    def test_cell_data_to_point_data_preserves_complex_values(self):
+        mesh = Mesh(
+            points=torch.tensor([[0.0], [1.0], [2.0]]),
+            cells=torch.tensor([[0, 1], [1, 2]]),
+            cell_data={"field": torch.tensor([1 + 2j, 3 + 6j])},
+        )
+
+        result = mesh.cell_data_to_point_data().point_data["field"]
+
+        torch.testing.assert_close(result, torch.tensor([1 + 2j, 2 + 4j, 3 + 6j]))
 
 
 class TestScatterAggregateDevices:
