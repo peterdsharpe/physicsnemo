@@ -109,14 +109,17 @@ def compute_mesh_statistics(
     ### Extract edge length statistics from quality metrics
     # compute_quality_metrics already computes min/max edge lengths per cell,
     # so we derive stats from those to avoid a redundant compute_cell_edge_lengths call.
-    min_edge = quality_metrics["min_edge_length"]
-    max_edge = quality_metrics["max_edge_length"]
-    stats["edge_length_stats"] = (
-        min_edge.min().item(),
-        (min_edge.mean().item() + max_edge.mean().item()) / 2.0,
-        max_edge.max().item(),
-        max_edge.std(correction=0).item(),
-    )
+    if "min_edge_length" in quality_metrics:
+        min_edge = quality_metrics["min_edge_length"]
+        max_edge = quality_metrics["max_edge_length"]
+        stats["edge_length_stats"] = (
+            min_edge.min().item(),
+            (min_edge.mean().item() + max_edge.mean().item()) / 2.0,
+            max_edge.max().item(),
+            max_edge.std(correction=0).item(),
+        )
+    else:
+        stats["edge_length_stats"] = (0.0, 0.0, 0.0, 0.0)
 
     if "aspect_ratio" in quality_metrics.keys():
         aspect_ratios = quality_metrics["aspect_ratio"]

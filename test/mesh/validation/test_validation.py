@@ -310,6 +310,18 @@ class TestQualityMetrics:
         # Should return empty TensorDict
         assert len(metrics) == 0 or metrics.shape[0] == 0
 
+    def test_point_cell_quality_has_no_undefined_metrics(self, device):
+        """0-simplices have no edge- or angle-based quality metrics."""
+        mesh = Mesh(
+            points=torch.tensor([[0.0, 0.0], [1.0, 0.0]], device=device),
+            cells=torch.tensor([[0], [1]], dtype=torch.long, device=device),
+        )
+
+        metrics = compute_quality_metrics(mesh)
+
+        assert metrics.batch_size == torch.Size([2])
+        assert list(metrics.keys()) == []
+
 
 ###############################################################################
 # Mesh Statistics Tests
@@ -411,6 +423,22 @@ class TestMeshStatistics:
 
         assert stats["n_cells"] == 0
         assert stats["n_isolated_vertices"] == 5
+
+    def test_statistics_point_cells(self, device):
+        """Statistics remain defined for a non-empty 0-simplex mesh."""
+        mesh = Mesh(
+            points=torch.tensor([[0.0, 0.0], [1.0, 0.0]], device=device),
+            cells=torch.tensor([[0], [1]], dtype=torch.long, device=device),
+        )
+
+        stats = compute_mesh_statistics(mesh)
+
+        assert stats["n_cells"] == 2
+        assert stats["n_manifold_dims"] == 0
+        assert stats["n_degenerate_cells"] == 0
+        assert stats["n_isolated_vertices"] == 0
+        assert stats["edge_length_stats"] == (0.0, 0.0, 0.0, 0.0)
+        assert stats["cell_area_stats"] == (1.0, 1.0, 1.0, 0.0)
 
 
 ###############################################################################

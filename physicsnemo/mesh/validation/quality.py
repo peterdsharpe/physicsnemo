@@ -117,6 +117,16 @@ def compute_quality_metrics(mesh: "Mesh") -> TensorDict:
             device=mesh.points.device,
         )
 
+    # A 0-simplex has no edges, angles, aspect ratio, or shape quality to
+    # summarize. Keep the per-cell batch contract without inventing values for
+    # undefined metrics (or reducing the empty edge dimension below).
+    if mesh.n_manifold_dims == 0:
+        return TensorDict(
+            {},
+            batch_size=torch.Size([mesh.n_cells]),
+            device=mesh.points.device,
+        )
+
     device = mesh.points.device
     dtype = mesh.points.dtype
     n_cells = mesh.n_cells
