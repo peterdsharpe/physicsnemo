@@ -16,8 +16,7 @@
 
 """Direct unit tests for :class:`physicsnemo.mesh.spatial.cluster_tree.ClusterTree`.
 
-ClusterTree was historically exercised only indirectly, through GLOBE's
-BarnesHutKernel tests and the mesh-attention tests. These tests pin down its
+ClusterTree was historically exercised only indirectly. These tests pin down its
 own contracts, so the shared-LBVH-build refactor (and future changes) have a
 safety net:
 

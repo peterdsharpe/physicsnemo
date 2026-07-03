@@ -38,6 +38,12 @@ from .mesh_attention import (
     ScalarVectorState,
     TypedProjection,
 )
+from .rope import (
+    build_axial_rope_cos_sin_2d_continuous,
+    build_rope_cos_sin_1d_continuous,
+    spherical_centroid,
+    stereographic_projection,
+)
 
 __all__ = [
     "FLARE",
@@ -58,4 +64,8 @@ __all__ = [
     "PointwiseGeometryBlock",
     "ScalarVectorState",
     "TypedProjection",
+    "build_axial_rope_cos_sin_2d_continuous",
+    "build_rope_cos_sin_1d_continuous",
+    "spherical_centroid",
+    "stereographic_projection",
 ]

@@ -154,7 +154,7 @@ def rank_counts(rank_spec: RankSpecDict) -> Counter[int]:
 def ranks_from_tensordict(td: TensorDict) -> RankSpecDict:
     r"""Derive semantic-rank-shaped metadata from TensorDict leaf shapes.
 
-    A leaf rank is its number of non-batch dimensions.  For a point-field
+    A leaf rank is its number of non-batch dimensions. For a point-field
     TensorDict with batch size ``(N,)``, ``(N,)`` is therefore rank 0 and
     ``(N, D)`` is rank 1.
     """
@@ -176,8 +176,22 @@ def validate_data_contains_ranks(
 ) -> None:
     r"""Validate that ``data`` contains every declared leaf at its stated rank.
 
-    Additional leaves in ``data`` are allowed.  Missing leaves and rank
+    Additional leaves in ``data`` are allowed. Missing leaves and rank
     mismatches are reported together to make schema errors easier to diagnose.
+
+    Parameters
+    ----------
+    data : TensorDict
+        Data TensorDict to validate.
+    declared_ranks : RankSpecDict
+        Rank specification that ``data`` must contain as a subset.
+    source_label : str
+        Human-readable description used in the error message.
+
+    Raises
+    ------
+    ValueError
+        If a declared field is missing or has a different rank.
     """
     validate_rank_spec(declared_ranks, source_label="declared_ranks")
     declared = flatten_rank_spec(declared_ranks)

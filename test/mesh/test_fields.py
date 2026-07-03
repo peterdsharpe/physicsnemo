@@ -189,3 +189,18 @@ def test_field_layout_validates_packed_shapes_and_dtype():
                 vectors=torch.empty(5, 1, 3, dtype=torch.float64),
             )
         )
+
+
+def test_validate_data_contains_ranks_reports_schema_errors():
+    data = TensorDict({"pressure": torch.zeros(3, 2)}, batch_size=[3])
+    with pytest.raises(ValueError) as error:
+        validate_data_contains_ranks(
+            data=data,
+            declared_ranks={"pressure": 0, "velocity": 1},
+            source_label="boundary data",
+        )
+    assert str(error.value) == (
+        "boundary data does not contain its declared rank spec:\n"
+        "  - missing leaf 'velocity' (declared rank 1)\n"
+        "  - rank mismatch for 'pressure': declared 0, got 1"
+    )
