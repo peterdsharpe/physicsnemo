@@ -1,0 +1,219 @@
+# Evaluation methodology and the benchmark suites {#sec-benchmarks}
+
+The program's claims are only as good as its evaluation. Three principles
+govern every suite: **exact analytic labels** (no numerical-solver error to
+hide behind), **frozen paired evaluation banks** (every model sees identical
+cases), and **contract checks as exact tests** (structural properties are
+asserted to floating point, never averaged into a soft score).
+
+## Exact labels without a PDE solver
+
+**2D: conformal maps.** Domains are images of the unit disk under
+$F_a(z) = z + \sum_{m\in S} a_m z^m$ with the injectivity certificate
+$\kappa = \sum_m m|a_m| < 1$, which yields the two-sided bound
+$(1-\kappa)|z_1 - z_2| \le |F_a(z_1) - F_a(z_2)| \le (1+\kappa)|z_1-z_2|$ —
+sampled geometries are provably nondegenerate, and the "deformation" split
+axis is the certificate parameter itself. For any holomorphic polynomial
+$H_c$, $u = \operatorname{Re} H_c(z)$ is *exactly* harmonic on the physical
+domain, so targets carry zero discretization error; boundary values are its
+trace at panel midpoints. Fluxes for the Neumann problem come from the same
+construction via $\overline{H_c'/F_a'}$. Every case may additionally undergo
+a random similarity (rotation, reflection, translation, scale in $[0.2, 5]$)
+with panel winding corrected so normals stay outward.
+
+**3D: exterior point charges — exact labels on *any* geometry.** The
+conformal trick does not survive to 3D, but manufactured solutions do: for
+charge locations $y_j$ strictly outside $\overline\Omega$,
+
+$$
+u(x) = \sum_j \frac{c_j}{4\pi\,\lVert x - y_j\rVert}
+$$
+
+is exactly harmonic inside $\Omega$, on deformed and multiply connected
+domains alike, and *every* boundary-condition type is analytic: the Dirichlet
+trace, the Neumann flux $n\cdot\nabla u$, and Robin combinations
+$u + \beta L\,\partial_n u$. This removes the main scaling obstacle of
+exact-label benchmarking — the label generator no longer constrains the
+geometry family.
+
+![The 2D conformal-domain families by evaluation split, boundaries colored by
+the sampled Dirichlet trace (diverging about each sample's boundary mean).
+Top: the training family. Middle: unseen shape modes $\{4,5\}$ at the training
+deformation range. Bottom: the stronger-deformation extrapolation split for
+the trained modes.](figures/gallery_2d.png){#fig-gallery2d}
+
+## What the model is allowed to see
+
+The generated `DomainMesh` contains only physical data: boundary vertices and
+cells, the declared boundary fields in `cell_data`, query coordinates, and
+the explicit `reference_length`. Targets, area weights, and reference-disk
+radii live in interior `point_data`, which the models strip before encoding —
+label leakage is structurally impossible, not just avoided. Conformal
+coefficients, preimages, charge positions, and mode indices never enter the
+`DomainMesh` at all: harmonic modes are label generators and diagnostic
+probes, not positional encodings.
+
+## Splits: one question per axis
+
+Training cases are generated online (fresh random geometry + drive mixture
+per step), so there is no finite training set to memorize. Evaluation
+separates failure modes that a single aggregate would conflate:
+
+| split | change from training | probes |
+|---|---|---|
+| `interpolation` | independent seeds, same family | ordinary generalization |
+| `unseen_geometry_modes` | shape modes $\{4,5\}$ vs $\{2,3\}$ | new geometric structure |
+| `stronger_deformation` | $\kappa \in [0.45, 0.65]$ vs $[0.05, 0.35]$ | distortion extrapolation |
+| `mixed_geometry_modes` | modes $\{2,3,4,5\}$ | new mode combinations |
+| `unseen_boundary_frequencies` | zero-mean drive modes $\{5..8\}$ vs $\{1..4\}$ | whether the *learned operator* transfers to new right-hand sides |
+| paired similarities | rotations, reflections, translations, scales | architectural covariance, not augmentation |
+| boundary resolution | 32/64/128/256 panels, same continuous cases | quadrature/remeshing stability |
+| pure-mode responses | one harmonic mode at a time, modes 0–12 | spectral transfer function of the learned operator |
+
+: The 2D evaluation axes. Geometry-OOD and frequency-OOD are never combined into one score. {#tbl-splits}
+
+The frequency split deserves emphasis because it is the program's sharpest
+discriminator: a *value interpolator* can score well on every geometry split
+while failing frequency-OOD completely (the free-form pair kernel: ID 0.107,
+freq-OOD 0.642; the direct Neumann control: ID 0.122, freq-OOD 0.658),
+whereas everything with a PDE-conforming operator has freq-OOD $\approx$ ID.
+The zero-mean construction matters too — with a seen constant in the mix,
+its correct reproduction would mask interior error on unseen modes.
+
+For the parametric suite (@sec-parametric) the same philosophy adds
+parameter-OOD splits ($\tilde\kappa$ above and below the training range) and
+a PDE-residual diagnostic that measures operator mismatch directly.
+
+## Contracts are exact tests, not metrics
+
+Structural properties are checked as **exact assertions** (to fp32/fp64
+roundoff tolerances), separately from accuracy:
+
+- **superposition and zero-drive**: two-drive linearity to $\sim 10^{-7}$; a
+  model claiming `linear` mode must pass, and `zero_preserving_nonlinear`
+  deliberately does not claim it;
+- **similarity covariance**: paired transformed cases must agree to
+  $128\,\epsilon_{\mathrm{fp32}}$ — measured at $10^{-7}$–$2\times10^{-6}$
+  across the model families;
+- **query independence**: predictions must be identical whichever other query
+  points are in the batch (chunking may only reorder floating-point sums);
+- **interior-data hygiene**: attaching arbitrary data to `domain.interior`
+  must not change any output;
+- **quadrature consistency**: splitting a panel into measure-conserving
+  duplicates must leave moment operators algebraically unchanged, and genuine
+  refinement is tested separately as finite Cauchy evidence.
+
+Beyond contracts, physics diagnostics keep supervised accuracy honest: the
+autograd Laplacian residual $\|L^2\Delta u_\theta\|/\|u_\theta\|$, the
+boundary-trace error, and a *certified* continuous maximum-principle check
+whose trace grid is enlarged by the analytic derivative bound
+$\sum_k k|c_k|$ so sampling cannot create a false positive. The reference
+study's most instructive single number pair: the dense pair kernel had the
+*best* supervised values of its cohort and the *worst* Laplacian residual
+(9.76). Accuracy and operator fidelity are complementary measurements.
+
+Selection is protected against wishful thinking by **prespecified gates**
+(declared in `study.py` before results existed): mode-3/4 error < 0.20,
+$\ge$ 75% of the current-to-dense ID gap closed, unseen-geometry/ID ratio
+$\le 1.2$, trace $\le 0.20$, Laplacian $\le 0.40$, exact contracts, and
+contracting refinement. Early elimination runs one seed; finalists run three
+seeds on a larger common bank. Oracles and external controls are reported
+through the same metrics but cannot become "candidates" by passing.
+
+## The 3D suite
+
+Iteration 5 extends the methodology to 3D
+(`laplace3d.py`; built as a direct test of the `Mesh` module's dimensional
+genericity — subdivided-icosahedron triangle meshes with `cell_areas`,
+`cell_normals`, `cell_centroids` from the same code paths as 2D).
+
+![The 3D geometry tiers, colored by exact Dirichlet data from exterior point
+charges. T1: randomized spheres (radius, center, orientation). T2:
+star-shaped $Y_{lm}$ radial deformations — new curvature, same topology. T3:
+spherical shells — multiply connected, two boundaries that may carry
+different BC types; the cutaway (camera-facing half of the outer boundary
+removed) shows the interior boundary. Rendered from the generator's surface
+and manufactured-solution components; the star row bypasses the
+interior-query sampler, which currently hangs (see the engineering review,
+@sec-future).](figures/gallery_3d.png){#fig-gallery3d}
+
+**Tiers** vary shape *and* connectivity:
+
+- **T1 sphere** — random radius $\in [0.7, 1.5]$, center, and mesh
+  orientation; the calibration tier.
+- **T2 star** — $r(\hat u) = R\,(1 + \sum \varepsilon\, Y_{lm}(\hat u))$ over
+  low-degree real spherical harmonics, with held-out degree-4 modes for
+  geometry-OOD; homeomorphic to the sphere but with varied curvature.
+- **T3 shell** — an outer boundary plus an inward-oriented inner boundary;
+  multiply connected, with cavity charges so the solution has genuinely
+  multiply-connected structure. The pure double-layer ansatz is
+  rank-deficient here, which is precisely why this tier is *declared
+  unsolved* for the first 3D model generation rather than quietly excluded.
+
+**BC regimes**, always well-posed (@sec-pde-theory): all-Dirichlet; mixed
+(exactly one boundary keeps Dirichlet, the other carries the dimensionless
+flux $L\,\partial_n u$); Robin with per-boundary $\beta \in [0.2, 2]$.
+All-Neumann is excluded by construction.
+
+**Planned model v1** carries the 2D lessons across dimension: the pruned
+flagship's analogue — a $c_1$ double-layer coefficient with the **exact
+triangle quadrature** given in closed form by the van Oosterom–Strackee
+signed solid angle (`solid_angle_influence`,
+$\int_{T} n\cdot(y-x)/(4\pi|y-x|^3)\,dS = -\Omega/4\pi$), a shared-$\alpha$
+$p{=}8$ Richardson solve in the orientation gauge that keeps zero-kernel
+initialization convergent, and 2–3 parameters total — benchmarked on
+all-Dirichlet T1/T2, with T3 and mixed BCs as the declared open tiers for the
+mixed-trace learned solve of iteration 6.
+
+## 3D results {#sec-3d-results}
+
+The 3D runs completed after the chapters above were first drafted; all
+numbers below are seed-17, session artifacts (`/tmp/h5_3d*`), evaluated on
+frozen 12-case banks per split.
+
+Two rows anchor the table. The **oracle** is parameter-free: the exact
+solid-angle influence with a dense solve of the second-kind system — the
+best any double-layer representation can do at this panel resolution. The
+**learned model** is `SolidAngleBIE`: *two* parameters (one kernel
+coefficient multiplying the exact solid-angle influence, one shared
+Richardson relaxation, eight solve steps), with **no reference frame at
+all** — solid angles are dimensionless and similarity-invariant by
+construction, so the 2D nondimensionalization machinery disappears entirely.
+
+| split | learned 2-param (10k steps) | dense-solve oracle |
+|---|--:|--:|
+| sphere (T1) | 0.0041 | 0.0041 |
+| star (T2) | 0.0023 | 0.0024 |
+| star, unseen deformation modes | 0.0024 | 0.0021 |
+| shell (T3, topology) | 0.2764 | 1.1348 |
+
+: 3D all-Dirichlet relative $L^2$; the learned model matches the oracle to
+the fourth digit on every simply connected split. {#tbl-3d}
+
+Three observations:
+
+1. **Learning converges to the oracle.** The learned kernel coefficient
+   reaches $-1.0029$ against the gauge-consistent value $-1$ (0.3%), and
+   validation is flat from step 9,000: accuracy on T1/T2 is now
+   quadrature-limited, not learning-limited. The 2D story — recover the
+   analytic kernel from interior data alone — repeats in 3D with even fewer
+   parameters, and with the same slow co-adaptation transit seen on 2D
+   Neumann (1,500 steps reach only 0.50; 10,000 are needed).
+2. **The shell tier fails for a classical reason, in both rows.** A pure
+   double-layer representation is incomplete on multiply connected domains;
+   the *oracle itself* scores 1.13. This is a representation fact, not a
+   learning failure, and it is exactly the gap the mixed-trace/Green
+   representation solve (@sec-future) is queued to close.
+3. **Truncated solves regularize.** The learned model *beats* the oracle on
+   shells (0.28 vs 1.13): eight Richardson steps cannot fully invert the
+   deficient system, and that truncation acts as implicit (Landweber-style)
+   spectral regularization, while the dense solve inverts the pathology
+   faithfully. The tier remains open — but the mechanism is worth keeping in
+   mind wherever a learned unrolled solve meets an ill-posed representation.
+
+The 3D build also stress-tested the `Mesh` module's dimensional genericity,
+which held: codimension-one triangle areas, outward normals, and centroids
+in 3D worked unchanged, and interior solid-angle row sums came out exactly
+$-1$. One generator bug (an over-loose analytic bound that hung the star
+tier's rejection sampler) was caught by *figure inspection* during the
+gallery work and fixed with empirical per-surface radial bounds.

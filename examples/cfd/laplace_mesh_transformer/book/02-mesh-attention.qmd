@@ -1,0 +1,263 @@
+# The MeshTransformer stack {#sec-mesh-attention}
+
+This chapter describes the mesh-native operator layers as implemented in
+`physicsnemo/experimental/nn/mesh_attention/` (`attention.py`, `block.py`,
+`model.py`). The design goal is a **global, quadrature-aware,
+O($D$)-equivariant primitive** with exact linear complexity in entity count —
+and an honest statement of what such a primitive *cannot* represent.
+
+The stack's lineage is explicit: it exists to **generalize GLOBE** (arXiv
+[2511.15856](https://arxiv.org/abs/2511.15856)), a boundary-element
+surrogate for boundary-driven PDEs, carrying over its theoretical core while
+replacing its bespoke machinery with mainstream transformer patterns. What
+is kept: the equivariance structure of @sec-pde-theory — boundary-to-interior
+propagation equivariant under the similarity group, with rotational symmetry
+broken only by directional data on the boundary, so learned maps see only
+joint invariants of relative displacement, normals, and boundary vector data
+— together with all-to-all boundary-integral information flow under
+quadrature weighting, and rigorous nondimensionalization. What is replaced:
+GLOBE's Padé-approximant kernel MLPs, hand-assembled multiscale kernel
+branches, and communication hyperlayers give way to standard attention
+blocks, residual streams, and typed projections in the style of transformer
+PDE surrogates such as Transolver (arXiv
+[2402.02366](https://arxiv.org/abs/2402.02366)) — trading special-purpose
+kernel machinery for the simplicity and flexibility of mainstream-ML
+components while keeping the contracts exact.
+
+## Typed state: invariant scalars and polar vectors
+
+All latent state lives in a `ScalarVectorState`: invariant scalar channels of
+shape $(N, C_s)$ and polar-vector channels of shape $(N, C_v, D)$. Nothing
+else is representable — pseudoscalars, axial vectors, and higher O($D$)
+irreps are rejected rather than silently flattened into channels.
+
+Equivariance is obtained **by construction** in `TypedProjection`:
+
+- scalar outputs are a learned linear map of the input scalars *plus the
+  Gram invariants* $v_a \cdot v_b$ of the vector channels;
+- vector outputs mix vector *channels* only, with one coefficient per channel
+  pair applied identically to every Cartesian component:
+  $v^{\text{out}}_{o} = \sum_c W_{oc}\, v_c$.
+
+No learned layer ever sees a raw Cartesian component, an absolute coordinate,
+a Fourier positional feature, or a vertex index. `GeometryConditionedLinear`
+adds the two elementary geometry-mediated type conversions — field-vector
+$\cdot$ geometry-vector $\to$ scalar, and field-scalar $\times$
+geometry-vector $\to$ vector — plus a dyad branch
+$\sum C\,(v\!\cdot\!g_a)\,g_b$ that can represent anisotropic maps like
+normal projection $(v\cdot n)n$, all while staying exactly linear in the
+field at fixed geometry.
+
+## Signed moment attention
+
+The central layer, `MeshAttention`, is a **finite-rank separable signed
+integral operator**. For head $h$, typed projections produce scalar and
+vector query/key features $q^0_{ihr}, k^0_{jhr} \in \mathbb R$ and
+$q^1_{ihrd}, k^1_{jhrd} \in \mathbb R^D$, and the pair coefficient is
+
+$$
+a_{ijh}
+=\frac{1}{\sqrt{R_0+DR_1}}
+\Bigl(
+\sum_{r=1}^{R_0} q^0_{ihr}k^0_{jhr}
++\sum_{r=1}^{R_1} q^1_{ihr}\!\cdot\! k^1_{jhr}
+\Bigr).
+$$
+
+Three deliberate absences: **no softmax** (the kernel must be signed —
+double-layer kernels change sign), **no distance envelope or cutoff**
+(@sec-global-flow), **no positivity or normalization** (which would break
+drive linearity). The output at receiver $i$ is the quadrature-weighted sum
+$o_{ihf} = \sum_j \omega_j\, a_{ijh}\, v_{jhf}$, with values retaining their
+scalar/vector type.
+
+Separability lets the sum reassociate into four typed **source moments**,
+
+$$
+M^{00}_{hrf}=\sum_j\omega_j k^0_{jhr}v^0_{jhf},\quad
+M^{10}_{hrdf}=\sum_j\omega_j k^1_{jhrd}v^0_{jhf},\quad
+M^{01}_{hrfe}=\sum_j\omega_j k^0_{jhr}v^1_{jhfe},\quad
+M^{11}_{hrdfe}=\sum_j\omega_j k^1_{jhrd}v^1_{jhfe},
+$$
+
+built once in $O(N_s)$ and contracted at each receiver in $O(N_q)$:
+
+$$
+o^0_{ihf}=\sum_r q^0_{ihr}M^{00}_{hrf}+\sum_{r,d}q^1_{ihrd}M^{10}_{hrdf},
+\qquad
+o^1_{ihfe}=\sum_r q^0_{ihr}M^{01}_{hrfe}+\sum_{r,d}q^1_{ihrd}M^{11}_{hrdfe}.
+$$
+
+This is an *algebraic rearrangement* of the dense all-pairs formula, not an
+approximation: every source contributes to every moment, every receiver reads
+every moment. A dense `forward_reference` oracle evaluates the identical
+operator in $O(N_sN_q)$ and is used for value- and gradient-equality tests. In
+code, the four moments are typed views of one packed
+$(R_0+DR_1)\times(F_0+DF_1)$ joint moment per head, built by a single
+mesh-native `integrate_moment` call — a batched-matmul optimization measured
+at 3.4–3.9$\times$ (directional; only aggregate ablation values were
+retained).
+
+The price of separability is stated up front: per head, the effective score
+matrix has rank at most $R_0 + DR_1$. One layer cannot represent an arbitrary
+full-rank pair kernel, a pair-specific radial function, or a singular Green
+kernel. Heads and ranks are capacity knobs, not physics.
+
+## Two streams and the linearity contract
+
+```{mermaid}
+%%| fig-cap: >
+%%|   MeshTransformer dataflow as implemented in model.py. Solid arrows are
+%%|   the encode path (run once per boundary); the dashed region is the decode
+%%|   path (run per query mesh, reusing the cached source moments). N-times
+%%|   blocks are residual with small LayerScale initialization; the first
+%%|   query cross-message initializes the field read-in with scale one.
+flowchart TB
+    subgraph ENC["encode(domain)  —  O(N_s)"]
+        DM["DomainMesh boundaries<br/>(codim-1 cells: centroid, measure, normal)"] --> QU["merge + cell quadrature<br/>boundary-measure center c, reference length L"]
+        QU --> LIFT["operator lift (TypedProjection)<br/>fields + z_j + n_j + BC one-hot"]
+        LIFT --> PGB["PointwiseGeometryBlock (shared with queries)"]
+        PGB --> OB["MeshOperatorBlock × L_o<br/>TypedRMSNorm → moment attention → FFN<br/>(nonlinear: geometry/operator only)"]
+        DR["drive fields<br/>(boundary + global)"] --> DLIFT["GeometryConditionedLinear drive lift<br/>(linear in drive at fixed operator state)"]
+        OB --> DLIFT
+        DLIFT --> DB["field blocks × L_d<br/>Linear- or NonlinearZero-MeshFieldBlock"]
+        OB --> DB
+        DB --> MOM["source moments per query block<br/>M00, M10, M01, M11"]
+        MOM --> EB["EncodedBoundary<br/>(source mesh, states, c, L, moments)"]
+    end
+    subgraph DEC["decode(encoded, query_mesh)  —  O(N_q)"]
+        QP["query points"] --> QOP["query operator tokens<br/>(z, global operator data, association flag)"]
+        QOP --> QB["query field blocks × L_q<br/>evaluate cached moments"]
+        EB -.-> QB
+        QB --> OUT["typed output projection<br/>(geometry-conditioned, bias-free)"]
+        OUT --> PM["prediction Mesh<br/>(point_data at queries)"]
+    end
+```
+
+Input fields are declared with one of two **roles**. `operator` fields
+(geometry, material data, PDE coefficients) may condition the learned
+operator arbitrarily; `drive` fields (the physical boundary/global data the
+solution depends on) flow through a separate stream whose linearity is a
+contract:
+
+- **Operator stream.** Source tokens (declared operator fields, normalized
+  centroid, normal, BC one-hot, association flag) pass through
+  `MeshOperatorBlock`s: typed RMS norm, global moment self-attention,
+  equivariant feed-forward, LayerScale residuals. Biases and nonlinearities
+  are *allowed* here — this stream describes the operator, not the solution
+  amplitude.
+- **Drive stream.** In `linear` mode (`LinearMeshFieldBlock`), queries and
+  keys read *only* the operator state; values are bias-free linear in the
+  drive; the pointwise map is `GeometryConditionedLinear`. The complete
+  drive-to-output map then satisfies $\mathcal N_\Gamma(0)=0$ and exact
+  superposition at fixed geometry — the linear-PDE law of @sec-pde-theory —
+  to floating point. `zero_preserving_nonlinear` mode
+  (`NonlinearZeroMeshFieldBlock`) lets keys and values read the field through
+  structurally multiplicative updates: zero-preservation survives,
+  superposition intentionally does not.
+
+The two modes are **different Python classes**, not flags on one class, so a
+future normalization or bias added to the nonlinear block cannot silently
+invalidate the linear-mode proof.
+
+`encode` returns an `EncodedBoundary` — dimensionless source mesh, operator
+and drive states, center, reference length, and the source moments for every
+query block. `decode` evaluates it at any query mesh: query points never
+interact, moments are reused across query chunks and across repeated decode
+calls, and prediction at a point is independent of which other points are
+requested — exactly the reusability structure that Green representation
+(@eq-green) suggests.
+
+## The proved limitation: an angular ceiling at order two {#sec-ceiling}
+
+The stack carries only invariant scalars and polar vectors, and at an
+ordinary interior query the *only* query-side vector is the centered position
+$x$ (the query normal is zeroed; no physical global vector exists in the
+benchmark). Under these assumptions, in `linear` mode with scalar output, the
+decoder can produce only
+
+$$
+u(x) = c(|x|^2) + b(|x|^2)\cdot x + x^\mathsf{T} A(|x|^2)\, x,
+$$
+
+because every additional pairing of $x$ with itself reduces to powers of
+$|x|^2$. On any circle centered at the model origin the angular content is
+limited to Fourier orders $m \in \{0, 1, 2\}$: one monopole, two dipoles, two
+quadrupoles — a boundary-to-ring operator of rank at most five. Width,
+heads, separable rank, and depth add channel multiplicity and radial
+structure but **cannot create an $m \ge 3$ irrep**. This is a representation
+nullspace, proved in the module documentation (§6.2) and confirmed by
+randomized-weight scans across width/heads/rank/depth.
+
+The checked-in benchmark measures exactly this:
+
+```{python}
+#| fig-cap: >
+#|   Pure-mode relative L2 response by boundary harmonic mode (checked-in
+#|   reference_2026-07-01.json, 1,000 updates, 3 seeds, mode probes on 8
+#|   geometries). The trained MeshTransformer transmits modes 0-2 and is at
+#|   ~0.98-1.0 relative error (i.e., no response) for every mode >= 3 --
+#|   the proved ceiling, not an optimization artifact. The dense invariant
+#|   pair kernel, which forms joint source-query geometry, degrades smoothly
+#|   instead.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+reference = json.load(open(Path("..") / "results" / "reference_2026-07-01.json"))
+responses = reference["pure_mode_relative_l2"]
+modes = [str(m) for m in range(9)]
+mt = [responses["mesh_transformer"][m] for m in modes]
+pk = [responses["invariant_pair_kernel"][m] for m in modes]
+
+x = np.arange(len(modes))
+width = 0.38
+fig, ax = plt.subplots(figsize=(6.8, 3.4))
+ax.bar(x - width / 2, mt, width, color="#2a78d6", label="MeshTransformer (135,945 p)")
+ax.bar(x + width / 2, pk, width, color="#eda100", label="dense pair kernel (19,008 p)")
+ax.axhline(1.0, color="#0b0b0b", lw=1.0, ls="--")
+ax.text(8.42, 1.02, "no response", fontsize=8, color="#0b0b0b",
+        ha="right", va="bottom")
+ax.axvspan(2.5, 8.5, color="#e34948", alpha=0.06, lw=0)
+ax.text(5.5, 1.14, "proved $m\\geq 3$ nullspace (linear mode, scalar output)",
+        ha="center", fontsize=8.5, color="#52514e")
+ax.set_xticks(x, [f"m={m}" for m in modes])
+ax.set_xlabel("boundary harmonic mode (modes 1-4 occur in training)")
+ax.set_ylabel("pure-mode relative $L^2$")
+ax.set_ylim(0, 1.24)
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(0.0, 1.0))
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Two facts sharpen the diagnosis. First, objective controls cannot fix it:
+equal-interior-energy and uniform-pure-mode training leave mode-3/4 errors at
+0.987/0.985 and 0.985/0.985 (checked-in ablation artifact) — you cannot
+optimize your way out of a nullspace. Second, the two-by-two factorial in the
+same artifact shows the bottleneck is the **source-query factorization**, not
+the boundary encoder: swapping the moment decoder for a dense relative pair
+decoder improves ID error by 0.34–0.39, while adding the global encoder to
+the moment decoder changes it by 0.00026. Once joint source-query geometry
+exists, the encoder helps (23.7% on the pair model) — a division of labor
+that @sec-parametric makes precise.
+
+## What the layer is, and is not
+
+The honest scope, carried through the rest of the book: `MeshAttention` is an
+exact, similarity-covariant, quadrature-weighted, low-order **global moment
+primitive** with linear cost and a dense oracle — a rigorous building block
+for boundary functionals. It is *not* a general elliptic surrogate: its
+separable finite-rank kernel cannot represent the singular, domain-dependent
+Poisson kernel, and its scalar query decoder has the exact $m\le2$ ceiling.
+On the reference bank it reaches ID $0.458\pm0.002$ where a 19k-parameter
+dense invariant pair kernel reaches $0.107\pm0.025$ — and @sec-learned-bie
+shows that 3 parameters beat both, once the decoder respects the PDE. (That
+comparison is available because the benchmark's PDE is known; under the
+product scope it serves as the oracle the general architecture is measured
+against, not as a design it can adopt.)

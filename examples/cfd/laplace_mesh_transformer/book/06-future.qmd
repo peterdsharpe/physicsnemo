@@ -1,0 +1,193 @@
+# Future work and engineering review {#sec-future}
+
+This closing chapter does two things: it lays out the directions the evidence
+actually points to, and it records — candidly — the engineering debt noticed
+while writing this book, including one live bug found (and confirmed) during
+figure generation.
+
+## Promising directions
+
+**1. The unknown-PDE main line: learned singularity-dictionary kernels with
+a learned second-kind solve.** Under the product scope the PDE is not given,
+so the kernel family cannot be Laplace's. The candidate replacement is a
+**singularity dictionary**: a kernel family spanning generic log/power
+singular parts plus smooth corrections, with exact panel quadrature for
+*every* member (the H1d lesson — singular members lose to mollifying MLPs
+under approximate quadrature) and the harmonic members *not privileged* over
+the rest, composed with the learned second-kind density solve in the
+convergent orientation gauge. The evaluation is already defined by the
+existing benchmarks: train on Laplace data *without telling the model it is
+Laplace*, and ask whether the data alone **selects the harmonic members**
+and recovers frequency-OOD at the level the PDE-conforming oracle achieves
+(@sec-ladder). Success turns the oracle-in-family diagnostics into an
+attainable target for the product setting; failure localizes exactly what
+information the PDE label was carrying.
+
+**2. Nonlinear extensions: state-dependent kernels and quasilinearization.**
+The eventual targets (steady RANS, steady Euler) are nonlinear, so the
+linear machinery cannot apply verbatim. The candidate nonlinear analogue of
+the density-solve $\circ$ propagation factorization is **learned
+quasilinearization**: an unrolled Newton/Picard outer loop in which each
+iterate is a linear BIE with a coefficient-frozen, state-dependent kernel,
+plus volume potentials to carry the linearization's interior terms. This
+preserves query independence and all-to-all information flow within each
+iterate. Benchmark candidates with exact solutions exist in-family:
+Liouville $\Delta u = e^u$ (whose exact solutions
+$u = \log(8|f'|^2/(1+|f|^2)^2)$ plug directly into the conformal
+generator), the minimal-surface equation, and the $p$-Laplacian.
+
+**3. Kernel-basis query decoders for `MeshTransformer`.** The moment
+decoder's $m \le 2$ angular ceiling is proved (@sec-ceiling), and objective
+controls cannot fix a nullspace. The falsification ladder identifies the
+replacement: a query decoder built from a kernel *basis* with exact singular
+quadrature, whose coefficients the network supplies — PDE-conforming
+(@eq-laurent in 2D; solid harmonics $\times$ Legendre in $n\cdot\hat r$ in
+3D) on benchmarks where the operator is known, the singularity dictionary of
+direction 1 where it is not. This preserves the encode/decode reuse
+structure and linear query cost while removing the angular ceiling at its
+source.
+
+**4. The encoder as an in-distribution conditioner — and testing whether
+geometry conditioning extrapolates.** Two independent measurements converge
+on the encoder's legitimate role: the factorial (encoder changes the moment
+decoder by 0.00026, improves the pair decoder by 23.7%) and iteration 3
+(conditioning absorbs in-distribution numerics to $5\times10^{-4}$, never
+extrapolates in $\tilde\kappa$). The open question is the geometry-side
+analogue: does *geometry* conditioning of kernel coefficients extrapolate to
+unseen geometry any better than $\tilde\kappa$-conditioning did to unseen
+parameters? Deformed screened domains need numerical labels, so this is a
+larger build — but it directly tests whether the iteration-3 design rule
+("conditioning never extrapolates") is universal or parameter-specific.
+
+**5. Iteration 6: the mixed-BC learned solve.** The 3D suite deliberately
+declares two unsolved tiers — shells and mixed BCs — because they break the
+pure double-layer ansatz. The principled next model works from the Green
+representation @eq-green with *unknown Cauchy data*: on Dirichlet patches
+$u$ is known and $\partial_n u$ unknown, on Neumann patches the reverse; the
+learned solve inverts for the missing data through the mixed trace system.
+The 2D lessons that transfer: orientation gauge per patch type (the
+iteration-2 divergence-as-gain failure will reappear otherwise), shared
+relaxation, and exact patch quadrature.
+
+**6. FMM/H-matrix scale-out — for free.** The learned kernel *is* the
+classical double layer ($c_1$ within 0.5–0.8% of $-1/2\pi$; single-layer
+$c_0$ within 1.8%). At $10^5$ sources $\times$ $10^6$ queries, the dense
+$O(N_sN_q)$ evaluation and $O(pN_s^2)$ solve can be replaced verbatim by
+classical FMM or $\mathcal H$-matrix machinery — controlled, decades-mature
+acceleration with the dense implementation retained as the oracle, exactly
+the acceleration policy the mesh-attention module already prescribes for
+nonseparable kernels.
+
+**7. 3D exact quadrature beyond the solid angle.** Van Oosterom–Strackee
+gives the double-layer triangle integral in closed form
+(`solid_angle_influence`, already implemented). The 3D single layer and the
+higher solid-harmonic members need their own exact triangle integrals; the
+H1d lesson says this is *load-bearing*, not optional — exactly singular
+kernels lose to mollifying MLPs under approximate near-field quadrature.
+
+**8. Solver-regime analysis at basis singularities.** The Yukawa arms'
+low-$\tilde\kappa$ blowup (8.7–28) is a solver-regime failure — $K_0$
+diverges logarithmically as $\tilde\kappa\rho \to 0$, pushing the trace
+operator out of the Richardson-convergent regime — the same mechanism family
+as the iteration-2 orientation failure. A short analysis connecting basis
+asymptotics to the convergent-regime condition would turn two empirical
+lessons into one design constraint.
+
+**9. Architecture parsimony in `MeshAttention`.** Heads were proved
+redundant with separable rank on this benchmark (heads are aligned moment
+groups; increasing rank spans the same operator family). Folding heads into
+rank would simplify the moment bookkeeping — four typed blocks per layer
+instead of four per head — with no capacity loss where this equivalence
+holds. Two further evidence-motivated probes exist from the design review
+(measure-averaged moments with a $\log\omega_{\text{total}}$ scalar for
+farfield stress cases; a compactified radial invariant), both awaiting a
+benchmark that stresses them.
+
+## Engineering review
+
+Findings from reading the sources end-to-end while writing this book. None
+are speculative; each was verified in the code or by execution.
+
+**A confirmed bug: the 3D star tier hangs.**
+`build_laplace3d_sample(tier="star")` never returns. Its interior-query
+rejection bound uses `max_star += abs(amplitude) * 35.0` per mode — but 35 is
+the *coefficient* of the leading term of the $(4,0)$ harmonic, not its
+maximum on the sphere (which is 8; most table entries are $\le 2$). With five
+modes at $|\varepsilon| \le 0.06$, `max_star` is typically $\approx 5$, so
+`hi_factor = 1.0 - 0.08 - max_star` is negative, the rejection predicate
+`r < radius * hi_factor` never accepts, and the `while` loop spins forever.
+Confirmed empirically: sphere and shell tiers build in $\sim$40 ms; the star
+tier was still looping after 10 s and the book's gallery had to bypass the
+query sampler (@fig-gallery3d). Two secondary effects of the same loose
+bound: manufactured charges are pushed to $\approx 6.5R$ (low-contrast star
+traces, weak high-order content in the labels), and star-tier query margins
+would be far too conservative even if positive. The fix is to use per-mode
+harmonic maxima (or simply the sampled surface's actual radial extrema).
+Related: `laplace3d.py` has no test file — the example's 12 test modules
+cover every other component, and the 180 passing example tests never execute
+the star tier, which is how the hang went unnoticed.
+
+**Dead and orphaned code.**
+
+- `icosphere()`'s edge-midpoint helper assigns
+  `edge_midpoint[key] = points.shape[0] + len(new_points) - 1` and
+  immediately overwrites it with the recomputed value on the next line — the
+  first assignment is dead.
+- `_STAR_MODES_OOD` in `laplace3d.py` declares the degree-4 geometry-OOD
+  modes but has no consumer: the 3D study driver that would use it does not
+  exist yet.
+- `solid_angle_influence` — the exact 3D double-layer quadrature — is
+  exported but unused by any model or test. Both are *planned*-use code (the
+  iteration-5 model), but until that model lands they are untested public
+  surface.
+
+**Duplication: the panel-influence math exists four times.** The
+subtended-angle singular integral and the entire-order antiderivatives are
+implemented in `layer_potential.py` (`double_layer_influence`),
+`HarmonicPanelBIE._influence`, `NeumannHarmonicPanelBIE._influence`, and
+`screened_laplace.harmonic_panel_influence` (whose docstring itself says
+"functional twin of `HarmonicPanelBIE._influence`"). This was a deliberate
+choice — benchmark-local isolation while a parallel session owned the core
+module — and each copy is separately tested. But the copies share a subtle
+convention (`zeta = n·r − i n×r`, the *conjugate* of the docstring frame,
+invisible for conjugation-even Dirichlet terms — the exact trap iteration 2
+fell into and documented) that is currently re-explained per file.
+Consolidation into one panel-quadrature helper, with the frame convention
+stated once and the brute-force quadrature tests attached to it, is the
+right refactor once the research surface stabilizes.
+
+**Evidence-orphaned defaults.** Iteration 4 proved that `regular_orders=0`
+plus a single shared relaxation is lossless (identical to four decimals) and
+*better* than the 13-parameter original — yet `HarmonicPanelBIE` still
+defaults to `regular_orders=3, shared_relaxation=False`. The archived runs
+that used the old defaults are reproducible from their recorded configs
+either way; new users get a strictly dominated default. Similarly, the
+refuted-hypothesis machinery in `SelfConsistentPairKernel` (`trace_loss`,
+`kernel_pde_loss`, `tied=False`, the midpoint-quadrature
+`_HarmonicPairKernel` family) remains live, maintained, tested surface. It
+is legitimate as an executable record of the falsification ladder, but it
+should be explicitly frozen (or moved to a clearly-labeled ladder module) so
+its options are not mistaken for recommendations — three of its four flags
+reproduce *refuted* configurations.
+
+**Two reference numbers, two banks.** The reference `MeshTransformer` row is
+0.458 on the 64-case reference bank and 0.425 on the 32-case finalist bank.
+Both are correct, both appear in the README, and they are one careless
+citation apart from contradicting each other. A single canonical comparison
+bank (or an explicit cross-reference table) would remove the trap.
+
+**Upstream gap worth contributing.** `torch.special.modified_bessel_k0/k1`
+lack autograd derivatives; the iteration-3 custom `Function`s with analytic
+recurrences ($K_0' = -K_1$, $K_1' = -K_0 - K_1/z$) are small,
+nested-derivative-tested, and generally useful — a candidate for
+PhysicsNeMo's utility layer or an upstream PyTorch contribution.
+
+## Standing caveats, restated
+
+Everything in this book is 2D except the (model-free) 3D suite; the harmonic
+Laurent basis is Laplace-specific; iterations 3–4 ablations are seed-17-only
+where marked; the Neumann seeds 29/43 were stopped mid-transit at 3,000 steps
+(destination established by the seed-17 10k run); external baselines are
+under-optimized controls at 1,000 updates; and the training histories and
+checkpoints behind @fig-kernel and @fig-convergence are single-machine `/tmp`
+artifacts. The checked-in JSONs under `results/` are the durable record.

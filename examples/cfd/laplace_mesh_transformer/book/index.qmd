@@ -1,0 +1,265 @@
+# What this program is about {.unnumbered}
+
+This book documents a research program on **surrogates for steady, homogeneous,
+boundary-driven PDEs**, developed around the `MeshTransformer` /
+`MeshAttention` stack in `physicsnemo/experimental/nn/mesh_attention/` and the
+exact-label benchmark suite in `examples/cfd/laplace_mesh_transformer/`.
+
+The audience is applied mathematicians and ML researchers. The style is
+first-principles: every architectural decision is stated as a hypothesis, and
+the chapters record which hypotheses survived falsification and which did not.
+
+## Problem statement and scope
+
+The object to learn is a single mapping:
+
+$$
+\{\text{boundary geometry},\ \text{BC types},\ \text{BC values}\}
+\;\longmapsto\;
+\text{interior field at specified query points}.
+$$
+
+This is not a time update. In contrast to most neural-PDE work there is no
+volume state to advance: no volume mesh, no time stepping, and no data of
+any kind attached to the interior query points — they are bare coordinates
+at which the steady field is requested.
+
+The admitted problem class is **well-posed** (in the Hadamard sense),
+**homogeneous** steady PDEs — no position-dependent interior source terms —
+governed by the **same equations everywhere** in the domain (no piecewise
+materials; those are future coupled subproblems). The eventual targets are
+steady RANS and steady Euler.
+
+Critically, **the governing equations are not given.** For the real targets
+they are not even perfectly knowable: turbulence closures are empirical
+curve fits, not derived operators. Exact fundamental solutions are therefore
+unavailable *by problem statement* — a learned kernel family may be *biased
+toward* typical-PDE behavior (a singularity dictionary as an inductive
+prior), but no rigorous PDE specialization can be assumed in deployment.
+
+What the problem class *does* license is one strong structural assumption:
+because the equations are homogeneous and identical everywhere in the
+domain, the boundary-to-interior propagation law is **equivariant under the
+similarity group** — translations, rotations/reflections, and positive
+scalings. Translations force kernels of the relative displacement $x - y$;
+rotational symmetry is broken *only* by directional data on the boundary
+(the normal $n_y$, and the direction of any vector-valued boundary values),
+so kernels are functions of **joint invariants of
+$\{x - y,\ n_y,\ \text{boundary vector data}\}$** — never of absolute
+position or absolute orientation. The domain dependence lives in the
+boundary solve, not in the kernel (@sec-pde-theory).
+
+The benchmarks in this book deliberately pose the simplest members of the
+class — problems like
+
+$$
+\Delta u = 0 \ \text{ in } \Omega,
+\qquad u = g \ \text{ on } \partial\Omega,
+$$
+
+whose answers *are* known — because exact labels and exact fundamental
+solutions make every structural claim falsifiable. Keeping the two settings
+distinct is the job of this section: the *benchmarks* know the PDE; the
+*product* does not.
+
+The goal is *not* only in-distribution accuracy. A learned operator is only
+useful if it behaves like an operator, which the program measures along four
+independent out-of-distribution axes:
+
+1. **geometry** — unseen shape modes, stronger deformations, new topology;
+2. **boundary data** — drive frequencies never seen in training;
+3. **PDE parameters** — e.g. the screening constant of $\Delta u - \kappa^2 u = 0$;
+4. **resolution** — boundary discretizations finer or coarser than training.
+
+## Design constraints
+
+Every model in the program must satisfy, *by construction rather than by
+augmentation*:
+
+- **Equivariance / similarity covariance.** Translation invariance,
+  O($D$) covariance for scalars and polar vectors, and positive-scale
+  covariance when the declared reference length transforms with the geometry.
+- **Dimensional consistency.** All fields enter nondimensionalized; the
+  reference length rescales only coordinates and measures. No unit-bearing
+  constant, fitted radius, or data-dependent length scale anywhere.
+- **All-to-all information flow.** Elliptic solutions couple every boundary
+  point to every interior point (@sec-global-flow); graph neighborhoods,
+  distance cutoffs, and locality heuristics are excluded.
+- **Exact linearity in the drive** (when the PDE is linear): superposition and
+  zero-drive preservation hold to floating point, enforced structurally.
+- **Exact query-point independence.** The prediction at $x$ must not depend on
+  which other query points are requested.
+
+## The headline
+
+The comparison below spans two deliberately different *model classes*, and it
+is important to read it that way:
+
+- **General-purpose architectures** (red/orange) know nothing about Laplace's
+  equation. `MeshTransformer` accepts arbitrary named boundary-condition
+  schemas, scalar and vector fields, and global parameters; the free-form
+  pair kernel is an unconstrained MLP of pair invariants. Their capacity is
+  spent *learning* what the PDE does.
+- **PDE-conforming learned BIE models** (green/blue) know the PDE family and
+  learn only *which member* of the analytic layer-potential family solves the
+  problem. The pruned **"3-parameter BIE"** (`HarmonicPanelBIE`) is exactly
+  this: its three scalars are (i) $c_1$, a learned multiple of the Laplace
+  double-layer kernel, integrated *exactly* over boundary panels; (ii)
+  $\alpha$, the relaxation of an unrolled eight-step second-kind boundary
+  solve; and (iii) $d_0$, a constant-kernel coefficient that trains to
+  $\approx 0$. Nothing else. It is a boundary-element method whose kernel
+  coefficient and solver relaxation are the only things learned.
+
+The benchmark is *exactly* Laplace — maximally favorable to the specialist
+class, and deliberately so. The PDE-conforming results are
+**oracle-in-family diagnostics**: on a problem whose answer is known, they
+quantify the value of each structural ingredient (factorization, kernel
+basis, singular quadrature, learned solve) and characterize what a learned
+kernel family must look like to behave as an operator. They are *not* the
+product design — under the scope above, the deployed model cannot assume a
+known kernel.
+
+```{python}
+#| fig-cap: >
+#|   Parameter count versus in-distribution relative L2 error on the frozen
+#|   64-case reference bank (identical evaluation protocol for all four
+#|   models; data from the checked-in results/learned_bie_2026-07-02.json).
+#|   Circles: general-purpose, PDE-agnostic architectures. Squares:
+#|   Laplace-specific learned boundary-integral models. The MeshTransformer,
+#|   pair-kernel, and 13-parameter rows use 1,000 training updates and 3
+#|   seeds; the 3-parameter row uses 3,000 updates and 3 seeds.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+comparisons = results["comparisons_same_bank"]
+confirmation = results["iteration_4_pruning"]["confirmation_3seed_reference_bank"]
+
+models = [
+    ("MeshTransformer\n(moment decoder)",
+     comparisons["mesh_transformer_reference"]["parameters"],
+     comparisons["mesh_transformer_reference"]["id"], "#e34948", "o",
+     "general-purpose (PDE-agnostic)"),
+    ("free-form invariant\npair kernel",
+     comparisons["invariant_pair_kernel"]["parameters"],
+     comparisons["invariant_pair_kernel"]["id"], "#eda100", "o",
+     "general-purpose (PDE-agnostic)"),
+    ("harmonic-panel BIE (13 p)", 13,
+     results["results_3seed_reference_bank"]["interpolation_relative_l2"]["mean"],
+     "#1baf7a", "s", "PDE-conforming learned BIE"),
+    ("harmonic-panel BIE,\npruned (3 p)", 3,
+     confirmation["interpolation"]["mean"], "#2a78d6", "s",
+     "PDE-conforming learned BIE"),
+]
+
+fig, ax = plt.subplots(figsize=(6.4, 3.9))
+seen = set()
+for label, params, err, color, marker, cls in models:
+    ax.plot(params, err, marker, ms=9, color=color, zorder=3,
+            label=cls if cls not in seen else None)
+    seen.add(cls)
+    offset = (8, 2) if "3 p" not in label else (10, -4)
+    ax.annotate(label, (params, err), textcoords="offset points",
+                xytext=offset, fontsize=8.5, color="#52514e")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1, 3e6)
+ax.set_xlabel("trainable parameters")
+ax.set_ylabel("ID relative $L^2$ (64-case bank)")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+ax.legend(loc="upper left", fontsize=8.5, frameon=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+::: {.callout-note title="How to read this figure"}
+This is **not** a like-for-like architecture ranking, and it does not say
+"attention is worse." It says that on a fixed, known, homogeneous linear PDE
+— the benchmark setting, not the product setting — encoding the PDE's
+fundamental-solution structure in the decoder beats generic learned capacity
+by an order of magnitude while using five orders of magnitude fewer
+parameters. Three qualifications matter:
+
+1. The specialist is the measuring instrument, not the goal. It cannot leave
+   its PDE family, and under the program's scope the deployed model must:
+   the target problems' equations are not given. The generalist path —
+   unknown operators, nonlinear closures, learned conditioning (where, in
+   the parametric study of @sec-parametric, conditioned models beat the pure
+   basis *in distribution* by a factor of six) — is the actual product goal;
+   the specialist rows calibrate how much each piece of structure is worth.
+2. The `MeshTransformer` point sits high partly because of a *diagnosed,
+   fixable* defect — the proved $m \le 2$ angular ceiling of its moment
+   decoder (@sec-mesh-attention) — not because attention over boundaries is
+   inherently limited. Replacing its query decoder with a kernel-basis
+   decoder is the direct repair suggested by these results.
+3. All models satisfy the same exact contracts (equivariance, superposition,
+   query independence); the comparison isolates representation, not
+   constraint discipline.
+:::
+
+The pruned model reaches ID relative $L^2$ of $0.0347\pm0.0006$ on the
+reference bank, with frequency-OOD error $0.0664\pm0.0004$, and its kernel
+coefficient converges to the analytic double-layer constant $-1/2\pi$ within
+$0.8\%$ on every seed. Trained longer (seed 17, 3,000 steps, early bank) it
+approaches the analytic oracle itself (ID $0.0062$ vs oracle $0.003$). The
+same recipe transfers to Neumann data (ID $0.0029$ at 10,000 steps) and, with
+the screening parameter placed in the kernel basis, to the screened Laplace
+family.
+
+The interesting part is not the small model per se — it is the
+**falsification ladder** that isolated *why* it works (@sec-ladder). Each of
+the three ingredients was refuted individually:
+
+| Ingredient removed | What happens |
+|---|---|
+| learned solve without a PDE-conforming kernel | frequency-OOD *worsens* (0.61 → 0.76) |
+| harmonicity as a soft penalty instead of exact structure | residual halves, generalization unchanged |
+| exact harmonic kernel without singular quadrature | loses even to the free-form MLP (ID 0.65) |
+
+: The three single-ingredient refutations (seed 17, early bank; details in @sec-ladder). {#tbl-refutations}
+
+## How the book is organized
+
+- @sec-pde-theory develops the PDE background: Green representation, boundary
+  integral equations, the second-kind Fredholm structure, and the similarity
+  group — the theory every design decision traces back to — and closes by
+  separating what is PDE-agnostic (assumable under the product scope) from
+  what is specific to a known fundamental solution.
+- @sec-mesh-attention describes the `MeshTransformer` layer stack as
+  implemented — a transformer-native generalization of GLOBE (arXiv
+  [2511.15856](https://arxiv.org/abs/2511.15856)) — including its
+  exactly-proved angular ceiling.
+- @sec-learned-bie walks the falsification ladder to the learned
+  boundary-integral model, including the Neumann extension and the pruning
+  study.
+- @sec-parametric asks where a global PDE parameter should enter a learned
+  surrogate — basis or conditioning — and answers it experimentally.
+- @sec-benchmarks documents the evaluation methodology, including the new 3D
+  suite with exact labels on arbitrary geometry.
+- @sec-future collects promising directions — led by the unknown-PDE main
+  line, learned singularity-dictionary kernels — and a candid engineering
+  review.
+
+## Provenance and caveats
+
+All quantitative claims come from two kinds of artifacts, and the text marks
+which is which:
+
+- **Checked-in results** under `examples/cfd/laplace_mesh_transformer/results/`
+  (`reference_2026-07-01.json`, `architectural_ablation_2026-07-01.json`,
+  `learned_bie_2026-07-02.json`) — frozen banks, fixed seeds, recorded
+  protocols.
+- **Session artifacts** under `/tmp` on the original machine (training
+  histories, checkpoints). Figures built from these are labeled; they have not
+  been reproduced elsewhere.
+
+Standing caveats, stated once here and repeated where they matter: the
+learned-BIE results are 2D and (except iteration 3) Laplace-specific so far;
+several ablations are seed-17-only where noted; the external baselines
+(GLOBE, radius-free GeoTransolver) are deliberately under-optimized controls
+at 1,000 updates, not tuned reproductions; and the 3D suite of @sec-benchmarks
+is a generator plus contracts — its model results are future work.

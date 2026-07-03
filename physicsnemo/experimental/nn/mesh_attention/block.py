@@ -159,6 +159,14 @@ class GeometryConditionedLinear(nn.Module):
     scalars, and scalar coefficients multiplying geometry vectors create
     vectors.  Invariant geometry gates modulate the result but never read the
     field, so the complete map remains exactly linear in ``field``.
+
+    In Clebsch-Gordan terms the five branches realize ``0e -> 0e`` and
+    ``1o -> 1o`` Schur channel mixing, ``1o x 1o -> 0e``
+    (``scalar_from_vector_dots``), ``0e x 1o -> 1o`` (``vector_from_scalar``),
+    and ``(1o x 1o -> 0e) x 1o -> 1o`` (``vector_from_vector_dots``).  For
+    ``l <= 1`` inputs and outputs under O(D) this set is complete: the
+    remaining formal paths are parity-forbidden (Levi-Civita) or reduce to
+    these by isotropic-tensor identities.
     """
 
     def __init__(

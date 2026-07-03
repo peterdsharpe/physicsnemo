@@ -827,3 +827,86 @@ Relevant variable-geometry operator-learning comparisons include
 [Boundary-Augmented Neural Operators](https://openreview.net/forum?id=DqZoWaDwfN).
 Their inclusion here motivates geometry-OOD and resolution tests; it does not
 imply an apples-to-apples numerical comparison with this small analytic task.
+
+## Learned harmonic-panel BIE (2026-07-02)
+
+`self_consistent_kernel.py` adds a hypothesis ladder testing whether the
+layer-potential controls' operator generalization comes from the
+density-solve/propagation *factorization* or from the *analytic kernel*.
+The answer, established by falsification, is: neither alone.
+
+1. `self_consistent_pair_kernel[_trace/_full]` — a free-form invariant MLP
+   kernel used both for a drive-linear Richardson boundary solve and for
+   propagation, optionally with relative trace-collocation and
+   kernel-harmonicity (`mean((|r|^2 * lap_x kappa)^2)`) auxiliary losses
+   (`--training-objective interior_plus_auxiliary`).  Each penalty moves only
+   its own diagnostic; frequency generalization never improves.  A converged
+   Richardson solve also makes the self-declared collocation-trace residual
+   small for *any* kernel, so that metric certifies solver convergence, not
+   boundary fidelity.
+2. `harmonic_kernel_*` — an exactly harmonic Laurent kernel
+   (`Re F(zeta)`, `zeta = n.r + i nxr`, real coefficients) under midpoint
+   quadrature *loses* to the free-form MLP: singular kernels demand singular
+   quadrature; free-form kernels win in-sample by learning a
+   quadrature-mollified near field.
+3. `harmonic_panel_bie` — the same harmonic family with **exact straight-panel
+   quadrature** (signed subtended angle for the `1/zeta` term, entire
+   antiderivatives for the regular terms; hypersingular orders excluded
+   because their flat-panel principal value does not exist) plus the learned
+   Richardson solve.  The analytic Richardson control is the exact member
+   `c1 = -1/(2*pi), d = 0`, and the model recovers it from interior data at
+   small random init.
+
+With 13 parameters, three seeds, and the frozen reference bank,
+`harmonic_panel_bie` reaches ID relative L2 0.068 ± 0.017 and
+unseen-frequency 0.111 ± 0.023 (versus 0.107 / 0.642 for the 19k-parameter
+dense pair kernel and 0.458 / 1.00 for the reference `MeshTransformer`),
+with interior Laplacian residual ~2e-4 by construction and learned
+`c1` within 5–10% of `-1/(2*pi)` (0.7% after 3,000 steps, where ID reaches
+0.006 and unseen-frequency 0.062 ≈ the analytic oracle).  Trained at 64
+panels, its error decreases monotonically when evaluated at 128 and 256
+panels: the learned coefficients are resolution-independent and the
+quadrature is exact, so the model converges under refinement like a numerical
+method.  See `results/learned_bie_2026-07-02.json` for the full record and
+caveats (2D Laplace-specific basis; dense evaluation; classical FMM applies
+to the learned kernel at scale).
+
+### Neumann extension (iteration 2)
+
+`--problem neumann` trains on exact analytic flux data (`evaluate_flux`,
+compatibility-corrected, targets gauge-fixed to the boundary-measure mean).
+`NeumannHarmonicPanelBIE` extends the harmonic panel family with the
+single-layer `log` term (branch-safe exact panel integrals) and a Neumann
+trace operator obtained by exact autograd differentiation of the panel
+influence.  Two findings: (1) the second-kind orientation gauge must place
+the zero-kernel initialization in the Richardson-convergent regime
+(`+1/2 I + K'`, oracle `c0 = -1/(2*pi)`), otherwise SGD exploits solver
+divergence as gain; (2) with the correct gauge the framework transfers —
+at 3,000 steps (seed 17): ID 0.123 with unseen-frequency error 0.124 equal
+to ID (operator behavior), Laplacian ~1e-5, and learned `c0` at 90% of the
+analytic value and still converging.  The p0 direct control shows the
+value-interpolator signature instead (ID 0.122, unseen-frequency 0.658).
+See `results/learned_bie_2026-07-02.json` ("iteration_2_neumann").
+
+### Parametric conditioning study (iteration 3)
+
+`screened_laplace.py` is a self-contained testbed for the screened Laplace
+equation on disks (exact Bessel-series labels) asking whether a global PDE
+parameter should enter through the kernel basis or through learned
+coefficient conditioning.  Result: a 10-parameter model with the screening
+parameter entering analytically through K0/K1 reaches PDE residual 0 and the
+best parameter-OOD transfer; learned conditioners absorb in-distribution
+numerics (down to 5e-4 relative error) but never extrapolate — not even when
+given a union basis containing the correct asymptotic family.  Design rule:
+physics belongs in the basis, conditioning is for numerics.  See
+`results/learned_bie_2026-07-02.json` ("iteration_3_parametric_conditioning").
+
+### Pruning ablations (iteration 4)
+
+At the 3,000-step budget, `harmonic_panel_bie_2param` (c1 + d0 + one shared
+relaxation, 3 parameters) exactly matches the 10-parameter variant and beats
+the 13-parameter original (ID 0.0056, unseen-frequency 0.0612, c1 within
+0.5% of -1/(2*pi), d0 ~ 0): effectively two scalars carry the interior
+Dirichlet Laplace solution operator.  Cutting the Richardson solve to two
+steps degrades the trace 160x — solve depth is a numerical-convergence knob,
+not prunable capacity.  See "iteration_4_pruning" in the results JSON.

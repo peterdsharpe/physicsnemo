@@ -480,6 +480,164 @@ def evaluate_potential(drive: HarmonicDrive, z: torch.Tensor) -> torch.Tensor:
     return holomorphic.real
 
 
+def evaluate_flux(
+    geometry: ConformalGeometry,
+    drive: HarmonicDrive,
+    similarity: SimilarityTransform,
+    boundary_preimages: torch.Tensor,
+    physical_normals: torch.Tensor,
+) -> torch.Tensor:
+    r"""Evaluate the exact physical normal flux :math:`\partial u/\partial n`.
+
+    The solution is ``u(x) = Re H(z)`` with ``x = T(F(z))``, ``T`` the physical
+    similarity.  In the intermediate frame ``w = F(z)`` the field is
+    ``Re G(w)`` with ``G = H \circ F^{-1}``, so the gradient is the vector form
+    of the conjugate derivative,
+
+    .. math::
+
+       \nabla_w u = (\operatorname{Re} g,\ -\operatorname{Im} g),
+       \qquad g = G'(w) = H'(z) / F'(z),
+
+    and the physical gradient under ``x = t + s R w`` (any orthogonal ``R``,
+    including reflections) is :math:`\nabla_x u = (1/s)\,R\,\nabla_w u`.  The
+    returned flux is ``physical_normals . grad_x u`` at each supplied preimage,
+    with the caller choosing the normal convention (the benchmark generator
+    uses the exact outward normals of the continuous curve).  A drive without
+    nonconstant modes has identically zero flux.
+    """
+
+    _validate_geometry_drive(geometry, drive)
+    _validate_compatible(geometry, similarity)
+    _validate_complex_argument(geometry, boundary_preimages)
+    if physical_normals.shape != boundary_preimages.shape + (2,):
+        raise ValueError(
+            "physical_normals must have shape (*boundary_preimages.shape, 2)"
+        )
+    if (
+        physical_normals.dtype != geometry.real_dtype
+        or physical_normals.device != geometry.device
+    ):
+        raise ValueError("physical_normals and geometry must share dtype and device")
+    if not drive.modes:
+        return torch.zeros(
+            boundary_preimages.shape,
+            device=geometry.device,
+            dtype=geometry.real_dtype,
+        )
+
+    modes = boundary_preimages.real.new_tensor(drive.modes)
+    holomorphic_derivative = torch.sum(
+        modes
+        * drive.coefficients
+        * _integer_powers(boundary_preimages, tuple(mode - 1 for mode in drive.modes)),
+        dim=-1,
+    )
+    conjugate_gradient = holomorphic_derivative / conformal_derivative(
+        geometry, boundary_preimages
+    )
+    intermediate_gradient = torch.stack(
+        (conjugate_gradient.real, -conjugate_gradient.imag), dim=-1
+    )
+    physical_gradient = (
+        torch.einsum("ed,...d->...e", similarity.rotation, intermediate_gradient)
+        / similarity.scale
+    )
+    return torch.sum(physical_normals * physical_gradient, dim=-1)
+
+
+def build_neumann_domain_sample(
+    geometry: ConformalGeometry,
+    drive: HarmonicDrive,
+    *,
+    n_boundary: int = 128,
+    n_query: int = 512,
+    query_seed: int = 0,
+    query_preimages: torch.Tensor | None = None,
+    similarity: SimilarityTransform | None = None,
+) -> ConformalLaplaceSample:
+    r"""Build the Neumann variant of one exact conformal Laplace problem.
+
+    The mesh geometry, query sampling, and metadata match
+    :func:`build_domain_sample` exactly; only the boundary data and the gauge
+    of the interior target change:
+
+    ``boundary_flux`` (boundary ``cell_data``)
+        Exact continuous flux ``n . grad u`` sampled at parameter-space panel
+        midpoints with the exact outward normal of the continuous curve, then
+        made discretely compatible.  The continuum flux of a harmonic field
+        integrates to zero over the boundary, but midpoint sampling leaves an
+        ``O(h**2)`` quadrature deficit; the panel-measure-weighted mean
+        ``sum(w * flux) / sum(w)`` is subtracted so ``sum(w * flux) == 0``
+        exactly and the discrete Neumann problem stays solvable.
+    ``boundary_value`` (boundary ``cell_data``)
+        Gauge-fixed Dirichlet trace samples ``g - u_bar``, retained only for
+        boundary-range diagnostics.  Neumann models must not read this field.
+    ``potential`` (interior ``point_data``)
+        Gauge-fixed target ``u - u_bar`` where
+        ``u_bar = sum(w_j * u(midpoint_j)) / sum(w_j)`` is the discrete
+        boundary-measure mean of the exact potential -- a property of the
+        solution and its boundary quadrature, never of the query set.  Neumann
+        data determine ``u`` only up to a constant, and this gauge matches the
+        model-side convention of reporting the potential relative to its own
+        boundary mean.
+
+    The sole boundary keeps the benchmark's fixed ``"dirichlet"`` mesh key so
+    every piece of mesh plumbing is shared between problems; the boundary
+    condition type is carried entirely by the ``cell_data`` key.
+    """
+
+    sample = build_domain_sample(
+        geometry,
+        drive,
+        n_boundary=n_boundary,
+        n_query=n_query,
+        query_seed=query_seed,
+        query_preimages=query_preimages,
+        similarity=similarity,
+    )
+    boundary = sample.domain.boundaries["dirichlet"]
+    weights = boundary.cell_areas
+    exact_normals = boundary_outward_normals(
+        geometry,
+        torch.angle(sample.boundary_midpoint_preimages),
+        sample.similarity,
+    )
+    flux = evaluate_flux(
+        geometry,
+        drive,
+        sample.similarity,
+        sample.boundary_midpoint_preimages,
+        exact_normals,
+    )
+    flux = flux - torch.sum(weights * flux) / weights.sum()
+
+    values = boundary.cell_data["boundary_value"]
+    boundary_mean = torch.sum(weights * values) / weights.sum()
+    neumann_boundary = boundary.with_data(
+        cell_data={
+            "boundary_flux": flux,
+            "boundary_value": values - boundary_mean,
+        }
+    )
+    interior = sample.domain.interior
+    point_data = dict(interior.point_data.items())
+    point_data["potential"] = point_data["potential"] - boundary_mean
+    domain = DomainMesh(
+        interior=interior.with_data(point_data=point_data),
+        boundaries={"dirichlet": neumann_boundary},
+        global_data=sample.domain.global_data,
+    )
+    return ConformalLaplaceSample(
+        domain=domain,
+        geometry=sample.geometry,
+        drive=sample.drive,
+        similarity=sample.similarity,
+        query_preimages=sample.query_preimages,
+        boundary_midpoint_preimages=sample.boundary_midpoint_preimages,
+    )
+
+
 def apply_similarity(
     points: torch.Tensor, transform: SimilarityTransform
 ) -> torch.Tensor:
@@ -717,9 +875,11 @@ __all__ = [
     "apply_similarity",
     "boundary_outward_normals",
     "build_domain_sample",
+    "build_neumann_domain_sample",
     "complex_to_points",
     "conformal_derivative",
     "conformal_map",
+    "evaluate_flux",
     "evaluate_potential",
     "identity_similarity",
     "map_to_physical",

@@ -33,14 +33,16 @@ from typing import Literal
 
 import torch
 from conformal_laplace import (
+    ConformalGeometry,
     ConformalLaplaceSample,
     HarmonicDrive,
+    SimilarityTransform,
     build_domain_sample,
+    build_neumann_domain_sample,
     evaluate_potential,
     sample_drive,
     sample_geometry,
     sample_similarity,
-    transform_sample,
     unit_circle,
 )
 from metrics import (
@@ -67,6 +69,22 @@ ModelName = Literal[
     "lifted_mesh_transformer",
     "pair_kernel",
     "encoded_pair_kernel",
+    "self_consistent_pair_kernel",
+    "self_consistent_pair_kernel_untied",
+    "self_consistent_pair_kernel_trace",
+    "self_consistent_pair_kernel_full",
+    "pair_kernel_harmonic",
+    "harmonic_kernel_direct",
+    "harmonic_kernel_bie",
+    "harmonic_kernel_bie_trace",
+    "harmonic_panel_direct",
+    "harmonic_panel_bie",
+    "harmonic_panel_bie_minimal",
+    "harmonic_panel_bie_2param",
+    "harmonic_panel_bie_p2",
+    "neumann_harmonic_panel_direct",
+    "neumann_harmonic_panel_bie",
+    "neumann_harmonic_panel_bie_minimal",
     "stf_multipole_l1",
     "stf_multipole_l2",
     "stf_multipole_l4",
@@ -85,6 +103,22 @@ MODEL_NAMES = (
     "lifted_mesh_transformer",
     "pair_kernel",
     "encoded_pair_kernel",
+    "self_consistent_pair_kernel",
+    "self_consistent_pair_kernel_untied",
+    "self_consistent_pair_kernel_trace",
+    "self_consistent_pair_kernel_full",
+    "pair_kernel_harmonic",
+    "harmonic_kernel_direct",
+    "harmonic_kernel_bie",
+    "harmonic_kernel_bie_trace",
+    "harmonic_panel_direct",
+    "harmonic_panel_bie",
+    "harmonic_panel_bie_minimal",
+    "harmonic_panel_bie_2param",
+    "harmonic_panel_bie_p2",
+    "neumann_harmonic_panel_direct",
+    "neumann_harmonic_panel_bie",
+    "neumann_harmonic_panel_bie_minimal",
     "stf_multipole_l1",
     "stf_multipole_l2",
     "stf_multipole_l4",
@@ -98,6 +132,16 @@ MODEL_NAMES = (
     "geotransolver_published_scale",
     "boundary_mean",
 )
+# Models that consume Neumann flux data; every other model reads Dirichlet
+# values.  The pairing with --problem is validated explicitly so that a
+# missing cell_data key surfaces as a configuration error, never as silent
+# training on the wrong boundary condition.
+NEUMANN_MODEL_NAMES = (
+    "neumann_harmonic_panel_direct",
+    "neumann_harmonic_panel_bie",
+    "neumann_harmonic_panel_bie_minimal",
+)
+Problem = Literal["dirichlet", "neumann"]
 TrainingDriveDistribution = Literal[
     "boundary_balanced_mixture",
     "disk_interior_balanced_mixture",
@@ -107,6 +151,7 @@ TrainingObjective = Literal[
     "auto",
     "interior_supervision",
     "boundary_collocation",
+    "interior_plus_auxiliary",
 ]
 
 
@@ -233,6 +278,7 @@ class RunConfig:
 
     model: ModelName = "mesh_transformer"
     capacity: str = "reference"
+    problem: Problem = "dirichlet"
     steps: int = 2000
     cases_per_step: int = 1
     train_boundary_points: int = 64
@@ -260,6 +306,38 @@ def _case_seed(seed: int, case_index: int, stream: int) -> int:
     return seed + 1_000_003 * case_index + 104_729 * stream
 
 
+def _build_sample(
+    problem: Problem,
+    geometry: ConformalGeometry,
+    drive: HarmonicDrive,
+    *,
+    n_boundary: int,
+    n_query: int = 512,
+    query_seed: int = 0,
+    query_preimages: torch.Tensor | None = None,
+    similarity: SimilarityTransform | None = None,
+) -> ConformalLaplaceSample:
+    """Build one sample of the declared boundary-condition problem."""
+
+    builder = {
+        "dirichlet": build_domain_sample,
+        "neumann": build_neumann_domain_sample,
+    }
+    try:
+        build = builder[problem]
+    except KeyError:
+        raise ValueError(f"unknown problem {problem!r}") from None
+    return build(
+        geometry,
+        drive,
+        n_boundary=n_boundary,
+        n_query=n_query,
+        query_seed=query_seed,
+        query_preimages=query_preimages,
+        similarity=similarity,
+    )
+
+
 def make_case(
     spec: SplitSpec,
     *,
@@ -269,6 +347,7 @@ def make_case(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> ConformalLaplaceSample:
     """Create one deterministic case whose latent parameters are never inputs."""
 
@@ -288,7 +367,8 @@ def make_case(
         device=device,
         dtype=dtype,
     )
-    return build_domain_sample(
+    return _build_sample(
+        problem,
         geometry,
         drive,
         n_boundary=n_boundary,
@@ -307,6 +387,7 @@ def make_training_case(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> ConformalLaplaceSample:
     r"""Create one case for a controlled boundary-spectrum objective.
 
@@ -328,6 +409,7 @@ def make_training_case(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         # For u_k(r, theta) = Re(c_k r**k exp(i k theta)), exact unit-disk
         # area energy is pi |c_k|**2 / (2(k+1)); the constant contributes
@@ -358,7 +440,8 @@ def make_training_case(
             modes=base.drive.modes,
             coefficients=coefficients * normalization,
         )
-        return build_domain_sample(
+        return _build_sample(
+            problem,
             base.geometry,
             balanced_drive,
             n_boundary=n_boundary,
@@ -390,6 +473,7 @@ def make_training_case(
         n_query=n_query,
         device=device,
         dtype=dtype,
+        problem=problem,
     )
 
 
@@ -418,6 +502,53 @@ def make_model(model_name: ModelName, capacity: str) -> nn.Module:
         except KeyError:
             raise ValueError(f"unknown capacity {capacity!r}") from None
         return EncodedInvariantPairKernel(config)
+    if model_name.startswith("neumann_harmonic_panel"):
+        from self_consistent_kernel import NeumannHarmonicPanelBIE
+
+        return NeumannHarmonicPanelBIE(
+            n_iterations=0 if model_name == "neumann_harmonic_panel_direct" else 8,
+            regular_orders=(
+                0 if model_name == "neumann_harmonic_panel_bie_minimal" else 3
+            ),
+        )
+    if model_name.startswith("harmonic_panel"):
+        from self_consistent_kernel import HarmonicPanelBIE
+
+        settings = {
+            "harmonic_panel_direct": dict(n_iterations=0),
+            "harmonic_panel_bie": dict(),
+            "harmonic_panel_bie_minimal": dict(regular_orders=0),
+            "harmonic_panel_bie_2param": dict(
+                regular_orders=0, shared_relaxation=True
+            ),
+            "harmonic_panel_bie_p2": dict(regular_orders=0, n_iterations=2),
+        }
+        return HarmonicPanelBIE(**settings[model_name])
+    if model_name.startswith(("self_consistent_pair_kernel", "harmonic_kernel")) or (
+        model_name == "pair_kernel_harmonic"
+    ):
+        from self_consistent_kernel import SelfConsistentPairKernel
+
+        variants = {
+            "self_consistent_pair_kernel": {},
+            "self_consistent_pair_kernel_untied": {"tied": False},
+            "self_consistent_pair_kernel_trace": {"trace_loss": True},
+            "self_consistent_pair_kernel_full": {
+                "trace_loss": True,
+                "kernel_pde_loss": True,
+            },
+            "pair_kernel_harmonic": {"n_iterations": 0, "kernel_pde_loss": True},
+            "harmonic_kernel_direct": {
+                "kernel_family": "harmonic",
+                "n_iterations": 0,
+            },
+            "harmonic_kernel_bie": {"kernel_family": "harmonic"},
+            "harmonic_kernel_bie_trace": {
+                "kernel_family": "harmonic",
+                "trace_loss": True,
+            },
+        }
+        return SelfConsistentPairKernel(**variants[model_name])
     if model_name.startswith("stf_multipole_l"):
         from stf_multipole import STFMultipolePotential
 
@@ -489,10 +620,17 @@ def relative_mse(
     return numerator / denominator
 
 
+ResolvedObjective = Literal[
+    "interior_supervision",
+    "boundary_collocation",
+    "interior_plus_auxiliary",
+]
+
+
 def _resolved_training_objective(
     model: nn.Module,
     requested: TrainingObjective,
-) -> Literal["interior_supervision", "boundary_collocation"]:
+) -> ResolvedObjective:
     """Resolve the explicit objective without guessing from model outputs."""
 
     has_collocation = callable(getattr(model, "collocation_loss", None))
@@ -502,19 +640,32 @@ def _resolved_training_objective(
         raise ValueError(
             "boundary_collocation requires a model exposing collocation_loss(domain)"
         )
+    if requested == "interior_plus_auxiliary" and not callable(
+        getattr(model, "auxiliary_loss", None)
+    ):
+        raise ValueError(
+            "interior_plus_auxiliary requires a model exposing auxiliary_loss(domain)"
+        )
     return requested
 
 
 def _training_loss(
     model: nn.Module,
     sample: ConformalLaplaceSample,
-    objective: Literal["interior_supervision", "boundary_collocation"],
+    objective: ResolvedObjective,
 ) -> torch.Tensor:
     """Evaluate one declared objective while keeping validation unchanged."""
 
     if objective == "boundary_collocation":
         return model.collocation_loss(sample.domain)  # type: ignore[attr-defined,no-any-return]
-    return relative_mse(_predict(model, sample), sample.target, sample.area_jacobian)
+    interior = relative_mse(
+        _predict(model, sample), sample.target, sample.area_jacobian
+    )
+    if objective == "interior_plus_auxiliary":
+        # Both terms are dimensionless relative residuals of the same solution
+        # object, so equal weighting introduces no tuned physical scale.
+        return interior + model.auxiliary_loss(sample.domain)  # type: ignore[attr-defined]
+    return interior
 
 
 def _predict(model: nn.Module, sample: ConformalLaplaceSample) -> torch.Tensor:
@@ -531,18 +682,24 @@ def _predict(model: nn.Module, sample: ConformalLaplaceSample) -> torch.Tensor:
     return model(model_domain).point_data["potential"]
 
 
+def _boundary_data_key(problem: Problem) -> str:
+    """Return the sole boundary cell_data key a model may consume."""
+
+    return "boundary_flux" if problem == "neumann" else "boundary_value"
+
+
 def _domain_with_boundary_values(
     domain: DomainMesh,
     values: torch.Tensor,
+    *,
+    data_key: str = "boundary_value",
 ) -> DomainMesh:
     """Replace the sole benchmark drive without changing its geometry."""
 
     boundary = domain.boundaries["dirichlet"]
     return DomainMesh(
         interior=domain.interior.with_data(point_data={}, cell_data={}, global_data={}),
-        boundaries={
-            "dirichlet": boundary.with_data(cell_data={"boundary_value": values})
-        },
+        boundaries={"dirichlet": boundary.with_data(cell_data={data_key: values})},
         global_data=domain.global_data,
     )
 
@@ -589,8 +746,17 @@ def _evaluate_split_cases(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> list[dict[str, float]]:
-    """Evaluate and retain metrics for every domain in a split."""
+    """Evaluate and retain metrics for every domain in a split.
+
+    The certified maximum-principle diagnostic requires the exact continuous
+    Dirichlet trace range; Neumann samples carry gauge-fixed targets whose
+    enclosure would need the sample's private gauge, so that single diagnostic
+    is reported only for the Dirichlet problem.  The sampled boundary-range
+    diagnostic inside ``case_metrics`` remains valid: Neumann samples store
+    gauge-fixed trace samples under ``boundary_value`` for diagnostics only.
+    """
 
     model.eval()
     cases: list[dict[str, float]] = []
@@ -603,6 +769,7 @@ def _evaluate_split_cases(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         prediction = _predict(model, sample)
         metrics = case_metrics(
@@ -612,17 +779,18 @@ def _evaluate_split_cases(
             sample.domain.boundaries["dirichlet"].cell_data["boundary_value"],
             sample.query_preimages.abs(),
         )
-        lower, upper = _certified_boundary_range(sample.drive)
-        metrics["certified_maximum_principle_violation"] = float(
-            certified_maximum_principle_violation(
-                prediction,
-                lower,
-                upper,
-                sample.drive.boundary_rms,
+        if problem == "dirichlet":
+            lower, upper = _certified_boundary_range(sample.drive)
+            metrics["certified_maximum_principle_violation"] = float(
+                certified_maximum_principle_violation(
+                    prediction,
+                    lower,
+                    upper,
+                    sample.drive.boundary_rms,
+                )
+                .detach()
+                .cpu()
             )
-            .detach()
-            .cpu()
-        )
         cases.append(metrics)
     return cases
 
@@ -638,6 +806,7 @@ def evaluate_split(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> dict[str, float]:
     """Aggregate per-domain metrics without weighting by mesh size."""
 
@@ -651,6 +820,7 @@ def evaluate_split(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
     )
 
@@ -665,6 +835,7 @@ def evaluate_similarity_contract(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> dict[str, float]:
     """Measure paired scalar predictions under large O(2) similarities."""
 
@@ -680,6 +851,7 @@ def evaluate_similarity_contract(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         transform = sample_similarity(
             _case_seed(seed, index, 3),
@@ -689,7 +861,14 @@ def evaluate_similarity_contract(
             device=device,
             dtype=dtype,
         )
-        transformed = transform_sample(base, transform)
+        transformed = _build_sample(
+            problem,
+            base.geometry,
+            base.drive,
+            n_boundary=n_boundary,
+            query_preimages=base.query_preimages,
+            similarity=transform,
+        )
         base_prediction = _predict(model, base)
         transformed_prediction = _predict(model, transformed)
         covariance_errors.append(
@@ -730,12 +909,14 @@ def evaluate_drive_linearity_contract(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> dict[str, float]:
     r"""Measure zero preservation and superposition at fixed geometry.
 
     Geometry, quadrature, and query points are identical across each quartet;
-    only the Dirichlet drive changes.  This evaluates the complete model rather
-    than inferring linearity from its class or parameterization.
+    only the boundary drive (Dirichlet values or Neumann flux) changes.  This
+    evaluates the complete model rather than inferring linearity from its
+    class or parameterization.
     """
 
     model.eval()
@@ -743,6 +924,7 @@ def evaluate_drive_linearity_contract(
     zero_errors: list[float] = []
     epsilon = torch.finfo(dtype).eps
     coefficients = (0.731, -1.217)
+    data_key = _boundary_data_key(problem)
     for index in range(n_cases):
         first = make_case(
             TRAIN_SPLIT,
@@ -752,6 +934,7 @@ def evaluate_drive_linearity_contract(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         second_drive = sample_drive(
             _case_seed(seed, index, 41),
@@ -762,22 +945,21 @@ def evaluate_drive_linearity_contract(
             device=device,
             dtype=dtype,
         )
-        second = build_domain_sample(
+        second = _build_sample(
+            problem,
             first.geometry,
             second_drive,
             n_boundary=n_boundary,
             query_preimages=first.query_preimages,
             similarity=first.similarity,
         )
-        first_values = first.domain.boundaries["dirichlet"].cell_data["boundary_value"]
-        second_values = second.domain.boundaries["dirichlet"].cell_data[
-            "boundary_value"
-        ]
+        first_values = first.domain.boundaries["dirichlet"].cell_data[data_key]
+        second_values = second.domain.boundaries["dirichlet"].cell_data[data_key]
         first_prediction = model(
-            _domain_with_boundary_values(first.domain, first_values)
+            _domain_with_boundary_values(first.domain, first_values, data_key=data_key)
         ).point_data["potential"]
         second_prediction = model(
-            _domain_with_boundary_values(first.domain, second_values)
+            _domain_with_boundary_values(first.domain, second_values, data_key=data_key)
         ).point_data["potential"]
         expected = (
             coefficients[0] * first_prediction + coefficients[1] * second_prediction
@@ -786,10 +968,14 @@ def evaluate_drive_linearity_contract(
             coefficients[0] * first_values + coefficients[1] * second_values
         )
         actual = model(
-            _domain_with_boundary_values(first.domain, combined_values)
+            _domain_with_boundary_values(
+                first.domain, combined_values, data_key=data_key
+            )
         ).point_data["potential"]
         zero = model(
-            _domain_with_boundary_values(first.domain, torch.zeros_like(first_values))
+            _domain_with_boundary_values(
+                first.domain, torch.zeros_like(first_values), data_key=data_key
+            )
         ).point_data["potential"]
         weights = first.area_jacobian
         expected_norm = torch.sqrt(torch.sum(weights * expected.square()))
@@ -820,6 +1006,7 @@ def evaluate_resolution_study(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> dict[str, dict[str, float]]:
     """Hold the continuous problems fixed while changing boundary panels."""
 
@@ -841,10 +1028,12 @@ def evaluate_resolution_study(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         predictions: dict[int, torch.Tensor] = {}
         for resolution in resolutions:
-            sample = build_domain_sample(
+            sample = _build_sample(
+                problem,
                 base.geometry,
                 base.drive,
                 n_boundary=resolution,
@@ -1074,12 +1263,14 @@ def evaluate_harmonic_residual(
     n_query: int,
     device: torch.device,
     dtype: torch.dtype,
+    problem: Problem = "dirichlet",
 ) -> dict[str, float]:
     r"""Measure :math:`L^2` of ``reference_length**2 * Laplacian(u)``.
 
     This is a diagnostic, not a training loss.  A generic learned operator is
     not expected to be exactly harmonic, but a good Laplace surrogate should
-    drive this quantity down along with supervised error.
+    drive this quantity down along with supervised error.  The diagnostic is
+    boundary-condition agnostic and applies to both benchmark problems.
     """
 
     model.eval()
@@ -1093,6 +1284,7 @@ def evaluate_harmonic_residual(
             n_query=n_query,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         query_points = sample.domain.interior.points.detach().clone().requires_grad_()
         interior = Mesh(points=query_points)
@@ -1176,7 +1368,7 @@ def _pointwise_laplacian(
 def _validation_objective(
     model: nn.Module,
     config: RunConfig,
-    objective: Literal["interior_supervision", "boundary_collocation"],
+    objective: ResolvedObjective,
     *,
     device: torch.device,
     dtype: torch.dtype,
@@ -1188,7 +1380,7 @@ def _validation_objective(
     deployment relative-L2 validation stream.
     """
 
-    if objective == "interior_supervision":
+    if objective in ("interior_supervision", "interior_plus_auxiliary"):
         validation = evaluate_split(
             model,
             TRAIN_SPLIT,
@@ -1198,6 +1390,7 @@ def _validation_objective(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
+            problem=config.problem,
         )
         return "validation_relative_l2", float(validation["relative_l2_mean"])
 
@@ -1216,6 +1409,7 @@ def _validation_objective(
             n_query=1,
             device=device,
             dtype=dtype,
+            problem=config.problem,
         )
         losses.append(float(model.collocation_loss(sample.domain).cpu()))  # type: ignore[attr-defined]
     return "validation_boundary_collocation_mse", sum(losses) / len(losses)
@@ -1271,6 +1465,7 @@ def train_model(
                 n_query=config.train_query_points,
                 device=device,
                 dtype=dtype,
+                problem=config.problem,
             )
             loss = _training_loss(model, sample, objective)
             (loss / config.cases_per_step).backward()
@@ -1314,9 +1509,18 @@ def evaluate_model(
     device: torch.device,
     dtype: torch.dtype,
 ) -> dict[str, object]:
-    """Run the complete accuracy, OOD, physics, and discretization audit."""
+    """Run the complete accuracy, OOD, physics, and discretization audit.
+
+    The boundary-trace and per-mode-response audits are Dirichlet-specific:
+    they compare interior traces against ``boundary_value`` data and include
+    the pure-constant mode, which has identically zero gauge-fixed Neumann
+    target.  They are cleanly omitted for the Neumann problem rather than
+    reinterpreted.  Every other audit (splits, similarity, drive linearity,
+    resolution, harmonic residual) is boundary-condition agnostic.
+    """
 
     evaluation_seed = config.evaluation_seed
+    problem = config.problem
     split_cases = {
         name: _evaluate_split_cases(
             model,
@@ -1327,24 +1531,11 @@ def evaluate_model(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
+            problem=problem,
         )
         for split_index, (name, spec) in enumerate(EVALUATION_SPLITS.items())
     }
     splits = {name: aggregate_metrics(cases) for name, cases in split_cases.items()}
-    traces = {
-        name: evaluate_boundary_trace(
-            model,
-            EVALUATION_SPLITS[name],
-            seed=evaluation_seed + 1_000_000 + index * 100_000,
-            n_cases=max(1, config.evaluation_cases // 4),
-            n_boundary=config.evaluation_boundary_points,
-            device=device,
-            dtype=dtype,
-        )
-        for index, name in enumerate(
-            ("interpolation", "unseen_geometry_modes", "unseen_boundary_frequencies")
-        )
-    }
     result: dict[str, object] = {
         "splits": splits,
         "split_cases": split_cases,
@@ -1356,6 +1547,7 @@ def evaluate_model(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
+            problem=problem,
         ),
         "drive_linearity": evaluate_drive_linearity_contract(
             model,
@@ -1365,6 +1557,7 @@ def evaluate_model(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
+            problem=problem,
         ),
         "resolution": evaluate_resolution_study(
             model,
@@ -1374,9 +1567,29 @@ def evaluate_model(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
+            problem=problem,
         ),
-        "boundary_trace": traces,
-        "mode_response": evaluate_mode_response(
+    }
+    if problem == "dirichlet":
+        result["boundary_trace"] = {
+            name: evaluate_boundary_trace(
+                model,
+                EVALUATION_SPLITS[name],
+                seed=evaluation_seed + 1_000_000 + index * 100_000,
+                n_cases=max(1, config.evaluation_cases // 4),
+                n_boundary=config.evaluation_boundary_points,
+                device=device,
+                dtype=dtype,
+            )
+            for index, name in enumerate(
+                (
+                    "interpolation",
+                    "unseen_geometry_modes",
+                    "unseen_boundary_frequencies",
+                )
+            )
+        }
+        result["mode_response"] = evaluate_mode_response(
             model,
             seed=evaluation_seed + 5_000_000,
             modes=tuple(range(13)),
@@ -1385,8 +1598,7 @@ def evaluate_model(
             n_query=config.evaluation_query_points,
             device=device,
             dtype=dtype,
-        ),
-    }
+        )
     if config.harmonic_cases:
         result["harmonic_residual"] = evaluate_harmonic_residual(
             model,
@@ -1396,6 +1608,7 @@ def evaluate_model(
             n_query=min(32, config.evaluation_query_points),
             device=device,
             dtype=dtype,
+            problem=problem,
         )
     return result
 
@@ -1423,6 +1636,15 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--capacity", choices=tuple(CAPACITY_CONFIGS), default="reference"
+    )
+    parser.add_argument(
+        "--problem",
+        choices=("dirichlet", "neumann"),
+        default=RunConfig.problem,
+        help=(
+            "Boundary-condition problem: Dirichlet trace data or "
+            "compatibility-corrected Neumann flux data with gauge-fixed targets"
+        ),
     )
     parser.add_argument("--steps", type=int, default=RunConfig.steps)
     parser.add_argument("--cases-per-step", type=int, default=RunConfig.cases_per_step)
@@ -1454,7 +1676,12 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--training-objective",
-        choices=("auto", "interior_supervision", "boundary_collocation"),
+        choices=(
+            "auto",
+            "interior_supervision",
+            "boundary_collocation",
+            "interior_plus_auxiliary",
+        ),
         default=RunConfig.training_objective,
         help=(
             "Training loss. Auto selects boundary collocation only for models "
@@ -1526,9 +1753,19 @@ def main() -> None:
     if device.type == "cuda":
         torch.cuda.manual_seed_all(args.seed)
 
+    problem = getattr(args, "problem", RunConfig.problem)
+    if (args.model in NEUMANN_MODEL_NAMES) != (problem == "neumann"):
+        raise ValueError(
+            f"model {args.model!r} and problem {problem!r} are mismatched: "
+            "Neumann models consume cell_data['boundary_flux'] and must run "
+            "with --problem neumann; all other models consume "
+            "cell_data['boundary_value'] and must run with --problem dirichlet"
+        )
+
     config = RunConfig(
         model=args.model,
         capacity=args.capacity,
+        problem=problem,
         steps=args.steps,
         cases_per_step=args.cases_per_step,
         train_boundary_points=args.train_boundary_points,

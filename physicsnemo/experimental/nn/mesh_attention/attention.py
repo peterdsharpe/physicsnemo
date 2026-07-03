@@ -50,6 +50,16 @@ class ScalarVectorState:
     ``scalars`` has shape ``(N, C_s)`` and ``vectors`` has shape
     ``(N, C_v, D)``.  Zero vector channels are represented by an empty tensor,
     not ``None``; this keeps compiled call signatures stable.
+
+    In representation-theoretic terms, this state carries exactly two O(D)
+    irreducible-representation sectors in Cartesian basis: ``scalars`` is the
+    even-parity trivial irrep (``0e``; true scalars) and ``vectors`` is the
+    odd-parity defining irrep (``1o``; polar vectors).  Pseudoscalars
+    (``0o``), axial vectors (``1e``), and higher orders are deliberately not
+    representable: any new physical type must arrive as a new typed sector
+    with its own transformation law, never packed into an existing tensor.
+    This per-sector packing is the "Irreps" abstraction of libraries such as
+    e3nn, minus the dependency; a future migration is a container swap.
     """
 
     scalars: Float[torch.Tensor, "n scalar_channels"]
@@ -145,7 +155,12 @@ class AttentionMoments:
 
 
 def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
-    """Return the upper triangle of each per-entity vector Gram matrix."""
+    """Return the upper triangle of each per-entity vector Gram matrix.
+
+    This is the ``1o x 1o -> 0e`` Clebsch-Gordan contraction (up to a fixed
+    normalization); the upper triangle is complete because the antisymmetric
+    combination lands in the axial sector this state does not carry.
+    """
     n, channels, _ = vectors.shape
     if channels == 0:
         return vectors.new_empty(n, 0)
@@ -155,7 +170,14 @@ def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
 
 
 class TypedProjection(nn.Module):
-    r"""Project scalar/vector state without mixing Cartesian components."""
+    r"""Project scalar/vector state without mixing Cartesian components.
+
+    The vector path (channel mixing with one shared weight per Cartesian
+    component, no bias) is exactly the equivariant linear map Schur's lemma
+    permits on an isotypic component; the scalar path additionally lifts the
+    ``1o x 1o -> 0e`` Gram invariants, making the whole map linear plus one
+    quadratic invariant lift.
+    """
 
     def __init__(
         self,
