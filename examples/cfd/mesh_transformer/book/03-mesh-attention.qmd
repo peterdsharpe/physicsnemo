@@ -1,0 +1,391 @@
+# The MeshTransformer stack: the mathematics {#sec-mesh-attention}
+
+@sec-architecture says what the MeshTransformer *is* in plain language.
+This chapter is the mathematics behind that description, keyed to the
+implementation in `physicsnemo/experimental/nn/mesh_attention/`
+(`attention.py`, `block.py`, `model.py`, `kernel_decoder.py`): the exact
+form of each layer, the contracts each one guarantees, the one limitation
+we can prove, and the decoder that removes it. Read @sec-architecture
+first; nothing here redefines what a polar vector or an irrep is — it
+uses them.
+
+One paragraph of lineage. The stack generalizes **GLOBE** (arXiv
+[2511.15856](https://arxiv.org/abs/2511.15856)), a boundary-element
+surrogate for boundary-driven PDEs. What is kept: the equivariance
+structure of @sec-pde-theory (learned maps see only joint invariants of
+relative displacement, normals, and boundary vector data), all-to-all
+boundary information flow under quadrature weighting, and rigorous
+nondimensionalization. What is replaced: GLOBE's bespoke kernel MLPs and
+hand-assembled multiscale machinery give way to standard attention
+blocks, residual streams, and typed projections — mainstream transformer
+parts, with the contracts kept exact.
+
+## Typed state and typed projections
+
+All latent state lives in a `ScalarVectorState`: invariant-scalar
+channels of shape $(N, C_s)$ and polar-vector channels of shape
+$(N, C_v, D)$. These are the two irreps of @sec-typed-channels, and they
+are the *only* representable types — pseudoscalars, axial vectors, and
+higher-order tensors are rejected at construction time rather than
+silently flattened into channels.
+
+`TypedProjection` implements the allowed combination rules and nothing
+else:
+
+- scalar outputs are a learned linear map of the input scalars *plus the
+  Gram invariants* $v_a \cdot v_b$ of the vector channels (the dot
+  product is how vector information reaches scalar channels);
+- vector outputs mix vector *channels* only, one coefficient per channel
+  pair, applied identically to every Cartesian component:
+  $v^{\text{out}}_{o} = \sum_c W_{oc}\, v_c$.
+
+Because no learned layer ever sees a raw Cartesian component, absolute
+coordinate, positional encoding, or vertex index, equivariance holds by
+construction for any weights. `GeometryConditionedLinear` adds the two
+elementary geometry-mediated type conversions — field-vector $\cdot$
+geometry-vector $\to$ scalar, and field-scalar $\times$ geometry-vector
+$\to$ vector — plus a dyad branch $\sum C\,(v\!\cdot\!g_a)\,g_b$ that
+represents anisotropic maps like the normal projection $(v \cdot n)n$,
+all while staying exactly linear in the field at fixed geometry.
+
+Whether the vector channels *earn their cost* is an empirical question
+with a measured answer: not load-bearing on easy 2D geometry, genuinely
+load-bearing on 3D and parametric problems — and it is oriented
+transport, not raw width (@sec-scalar-only; history in
+@sec-notebook, iteration 14).
+
+## Signed moment attention
+
+The central layer, `MeshAttention`, is a **finite-rank separable signed
+integral operator** — the precise form of the "boundary self-attention"
+of @sec-attention-role. For head $h$, typed projections produce scalar
+and vector query/key features $q^0_{ihr}, k^0_{jhr} \in \mathbb R$ and
+$q^1_{ihrd}, k^1_{jhrd} \in \mathbb R^D$, and the pair coefficient is
+
+$$
+a_{ijh}
+=\frac{1}{\sqrt{R_0+DR_1}}
+\Bigl(
+\sum_{r=1}^{R_0} q^0_{ihr}k^0_{jhr}
++\sum_{r=1}^{R_1} q^1_{ihr}\!\cdot\! k^1_{jhr}
+\Bigr).
+$$
+
+The three departures from textbook attention (@sec-attention-role) appear
+here as absences: **no softmax** (boundary-integral kernels are signed),
+**no distance envelope or cutoff** (elliptic problems are global,
+@sec-global-flow), **no normalization** (it would break drive linearity).
+The output at receiver $i$ is the quadrature-weighted sum
+$o_{ihf} = \sum_j \omega_j\, a_{ijh}\, v_{jhf}$, values retaining their
+scalar/vector type.
+
+Separability is what makes encode $O(N_s)$: the all-pairs sum
+reassociates exactly into four typed **source moments**,
+
+$$
+M^{00}_{hrf}=\sum_j\omega_j k^0_{jhr}v^0_{jhf},\quad
+M^{10}_{hrdf}=\sum_j\omega_j k^1_{jhrd}v^0_{jhf},\quad
+M^{01}_{hrfe}=\sum_j\omega_j k^0_{jhr}v^1_{jhfe},\quad
+M^{11}_{hrdfe}=\sum_j\omega_j k^1_{jhrd}v^1_{jhfe},
+$$
+
+built once and contracted at each receiver:
+
+$$
+o^0_{ihf}=\sum_r q^0_{ihr}M^{00}_{hrf}+\sum_{r,d}q^1_{ihrd}M^{10}_{hrdf},
+\qquad
+o^1_{ihfe}=\sum_r q^0_{ihr}M^{01}_{hrfe}+\sum_{r,d}q^1_{ihrd}M^{11}_{hrdfe}.
+$$
+
+This is an algebraic rearrangement, not an approximation: every source
+contributes to every moment, every receiver reads every moment. A dense
+`forward_reference` oracle evaluates the identical operator in
+$O(N_sN_q)$ and backs value- and gradient-equality tests. In code the
+four moments are typed views of one packed joint moment per head, built
+by a single mesh-native `integrate_moment` call.
+
+The price of separability, stated up front: per head, the effective score
+matrix has rank at most $R_0 + DR_1$. One layer cannot represent an
+arbitrary full-rank pair kernel, a pair-specific radial function, or a
+singular Green kernel. Heads and ranks are capacity knobs, not physics.
+This price is exactly what @sec-ceiling turns into a theorem.
+
+## Two streams and the linearity contract
+
+```{mermaid}
+%%| fig-cap: >
+%%|   MeshTransformer dataflow as implemented in model.py. Encode (top) runs
+%%|   once per boundary in O(N_s); decode (bottom) runs per query mesh in
+%%|   O(N_q) per moment read, reusing the cached encoding. Blue boxes are
+%%|   data, cream boxes are computation, green is the output.
+flowchart TB
+    classDef stage fill:#fff8e8,stroke:#8a6d1a,color:#1a1a1a
+    classDef data fill:#eef4ff,stroke:#2a4a8a,color:#1a1a1a
+    classDef out fill:#eaf7ea,stroke:#2a6a2a,color:#1a1a1a
+
+    subgraph ENC["encode(domain) — O(N_s)"]
+        DM["DomainMesh boundaries<br/>(cells: centroid, measure, normal)"]:::data --> QU["merge + cell quadrature<br/>center c, reference length L"]:::stage
+        QU --> LIFT["operator lift (TypedProjection)<br/>fields + z_j + n_j + BC one-hot"]:::stage
+        LIFT --> OB["MeshOperatorBlock × L_o<br/>typed RMS norm → moment attention → FFN<br/>(nonlinearities allowed here)"]:::stage
+        DR["drive fields<br/>(boundary + global)"]:::data --> DLIFT["drive lift (GeometryConditionedLinear)<br/>linear in drive at fixed operator state"]:::stage
+        OB --> DLIFT
+        DLIFT --> DB["field blocks × L_d<br/>Linear- or NonlinearZero-MeshFieldBlock"]:::stage
+        OB --> DB
+        DB --> EB["EncodedBoundary<br/>(states, c, L, cached moments)"]:::data
+    end
+    subgraph DEC["decode(encoded, query_mesh)"]
+        QP["query points"]:::data --> QB["query field blocks<br/>(moment or kernel decoder)"]:::stage
+        EB --> QB
+        QB --> OUT["typed output projection<br/>(bias-free)"]:::stage
+        OUT --> PM["prediction at queries"]:::out
+    end
+```
+
+Input fields carry one of two **roles**, and the two roles flow through
+different streams:
+
+- **Operator stream** (geometry, material data, PDE coefficients): source
+  tokens pass through `MeshOperatorBlock`s — typed RMS norm, moment
+  self-attention, equivariant feed-forward, LayerScale residuals. Biases
+  and nonlinearities are *allowed* here: this stream describes the
+  operator, not the solution amplitude.
+- **Drive stream** (the boundary/global data the solution depends on): in
+  `linear` mode (`LinearMeshFieldBlock`), attention queries and keys read
+  *only* the operator state, values are bias-free linear in the drive,
+  and the pointwise map is `GeometryConditionedLinear` — so the complete
+  drive-to-output map satisfies $\mathcal N_\Gamma(0)=0$ and exact
+  superposition at fixed geometry, to floating point.
+  `quadratic` mode (`QuadraticFieldReadIn`) keeps the linear machinery
+  and adds exactly one bilinear typed composition at the query read-in,
+  making the output an exact degree-$\le 2$ polynomial in the drive for
+  any weights — the *declared-degree* contract (@sec-nonlinear-fragility).
+  `zero_preserving_nonlinear` mode (`NonlinearZeroMeshFieldBlock`) lets
+  keys and values read the field through structurally multiplicative
+  updates: zero-preservation survives, superposition intentionally does
+  not.
+
+The modes are **different Python classes**, not flags on one class,
+so a future normalization or bias added to the nonlinear block cannot
+silently invalidate the linear-mode (or declared-degree) proof.
+
+`encode` returns an `EncodedBoundary` — dimensionless source mesh,
+operator and drive states, center, reference length, cached moments.
+`decode` evaluates it at any query mesh; query points never interact,
+and prediction at a point is independent of which other points are
+requested — the reusability structure the Green representation
+(@eq-green) suggests.
+
+## The proved limitation: an angular ceiling at order two {#sec-ceiling}
+
+At an ordinary interior query, the *only* query-side vector is the
+centered position $x$ (the query normal is zeroed; no physical global
+vector exists in the benchmark). Since the stack carries only scalars and
+polar vectors, in `linear` mode with scalar output the moment decoder can
+produce only
+
+$$
+u(x) = c(|x|^2) + b(|x|^2)\cdot x + x^\mathsf{T} A(|x|^2)\, x,
+$$
+
+because every additional pairing of $x$ with itself reduces to powers of
+$|x|^2$. On any circle centered at the model origin, the angular content
+is limited to Fourier orders $m \in \{0, 1, 2\}$ — one monopole, two
+dipoles, two quadrupoles; a boundary-to-ring operator of rank at most
+five. Width, heads, separable rank, and depth add channel multiplicity
+and radial structure but **cannot create an $m \ge 3$ irrep**. This is a
+representation nullspace — proved in the module documentation (§6.2),
+confirmed by randomized-weight scans — and the checked-in benchmark
+measures exactly it:
+
+```{python}
+#| fig-cap: >
+#|   Pure-mode relative L2 response by boundary harmonic mode (checked-in
+#|   reference_2026-07-01.json, 1,000 updates, 3 seeds, mode probes on 8
+#|   geometries). The trained MeshTransformer transmits modes 0-2 and is at
+#|   ~0.98-1.0 relative error (i.e., no response) for every mode >= 3 --
+#|   the proved ceiling, not an optimization artifact. The dense invariant
+#|   pair kernel, which forms joint source-query geometry, degrades smoothly
+#|   instead.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+reference = json.load(open(Path("..") / "results" / "reference_2026-07-01.json"))
+responses = reference["pure_mode_relative_l2"]
+modes = [str(m) for m in range(9)]
+mt = [responses["mesh_transformer"][m] for m in modes]
+pk = [responses["invariant_pair_kernel"][m] for m in modes]
+
+x = np.arange(len(modes))
+width = 0.38
+fig, ax = plt.subplots(figsize=(6.8, 3.4))
+ax.bar(x - width / 2, mt, width, color="#2a78d6", label="MeshTransformer (135,945 p)")
+ax.bar(x + width / 2, pk, width, color="#eda100", label="dense pair kernel (19,008 p)")
+ax.axhline(1.0, color="#0b0b0b", lw=1.0, ls="--")
+ax.text(8.42, 1.02, "no response", fontsize=8, color="#0b0b0b",
+        ha="right", va="bottom")
+ax.axvspan(2.5, 8.5, color="#e34948", alpha=0.06, lw=0)
+ax.text(5.5, 1.14, "proved $m\\geq 3$ nullspace (linear mode, scalar output)",
+        ha="center", fontsize=8.5, color="#52514e")
+ax.set_xticks(x, [f"m={m}" for m in modes])
+ax.set_xlabel("boundary harmonic mode (modes 1-4 occur in training)")
+ax.set_ylabel("pure-mode relative $L^2$")
+ax.set_ylim(0, 1.24)
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(0.0, 1.0))
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Two facts sharpen the diagnosis. Objective controls cannot fix it:
+equal-interior-energy and uniform-pure-mode training leave mode-3/4
+errors at $\approx$0.985 — you cannot optimize your way out of a
+nullspace. And the two-by-two factorial locates the bottleneck in the
+**source–query factorization**, not the boundary encoder: swapping the
+moment decoder for a dense relative pair decoder improves ID error by
+0.34–0.39, while adding the global encoder to the moment decoder changes
+it by 0.00026. Once joint source–query geometry exists, the encoder helps
+(23.7% on the pair model) — a division of labor @sec-parametric makes
+precise.
+
+## The fix: a kernel-basis query decoder {#sec-kernel-decoder}
+
+The ceiling is a query-side representation nullspace induced by
+separability, so the repair changes what the decoder *is*, not how it is
+trained. `MeshTransformer(query_decoder="kernel")` (`kernel_decoder.py`)
+replaces the separable moment contraction in the query field blocks with
+a **dense, operator-conditioned pair-kernel dictionary** — the
+plain-language version is @sec-decoder-role:
+
+$$
+u_{hf}(x) = \sum_j \kappa_h(x, y_j)\, V_{jhf},
+\qquad
+\kappa_h(x, y_j) = \sum_m C_{mh}(\mathrm{op}_j)\, \varphi_m(x, y_j),
+$$
+
+evaluated densely over query–source pairs at the documented price of
+$O(N_qN_s)$ per decode (chunked — a pure memory control that never
+changes the operator; a hierarchical/FMM backend would be a separate
+numerical backend converging to this dense oracle). Each ingredient is a
+lesson the program paid for earlier:
+
+- **Exact-quadrature singular members — the H1d lesson (@sec-ladder).**
+  The singular members are *exact* integrals of the free-space kernels
+  over each boundary cell, dimension-dispatched: for the double layer,
+  the signed subtended angle over 2D segments and the van
+  Oosterom–Strackee signed solid angle over 3D triangles (entries at an
+  interior point of a closed boundary sum to exactly $-1$); for the
+  single layer, the Hess–Smith closed form in 2D and a per-edge
+  $\operatorname{asinh}$ form in 3D. H1d showed that exactly singular
+  kernels *lose* under midpoint quadrature — the optimizer mollifies the
+  near field at the cost of operator fidelity — so the closed forms are
+  load-bearing, validated to $\sim 10^{-14}$.
+- **Operator-conditioned coefficients — the conditioning role the
+  parametric study licenses (@sec-parametric).** The $C_{mh}$ are a linear map of each source
+  token's operator-state invariants (scalars plus vector Gram
+  invariants): the globally encoded boundary conditions the kernel. That
+  is exactly the encoder role the evidence licenses — conditioning
+  coefficients of a fixed dictionary, with the dictionary, not the
+  conditioner, carrying the angular and radial structure.
+- **A genuinely dense pair kernel — the factorial finding (above).** The
+  bottleneck was the source–query factorization; any genuine pair kernel
+  lifts the ceiling, and the subtended-angle member alone carries every
+  angular order.
+
+The contracts survive intact. The two linearity classes are again
+separate Python classes (the linear decoder's kernel reads only operator
+state; the nonlinear-zero class lets the kernel read drive invariants
+while values stay bias-free). All pair features are joint O($D$)
+invariants of $\{x-y,\ n_y,\ \text{source-state vectors}\}$. Query
+independence is *bitwise*: the dense evaluation avoids
+batch-shape-dependent reductions on the query axis, so decoding a query
+subset reproduces the corresponding rows of the full batch exactly.
+
+The spectral fix is documented in the test suite, not just claimed: a
+paired random-weight ring test (`test_kernel_decoder.py`) asserts on the
+same seeds that the moment decoder's $m \ge 3$ ring content is
+$\le 2\times10^{-11}$ (the ceiling) while the kernel decoder's is
+$\ge 10^{-6}$ (lifted); the module's contract tests are parametrized over
+both decoders.
+
+On the frozen 64-case reference bank, three seeds, 3,000 updates:
+
+| model (reference bank, 3,000 updates, 3 seeds) | params | ID | freq-OOD | mode-6 |
+|---|--:|--:|--:|--:|
+| kernel decoder, full dictionary | 110,561 | 0.0399 ± 0.0035 | 0.487 ± 0.047 | 0.48 |
+| **kernel decoder, dictionary-only** (`kernel_mlp_members=0`) | 105,089 | 0.0409 ± 0.0076 | **0.0713 ± 0.0008** | 0.064 |
+| moment decoder (reference capacity) | 135,945 | 0.4503 ± 0.0016 | 1.000 | 1.00 |
+| free-form pair kernel (control) | 19,008 | 0.0398 ± 0.0013 | 0.497 | 0.41 |
+
+: Three-seed confirmation on the frozen 64-case reference bank —
+fixed-compute discipline, 3,000 updates for every row (which is why the
+free-form pair kernel reads 0.0398 here rather than its checked-in
+1,000-update 0.107). Checked-in artifact. {#tbl-kernel-refbank}
+
+The repair holds where it counts: the kernel decoder cuts the moment
+decoder's ID error 11.3$\times$ (0.4503 $\to$ 0.0399) and the ceiling
+stays gone at three seeds. (The single-seed gate that preceded this
+table, and its mode-response figure, are in the notebook —
+@sec-notebook, iteration 7.)
+
+## Dictionary selection {#sec-dictionary-selection}
+
+The freq-OOD column of @tbl-kernel-refbank contains the finding that the
+rest of the dictionary program turns on. The full dictionary's freq-OOD
+*degrades with training* (0.12 at 1,000 updates $\to$ 0.487 at 3,000)
+while the dictionary-only ablation holds 0.0713 at identical ID. The
+mechanism: the near-zero-initialized smooth MLP members grow during
+training to absorb residual ID error, sliding the kernel toward
+value-interpolator behavior on unseen frequencies. **Training trades
+structure for interpolation** — the data does not select the structured
+members; selection has to be imposed.
+
+That finding was then tested on every suite in the program — nonlinear
+Liouville, screened Laplace, 3D Laplace, and finally a pre-registered
+four-arm 2D ablation and its 3D disentangler. Two working hypotheses died
+on the way (the full chronology, with both refutations, is the notebook's
+iterations 8–13, @sec-notebook). The rule that survived everything:
+
+> **The dictionary carries the singularity; conditioning carries the
+> smoothness; nonlinearity needs a smooth basis.** In drive-linear
+> operation the dictionary is the exact singular member(s) alone, and
+> operator conditioning carries all smoothness — best-in-class on 2D
+> Laplace, screened Laplace, and 3D Laplace. In nonlinear field mode the
+> polynomial members are load-bearing. MLP members are prunable
+> everywhere.
+
+This is the member-level instance of a rule the program established
+twice before at smaller scales: the parametric study proved the
+coefficient-level version (conditioning interpolates; only built-in
+structure extrapolates, @sec-parametric), and the pruning study the
+parameter-level version (free capacity is not neutral; pruning it is
+lossless or better, @sec-learned-bie). The twist at architecture scale: the unstructured
+capacity does not train toward zero — it actively grows to eat ID error.
+Current-best evidence tables: @sec-dictionary-ablation,
+@sec-dictionary-3d, @sec-singonly-universality, @sec-single-layer.
+
+## What the layer is, and is not
+
+The honest scope, carried through the rest of the book: `MeshAttention`
+is an exact, similarity-covariant, quadrature-weighted, low-order
+**global moment primitive** with linear cost and a dense oracle — a
+rigorous building block for boundary functionals. It is *not* a general
+elliptic surrogate: its separable finite-rank kernel cannot represent
+the singular, domain-dependent Poisson kernel, and its default moment
+query decoder has the exact $m\le2$ ceiling — lifted, at the documented
+$O(N_qN_s)$ price and confirmed on three seeds on the reference bank
+(@tbl-kernel-refbank), by the kernel-basis decoder of
+@sec-kernel-decoder. With the moment decoder it reaches ID
+$0.458\pm0.002$ on the reference bank where a 19k-parameter dense
+invariant pair kernel reaches $0.107\pm0.025$ (the checked-in
+1,000-update protocol; @tbl-kernel-refbank reports the same pair at
+3,000 updates) — and @sec-learned-bie
+shows that 3 parameters beat both, once the decoder respects the PDE.
+(That comparison exists because the benchmark's PDE is known; under the
+product scope it is the oracle the general architecture is measured
+against, not a design it can adopt.)

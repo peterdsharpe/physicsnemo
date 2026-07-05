@@ -1,0 +1,5815 @@
+{
+ "title": "Learned harmonic-panel BIE (HarmonicPanelBIE): 13-parameter PDE-conforming decoder",
+ "date": "2026-07-02",
+ "protocol": {
+  "steps": 1000,
+  "seeds": [
+   17,
+   29,
+   43
+  ],
+  "evaluation_seed": 97000037,
+  "evaluation_cases": 64,
+  "harmonic_cases": 4,
+  "objective": "interior_supervision",
+  "training_drive_distribution": "boundary_balanced_mixture",
+  "dtype": "float32",
+  "note": "identical bank/protocol as results/reference_2026-07-01.json"
+ },
+ "model": {
+  "name": "harmonic_panel_bie",
+  "parameters": 13,
+  "structure": "kappa = c1*Re(zeta^-1) + sum_{k=0..3} d_k*Re(zeta^k), zeta = n.r + i nxr; exact straight-panel quadrature (signed subtended angle + entire antiderivatives); p=8 drive-linear Richardson density solve through 0.5I + K; analytic constant lift",
+  "exact_contracts": [
+   "drive superposition",
+   "O(2)+similarity invariance",
+   "query-set independence",
+   "field harmonicity (by construction)"
+  ]
+ },
+ "hypothesis_chain": {
+  "H1_solve_only": {
+   "id": 0.154,
+   "freq": 0.756,
+   "verdict": "refuted: architecture alone adds no trace-consistency pressure"
+  },
+  "H1c_soft_kernel_harmonicity": {
+   "id": 0.083,
+   "freq": 0.706,
+   "laplacian": 3.47,
+   "verdict": "refuted: penalty buys ~2x, mechanism needs exact harmonicity"
+  },
+  "H1d_exact_harmonicity_midpoint_quadrature": {
+   "id": 0.652,
+   "freq": 1.014,
+   "verdict": "refuted: singular kernels need singular quadrature; free-form MLPs win by learning quadrature-mollified near-fields"
+  },
+  "H1e_exact_harmonicity_exact_quadrature_learned_solve": {
+   "verdict": "confirmed"
+  }
+ },
+ "results_3seed_reference_bank": {
+  "interpolation_relative_l2": {
+   "mean": 0.067551,
+   "seed_std": 0.016662,
+   "values": [
+    0.054679,
+    0.086371,
+    0.061603
+   ]
+  },
+  "unseen_geometry_relative_l2": {
+   "mean": 0.070929,
+   "seed_std": 0.017474,
+   "values": [
+    0.057592,
+    0.09071,
+    0.064485
+   ]
+  },
+  "stronger_deformation_relative_l2": {
+   "mean": 0.065358,
+   "seed_std": 0.016474,
+   "values": [
+    0.052834,
+    0.08402,
+    0.059221
+   ]
+  },
+  "unseen_boundary_frequencies_relative_l2": {
+   "mean": 0.110816,
+   "seed_std": 0.022734,
+   "values": [
+    0.093273,
+    0.136499,
+    0.102677
+   ]
+  },
+  "boundary_trace_relative_l2": {
+   "mean": 0.000399,
+   "seed_std": 2.4e-05,
+   "values": [
+    0.000398,
+    0.000424,
+    0.000377
+   ]
+  },
+  "normalized_laplacian_l2": {
+   "mean": 0.000155,
+   "seed_std": 2.6e-05,
+   "values": [
+    0.000125,
+    0.00017,
+    0.00017
+   ]
+  },
+  "learned_c1": {
+   "values": [
+    -0.15126,
+    -0.14274,
+    -0.14931
+   ],
+   "oracle": -0.1591549
+  }
+ },
+ "comparisons_same_bank": {
+  "mesh_transformer_reference": {
+   "parameters": 135945,
+   "id": 0.458,
+   "freq": 1.0001
+  },
+  "invariant_pair_kernel": {
+   "parameters": 19008,
+   "id": 0.1068,
+   "freq": 0.6421,
+   "laplacian": 9.76
+  }
+ },
+ "ablations_seed17_early_bank": {
+  "minimal_10_parameters": {
+   "id": 0.0294,
+   "freq": 0.0814,
+   "note": "regular_orders=0; higher regular orders unnecessary at 1000 steps"
+  },
+  "steps_3000": {
+   "id": 0.0062,
+   "freq": 0.0618,
+   "learned_c1": -0.15801,
+   "note": "approaches the analytic oracle (id 0.003, freq 0.060); c1 within 0.7% of -1/(2*pi) - the 1000-step gap is optimization, not representation"
+  },
+  "direct_no_solve": {
+   "id": 0.2126,
+   "freq": 0.3518,
+   "note": "density solve is essential"
+  }
+ },
+ "resolution_transfer_seed17": {
+  "note": "trained at 64 panels; evaluation error decreases monotonically under refinement",
+  "relative_l2_by_n_boundary": {
+   "32": 0.1831,
+   "64": 0.1272,
+   "128": 0.0675,
+   "256": 0.0384
+  }
+ },
+ "caveats": [
+  "2D interior Dirichlet Laplace only; the harmonic Laurent basis is Laplace-specific (3D analogue: solid harmonics x Legendre in n.r_hat with exact triangle quadrature)",
+  "dense O(Nq*Ns) evaluation and O(p*Ns^2) solve; at scale the c1 term is the classical double layer so standard FMM/H-matrix acceleration applies verbatim",
+  "collocation-residual trace metric certifies solver convergence, not boundary fidelity, unless the imposed jump matches the kernel (self-consistent at c1=-1/(2*pi))",
+  "single-machine artifacts under /tmp/h1_learned_bie; not yet reproduced elsewhere"
+ ],
+ "iteration_2_neumann": {
+  "question": "does kernel-basis + exact panel quadrature + learned drive-linear solve transfer to a different BC/jump structure?",
+  "implementation": "evaluate_flux + build_neumann_domain_sample (exact analytic flux, discrete compatibility enforced, targets gauge-fixed to boundary-measure mean); NeumannHarmonicPanelBIE (adds c0*Re log zeta single-layer term with branch-safe exact panel integrals incl. self-panel L(log(L/2)-1); Neumann trace K' = n.grad(influence) via autograd; output anchored to its own exact boundary-trace mean, query-independent); --problem neumann in train.py; 13 new tests",
+  "structural_findings": [
+   "orientation gauge matters: with T = -1/2 I + K' and alpha init +1, Richardson anti-converges at small kernel and SGD exploits solver divergence as a ~25x gain (learned kernel ~0, ID 0.081 in-sample, freq-OOD 0.268) - a degenerate optimum. Fix is the c=-1 gauge (T = +1/2 I + K', oracle c0 = -1/(2*pi)), a convention choice, not a tuned constant. General rule: place the zero-kernel init in the solver's convergent regime.",
+   "Neumann optimization is ~3x slower than Dirichlet: validation rises (~3.4 at step 250) before descending - an early landscape barrier while kernel and solve co-adapt"
+  ],
+  "result_seed17": {
+   "steps_3000": {
+    "id": 0.1234,
+    "geo": 0.1217,
+    "strong": 0.1578,
+    "freq": 0.1236,
+    "laplacian": 1e-05,
+    "learned_c0": -0.14306,
+    "oracle_c0": -0.15915,
+    "note": "freq-OOD == ID: uniform operator behavior; c0 at 90% of oracle and still converging (validation monotone 0.88->0.12 over steps 1000-3000)"
+   },
+   "steps_1000": {
+    "id": 0.9616,
+    "note": "mid-transit, not converged"
+   },
+   "direct_p0_control": {
+    "id": 0.1217,
+    "freq": 0.6576,
+    "note": "value-interpolator signature: good ID, poor frequency transfer"
+   }
+  },
+  "verdict": "framework transfers; BC change costs optimization time, not structure",
+  "closeout": {
+   "steps_10000_seed17": {
+    "id": 0.0029,
+    "geo": 0.0043,
+    "strong": 0.0044,
+    "freq": 0.0021,
+    "laplacian": 2e-05,
+    "learned_c0": -0.1619,
+    "note": "analytic-oracle-level accuracy uniformly across all splits including unseen frequencies; c0 within 1.8% of -1/(2*pi)"
+   },
+   "seeds_29_43_at_3000": {
+    "id": [
+     0.2736,
+     0.1895
+    ],
+    "note": "same slow transit as seed 17 (0.12 at 3000); destination established by the 10k run"
+   }
+  }
+ },
+ "iteration_3_parametric_conditioning": {
+  "question": "should a global PDE parameter enter through the kernel basis (parameter-dependent fundamental solutions) or through learned coefficient conditioning?",
+  "testbed": "screened_laplace.py: exact Bessel-series Dirichlet problems for lap(u) - kappa^2 u = 0 on randomized disks; dimensionless kappa_tilde = kappa*R in global_data; train kappa in [0.5,2], OOD-high [3,5], OOD-low [0.05,0.3], unseen modes {4,5,6}; Gauss-16 panel quadrature for the K0/K1 kernels (documented numerical knob; zeroed self-panel breaks exact resolution transfer, noted)",
+  "results_seed17_2000steps": {
+   "yukawa_10p": {
+    "id": 0.0033,
+    "ood_high": 0.0158,
+    "ood_low": 8.68,
+    "unseen_modes": 0.008,
+    "pde_residual": 0.0
+   },
+   "conditioned_yukawa": {
+    "id": 0.0005,
+    "ood_high": 0.0474,
+    "ood_low": 28.0,
+    "unseen_modes": 0.006,
+    "pde_residual": 0.0
+   },
+   "conditioned_harmonic": {
+    "id": 0.0613,
+    "ood_high": 0.3101,
+    "ood_low": 0.0035,
+    "unseen_modes": 0.0459,
+    "pde_residual": 1.646
+   },
+   "conditioned_union": {
+    "id": 0.002,
+    "ood_high": 0.0663,
+    "ood_low": 25.0,
+    "unseen_modes": 0.0073,
+    "pde_residual": 0.14
+   }
+  },
+  "findings": [
+   "physics-in-basis gives exact operator fidelity (PDE residual 0 vs 1.65 = E[kappa_tilde^2] for the wrong basis, which measures precisely the operator mismatch) and the best parameter-OOD transfer with 10 parameters",
+   "each basis generalizes toward its own asymptotic regime: the harmonic conditioner wins the kappa->0 limit (0.0035) because harmonic IS that limit; Yukawa models blow up there as K0 diverges logarithmically",
+   "learned conditioning absorbs in-distribution numerical imperfections (0.0005; it learns the kappa-dependence of the zeroed self-panel term) but never extrapolates",
+   "a union basis does NOT rescue parameter-OOD: coefficient selection itself must extrapolate (union ood_low 25.0 despite containing the basis that solves it)",
+   "torch.special.modified_bessel_k0/k1 have no autograd derivatives; custom Functions with the analytic recurrences added (nested-derivative test)"
+  ],
+  "design_rule": "the operator parameter must enter analytically through the fundamental-solution basis; learned conditioning is for in-distribution numerics, not physics extrapolation"
+ },
+ "iteration_4_pruning": {
+  "protocol": "3000 steps, seed 17, early bank; ablations of HarmonicPanelBIE motivated by observed evidence (uniform learned relaxations; minimal variant winning at 1000 steps)",
+  "results": {
+   "full_13p": {
+    "id": 0.0062,
+    "geo": 0.0066,
+    "strong": 0.0297,
+    "freq": 0.0618,
+    "trace": 0.0004
+   },
+   "minimal_10p": {
+    "id": 0.0056,
+    "geo": 0.0058,
+    "strong": 0.0277,
+    "freq": 0.0612,
+    "trace": 0.0004
+   },
+   "shared_alpha_3p": {
+    "id": 0.0056,
+    "geo": 0.0058,
+    "strong": 0.0277,
+    "freq": 0.0612,
+    "trace": 0.0004,
+    "learned": {
+     "c1": -0.15828,
+     "d0": -0.00151,
+     "alpha": 1.17983
+    },
+    "note": "identical to minimal to 4 decimals: sharing the relaxation is lossless; d0 ~ 0 so effectively TWO scalars (c1, alpha) carry the solution operator; c1 within 0.5% of -1/(2*pi)"
+   },
+   "p2_solve_4p": {
+    "id": 0.0067,
+    "geo": 0.0139,
+    "strong": 0.0403,
+    "freq": 0.0612,
+    "trace": 0.0653,
+    "note": "2 Richardson steps under-converge the density; the kernel inflates (c1 -0.1705) to compensate; solve depth is a numerical-convergence knob, keep p=8"
+   }
+  },
+  "pruned": [
+   "regular orders (d_1..d_3)",
+   "per-step relaxations"
+  ],
+  "kept_with_reason": [
+   "solve depth p=8 (density convergence)",
+   "d0 retained structurally but learns ~0"
+  ],
+  "confirmation_3seed_reference_bank": {
+   "protocol": "3000 steps, seeds 17/29/43, eval seed 97000037, 64 cases (same bank as all headline comparisons)",
+   "interpolation": {
+    "mean": 0.0347,
+    "seed_std": 0.0006
+   },
+   "unseen_geometry": {
+    "mean": 0.0343,
+    "seed_std": 0.0007
+   },
+   "stronger_deformation": {
+    "mean": 0.0302,
+    "seed_std": 0.0006
+   },
+   "unseen_frequencies": {
+    "mean": 0.0664,
+    "seed_std": 0.0004
+   },
+   "boundary_trace": 0.0003,
+   "laplacian": 0.0001,
+   "learned_c1_by_seed": [
+    -0.15828,
+    -0.15825,
+    -0.1579
+   ],
+   "note": "3 parameters; seed spread ~30x tighter than larger variants; c1 within 0.8% of -1/(2*pi) on every seed; vs same-bank references: mesh_transformer 0.458 (136k params), pair_kernel 0.107 (19k), 13-param harmonic BIE 0.068 at 1000 steps"
+  }
+ },
+ "iteration_7_kernel_decoder_fix": {
+  "date": "2026-07-03",
+  "change": "MeshTransformer(query_decoder='kernel'): dense operator-conditioned pair-kernel query decoder (kernel_decoder.py) replacing the separable moment decoder; dictionary = exact-quadrature double-layer member (2D subtended angle / 3D solid angle, brute-force-verified) + polynomial {1,b,a} + 8-member MLP of joint pair invariants; coefficients from source operator-state invariants (encoder as conditioner); kernel never reads drive in linear mode; bitwise query independence via row-stable reductions",
+  "gate_seed17_1000steps_early_bank": {
+   "mesh_transformer_kernel": {
+    "parameters": 110561,
+    "id": 0.0416,
+    "geo": 0.0635,
+    "strong": 0.0934,
+    "mixed": 0.061,
+    "freq": 0.1225,
+    "m3": 0.0803,
+    "m4": 0.0783,
+    "laplacian": 1.02,
+    "resolution_transfer": "0.322 -> 0.032 over 32->256 panels (discretization-convergent; moment decoder flat at ~0.27)",
+    "contracts_trained_model": {
+     "superposition": 1.1e-07,
+     "zero_drive": 0.0,
+     "similarity": 2.8e-07
+    }
+   },
+   "baselines_same_protocol": {
+    "moment_decoder": {
+     "id": 0.53,
+     "freq": 1.0,
+     "m3": 0.99
+    },
+    "encoded_pair_factorial_winner": {
+     "id": 0.144,
+     "freq": 0.898,
+     "m3": 0.142
+    }
+   }
+  },
+  "spectral_fix_documented_in_tests": "paired random-weight ring test: moment decoder m>=3 content <= 2e-11 (ceiling), kernel decoder >= 1e-6 (lifted); 180 core + 187 example tests pass, 11 contract tests parametrized over both decoders",
+  "caveats": [
+   "seed-17, 1000 steps, early bank; 3-seed 3000-step reference-bank rows running on Brev",
+   "interior Laplacian ~1.0: PDE-agnostic smooth member is not harmonic; freq-OOD 0.12 achieved WITHOUT operator fidelity",
+   "on-boundary trace diagnostic (~1.6) reflects the singular member's discontinuity at the boundary; near-boundary interior error is 0.033"
+  ],
+  "reference_bank_3seed_3000steps": {
+   "kernel_full": {
+    "parameters": 110561,
+    "id": [
+     0.0372,
+     0.0386,
+     0.0439
+    ],
+    "freq": [
+     0.5401,
+     0.4498,
+     0.4705
+    ],
+    "m3_mean": 0.0255,
+    "m6_mean": 0.4805,
+    "lap_mean": 1.7
+   },
+   "kernel_dictionary_only": {
+    "parameters": 105089,
+    "id": [
+     0.0382,
+     0.035,
+     0.0494
+    ],
+    "freq": [
+     0.0721,
+     0.0705,
+     0.0713
+    ],
+    "m3_mean": 0.0239,
+    "m6_mean": 0.0637,
+    "lap_mean": 0.78,
+    "note": "kernel_mlp_members=0: exact double-layer + polynomial members only"
+   },
+   "moment_decoder": {
+    "parameters": 135945,
+    "id": [
+     0.4519,
+     0.4488,
+     0.4502
+    ],
+    "freq": [
+     1.0001,
+     1.0001,
+     1.0001
+    ]
+   },
+   "pair_kernel_control": {
+    "parameters": 19008,
+    "id": [
+     0.0402,
+     0.0383,
+     0.0408
+    ],
+    "freq": [
+     0.505,
+     0.5081,
+     0.4785
+    ],
+    "lap_mean": 5.73
+   },
+   "finding_dictionary_selection_tension": "freq-OOD degraded 0.12(@1k steps)->0.49(@3k) for the full kernel decoder; ablating the smooth MLP members restores 0.0713 with IDENTICAL ID (0.0409 vs 0.0399) \u2014 unstructured smooth members are ID-neutral and OOD-destructive at this capacity; structured members + operator conditioning extrapolate. Caveat: the singular member is Laplace-family structure; on other PDE families the dictionary needs more members and the smooth member may earn its place (untested).",
+   "provenance": "Brev A100 runs, scratch/brev/results/phase1"
+  }
+ },
+ "iteration_8_liouville_nonlinear_wall": {
+  "date": "2026-07-03",
+  "question": "Liouville (lap u + 2 e^u = 0) is homogeneous but nonlinear; all drive-linear models tied at ~0.79 ID (superposition wall; boundary_mean floor 1.06). The kernel-basis query decoder in zero_preserving_nonlinear field mode reads drive invariants, so it is NOT drive-linear. Does it break the wall, and do unstructured MLP members earn their place on a nonlinear PDE?",
+  "setup": "liouville.py, 1500 steps, seed 17, cuda (A100), same data protocol as prior Liouville baselines",
+  "arms_seed17": {
+   "mesh_transformer_kernel_linear": {
+    "parameters": 110561,
+    "steps": 1500,
+    "seed": 17,
+    "in_distribution": 0.7701,
+    "stronger_deformation": 0.7206,
+    "unseen_geometry_modes": 0.7686,
+    "pde_residual": 2.2747,
+    "elapsed_seconds": 94.2
+   },
+   "mesh_transformer_kernel_nl_nomlp": {
+    "parameters": 173009,
+    "steps": 1500,
+    "seed": 17,
+    "in_distribution": 0.3963,
+    "stronger_deformation": 0.4641,
+    "unseen_geometry_modes": 0.5918,
+    "pde_residual": 3.0133,
+    "elapsed_seconds": 94.8
+   },
+   "mesh_transformer_kernel_nl": {
+    "parameters": 183089,
+    "steps": 1500,
+    "seed": 17,
+    "in_distribution": 0.399,
+    "stronger_deformation": 0.4591,
+    "unseen_geometry_modes": 0.6092,
+    "pde_residual": 2.2675,
+    "elapsed_seconds": 96.4
+   }
+  },
+  "findings": [
+   "Wall broken: nonlinear kernel decoder reaches ~0.40 ID vs 0.77 for the linear-arm control (which lands on the predicted ~0.79 superposition wall). OOD improves too (unseen geometry modes 0.77->0.59, stronger deformation 0.72->0.46).",
+   "Dictionary-selection finding extends to nonlinear PDEs: dictionary-only (mlp_members=0) matches or beats full MLP members on all three splits at 10k fewer parameters.",
+   "PDE residual stays high (2.3-3.0 vs harmonic-prediction score of exactly 2): the model fits the field without satisfying the strong-form PDE; consistent with L2-fit-only training."
+  ],
+  "caveats": [
+   "Headline protocol: 1500 steps, constant LR, final-model eval - identical to the Liouville baseline protocol.",
+   "Longer training needs LR decay + best-checkpoint selection before it means anything (see replication_p2b)."
+  ],
+  "replication_p2b": {
+   "date": "2026-07-03",
+   "runs": {
+    "linear": [
+     {
+      "seed": 17,
+      "steps": 5000,
+      "in_distribution": 0.8084,
+      "unseen_geometry_modes": 0.8942,
+      "stronger_deformation": 0.7439,
+      "pde_residual": 1.522,
+      "val_history_tail": [
+       0.476,
+       0.536,
+       0.697,
+       0.62
+      ]
+     },
+     {
+      "seed": 18,
+      "steps": 1500,
+      "in_distribution": 0.7486,
+      "unseen_geometry_modes": 0.6891,
+      "stronger_deformation": 0.6525,
+      "pde_residual": 2.877,
+      "val_history_tail": [
+       0.526,
+       0.515,
+       0.528,
+       0.552
+      ]
+     },
+     {
+      "seed": 19,
+      "steps": 1500,
+      "in_distribution": 0.7883,
+      "unseen_geometry_modes": 0.8031,
+      "stronger_deformation": 0.7166,
+      "pde_residual": 1.375,
+      "val_history_tail": [
+       0.563,
+       0.493,
+       0.505,
+       0.487
+      ]
+     }
+    ],
+    "nl_nomlp": [
+     {
+      "seed": 17,
+      "steps": 5000,
+      "in_distribution": 1.3368,
+      "unseen_geometry_modes": 0.6177,
+      "stronger_deformation": 0.5455,
+      "pde_residual": 3.163,
+      "val_history_tail": [
+       0.587,
+       0.831,
+       0.546,
+       0.41
+      ]
+     },
+     {
+      "seed": 18,
+      "steps": 1500,
+      "in_distribution": 0.5619,
+      "unseen_geometry_modes": 0.4675,
+      "stronger_deformation": 0.5101,
+      "pde_residual": 5.198,
+      "val_history_tail": [
+       0.651,
+       0.765,
+       0.526,
+       0.42
+      ]
+     },
+     {
+      "seed": 19,
+      "steps": 1500,
+      "in_distribution": 0.4688,
+      "unseen_geometry_modes": 0.551,
+      "stronger_deformation": 0.5676,
+      "pde_residual": 2.445,
+      "val_history_tail": [
+       0.433,
+       0.46,
+       0.516,
+       0.415
+      ]
+     }
+    ],
+    "nl": [
+     {
+      "seed": 17,
+      "steps": 5000,
+      "in_distribution": 0.4598,
+      "unseen_geometry_modes": 0.4199,
+      "stronger_deformation": 0.4908,
+      "pde_residual": 3.293,
+      "val_history_tail": [
+       0.537,
+       0.729,
+       0.579,
+       0.401
+      ]
+     },
+     {
+      "seed": 18,
+      "steps": 1500,
+      "in_distribution": 0.4305,
+      "unseen_geometry_modes": 0.4975,
+      "stronger_deformation": 0.5406,
+      "pde_residual": 4.776,
+      "val_history_tail": [
+       0.574,
+       0.877,
+       0.556,
+       0.41
+      ]
+     },
+     {
+      "seed": 19,
+      "steps": 1500,
+      "in_distribution": 0.5639,
+      "unseen_geometry_modes": 0.6333,
+      "stronger_deformation": 0.5338,
+      "pde_residual": 3.6,
+      "val_history_tail": [
+       0.505,
+       0.639,
+       0.595,
+       0.457
+      ]
+     }
+    ]
+   },
+   "summary_1500_steps_3_seeds": {
+    "linear_ID": [
+     0.7701,
+     0.7486,
+     0.7883
+    ],
+    "nl_ID": [
+     0.399,
+     0.4305,
+     0.5639
+    ],
+    "nl_nomlp_ID": [
+     0.3963,
+     0.5619,
+     0.4688
+    ],
+    "means": {
+     "linear": 0.769,
+     "nl": 0.464,
+     "nl_nomlp": 0.476
+    }
+   },
+   "findings": [
+    "Wall break REPLICATES: at 1500 steps, worst nonlinear ID (0.564) < best linear ID (0.749) across all 3 seeds; linear mean 0.769 sits on the ~0.79 superposition wall, nonlinear arms mean ~0.47 (1.6x better), OOD splits improve similarly.",
+    "MLP-member question resolves to a TIE at 1500 steps (nl 0.464 vs nomlp 0.476, sd ~0.085): unstructured smooth members neither help nor hurt on Liouville; parsimony favors dictionary-only. Seed 17 alone (tie) and seed 18 alone (nl wins by 0.13) each mislead - replication was necessary.",
+    "5000-step constant-LR training is UNSTABLE: validation oscillates late (nomlp val 0.44->0.60->0.41). CORRECTION (2026-07-04): liouville.py already restores the best-validation checkpoint before the final eval, so the nomlp ID 1.337 vs val 0.410 gap is NOT final-vs-best-model - it is a 4-case validation vs 16-case eval gap on an unstable model (heavy-tailed per-case errors). Protocol gap remaining: no LR decay; headline numbers use the 1500-step fixed-compute protocol shared with all baselines."
+   ]
+  }
+ },
+ "iteration_9_screened_meshtransformer": {
+  "date": "2026-07-03",
+  "question": "Does kappa-tilde conditioning through the MeshTransformer operator encoder (global scalar \"screening\" -> operator tokens -> kernel-decoder coefficients) extrapolate parameter-OOD, and how does the full generalist architecture compare to the iteration-3 specialist pair-kernel BIEs? Also: do MLP members hurt geometry-OOD on a second linear PDE?",
+  "setup": "screened_laplace.py, mesh_transformer_kernel (110,593 par, 8 MLP members) vs mesh_transformer_kernel_nomlp (105,121 par), 2000 steps, seeds 17/18/19, cuda A100. field_mode=linear; kappa-tilde = kappa*R enters ONLY as operator global scalar. Comparators: iteration_3 specialists at same steps/seed17.",
+  "runs": {
+   "mlp8": [
+    {
+     "seed": 17,
+     "steps": 2000,
+     "parameters": 110593,
+     "in_distribution": 0.014,
+     "ood_low_screening": 0.0553,
+     "ood_high_screening": 0.1523,
+     "unseen_modes": 0.2386,
+     "pde_residual": 0.492
+    },
+    {
+     "seed": 18,
+     "steps": 2000,
+     "parameters": 110593,
+     "in_distribution": 0.0129,
+     "ood_low_screening": 0.0303,
+     "ood_high_screening": 0.1473,
+     "unseen_modes": 0.1963,
+     "pde_residual": 0.579
+    },
+    {
+     "seed": 19,
+     "steps": 2000,
+     "parameters": 110593,
+     "in_distribution": 0.0162,
+     "ood_low_screening": 0.0473,
+     "ood_high_screening": 0.2508,
+     "unseen_modes": 0.1178,
+     "pde_residual": 0.616
+    }
+   ],
+   "nomlp": [
+    {
+     "seed": 17,
+     "steps": 2000,
+     "parameters": 105121,
+     "in_distribution": 0.0141,
+     "ood_low_screening": 0.0544,
+     "ood_high_screening": 0.2281,
+     "unseen_modes": 0.0143,
+     "pde_residual": 0.682
+    },
+    {
+     "seed": 18,
+     "steps": 2000,
+     "parameters": 105121,
+     "in_distribution": 0.0106,
+     "ood_low_screening": 0.0256,
+     "ood_high_screening": 0.1624,
+     "unseen_modes": 0.023,
+     "pde_residual": 0.513
+    },
+    {
+     "seed": 19,
+     "steps": 2000,
+     "parameters": 105121,
+     "in_distribution": 0.0114,
+     "ood_low_screening": 0.0441,
+     "ood_high_screening": 0.1636,
+     "unseen_modes": 0.0203,
+     "pde_residual": 0.51
+    }
+   ]
+  },
+  "means_3seed": {
+   "mlp8": {
+    "ID": 0.0144,
+    "lowK": 0.0443,
+    "highK": 0.1835,
+    "modes": 0.1842
+   },
+   "nomlp": {
+    "ID": 0.012,
+    "lowK": 0.0414,
+    "highK": 0.1847,
+    "modes": 0.0192
+   }
+  },
+  "iteration_3_comparators_seed17": {
+   "yukawa_basis_10p": {
+    "ID": 0.0033,
+    "highK": 0.0158,
+    "lowK": 8.68,
+    "modes": 0.008
+   },
+   "conditioned_yukawa": {
+    "ID": 0.0005,
+    "highK": 0.0474,
+    "lowK": 28.0,
+    "modes": 0.006
+   },
+   "conditioned_harmonic": {
+    "ID": 0.0613,
+    "highK": 0.3101,
+    "lowK": 0.0035,
+    "modes": 0.0459
+   },
+   "conditioned_union": {
+    "ID": 0.002,
+    "highK": 0.0663,
+    "lowK": 25.0,
+    "modes": 0.0073
+   }
+  },
+  "findings": [
+   "Generalist beats the harmonic-basis specialist ID by ~5x (0.012 vs 0.061) without knowing the PDE, staying within ~4x of exact-Yukawa-basis specialists (0.003) that do.",
+   "Graceful low-kappa degradation: Yukawa-basis specialists diverge catastrophically at low kappa (8.7-28, K0 log-divergence); MeshTransformer degrades to 0.03-0.05 - its harmonic-biased singular dictionary contains the kappa->0 limit. High-kappa: the exact-basis specialist wins (0.016 vs 0.18) - the expected specialist/generalist trade.",
+   "STRONGEST dictionary-selection replication: MLP members leave ID and kappa-OOD unchanged but destroy unseen-modes generalization 10x (0.184 vs 0.019), consistent across all 3 seeds. Third linear-PDE occurrence (Laplace freq-OOD 0.12->0.49; screened modes 0.019->0.184); on nonlinear Liouville they were merely neutral."
+  ]
+ },
+ "iteration_10_laplace3d_meshtransformer": {
+  "date": "2026-07-03",
+  "question": "Does the kernel-decoder MeshTransformer work in 3D unchanged (dimensional genericity), how does it fare on the shell topology-OOD tier where pure double-layer is deficient, and does the MLP-member pattern from 2D carry over?",
+  "setup": "laplace3d_study.py, mesh_transformer_kernel (110,561 par, BITWISE-identical count to 2D - channels are D-independent) vs _nomlp (105,089), 3000 steps, seeds 17-22 (6 seeds), cuda A100. Boundaries merged outer+inner -> single dirichlet (identity only geometric). Oracle reference: sphere 0.003, star 0.002, shell 0.753 (double-layer deficiency).",
+  "runs": {
+   "mlp8": [
+    {
+     "seed": 17,
+     "sphere": 0.0127,
+     "star": 0.0131,
+     "star_unseen_modes": 0.0359,
+     "shell_topology": 0.3204
+    },
+    {
+     "seed": 18,
+     "sphere": 0.0184,
+     "star": 0.0197,
+     "star_unseen_modes": 0.1445,
+     "shell_topology": 0.8158
+    },
+    {
+     "seed": 19,
+     "sphere": 0.0196,
+     "star": 0.0159,
+     "star_unseen_modes": 0.0821,
+     "shell_topology": 0.2798
+    },
+    {
+     "seed": 20,
+     "sphere": 0.0178,
+     "star": 0.0258,
+     "star_unseen_modes": 0.1243,
+     "shell_topology": 0.522
+    },
+    {
+     "seed": 21,
+     "sphere": 0.0185,
+     "star": 0.0202,
+     "star_unseen_modes": 0.0344,
+     "shell_topology": 0.3074
+    },
+    {
+     "seed": 22,
+     "sphere": 0.0171,
+     "star": 0.0153,
+     "star_unseen_modes": 0.1012,
+     "shell_topology": 0.44
+    }
+   ],
+   "nomlp": [
+    {
+     "seed": 17,
+     "sphere": 0.0121,
+     "star": 0.0142,
+     "star_unseen_modes": 0.0469,
+     "shell_topology": 0.2901
+    },
+    {
+     "seed": 18,
+     "sphere": 0.025,
+     "star": 0.0439,
+     "star_unseen_modes": 0.2556,
+     "shell_topology": 0.4134
+    },
+    {
+     "seed": 19,
+     "sphere": 0.0131,
+     "star": 0.0237,
+     "star_unseen_modes": 0.1166,
+     "shell_topology": 1.1687
+    },
+    {
+     "seed": 20,
+     "sphere": 0.0298,
+     "star": 0.0431,
+     "star_unseen_modes": 0.1053,
+     "shell_topology": 0.5024
+    },
+    {
+     "seed": 21,
+     "sphere": 0.0248,
+     "star": 0.0216,
+     "star_unseen_modes": 0.0796,
+     "shell_topology": 0.8042
+    },
+    {
+     "seed": 22,
+     "sphere": 0.0141,
+     "star": 0.0158,
+     "star_unseen_modes": 0.1071,
+     "shell_topology": 0.3744
+    }
+   ]
+  },
+  "aggregates_6seed": {
+   "mlp8": {
+    "sphere": {
+     "mean": 0.0174,
+     "median": 0.0181,
+     "sd": 0.0024
+    },
+    "star": {
+     "mean": 0.0183,
+     "median": 0.0178,
+     "sd": 0.0046
+    },
+    "star_unseen_modes": {
+     "mean": 0.0871,
+     "median": 0.0917,
+     "sd": 0.0454
+    },
+    "shell_topology": {
+     "mean": 0.4476,
+     "median": 0.3802,
+     "sd": 0.2026
+    }
+   },
+   "nomlp": {
+    "sphere": {
+     "mean": 0.0198,
+     "median": 0.0194,
+     "sd": 0.0076
+    },
+    "star": {
+     "mean": 0.0271,
+     "median": 0.0226,
+     "sd": 0.0132
+    },
+    "star_unseen_modes": {
+     "mean": 0.1185,
+     "median": 0.1062,
+     "sd": 0.0718
+    },
+    "shell_topology": {
+     "mean": 0.5922,
+     "median": 0.4579,
+     "sd": 0.3335
+    }
+   }
+  },
+  "findings": [
+   "Dimensional genericity holds end-to-end: same architecture, same param count, no core changes; 3D ID sphere/star ~0.02 (within ~6x of the exact-quadrature oracle).",
+   "Shell topology-OOD: both arms (medians 0.380 / 0.458) beat the double-layer oracle (0.753) - attention-conditioned coefficients partially overcome the representational deficiency; high seed variance (sd 0.20-0.33), some catastrophic nomlp seeds (1.17).",
+   "MLP-member pattern FLIPS in 3D: mlp8 equal-or-better on star 6/6 seeds, modes-OOD 5/6 (means 0.087 vs 0.119), shell means 0.448 vs 0.592. Opposite of 2D linear (10x destructive). Refined hypothesis: unstructured members hurt where the structured dictionary already spans the smooth corrections (2D poly family) and help where it spans less (3D). Testable: drop polynomial members in 2D (singular+MLP only) -> if OOD collapses, poly members are the structured span that makes MLPs redundant."
+  ],
+  "caveats": [
+   "Seed variance on shell/modes is large; 6 seeds give direction, not tight CIs.",
+   "No LR decay (protocol parity with 2D benchmarks)."
+  ]
+ },
+ "iteration_11_dictionary_ablation_2d": {
+  "date": "2026-07-04",
+  "question": "Which dictionary members carry the 2D kernel decoder? Pre-registered (research log): span hypothesis predicted (a) nopoly recovers ID but destroys freq-OOD, (b) singonly loses ID but stays OOD-stable.",
+  "setup": "train.py reference protocol (3000 steps, seeds 17/29/43, reference capacity, dirichlet), arms: nopoly = singular+8MLP (109,733p, 9 members), singonly = singular only (104,261p, 1 member). Comparators: iteration-7 kernel_full (12 members) and kernel_dictionary_only (=nomlp, 4 members) at identical protocol.",
+  "runs": {
+   "nopoly": [
+    {
+     "seed": 17,
+     "parameters": 109733,
+     "interpolation": 0.043,
+     "mixed_geometry_modes": 0.0595,
+     "stronger_deformation": 0.1176,
+     "unseen_boundary_frequencies": 0.1979,
+     "unseen_geometry_modes": 0.0517
+    },
+    {
+     "seed": 29,
+     "parameters": 109733,
+     "interpolation": 0.036,
+     "mixed_geometry_modes": 0.0509,
+     "stronger_deformation": 0.0835,
+     "unseen_boundary_frequencies": 0.2962,
+     "unseen_geometry_modes": 0.0453
+    },
+    {
+     "seed": 43,
+     "parameters": 109733,
+     "interpolation": 0.0483,
+     "mixed_geometry_modes": 0.0753,
+     "stronger_deformation": 0.0837,
+     "unseen_boundary_frequencies": 0.1447,
+     "unseen_geometry_modes": 0.0664
+    }
+   ],
+   "singonly": [
+    {
+     "seed": 17,
+     "parameters": 104261,
+     "interpolation": 0.036,
+     "mixed_geometry_modes": 0.0611,
+     "stronger_deformation": 0.0796,
+     "unseen_boundary_frequencies": 0.0733,
+     "unseen_geometry_modes": 0.049
+    },
+    {
+     "seed": 29,
+     "parameters": 104261,
+     "interpolation": 0.0401,
+     "mixed_geometry_modes": 0.0641,
+     "stronger_deformation": 0.0814,
+     "unseen_boundary_frequencies": 0.0761,
+     "unseen_geometry_modes": 0.0519
+    },
+    {
+     "seed": 43,
+     "parameters": 104261,
+     "interpolation": 0.0365,
+     "mixed_geometry_modes": 0.0619,
+     "stronger_deformation": 0.0713,
+     "unseen_boundary_frequencies": 0.0749,
+     "unseen_geometry_modes": 0.05
+    }
+   ]
+  },
+  "four_arm_matrix_means": {
+   "full_sing_poly_mlp": {
+    "members": 12,
+    "ID": 0.0399,
+    "freq": 0.487
+   },
+   "nomlp_sing_poly": {
+    "members": 4,
+    "ID": 0.0409,
+    "freq": 0.0713
+   },
+   "nopoly_sing_mlp": {
+    "members": 9,
+    "ID": 0.0424,
+    "freq": 0.2129
+   },
+   "singonly": {
+    "members": 1,
+    "ID": 0.0375,
+    "freq": 0.0748
+   }
+  },
+  "findings": [
+   "SINGULAR-ONLY WINS OUTRIGHT: best ID (0.0375) and freq-OOD statistically identical to sing+poly (0.0748 vs 0.0713, tight seed spread 0.073-0.076), best stronger_deformation (0.0774). The exact singular member + operator conditioning carries everything in 2D; polynomial members are dead weight, MLP members are actively harmful.",
+   "Prediction (a) half-confirmed: nopoly recovers ID (0.042) and freq-OOD is destroyed relative to structured arms (0.213) - but LESS than the full arm (0.49): MLP members hurt MORE when polynomial members are also present (unexpected interaction).",
+   "Prediction (b) REFUTED favorably: singonly lost nothing - the span hypothesis as stated is dead. Revised rule: in 2D, ALL smooth members are at best neutral; smooth structure comes from operator conditioning, not the member dictionary. 3D disentangler launched (p3b: 3D nopoly/singonly x 6 seeds) - if 3D singonly degrades, 3D genuinely needs smooth members; if not, prune everywhere."
+  ],
+  "caveats": [
+   "Single capacity (reference); interaction effect (poly amplifying MLP harm) unexplained."
+  ]
+ },
+ "iteration_12_dictionary_ablation_3d": {
+  "date": "2026-07-04",
+  "question": "3D disentangler for iteration 11: does 3D genuinely need smooth members (iteration-10 reading: MLPs modestly helpful), or does singular-only win everywhere once polynomial members are removed?",
+  "setup": "laplace3d_study.py, nopoly = singular+8MLP (109,733p) and singonly (104,261p), 3000 steps, seeds 17-22, cuda A100; protocol identical to iteration 10.",
+  "runs": {
+   "nopoly": [
+    {
+     "seed": 17,
+     "sphere": 0.0087,
+     "star": 0.0139,
+     "star_unseen_modes": 0.0374,
+     "shell_topology": 0.373
+    },
+    {
+     "seed": 18,
+     "sphere": 0.0123,
+     "star": 0.0133,
+     "star_unseen_modes": 0.0695,
+     "shell_topology": 0.4105
+    },
+    {
+     "seed": 19,
+     "sphere": 0.0073,
+     "star": 0.0117,
+     "star_unseen_modes": 0.0414,
+     "shell_topology": 0.3757
+    },
+    {
+     "seed": 20,
+     "sphere": 0.0131,
+     "star": 0.0225,
+     "star_unseen_modes": 0.0715,
+     "shell_topology": 0.347
+    },
+    {
+     "seed": 21,
+     "sphere": 0.006,
+     "star": 0.0093,
+     "star_unseen_modes": 0.0355,
+     "shell_topology": 0.3538
+    },
+    {
+     "seed": 22,
+     "sphere": 0.0104,
+     "star": 0.0131,
+     "star_unseen_modes": 0.0458,
+     "shell_topology": 0.3678
+    }
+   ],
+   "singonly": [
+    {
+     "seed": 17,
+     "sphere": 0.0109,
+     "star": 0.0118,
+     "star_unseen_modes": 0.0607,
+     "shell_topology": 0.3473
+    },
+    {
+     "seed": 18,
+     "sphere": 0.0061,
+     "star": 0.0123,
+     "star_unseen_modes": 0.0988,
+     "shell_topology": 0.3431
+    },
+    {
+     "seed": 19,
+     "sphere": 0.0054,
+     "star": 0.0149,
+     "star_unseen_modes": 0.0537,
+     "shell_topology": 0.3738
+    },
+    {
+     "seed": 20,
+     "sphere": 0.0067,
+     "star": 0.0081,
+     "star_unseen_modes": 0.0482,
+     "shell_topology": 0.4458
+    },
+    {
+     "seed": 21,
+     "sphere": 0.0069,
+     "star": 0.0127,
+     "star_unseen_modes": 0.0628,
+     "shell_topology": 0.4252
+    },
+    {
+     "seed": 22,
+     "sphere": 0.0069,
+     "star": 0.013,
+     "star_unseen_modes": 0.0577,
+     "shell_topology": 0.3805
+    }
+   ]
+  },
+  "aggregates_6seed": {
+   "nopoly": {
+    "sphere": {
+     "mean": 0.0096,
+     "median": 0.0095,
+     "sd": 0.0028
+    },
+    "star": {
+     "mean": 0.014,
+     "median": 0.0132,
+     "sd": 0.0045
+    },
+    "star_unseen_modes": {
+     "mean": 0.0502,
+     "median": 0.0436,
+     "sd": 0.0161
+    },
+    "shell_topology": {
+     "mean": 0.3713,
+     "median": 0.3704,
+     "sd": 0.0222
+    }
+   },
+   "singonly": {
+    "sphere": {
+     "mean": 0.0072,
+     "median": 0.0068,
+     "sd": 0.0019
+    },
+    "star": {
+     "mean": 0.0121,
+     "median": 0.0125,
+     "sd": 0.0022
+    },
+    "star_unseen_modes": {
+     "mean": 0.0636,
+     "median": 0.0592,
+     "sd": 0.018
+    },
+    "shell_topology": {
+     "mean": 0.386,
+     "median": 0.3771,
+     "sd": 0.0415
+    }
+   }
+  },
+  "iteration_10_with_poly_reference": {
+   "mlp8": {
+    "sphere": 0.0173,
+    "star": 0.0183,
+    "modes": 0.0871,
+    "shell_median": 0.3802,
+    "shell_sd": 0.2026
+   },
+   "nomlp": {
+    "sphere": 0.0198,
+    "star": 0.0271,
+    "modes": 0.1185,
+    "shell_median": 0.4579,
+    "shell_sd": 0.3335
+   }
+  },
+  "findings": [
+   "POLYNOMIAL MEMBERS WERE THE PROBLEM IN 3D TOO: dropping them improves every split ~2x (sphere 0.017->0.0095/0.0072, star 0.018->0.014/0.012, modes 0.087->0.051/0.064) and collapses shell-tier seed variance (sd 0.20-0.33 -> 0.025-0.042; no more catastrophic 1.17 seeds). The iteration-10 \"MLP members help in 3D\" reading was an artifact: MLPs partially compensated for polynomial-member harm.",
+   "Singular-only matches singular+MLP in 3D (sphere 0.0072 vs 0.0095, star 0.0121 vs 0.0141, modes 0.0637 vs 0.0511, shell median 0.377 vs 0.373) - no split shows a decisive MLP win.",
+   "UNIVERSAL RULE (2D + 3D Laplace): dictionary = the exact singular member only; all smooth structure through operator-conditioned coefficients. 3D singular-only now beats the double-layer oracle 2x on the shell tier (0.377 vs 0.753) with tight variance.",
+   "Universality checks in flight (p3cd): screened singonly (kappa-conditioning must survive poly removal) and Liouville nl_singonly (wall break must survive full pruning)."
+  ]
+ },
+ "iteration_13_singonly_universality": {
+  "date": "2026-07-04",
+  "question": "Does the singular-only rule extend to (a) screened Laplace (kappa-conditioning must survive poly removal) and (b) nonlinear Liouville (wall break must survive full pruning)?",
+  "screened_singonly_2000steps": {
+   "runs": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0131,
+     "ood_low_screening": 0.0436,
+     "ood_high_screening": 0.1342,
+     "unseen_modes": 0.027
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.0091,
+     "ood_low_screening": 0.0341,
+     "ood_high_screening": 0.2,
+     "unseen_modes": 0.0147
+    },
+    {
+     "seed": 19,
+     "in_distribution": 0.0074,
+     "ood_low_screening": 0.0257,
+     "ood_high_screening": 0.163,
+     "unseen_modes": 0.0202
+    }
+   ],
+   "means": {
+    "ID": 0.0099,
+    "lowK": 0.0345,
+    "highK": 0.1657,
+    "modes": 0.0206
+   },
+   "comparators_means": {
+    "mlp8": {
+     "ID": 0.0144,
+     "lowK": 0.0443,
+     "highK": 0.1835,
+     "modes": 0.1842
+    },
+    "nomlp_sing_poly": {
+     "ID": 0.012,
+     "lowK": 0.0414,
+     "highK": 0.1847,
+     "modes": 0.0192
+    }
+   },
+   "finding": "CONFIRMED and improved: singular-only is best-in-class on screened too (best ID and lowK, modes tie with sing+poly). Conditioning carries the kappa-dependence with a one-member dictionary."
+  },
+  "liouville_nl_singonly_1500steps": {
+   "runs": [
+    {
+     "seed": 17,
+     "in_distribution": 0.9583,
+     "unseen_geometry_modes": 0.7219,
+     "stronger_deformation": 0.4984
+    },
+    {
+     "seed": 18,
+     "in_distribution": 36.5348,
+     "unseen_geometry_modes": 2.2519,
+     "stronger_deformation": 6.6148
+    },
+    {
+     "seed": 19,
+     "in_distribution": 2.3,
+     "unseen_geometry_modes": 0.6887,
+     "stronger_deformation": 0.5581
+    }
+   ],
+   "comparators_ID_means": {
+    "nl_sing_poly_mlp": 0.464,
+    "nl_nomlp_sing_poly": 0.476,
+    "linear_wall": 0.769
+   },
+   "finding": "CATASTROPHIC FAILURE: ID 0.96/36.5/2.30 (seed 18 diverged). In zero-preserving-nonlinear field mode the polynomial members are LOAD-BEARING; removing them destabilizes training entirely."
+  },
+  "refined_rule": "Drive-LINEAR operation: dictionary = exact singular member only; operator conditioning carries all smoothness (2D Laplace, screened, 3D Laplace all best-in-class). NONLINEAR field mode: smooth polynomial members are load-bearing for the drive-nonlinear correction; MLP members remain prunable everywhere. Open: is the nonlinear failure representational or optimization instability? LR-decay discriminator queued (if cosine decay rescues nl_singonly to ~0.46, poly members were an optimization crutch; if not, they are representational)."
+ },
+ "iteration_14_scalar_only_2d": {
+  "date": "2026-07-04",
+  "question": "Do the vector (1o) channels earn their complexity? Scalar-only mode ablates oriented state transport between cells (normals still enter via scalar Gram invariants and decoder pair invariants).",
+  "setup": "train.py reference protocol, 3000 steps, seeds 17/29/43. Arms: mesh_transformer_kernel_singonly_scalar (41,941p, -59.8%) and mesh_transformer_kernel_scalar (full dict, 46,273p, -58.1%).",
+  "runs": {
+   "scalar": [
+    {
+     "seed": 17,
+     "parameters": 46273,
+     "sim_cov": 2.64e-07,
+     "interpolation": 0.05,
+     "mixed_geometry_modes": 0.0637,
+     "stronger_deformation": 0.073,
+     "unseen_boundary_frequencies": 0.2603,
+     "unseen_geometry_modes": 0.0545
+    },
+    {
+     "seed": 29,
+     "parameters": 46273,
+     "sim_cov": 2.59e-07,
+     "interpolation": 0.0508,
+     "mixed_geometry_modes": 0.062,
+     "stronger_deformation": 0.0741,
+     "unseen_boundary_frequencies": 0.311,
+     "unseen_geometry_modes": 0.0545
+    },
+    {
+     "seed": 43,
+     "parameters": 46273,
+     "sim_cov": 2.49e-07,
+     "interpolation": 0.0396,
+     "mixed_geometry_modes": 0.0487,
+     "stronger_deformation": 0.0812,
+     "unseen_boundary_frequencies": 0.3891,
+     "unseen_geometry_modes": 0.0447
+    }
+   ],
+   "singonly_scalar": [
+    {
+     "seed": 17,
+     "parameters": 41941,
+     "sim_cov": 2.82e-07,
+     "interpolation": 0.0412,
+     "mixed_geometry_modes": 0.0661,
+     "stronger_deformation": 0.092,
+     "unseen_boundary_frequencies": 0.073,
+     "unseen_geometry_modes": 0.0573
+    },
+    {
+     "seed": 29,
+     "parameters": 41941,
+     "sim_cov": 2.81e-07,
+     "interpolation": 0.04,
+     "mixed_geometry_modes": 0.066,
+     "stronger_deformation": 0.0916,
+     "unseen_boundary_frequencies": 0.0727,
+     "unseen_geometry_modes": 0.057
+    },
+    {
+     "seed": 43,
+     "parameters": 41941,
+     "sim_cov": 2.84e-07,
+     "interpolation": 0.0389,
+     "mixed_geometry_modes": 0.0646,
+     "stronger_deformation": 0.084,
+     "unseen_boundary_frequencies": 0.0742,
+     "unseen_geometry_modes": 0.0553
+    }
+   ]
+  },
+  "means": {
+   "singonly_scalar": {
+    "ID": 0.04,
+    "freq": 0.0733,
+    "geo": 0.0565,
+    "strong": 0.0892,
+    "mixed": 0.0656
+   },
+   "scalar_fulldict": {
+    "ID": 0.0468,
+    "freq": 0.3201,
+    "geo": 0.0512,
+    "strong": 0.0761,
+    "mixed": 0.0581
+   },
+   "vectorful_singonly_ref": {
+    "ID": 0.0375,
+    "freq": 0.0748,
+    "geo": 0.0503,
+    "strong": 0.0774
+   }
+  },
+  "findings": [
+   "VECTOR CHANNELS NOT LOAD-BEARING ON 2D LAPLACE: scalar singular-only (41,941p) matches vector-ful singular-only (104,261p) within ~5-15% on every split at 60% fewer params; similarity covariance stays at machine precision (2.7e-7).",
+   "The MLP-member freq destruction persists in scalar mode (0.32) but is smaller than vector-ful (0.49) - less capacity to overfit.",
+   "Caveat: 2D circle-family geometry may simply not need oriented transport; 3D, screened, and especially the encoder-stress benchmarks (multi-hop coupling) are the discriminating tests, queued."
+  ],
+  "screened_and_3d_extension": {
+   "date": "2026-07-04",
+   "screened_singonly_scalar_runs": [
+    {
+     "seed": 17,
+     "ID": 0.0331,
+     "lowK": 0.0475,
+     "highK": 0.2196,
+     "modes": 0.029
+    },
+    {
+     "seed": 18,
+     "ID": 0.023,
+     "lowK": 0.0278,
+     "highK": 0.2264,
+     "modes": 0.0284
+    },
+    {
+     "seed": 19,
+     "ID": 0.0289,
+     "lowK": 0.0341,
+     "highK": 0.215,
+     "modes": 0.0286
+    }
+   ],
+   "laplace3d_singonly_scalar_runs": [
+    {
+     "seed": 17,
+     "sphere": 0.0246,
+     "star": 0.0238,
+     "modes": 0.0586,
+     "shell": 0.3746
+    },
+    {
+     "seed": 18,
+     "sphere": 0.0239,
+     "star": 0.0214,
+     "modes": 0.0467,
+     "shell": 0.3609
+    },
+    {
+     "seed": 19,
+     "sphere": 0.0237,
+     "star": 0.0228,
+     "modes": 0.0461,
+     "shell": 0.3684
+    },
+    {
+     "seed": 20,
+     "sphere": 0.025,
+     "star": 0.0225,
+     "modes": 0.0602,
+     "shell": 0.3943
+    },
+    {
+     "seed": 21,
+     "sphere": 0.0244,
+     "star": 0.0256,
+     "modes": 0.0518,
+     "shell": 0.36
+    },
+    {
+     "seed": 22,
+     "sphere": 0.0245,
+     "star": 0.0207,
+     "modes": 0.0511,
+     "shell": 0.3806
+    }
+   ],
+   "summary": {
+    "screened_scalar_ID_mean": 0.0283,
+    "screened_vectorful_ID_mean": 0.0099,
+    "l3_scalar_means": {
+     "sphere": 0.0244,
+     "star": 0.0228,
+     "modes": 0.0524,
+     "shell": 0.3731
+    },
+    "l3_vectorful_means": {
+     "sphere": 0.0072,
+     "star": 0.0121,
+     "modes": 0.0637,
+     "shell_median": 0.377
+    }
+   },
+   "findings": [
+    "VECTORS ARE LOAD-BEARING OFF PLAIN 2D LAPLACE: screened ID degrades 2-3x (0.028 vs 0.0099); 3D sphere degrades 3.4x (0.0244 vs 0.0072), star 1.9x. But modes-OOD is UNCHANGED-or-better and shell is identical with TIGHTER variance (sd 0.013 vs 0.042) - more evidence shell error is representational (missing single-layer member), not encoder capacity.",
+    "Confound: 42k vs 104k params. Capacity-matched wide-scalar control (52/76 scalar dims, rank 18, 105,301 params) built and launched (p4e) to disentangle oriented-transport from width."
+   ]
+  },
+  "wide_scalar_capacity_control": {
+   "date": "2026-07-04",
+   "setup": "scalar-only widened to 105,301 params (52/76 dims, rank 18) = +1% of vector-ful; 2D/screened/3D",
+   "runs_2d": [
+    {
+     "seed": 17,
+     "interpolation": 0.0416,
+     "mixed_geometry_modes": 0.066,
+     "stronger_deformation": 0.0871,
+     "unseen_boundary_frequencies": 0.0747,
+     "unseen_geometry_modes": 0.057
+    },
+    {
+     "seed": 29,
+     "interpolation": 0.0395,
+     "mixed_geometry_modes": 0.0643,
+     "stronger_deformation": 0.0867,
+     "unseen_boundary_frequencies": 0.0738,
+     "unseen_geometry_modes": 0.0548
+    },
+    {
+     "seed": 43,
+     "interpolation": 0.0401,
+     "mixed_geometry_modes": 0.0643,
+     "stronger_deformation": 0.0879,
+     "unseen_boundary_frequencies": 0.0752,
+     "unseen_geometry_modes": 0.0546
+    }
+   ],
+   "runs_screened": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0281,
+     "ood_high_screening": 0.2332,
+     "ood_low_screening": 0.0279,
+     "unseen_modes": 0.0272
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.0226,
+     "ood_high_screening": 0.2188,
+     "ood_low_screening": 0.0302,
+     "unseen_modes": 0.0328
+    },
+    {
+     "seed": 19,
+     "in_distribution": 0.0228,
+     "ood_high_screening": 0.2422,
+     "ood_low_screening": 0.0152,
+     "unseen_modes": 0.0361
+    }
+   ],
+   "runs_3d": [
+    {
+     "seed": 17,
+     "shell_topology": 0.3618,
+     "sphere": 0.0239,
+     "star": 0.0265,
+     "star_unseen_modes": 0.0531
+    },
+    {
+     "seed": 18,
+     "shell_topology": 0.3669,
+     "sphere": 0.0236,
+     "star": 0.0203,
+     "star_unseen_modes": 0.0463
+    },
+    {
+     "seed": 19,
+     "shell_topology": 0.3577,
+     "sphere": 0.0249,
+     "star": 0.0245,
+     "star_unseen_modes": 0.0477
+    }
+   ],
+   "verdict": "CONCLUSIVE - VECTORS ARE LOAD-BEARING, NOT WIDTH: capacity-matched scalar does NOT recover the gap (3D sphere 0.024 vs 0.0072 vector-ful = 3.3x; screened ID 0.024 vs 0.0099 = 2.5x); 2D stays at parity. Oriented inter-cell state transport is genuine physics capacity off plain 2D geometry. Component eval closed: keep the vector channels."
+  }
+ },
+ "iteration_15_transolver_comparison": {
+  "date": "2026-07-04",
+  "question": "Fair-ground comparison against the strongest physics-agnostic attention architecture (Transolver, Wu et al. ICML 2024; faithful port verified against the official repo; steel-man adaptations: shared boundary+query token sequence gives it MORE interaction than MeshTransformer gets; same normalization as our baselines). The thesis ablation: what does building BIE structure into attention buy?",
+  "protocol": "train.py reference protocol (streaming generation, 1 case/step, AdamW 3e-4, identical to all MT runs), seeds 17/29/43. transolver_matched=103,053p (vs MT singonly 104,261p), transolver_native=2,809,409p (27x). Step curve 3k/10k/30k for native.",
+  "runs_3000": [
+   {
+    "seed": 17,
+    "steps": 3000,
+    "parameters": 103053,
+    "ID": 0.7813,
+    "freq": 1.0024,
+    "geo": 0.7897,
+    "strong": 0.8097,
+    "mixed": 0.8128,
+    "sim_cov": 0.0575
+   },
+   {
+    "seed": 29,
+    "steps": 3000,
+    "parameters": 103053,
+    "ID": 0.7573,
+    "freq": 1.007,
+    "geo": 0.775,
+    "strong": 0.786,
+    "mixed": 0.8043,
+    "sim_cov": 0.0831
+   },
+   {
+    "seed": 43,
+    "steps": 3000,
+    "parameters": 103053,
+    "ID": 0.7673,
+    "freq": 1.0048,
+    "geo": 0.7779,
+    "strong": 0.7971,
+    "mixed": 0.8007,
+    "sim_cov": 0.1325
+   },
+   {
+    "seed": 17,
+    "steps": 3000,
+    "parameters": 2809409,
+    "ID": 0.5409,
+    "freq": 0.9978,
+    "geo": 0.5602,
+    "strong": 0.5389,
+    "mixed": 0.5656,
+    "sim_cov": 0.2503
+   },
+   {
+    "seed": 29,
+    "steps": 3000,
+    "parameters": 2809409,
+    "ID": 0.4597,
+    "freq": 0.9044,
+    "geo": 0.4626,
+    "strong": 0.4402,
+    "mixed": 0.4582,
+    "sim_cov": 0.1715
+   },
+   {
+    "seed": 43,
+    "steps": 3000,
+    "parameters": 2809409,
+    "ID": 0.8244,
+    "freq": 1.0086,
+    "geo": 0.8087,
+    "strong": 0.8317,
+    "mixed": 0.8373,
+    "sim_cov": 0.1044
+   }
+  ],
+  "runs_step_curve": [
+   {
+    "seed": 17,
+    "steps": 10000,
+    "parameters": 2809409,
+    "ID": 0.253,
+    "freq": 0.7027,
+    "geo": 0.253,
+    "strong": 0.2605,
+    "mixed": 0.2546,
+    "sim_cov": 0.1778
+   },
+   {
+    "seed": 17,
+    "steps": 30000,
+    "parameters": 2809409,
+    "ID": 0.097,
+    "freq": 0.407,
+    "geo": 0.0953,
+    "strong": 0.1222,
+    "mixed": 0.0979,
+    "sim_cov": 0.08
+   },
+   {
+    "seed": 29,
+    "steps": 10000,
+    "parameters": 2809409,
+    "ID": 0.2419,
+    "freq": 0.6963,
+    "geo": 0.2199,
+    "strong": 0.2543,
+    "mixed": 0.2343,
+    "sim_cov": 0.2074
+   },
+   {
+    "seed": 29,
+    "steps": 30000,
+    "parameters": 2809409,
+    "ID": 0.1057,
+    "freq": 0.4356,
+    "geo": 0.1007,
+    "strong": 0.138,
+    "mixed": 0.1042,
+    "sim_cov": 0.1006
+   },
+   {
+    "seed": 43,
+    "steps": 10000,
+    "parameters": 2809409,
+    "ID": 0.2924,
+    "freq": 0.8986,
+    "geo": 0.2908,
+    "strong": 0.3041,
+    "mixed": 0.3033,
+    "sim_cov": 0.1915
+   },
+   {
+    "seed": 43,
+    "steps": 30000,
+    "parameters": 2809409,
+    "ID": 0.1532,
+    "freq": 0.5299,
+    "geo": 0.1507,
+    "strong": 0.1677,
+    "mixed": 0.153,
+    "sim_cov": 0.1086
+   }
+  ],
+  "reference_MT_singonly_3000steps": {
+   "parameters": 104261,
+   "ID": 0.0375,
+   "freq": 0.0748,
+   "geo": 0.0503,
+   "strong": 0.0774,
+   "sim_cov": 3e-07
+  },
+  "findings": [
+   "Data efficiency: at matched params and compute (3k steps) Transolver ID=0.769 vs MT 0.0375 (20x). Native capacity (27x params): 0.608@3k -> 0.262@10k -> 0.119@30k - still 3.2x worse than MT-at-3k after 10x the compute; power-law slope suggests ~300k+ steps to close ID.",
+   "Architectural gaps that training does NOT close: freq-OOD saturates ~0.46 (vs 0.075) - physics-agnostic attention does not extrapolate the drive spectrum; similarity covariance stuck at ~0.08-0.25 across all budgets (vs 3e-7) - 5-6 orders of magnitude equivariance gap.",
+   "Honest scope notes: streaming small-data regime is our claimed strength and Transolvers published regime (large fixed datasets, many epochs) is not tested here (dataset-backed training arm queued on the FEM catalog); Transolver retains advantages out of our scope: volumetric/piecewise inputs, linear O(N) scaling at industrial N."
+  ],
+  "screened_and_3d_extension": {
+   "date": "2026-07-04",
+   "setup": "In-tree Transolver (matched, 103,117p screened / 103,245p 3D), kappa as constant token channel (steel-man), D-generalized adapter; identical protocols; h100-3.",
+   "runs": {
+    "laplace3d_transolver_intree_matched": [
+     {
+      "seed": 17,
+      "shell_topology": 0.5342,
+      "sphere": 0.4137,
+      "star": 0.4283,
+      "star_unseen_modes": 0.4405
+     },
+     {
+      "seed": 18,
+      "shell_topology": 0.5058,
+      "sphere": 0.3659,
+      "star": 0.3718,
+      "star_unseen_modes": 0.434
+     },
+     {
+      "seed": 19,
+      "shell_topology": 0.5458,
+      "sphere": 0.4252,
+      "star": 0.4418,
+      "star_unseen_modes": 0.4348
+     }
+    ],
+    "screened_transolver_intree_matched": [
+     {
+      "seed": 17,
+      "in_distribution": 0.7762,
+      "ood_high_screening": 1.0709,
+      "ood_low_screening": 0.7462,
+      "unseen_modes": 1.0373
+     },
+     {
+      "seed": 18,
+      "in_distribution": 0.761,
+      "ood_high_screening": 0.9492,
+      "ood_low_screening": 0.712,
+      "unseen_modes": 1.0088
+     },
+     {
+      "seed": 19,
+      "in_distribution": 0.7828,
+      "ood_high_screening": 1.023,
+      "ood_low_screening": 0.7184,
+      "unseen_modes": 1.0206
+     }
+    ]
+   },
+   "findings": [
+    "Matrix complete: screened ID 0.773 vs MT singonly 0.0099 (78x); 3D sphere 0.402 vs 0.0072 (56x), star 0.414 vs 0.0121 (34x), shell 0.529 vs 0.377 (1.4x).",
+    "The gap narrows exactly where the MeshTransformer is itself representation-limited (shell) and explodes where its structure pays (smooth tiers) - consistent with the thesis-ablation reading across every suite."
+   ]
+  }
+ },
+ "iteration_16_single_layer_member": {
+  "date": "2026-07-04",
+  "pre_registered_prediction": "Shell tier improves dramatically (double-layer flux deficiency on multiply-connected domains); simply-connected tiers unchanged.",
+  "implementation": "Exact single-layer member: 2D Hess-Smith segment closed form, 3D per-edge asinh + solid-angle form; quadrature validated to ~1e-14; +276 params (singpair = 104,537, exactly two exact singular members).",
+  "runs_3d_singpair": [
+   {
+    "seed": 17,
+    "shell_topology": 0.3047,
+    "sphere": 0.008,
+    "star": 0.0131,
+    "star_unseen_modes": 0.0666
+   },
+   {
+    "seed": 18,
+    "shell_topology": 0.3677,
+    "sphere": 0.0073,
+    "star": 0.0144,
+    "star_unseen_modes": 0.0824
+   },
+   {
+    "seed": 19,
+    "shell_topology": 0.7044,
+    "sphere": 0.004,
+    "star": 0.0163,
+    "star_unseen_modes": 0.0682
+   }
+  ],
+  "runs_2d_singpair": [
+   {
+    "seed": 17,
+    "interpolation": 0.0533,
+    "mixed_geometry_modes": 0.0688,
+    "stronger_deformation": 0.0922,
+    "unseen_boundary_frequencies": 0.1685,
+    "unseen_geometry_modes": 0.0628
+   },
+   {
+    "seed": 29,
+    "interpolation": 0.0518,
+    "mixed_geometry_modes": 0.0638,
+    "stronger_deformation": 0.1036,
+    "unseen_boundary_frequencies": 0.2002,
+    "unseen_geometry_modes": 0.0574
+   },
+   {
+    "seed": 43,
+    "interpolation": 0.0448,
+    "mixed_geometry_modes": 0.0537,
+    "stronger_deformation": 0.0625,
+    "unseen_boundary_frequencies": 0.2742,
+    "unseen_geometry_modes": 0.0501
+   }
+  ],
+  "references": {
+   "singonly_3d": {
+    "sphere": 0.0072,
+    "star": 0.0121,
+    "modes": 0.0637,
+    "shell_median": 0.377,
+    "shell_sd": 0.042
+   },
+   "singonly_2d": {
+    "ID": 0.0375,
+    "freq": 0.0748,
+    "geo": 0.0503
+   }
+  },
+  "findings_so_far": [
+   "PREDICTION FAILING ON BOTH HALVES: shell NOT fixed (0.305/0.368/0.704 - median matches singonly, one unstable seed); 2D freq-OOD REGRESSED 2-4x (0.17-0.27 vs 0.075). Sphere improved slightly (0.004-0.008).",
+   "Refined insight: any member with a smooth FAR-FIELD - even an exact singular one - is abused by SGD to absorb ID error at the cost of extrapolation, because the conditioned coefficients are unconstrained; in classical BIE the single-layer density is determined by the boundary system, not freely fit.",
+   "Pending discriminator: p5b multi_body (2D holes, genuine winding content in the data) - if singpair helps THERE while hurting simply-connected freq-OOD, the design answer is a TOPOLOGY-GATED dictionary: member set selected by the number of boundary loops (Betti number) - a discrete physical gate, not a learned choice."
+  ],
+  "multi_body_head_to_head_partial": {
+   "seed17": {
+    "singonly": {
+     "ID": 0.14,
+     "narrow_gap": 0.287,
+     "single_body": 0.184,
+     "unseen_charge": 0.17
+    },
+    "singpair": {
+     "ID": 0.07,
+     "narrow_gap": 0.157,
+     "single_body": 0.147,
+     "unseen_charge": 0.096
+    },
+    "pair_kernel_ref": {
+     "ID": 0.097,
+     "narrow_gap": 0.242,
+     "single_body": 0.161,
+     "unseen_charge": 0.16
+    }
+   },
+   "reading": "TOPOLOGY-GATE CONFIRMED (seed 17): on the multiply-connected family the single-layer member halves error on every split, and WITHOUT it the MeshTransformer loses to the pair-kernel control (0.140 vs 0.097) - the flux deficiency was binding. Combined with the simply-connected freq-OOD regression, the design rule: include the single-layer member iff the domain has interior boundary loops (Betti-gated dictionary). Seeds 18/19 + deep_cavity control pending."
+  },
+  "encoder_stress_head_to_head": {
+   "date": "2026-07-04",
+   "runs": {
+    "deep_cavity_singonly": [
+     {
+      "seed": 17,
+      "convex_control": 0.0883,
+      "deep_slot": 0.4501,
+      "in_distribution": 0.0871
+     },
+     {
+      "seed": 18,
+      "convex_control": 0.077,
+      "deep_slot": 0.3488,
+      "in_distribution": 0.1091
+     }
+    ],
+    "deep_cavity_singpair": [
+     {
+      "seed": 17,
+      "convex_control": 0.0658,
+      "deep_slot": 0.3232,
+      "in_distribution": 0.0676
+     },
+     {
+      "seed": 18,
+      "convex_control": 0.0767,
+      "deep_slot": 0.2093,
+      "in_distribution": 0.0647
+     }
+    ],
+    "multi_body_singonly": [
+     {
+      "seed": 17,
+      "in_distribution": 0.1397,
+      "narrow_gap": 0.2872,
+      "single_body": 0.1836,
+      "unseen_charge_count": 0.1702
+     },
+     {
+      "seed": 18,
+      "in_distribution": 0.0898,
+      "narrow_gap": 0.1476,
+      "single_body": 0.141,
+      "unseen_charge_count": 0.1428
+     },
+     {
+      "seed": 19,
+      "in_distribution": 0.1157,
+      "narrow_gap": 0.3037,
+      "single_body": 0.1341,
+      "unseen_charge_count": 0.146
+     }
+    ],
+    "multi_body_singpair": [
+     {
+      "seed": 17,
+      "in_distribution": 0.0703,
+      "narrow_gap": 0.1567,
+      "single_body": 0.147,
+      "unseen_charge_count": 0.0963
+     },
+     {
+      "seed": 18,
+      "in_distribution": 0.0523,
+      "narrow_gap": 0.1049,
+      "single_body": 0.0708,
+      "unseen_charge_count": 0.0771
+     },
+     {
+      "seed": 19,
+      "in_distribution": 0.0741,
+      "narrow_gap": 0.2173,
+      "single_body": 0.0894,
+      "unseen_charge_count": 0.0868
+     }
+    ]
+   },
+   "pair_kernel_1500step_refs": {
+    "multi_body": {
+     "ID": 0.097,
+     "narrow_gap": 0.242,
+     "single_body": 0.161,
+     "unseen_charge": 0.16
+    },
+    "deep_cavity": {
+     "convex": 0.084,
+     "ID": 0.115,
+     "deep_slot": 0.265
+    }
+   },
+   "verdict": [
+    "MULTI-BODY (3 seeds, CLOSED): singpair sweeps all 12 split-seed comparisons (means ID 0.065 vs 0.115, narrow_gap 0.160 vs 0.246, single_body 0.102 vs 0.153, unseen_charge 0.087 vs 0.153) and beats the pair-kernel control everywhere; WITHOUT the single layer the MeshTransformer loses to pair_kernel in-distribution (0.115 vs 0.097) - the flux deficiency binds on genuinely multiply-connected data.",
+    "DEEP-CAVITY (2 seeds): single layer helps hard simply-connected geometry too (deep_slot 0.27 vs 0.40 means, ID 0.067 vs 0.098) - so the gate is not purely Betti: the second exact member helps wherever geometry is hard and hurts extrapolation only on the easy star bank (freq-OOD 0.075->0.21). Refined rule: two exact singular members as the default dictionary for hard geometry; the star-bank regression is the honest cost.",
+    "NEW FAILURE (stress-test target): BOTH MT arms lose to the 19k-param pair_kernel on deep_slot OOD (0.21-0.45 vs 0.265 at seed level) while winning ID - the architecture generalizes to deeper slots no better than a dense pair map."
+   ],
+   "deep_cavity_final_n3": {
+    "singonly_deep_slot": [
+     0.45,
+     0.349,
+     0.381
+    ],
+    "singpair_deep_slot": [
+     0.323,
+     0.209,
+     0.187
+    ],
+    "update": "Deep-cavity closed at 3 seeds: singpair deep_slot mean 0.240 now MATCHES/BEATS pair_kernel (0.265) - the earlier \"MT loses on deep_slot\" failure was specifically the singonly arm (mean 0.393). With both exact members the architecture is competitive on the hardest OOD tier; the failure claim is downgraded to \"singonly insufficient on hard geometry\"."
+   }
+  }
+ },
+ "iteration_17_fixed_dataset_regime": {
+  "date": "2026-07-04",
+  "question": "Does the Transolver comparison hold in ITS published regime (large fixed dataset, many epochs, best-checkpoint) - and does the MeshTransformer survive solver-verified labels whose BC traces are outside any harmonic construction?",
+  "setup": "dataset_train.py on star_random_trace v1 (4,608 FEM cases, P2 solver rel-err ~1e-8, random Fourier Dirichlet traces in arc length; 2,304 train), 15 epochs (~35k case-visits), AdamW 3e-4 streaming-parity protocol, seeds 17/29.",
+  "runs": [
+   {
+    "model": "mesh_transformer_kernel_singonly",
+    "seed": 17,
+    "parameters": 104261,
+    "best_val": 0.0091,
+    "eval_id": 0.0174,
+    "eval_stronger_deformation": 0.0341,
+    "eval_unseen_trace_frequencies": 0.0129
+   },
+   {
+    "model": "mesh_transformer_kernel_singonly",
+    "seed": 29,
+    "parameters": 104261,
+    "best_val": 0.0078,
+    "eval_id": 0.0164,
+    "eval_stronger_deformation": 0.0292,
+    "eval_unseen_trace_frequencies": 0.0103
+   },
+   {
+    "model": "transolver_matched",
+    "seed": 17,
+    "parameters": 103053,
+    "best_val": 0.1323,
+    "eval_id": 0.1364,
+    "eval_stronger_deformation": 0.1563,
+    "eval_unseen_trace_frequencies": 0.1311
+   },
+   {
+    "model": "transolver_matched",
+    "seed": 29,
+    "parameters": 103053,
+    "best_val": 0.1137,
+    "eval_id": 0.1258,
+    "eval_stronger_deformation": 0.1407,
+    "eval_unseen_trace_frequencies": 0.1124
+   },
+   {
+    "model": "transolver_native",
+    "seed": 17,
+    "parameters": 2809409,
+    "best_val": 0.0522,
+    "eval_id": 0.0697,
+    "eval_stronger_deformation": 0.0813,
+    "eval_unseen_trace_frequencies": 0.1075
+   },
+   {
+    "model": "transolver_native",
+    "seed": 29,
+    "parameters": 2809409,
+    "best_val": 0.0631,
+    "eval_id": 0.0618,
+    "eval_stronger_deformation": 0.0801,
+    "eval_unseen_trace_frequencies": 0.0894
+   }
+  ],
+  "findings": [
+   "Comparison holds on Transolvers home turf: matched-param Transolver ID 0.126-0.136 vs MT singonly 0.016-0.017 (7.7x); native (27x params) 0.062-0.070 (3.8x); trace-frequency-OOD gap ~10x (0.089-0.131 vs 0.010-0.013). Both fairness regimes now tested; the steel-man is complete.",
+   "External validity: MT reaches 0.017 ID / 0.010 freq-OOD on FEM-verified labels with BC traces decoupled from harmonic reachability - the architecture is not exploiting manufactured-solution structure."
+  ]
+ },
+ "iteration_18_encoder_depth": {
+  "date": "2026-07-04",
+  "status": "multi_body n=2: enc0 ~ enc1 ~ enc2 confirmed on Dirichlet stress family; mixed-BC discriminator (iteration_19) shows where depth DOES matter.",
+  "runs": {
+   "multi_body_enc0": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0727,
+     "narrow_gap": 0.1718,
+     "single_body": 0.1337,
+     "unseen_charge_count": 0.0879
+    }
+   ],
+   "multi_body_enc1": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0796,
+     "narrow_gap": 0.2546,
+     "single_body": 0.119,
+     "unseen_charge_count": 0.0769
+    }
+   ]
+  },
+  "singpair_2layer_ref_seed17": {
+   "ID": 0.07,
+   "narrow_gap": 0.157,
+   "single_body": 0.147,
+   "unseen_charge": 0.096
+  },
+  "finding_preliminary": "enc0 (NO boundary self-attention, 59,385 params) MATCHES the full 2-layer singpair on multi_body seed 17 (ID 0.073 vs 0.070). If this holds, boundary attention is dead weight on every current benchmark and the model collapses to lift -> conditioned 2-member singular decode. THEORY (pre-registered): Dirichlet double-layer density is a second-kind Fredholm solve dominated by the local 1/2-identity term, so weak nonlocality is expected; the attention-necessity test belongs on mixed/Neumann BC problems where the solve is genuinely nonlocal.",
+  "runs_update_n2": {
+   "multi_body_enc0": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0727,
+     "narrow_gap": 0.1718,
+     "single_body": 0.1337,
+     "unseen_charge_count": 0.0879
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.0674,
+     "narrow_gap": 0.1444,
+     "single_body": 0.1019,
+     "unseen_charge_count": 0.0901
+    }
+   ],
+   "multi_body_enc1": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0796,
+     "narrow_gap": 0.2546,
+     "single_body": 0.119,
+     "unseen_charge_count": 0.0769
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.0556,
+     "narrow_gap": 0.1093,
+     "single_body": 0.0969,
+     "unseen_charge_count": 0.0716
+    }
+   ]
+  }
+ },
+ "iteration_19_mixed_bc_discriminator": {
+  "date": "2026-07-04",
+  "pre_registered": "Mixed-BC Cauchy solves are genuinely nonlocal (vs half-identity-dominated all-Dirichlet) -> encoder depth should matter on mixed where it did not on Dirichlet. Only genuinely mixed tier: shell (inner Dirichlet trace, outer Neumann flux; per-boundary assignment).",
+  "setup": "mixed_bc_study.py, mt_singpair_mixed{,_enc1,_enc0} (104,713/82,137/59,561p), 3000 steps, seeds 17/18/19, splits shell_mixed + shell_mixed_fine (resolution OOD).",
+  "runs": {
+   "_enc0": [
+    {
+     "seed": 17,
+     "shell_mixed": 0.0612,
+     "shell_mixed_fine": 0.0551
+    },
+    {
+     "seed": 18,
+     "shell_mixed": 0.112,
+     "shell_mixed_fine": 0.1823
+    },
+    {
+     "seed": 19,
+     "shell_mixed": 0.065,
+     "shell_mixed_fine": 0.0693
+    }
+   ],
+   "_enc1": [
+    {
+     "seed": 17,
+     "shell_mixed": 0.0534,
+     "shell_mixed_fine": 0.0539
+    },
+    {
+     "seed": 18,
+     "shell_mixed": 0.0423,
+     "shell_mixed_fine": 0.0545
+    },
+    {
+     "seed": 19,
+     "shell_mixed": 0.0576,
+     "shell_mixed_fine": 0.0706
+    }
+   ],
+   "enc2": [
+    {
+     "seed": 17,
+     "shell_mixed": 0.0479,
+     "shell_mixed_fine": 0.0505
+    },
+    {
+     "seed": 18,
+     "shell_mixed": 0.0374,
+     "shell_mixed_fine": 0.0649
+    },
+    {
+     "seed": 19,
+     "shell_mixed": 0.0614,
+     "shell_mixed_fine": 0.0945
+    }
+   ]
+  },
+  "findings": [
+   "HYPOTHESIS CONFIRMED IN DIRECTION, WITH A PARSIMONY TWIST: enc0 degrades on mixed BCs (shell_mixed mean 0.079 vs 0.049; catastrophic seed 18: 0.112/0.182) while enc1 matches enc2 (0.051 vs 0.049) - attention earns its keep exactly where the Fredholm structure is nonlocal, and ONE encoder layer suffices. Depth-0 is unreliable (seed instability) rather than uniformly worse.",
+   "Physics note: shell_mixed at 0.049 is 7x EASIER than all-Dirichlet shell (0.37) - giving the outer flux explicitly removes the winding-inference difficulty.",
+   "Caveats: single mixed geometry tier (per-boundary BC assignment); drive_layers held at 1 in all arms - if a sharper claim is needed, sweep drive depth (nonlocal DATA coupling lives in drive blocks)."
+  ]
+ },
+ "iteration_20_scale_ladder": {
+  "date": "2026-07-04",
+  "setup": "scale_study.py, 3D singpair arm with operator_layers=1 (81,961p; the iteration-19 sufficient depth), A100 80GB: cost grid (320-20480 tris x 1e3-1e5 queries, OOM-guarded, encode/decode timed separately) + resolution transfer (train subdiv 2, zero-shot 2/3/4).",
+  "a100": {
+   "scaling_fits": {
+    "forward_ms": {
+     "coefficient": 0.0001121688893170726,
+     "query_exponent": 0.8875359416368677,
+     "source_exponent": 0.8716801110457966,
+     "r_squared": 0.9876564794780929,
+     "n_points": 12
+    },
+    "encode_ms": {
+     "coefficient": 4.2646508877441445,
+     "source_exponent": 0.11075831144102329,
+     "r_squared": 0.6197626560357719,
+     "n_points": 4
+    },
+    "decode_ms": {
+     "coefficient": 2.1107954237114554e-05,
+     "query_exponent": 0.9738570043233878,
+     "source_exponent": 0.9625997429353854,
+     "r_squared": 0.9991383770537794,
+     "n_points": 12
+    },
+    "forward_backward_ms": {
+     "coefficient": 0.0003469860763994908,
+     "query_exponent": 0.8336254643651846,
+     "source_exponent": 0.823941964184643,
+     "r_squared": 0.972122950415403,
+     "n_points": 12
+    },
+    "forward_peak_bytes": {
+     "coefficient": 159213.71950343778,
+     "query_exponent": 0.16062891536384621,
+     "source_exponent": 0.9529455897033932,
+     "r_squared": 0.9882471877826947,
+     "n_points": 12
+    },
+    "train_peak_bytes": {
+     "coefficient": 32311.94125712193,
+     "query_exponent": 0.44203490855447236,
+     "source_exponent": 0.9479017733903411,
+     "r_squared": 0.9967160107673292,
+     "n_points": 12
+    }
+   },
+   "extrapolation_product_scope": {
+    "n_boundary_cells": 100000,
+    "n_query": 1000000,
+    "fitted": {
+     "forward_ms": 541363.067884717,
+     "encode_ms": null,
+     "decode_ms": 956283.9891816885,
+     "forward_backward_ms": null,
+     "forward_peak_bytes": 85208305550.3263,
+     "train_peak_bytes": 796308531859.8583
+    },
+    "ideal_from_largest_measured": {
+     "forward_ms": {
+      "value": 1168725.3047362845,
+      "from_point": {
+       "n_query": 100000,
+       "n_boundary_cells": 20480
+      }
+     },
+     "encode_ms": {
+      "value": 72.15428222906439,
+      "from_point": {
+       "n_query": 1000,
+       "n_boundary_cells": 20480
+      }
+     },
+     "decode_ms": {
+      "value": 1168108.0980956438,
+      "from_point": {
+       "n_query": 100000,
+       "n_boundary_cells": 20480
+      }
+     },
+     "forward_backward_ms": {
+      "value": 1355150.790820403,
+      "from_point": {
+       "n_query": 100000,
+       "n_boundary_cells": 20480
+      }
+     },
+     "forward_peak_bytes": {
+      "value": 27017740000.0,
+      "from_point": {
+       "n_query": 1000,
+       "n_boundary_cells": 20480
+      }
+     },
+     "train_peak_bytes": {
+      "value": 3252672425000.0,
+      "from_point": {
+       "n_query": 100000,
+       "n_boundary_cells": 20480
+      }
+     }
+    },
+    "what_breaks_first": "training memory breaks first: one forward+backward at product scope extrapolates to ~742 GiB (9x an 80 GiB A100) because autograd retains the dense O(Nq*Ns) pair activations of the kernel decode; gradient checkpointing over query chunks (or a hierarchical decode backend) is required before product-scale training is possible; inference stays chunk-bounded at ~79.4 GiB and is limited by wall-clock instead: ~541 s per forward (~1355 s forward+backward), the dense O(Nq*Ns) decode"
+   },
+   "notes": [
+    "encode_ms shows no growth with boundary size over the measured range (separable-moment encoder, O(Ns) per layer): the measurements are kernel-launch-overhead dominated and the fitted exponent is a floor artifact, not architecture cost; the encoder is not the wall",
+    "the fitted forward_backward_ms extrapolation fell below the forward-only extrapolation (the forward+backward points that survive the paging exclusions are small and overhead-dominated on this device); it is suppressed in favor of the ideal O(Nq*Ns) entry"
+   ],
+   "resolution_transfer_zero_shot": {
+    "sphere_subdiv2": 0.010051788801016906,
+    "sphere_subdiv3": 0.015456280360619227,
+    "sphere_subdiv4": 0.017475214321166277,
+    "star_subdiv2": 0.013643423017735282,
+    "star_subdiv3": 0.019599929296722014,
+    "star_subdiv4": 0.03123322067161401
+   }
+  },
+  "findings": [
+   "Cost law confirmed: decode O(Q^0.97 S^0.96), R2=0.999 - the designed dense O(QS); encoder flat over the measured range (launch-overhead dominated; not the wall).",
+   "Product scope (1e5 boundary x 1e6 queries): TRAINING MEMORY BREAKS FIRST - one forward+backward extrapolates to ~742 GiB (9x an A100) because autograd retains dense pair activations. Named fixes: gradient checkpointing over query chunks (cheap, exact) or a hierarchical decode backend (FMM-style). Inference fits one A100 with chunking (~85 GB peak, ~9-16 min forward).",
+   "Resolution transfer (fully trained): sphere 0.0101/0.0155/0.0175 and star 0.0136/0.0196/0.0312 zero-shot across 16x resolution - the exact-quadrature transfer claim holds with mild degradation.",
+   "Efficiency gap found while profiling: PairInvariantFeatures.compute runs unconditionally in the dense hot loop even when the dictionary has no smooth members to consume it (~10 dead floats per pair on singpair/singonly arms) - a straightforward speed fix, queued."
+  ]
+ },
+ "iteration_21_fluid_families_pseudoscalar_wall": {
+  "date": "2026-07-04",
+  "setup": "potential_flow.py: exterior potential flow (certified exterior conformal maps, freestream as global rank-1 drive vector + circulation scalar; target = disturbance STREAMFUNCTION, single-valued under circulation) and boundary_layer (manufactured two-scale field, near/far buckets). Controls are TRACE-INFORMED (exact disturbance trace as boundary_value); MT arms get raw {U, Gamma} only. 3000 steps, 3 seeds, H100 fleet.",
+  "runs_partial": {
+   "boundary_layer_mesh_transformer_kernel": [
+    {
+     "seed": 17,
+     "in_distribution": 0.9593,
+     "in_distribution/near_wall": 0.9326,
+     "in_distribution/far_field": 1.0349,
+     "thinner_layer": 1.0446,
+     "thinner_layer/near_wall": 1.0365,
+     "thinner_layer/far_field": 1.0773,
+     "unseen_amplitude_frequencies": 0.9022,
+     "unseen_amplitude_frequencies/near_wall": 0.8758,
+     "unseen_amplitude_frequencies/far_field": 1.0074
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.9372,
+     "in_distribution/near_wall": 0.9119,
+     "in_distribution/far_field": 1.0361,
+     "thinner_layer": 1.0039,
+     "thinner_layer/near_wall": 0.9856,
+     "thinner_layer/far_field": 1.0843,
+     "unseen_amplitude_frequencies": 0.9016,
+     "unseen_amplitude_frequencies/near_wall": 0.8752,
+     "unseen_amplitude_frequencies/far_field": 1.0065
+    },
+    {
+     "seed": 19,
+     "in_distribution": 0.913,
+     "in_distribution/near_wall": 0.8939,
+     "in_distribution/far_field": 0.9999,
+     "thinner_layer": 0.9519,
+     "thinner_layer/near_wall": 0.941,
+     "thinner_layer/far_field": 1.0094,
+     "unseen_amplitude_frequencies": 0.9148,
+     "unseen_amplitude_frequencies/near_wall": 0.8915,
+     "unseen_amplitude_frequencies/far_field": 1.009
+    }
+   ],
+   "boundary_layer_pair_kernel": [
+    {
+     "seed": 17,
+     "in_distribution": 0.7373,
+     "in_distribution/near_wall": 0.5819,
+     "in_distribution/far_field": 1.1506,
+     "thinner_layer": 0.7897,
+     "thinner_layer/near_wall": 0.6583,
+     "thinner_layer/far_field": 1.1687,
+     "unseen_amplitude_frequencies": 0.3986,
+     "unseen_amplitude_frequencies/near_wall": 0.4233,
+     "unseen_amplitude_frequencies/far_field": 0.2627
+    },
+    {
+     "seed": 18,
+     "in_distribution": 0.7314,
+     "in_distribution/near_wall": 0.5791,
+     "in_distribution/far_field": 1.1374,
+     "thinner_layer": 0.7841,
+     "thinner_layer/near_wall": 0.6529,
+     "thinner_layer/far_field": 1.1614,
+     "unseen_amplitude_frequencies": 0.3799,
+     "unseen_amplitude_frequencies/near_wall": 0.4058,
+     "unseen_amplitude_frequencies/far_field": 0.2339
+    },
+    {
+     "seed": 19,
+     "in_distribution": 0.7275,
+     "in_distribution/near_wall": 0.5743,
+     "in_distribution/far_field": 1.137,
+     "thinner_layer": 0.7673,
+     "thinner_layer/near_wall": 0.6306,
+     "thinner_layer/far_field": 1.1554,
+     "unseen_amplitude_frequencies": 0.3846,
+     "unseen_amplitude_frequencies/near_wall": 0.4094,
+     "unseen_amplitude_frequencies/far_field": 0.2484
+    }
+   ],
+   "potential_flow_mesh_transformer_kernel": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.6471,
+     "farfield_queries": 0.8913,
+     "in_distribution": 0.9799,
+     "unseen_geometry_modes": 0.9591,
+     "wilder_shapes": 0.9537
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.7423,
+     "farfield_queries": 0.9928,
+     "in_distribution": 1.0029,
+     "unseen_geometry_modes": 0.9696,
+     "wilder_shapes": 0.9927
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.6608,
+     "farfield_queries": 0.9357,
+     "in_distribution": 0.9825,
+     "unseen_geometry_modes": 0.96,
+     "wilder_shapes": 0.9454
+    }
+   ],
+   "potential_flow_pair_kernel": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.7626,
+     "farfield_queries": 0.964,
+     "in_distribution": 0.178,
+     "unseen_geometry_modes": 0.2449,
+     "wilder_shapes": 0.2506
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.7625,
+     "farfield_queries": 1.294,
+     "in_distribution": 0.1777,
+     "unseen_geometry_modes": 0.2448,
+     "wilder_shapes": 0.2506
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.7625,
+     "farfield_queries": 1.0777,
+     "in_distribution": 0.1774,
+     "unseen_geometry_modes": 0.2446,
+     "wilder_shapes": 0.2504
+    }
+   ]
+  },
+  "finding": "THE PSEUDOSCALAR WALL: MT arms at no-response (potential_flow ID 0.98-1.00, boundary_layer 0.91-1.04, all seeds) while trace-informed pair_kernel reaches 0.178/0.73. Gradient diagnostic: d(out)/d(freestream)=6359 - the path is alive. Root cause: the streamfunction is a 2D PSEUDOSCALAR (uniform-flow part is the wedge U^x = Ux*y - Uy*x); the type system builds scalars only from DOT products of polar vectors and cannot manufacture handedness from unhanded inputs - the architecture is enforcing its type contract, and the benchmark target violates it. Controls escape because the pseudoscalar-ness arrives baked into per-cell trace scalars. Circulation itself is a pseudoscalar (benchmark restricted to orientation-preserving similarities).",
+  "fix_paths": [
+   "velocity vector output (polar, representable; = Euler multi-field step)",
+   "trace-driven MT variant (separates encode-solve difficulty from type mismatch)",
+   "2D pseudoscalar (0o) channels with wedge product (previously set aside; now has a concrete motivating failure)"
+  ]
+ },
+ "iteration_22_representable_reformulations": {
+  "date": "2026-07-04",
+  "setup": "p10, 3000 steps, 3 seeds, H100s. Trace arms (MT given the same certified boundary trace as controls, predicting psi_d) and velocity arms (rank-1 output, exact dW/dz push-forward targets; first vector-output runs of the program).",
+  "runs": {
+   "potential_flow_mesh_transformer_kernel_singpair_trace": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.0226,
+     "farfield_queries": 0.5035,
+     "in_distribution": 0.0137,
+     "unseen_geometry_modes": 0.0127,
+     "wilder_shapes": 0.0392
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.0267,
+     "farfield_queries": 0.4392,
+     "in_distribution": 0.0181,
+     "unseen_geometry_modes": 0.0165,
+     "wilder_shapes": 0.0667
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.0115,
+     "farfield_queries": 0.4297,
+     "in_distribution": 0.0081,
+     "unseen_geometry_modes": 0.0067,
+     "wilder_shapes": 0.0288
+    }
+   ],
+   "potential_flow_mesh_transformer_kernel_trace": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.0365,
+     "farfield_queries": 0.7143,
+     "in_distribution": 0.0153,
+     "unseen_geometry_modes": 0.016,
+     "wilder_shapes": 0.0433
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.0376,
+     "farfield_queries": 0.7688,
+     "in_distribution": 0.0212,
+     "unseen_geometry_modes": 0.0217,
+     "wilder_shapes": 0.0702
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.0171,
+     "farfield_queries": 0.7125,
+     "in_distribution": 0.0091,
+     "unseen_geometry_modes": 0.0103,
+     "wilder_shapes": 0.0538
+    }
+   ],
+   "potential_flow_velocity_mesh_transformer_kernel": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.6465,
+     "farfield_queries": 0.9131,
+     "in_distribution": 0.1466,
+     "unseen_geometry_modes": 0.1946,
+     "wilder_shapes": 0.2904
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.6508,
+     "farfield_queries": 0.8952,
+     "in_distribution": 0.1597,
+     "unseen_geometry_modes": 0.2068,
+     "wilder_shapes": 0.2754
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.6511,
+     "farfield_queries": 0.8316,
+     "in_distribution": 0.133,
+     "unseen_geometry_modes": 0.1925,
+     "wilder_shapes": 0.2422
+    }
+   ],
+   "potential_flow_velocity_mesh_transformer_kernel_singonly": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.6477,
+     "farfield_queries": 0.7614,
+     "in_distribution": 0.1379,
+     "unseen_geometry_modes": 0.1889,
+     "wilder_shapes": 0.2585
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.6482,
+     "farfield_queries": 0.9641,
+     "in_distribution": 0.1563,
+     "unseen_geometry_modes": 0.2012,
+     "wilder_shapes": 0.2708
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.6463,
+     "farfield_queries": 0.8055,
+     "in_distribution": 0.1326,
+     "unseen_geometry_modes": 0.1872,
+     "wilder_shapes": 0.2477
+    }
+   ],
+   "potential_flow_velocity_mesh_transformer_kernel_singpair": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.6467,
+     "farfield_queries": 0.8347,
+     "in_distribution": 0.1406,
+     "unseen_geometry_modes": 0.1913,
+     "wilder_shapes": 0.2632
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.6455,
+     "farfield_queries": 0.7647,
+     "in_distribution": 0.1374,
+     "unseen_geometry_modes": 0.1877,
+     "wilder_shapes": 0.2664
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.6446,
+     "farfield_queries": 0.7576,
+     "in_distribution": 0.1292,
+     "unseen_geometry_modes": 0.1851,
+     "wilder_shapes": 0.2473
+    }
+   ]
+  },
+  "findings": [
+   "TRACE ARMS RESOLVE THE WALL COMPLETELY: singpair_trace ID 0.013 / geo 0.012 / wilder 0.045 / circulation-OOD 0.020 - 14x better than the pair-kernel control (0.178) given IDENTICAL data. The pseudoscalar wall was pure target-type mismatch; the architecture handles the exterior problem + circulation excellently in representable variables.",
+   "VELOCITY ARMS BREAK THE WALL AND EXPOSE A SECOND TYPE FINDING: ID 0.14 / geo 0.19, but circulation-OOD pinned at 0.646-0.649 across ALL arms and seeds. The vortex velocity is Gamma*x_perp/(2pi|x|^2): with Gamma typed as a TRUE scalar this product is axial - unrepresentable. The residual decomposes into representable potential flow (learned) + unrepresentable vortex flow (refused). Pre-registered Armijo criterion for the pseudoscalar (0o) extension is MET, precisely on the circulation component.",
+   "New stress axis: farfield_queries degrades for every arm (0.43-0.88; control 1.69) - radius extrapolation beyond the training annulus is open.",
+   "Rank-1 output path verified complete in core (first vector-output benchmark runs)."
+  ]
+ },
+ "iteration_23_pseudoscalar_extension": {
+  "date": "2026-07-05",
+  "design": "First type-system extension: 2D pseudoscalar (0o) channels, rank token \"0o\", closed product set {v^w->0o wedge, p*v_perp->1 rotation, p*q->0e, s*p->0o}; pseudos ride the scalar moment machinery; bitwise-default (zero params/RNG at width 0); circulation declared 0o. Arms kernel_pseudo 138,665p / singpair_pseudo 132,641p (drive_pseudo_dim=8). 553 tests incl. reflection equivariance of every product and end-to-end model reflection tests.",
+  "pre_registered_prediction": "circulation-OOD joins ID; other splits unmoved.",
+  "runs_3000steps": {
+   "mesh_transformer_kernel_pseudo": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.0623,
+     "farfield_queries": 0.8195,
+     "in_distribution": 0.0384,
+     "unseen_geometry_modes": 0.0521,
+     "wilder_shapes": 0.1718
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.057,
+     "farfield_queries": 0.8414,
+     "in_distribution": 0.043,
+     "unseen_geometry_modes": 0.0574,
+     "wilder_shapes": 0.164
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.0633,
+     "farfield_queries": 0.7293,
+     "in_distribution": 0.0241,
+     "unseen_geometry_modes": 0.0409,
+     "wilder_shapes": 0.1064
+    },
+    {
+     "seed": 20,
+     "circulation_ood": 0.026,
+     "farfield_queries": 0.6888,
+     "in_distribution": 0.0196,
+     "unseen_geometry_modes": 0.039,
+     "wilder_shapes": 0.1185
+    },
+    {
+     "seed": 21,
+     "circulation_ood": 0.0381,
+     "farfield_queries": 0.741,
+     "in_distribution": 0.0212,
+     "unseen_geometry_modes": 0.0524,
+     "wilder_shapes": 0.1208
+    }
+   ],
+   "mesh_transformer_kernel": [
+    {
+     "seed": 20,
+     "circulation_ood": 0.6457,
+     "farfield_queries": 0.8718,
+     "in_distribution": 0.1496,
+     "unseen_geometry_modes": 0.1953,
+     "wilder_shapes": 0.2735
+    },
+    {
+     "seed": 21,
+     "circulation_ood": 0.6481,
+     "farfield_queries": 0.9035,
+     "in_distribution": 0.1405,
+     "unseen_geometry_modes": 0.1925,
+     "wilder_shapes": 0.2794
+    }
+   ],
+   "mesh_transformer_kernel_singpair_pseudo": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.0372,
+     "farfield_queries": 0.717,
+     "in_distribution": 0.0279,
+     "unseen_geometry_modes": 0.0411,
+     "wilder_shapes": 0.1405
+    },
+    {
+     "seed": 18,
+     "circulation_ood": 0.0613,
+     "farfield_queries": 0.7965,
+     "in_distribution": 0.0534,
+     "unseen_geometry_modes": 0.0603,
+     "wilder_shapes": 0.1761
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.0237,
+     "farfield_queries": 0.63,
+     "in_distribution": 0.0204,
+     "unseen_geometry_modes": 0.033,
+     "wilder_shapes": 0.1249
+    },
+    {
+     "seed": 20,
+     "circulation_ood": 0.0222,
+     "farfield_queries": 0.5769,
+     "in_distribution": 0.0161,
+     "unseen_geometry_modes": 0.0337,
+     "wilder_shapes": 0.1022
+    },
+    {
+     "seed": 21,
+     "circulation_ood": 0.0412,
+     "farfield_queries": 0.6449,
+     "in_distribution": 0.0212,
+     "unseen_geometry_modes": 0.0359,
+     "wilder_shapes": 0.109
+    }
+   ],
+   "mesh_transformer_kernel_singpair": [
+    {
+     "seed": 20,
+     "circulation_ood": 0.6459,
+     "farfield_queries": 0.6431,
+     "in_distribution": 0.1367,
+     "unseen_geometry_modes": 0.1878,
+     "wilder_shapes": 0.2653
+    },
+    {
+     "seed": 21,
+     "circulation_ood": 0.6464,
+     "farfield_queries": 0.7706,
+     "in_distribution": 0.1361,
+     "unseen_geometry_modes": 0.1868,
+     "wilder_shapes": 0.2408
+    }
+   ]
+  },
+  "means_5seed": {
+   "singpair_pseudo": {
+    "circOOD": 0.037,
+    "ID": 0.028,
+    "geo": 0.041,
+    "wilder": 0.131,
+    "farfield": 0.673
+   },
+   "kernel_pseudo": {
+    "circOOD": 0.049,
+    "ID": 0.029,
+    "geo": 0.048,
+    "wilder": 0.136,
+    "farfield": 0.764
+   },
+   "untyped_controls_n5": {
+    "circOOD": 0.647,
+    "ID": 0.141,
+    "geo": 0.191,
+    "wilder": 0.264,
+    "farfield": 0.83
+   }
+  },
+  "findings": [
+   "PREDICTION CONFIRMED AND EXCEEDED at 5 seeds: circulation-OOD 0.647 -> 0.037 (17x; joins ID at 0.028) - and the ENTIRE velocity field improves ~5x (ID 0.141->0.028, geo 0.191->0.041, wilder 0.264->0.131). Fresh control seeds (20/21) confirm the pinned floor. Interpretation: 2D potential-flow velocity is intrinsically parity-mixed (doublet angular structure carries both U.x and U^x content), so wedge invariants pay everywhere.",
+   "Parsimony holds under the extension: singpair (two exact members) remains the best dictionary in the pseudo setting.",
+   "farfield (radius extrapolation) unchanged (~0.7-0.8) - confirmed as a non-type open axis.",
+   "Scope: 0o is 2D-only and opt-in (3D analogue = axial vector, out of scope); NOT part of the default reference configuration."
+  ]
+ },
+ "iteration_24_intrinsic_gauge": {
+  "date": "2026-07-05",
+  "design": "Default scale gauge made intrinsic: reference_length_key=None derives L as the measure-weighted RMS boundary radius (radius of gyration, fp64, differentiable); explicit key remains a bitwise-preserved override. Makes scale equivariance UNCONDITIONAL (degree-1 homogeneity; no caller convention to drift).",
+  "runs_intrinsic_3seed": [
+   {
+    "seed": 17,
+    "sim_cov": 2.93e-07,
+    "interpolation": 0.0373,
+    "mixed_geometry_modes": 0.0618,
+    "stronger_deformation": 0.0638,
+    "unseen_boundary_frequencies": 0.076,
+    "unseen_geometry_modes": 0.0488
+   },
+   {
+    "seed": 29,
+    "sim_cov": 3.14e-07,
+    "interpolation": 0.0392,
+    "mixed_geometry_modes": 0.065,
+    "stronger_deformation": 0.0679,
+    "unseen_boundary_frequencies": 0.0737,
+    "unseen_geometry_modes": 0.0535
+   },
+   {
+    "seed": 43,
+    "sim_cov": 2.94e-07,
+    "interpolation": 0.035,
+    "mixed_geometry_modes": 0.0604,
+    "stronger_deformation": 0.0632,
+    "unseen_boundary_frequencies": 0.0754,
+    "unseen_geometry_modes": 0.0477
+   }
+  ],
+  "explicit_reference": {
+   "ID": [
+    0.036,
+    0.0401,
+    0.0365
+   ],
+   "freq": [
+    0.0733,
+    0.0761,
+    0.0749
+   ]
+  },
+  "findings": [
+   "GAUGE NEUTRALITY at 3 seeds: intrinsic ID mean 0.0372 vs explicit 0.0375 - identical band; freq/geo likewise.",
+   "CONVENTION-DRIFT: explicit-key model degrades 4.64x under a 3x L_ref corruption at eval; the intrinsic model is BITWISE immune (the input no longer exists). Permanent demo test.",
+   "Similarity contract UNCONDITIONAL: paired covariance 2.9-3.1e-7 including 0.2x/5x scales.",
+   "Bonus latent bug found+fixed: pair-invariant einsum broke bitwise query independence for any L != 1 (1-ulp CUDA batched-GEMM drift masked by L=1 test data)."
+  ]
+ },
+ "iteration_25_euler_bernoulli_multifield": {
+  "date": "2026-07-05",
+  "design": "First MULTI-FIELD benchmark: euler_bernoulli - exterior flow, targets {velocity rank-1, pressure rank-0}; pressure p*=(|U|^2-|u|^2)/2 is exactly drive-QUADRATIC (exact labels, no solver; velocity odd / pressure even under drive negation, verified exactly). Pre-registered second wall: a linear-mode arm is bitwise drive-odd, hence structurally zero pressure response. Multi-field output worked through core UNCHANGED.",
+  "runs_3000steps_5seed": {
+   "floor": [
+    {
+     "seed": 17,
+     "circulation_ood": 1.0,
+     "circulation_ood/velocity": 1.0,
+     "circulation_ood/pressure": 1.0,
+     "farfield_queries": 1.0,
+     "farfield_queries/velocity": 1.0,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 1.0,
+     "in_distribution/velocity": 1.0,
+     "in_distribution/pressure": 1.0,
+     "unseen_geometry_modes": 1.0,
+     "unseen_geometry_modes/velocity": 1.0,
+     "unseen_geometry_modes/pressure": 1.0,
+     "wilder_shapes": 1.0,
+     "wilder_shapes/velocity": 1.0,
+     "wilder_shapes/pressure": 1.0
+    }
+   ],
+   "mt_singpair_linear": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.838,
+     "circulation_ood/velocity": 0.6459,
+     "circulation_ood/pressure": 1.0001,
+     "farfield_queries": 0.8457,
+     "farfield_queries/velocity": 0.7516,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 0.6373,
+     "in_distribution/velocity": 0.1351,
+     "in_distribution/pressure": 1.0,
+     "unseen_geometry_modes": 0.6453,
+     "unseen_geometry_modes/velocity": 0.187,
+     "unseen_geometry_modes/pressure": 1.0,
+     "wilder_shapes": 0.6944,
+     "wilder_shapes/velocity": 0.2493,
+     "wilder_shapes/pressure": 1.0
+    },
+    {
+     "seed": 29,
+     "circulation_ood": 0.8379,
+     "circulation_ood/velocity": 0.6457,
+     "circulation_ood/pressure": 1.0,
+     "farfield_queries": 1.2068,
+     "farfield_queries/velocity": 1.3008,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 0.6373,
+     "in_distribution/velocity": 0.1343,
+     "in_distribution/pressure": 1.0,
+     "unseen_geometry_modes": 0.6452,
+     "unseen_geometry_modes/velocity": 0.1871,
+     "unseen_geometry_modes/pressure": 1.0,
+     "wilder_shapes": 0.6964,
+     "wilder_shapes/velocity": 0.2581,
+     "wilder_shapes/pressure": 1.0
+    },
+    {
+     "seed": 43,
+     "circulation_ood": 0.8378,
+     "circulation_ood/velocity": 0.6457,
+     "circulation_ood/pressure": 0.9999,
+     "farfield_queries": 0.8053,
+     "farfield_queries/velocity": 0.6785,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 0.637,
+     "in_distribution/velocity": 0.1319,
+     "in_distribution/pressure": 0.9999,
+     "unseen_geometry_modes": 0.6449,
+     "unseen_geometry_modes/velocity": 0.1849,
+     "unseen_geometry_modes/pressure": 1.0,
+     "wilder_shapes": 0.6954,
+     "wilder_shapes/velocity": 0.2531,
+     "wilder_shapes/pressure": 1.0001
+    },
+    {
+     "seed": 61,
+     "circulation_ood": 0.8388,
+     "circulation_ood/velocity": 0.6481,
+     "circulation_ood/pressure": 1.0001,
+     "farfield_queries": 0.8127,
+     "farfield_queries/velocity": 0.6923,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 0.6379,
+     "in_distribution/velocity": 0.1403,
+     "in_distribution/pressure": 1.0,
+     "unseen_geometry_modes": 0.6455,
+     "unseen_geometry_modes/velocity": 0.1901,
+     "unseen_geometry_modes/pressure": 1.0,
+     "wilder_shapes": 0.7005,
+     "wilder_shapes/velocity": 0.2747,
+     "wilder_shapes/pressure": 1.0
+    },
+    {
+     "seed": 79,
+     "circulation_ood": 0.8368,
+     "circulation_ood/velocity": 0.6446,
+     "circulation_ood/pressure": 0.9989,
+     "farfield_queries": 0.8563,
+     "farfield_queries/velocity": 0.7695,
+     "farfield_queries/pressure": 1.0,
+     "in_distribution": 0.6367,
+     "in_distribution/velocity": 0.1286,
+     "in_distribution/pressure": 0.9997,
+     "unseen_geometry_modes": 0.6453,
+     "unseen_geometry_modes/velocity": 0.1843,
+     "unseen_geometry_modes/pressure": 1.0007,
+     "wilder_shapes": 0.6932,
+     "wilder_shapes/velocity": 0.2411,
+     "wilder_shapes/pressure": 0.9997
+    }
+   ],
+   "mt_singpair_nl_pseudo": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.4181,
+     "circulation_ood/velocity": 0.4286,
+     "circulation_ood/pressure": 0.4085,
+     "farfield_queries": 0.5997,
+     "farfield_queries/velocity": 0.6045,
+     "farfield_queries/pressure": 0.5894,
+     "in_distribution": 0.0435,
+     "in_distribution/velocity": 0.0291,
+     "in_distribution/pressure": 0.0588,
+     "unseen_geometry_modes": 0.0609,
+     "unseen_geometry_modes/velocity": 0.0397,
+     "unseen_geometry_modes/pressure": 0.0834,
+     "wilder_shapes": 0.1748,
+     "wilder_shapes/velocity": 0.1294,
+     "wilder_shapes/pressure": 0.2123
+    },
+    {
+     "seed": 29,
+     "circulation_ood": 0.4231,
+     "circulation_ood/velocity": 0.3136,
+     "circulation_ood/pressure": 0.5082,
+     "farfield_queries": 0.6735,
+     "farfield_queries/velocity": 0.6806,
+     "farfield_queries/pressure": 0.6587,
+     "in_distribution": 0.0476,
+     "in_distribution/velocity": 0.0345,
+     "in_distribution/pressure": 0.0628,
+     "unseen_geometry_modes": 0.0655,
+     "unseen_geometry_modes/velocity": 0.0447,
+     "unseen_geometry_modes/pressure": 0.0882,
+     "wilder_shapes": 0.1582,
+     "wilder_shapes/velocity": 0.1233,
+     "wilder_shapes/pressure": 0.1881
+    },
+    {
+     "seed": 43,
+     "circulation_ood": 0.2872,
+     "circulation_ood/velocity": 0.3396,
+     "circulation_ood/pressure": 0.2107,
+     "farfield_queries": 0.6571,
+     "farfield_queries/velocity": 0.6493,
+     "farfield_queries/pressure": 0.6709,
+     "in_distribution": 0.0543,
+     "in_distribution/velocity": 0.0344,
+     "in_distribution/pressure": 0.0756,
+     "unseen_geometry_modes": 0.0679,
+     "unseen_geometry_modes/velocity": 0.0428,
+     "unseen_geometry_modes/pressure": 0.094,
+     "wilder_shapes": 0.2026,
+     "wilder_shapes/velocity": 0.1579,
+     "wilder_shapes/pressure": 0.2356
+    },
+    {
+     "seed": 61,
+     "circulation_ood": 0.4422,
+     "circulation_ood/velocity": 0.4613,
+     "circulation_ood/pressure": 0.4236,
+     "farfield_queries": 0.6249,
+     "farfield_queries/velocity": 0.622,
+     "farfield_queries/pressure": 0.6287,
+     "in_distribution": 0.0442,
+     "in_distribution/velocity": 0.0298,
+     "in_distribution/pressure": 0.0599,
+     "unseen_geometry_modes": 0.0663,
+     "unseen_geometry_modes/velocity": 0.0404,
+     "unseen_geometry_modes/pressure": 0.0926,
+     "wilder_shapes": 0.1769,
+     "wilder_shapes/velocity": 0.1274,
+     "wilder_shapes/pressure": 0.2177
+    },
+    {
+     "seed": 79,
+     "circulation_ood": 0.1881,
+     "circulation_ood/velocity": 0.1862,
+     "circulation_ood/pressure": 0.1901,
+     "farfield_queries": 0.6362,
+     "farfield_queries/velocity": 0.6192,
+     "farfield_queries/pressure": 0.666,
+     "in_distribution": 0.0414,
+     "in_distribution/velocity": 0.0281,
+     "in_distribution/pressure": 0.0562,
+     "unseen_geometry_modes": 0.0646,
+     "unseen_geometry_modes/velocity": 0.041,
+     "unseen_geometry_modes/pressure": 0.0895,
+     "wilder_shapes": 0.1663,
+     "wilder_shapes/velocity": 0.1173,
+     "wilder_shapes/pressure": 0.2036
+    }
+   ],
+   "mt_singpair_nl": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.7412,
+     "circulation_ood/velocity": 0.6928,
+     "circulation_ood/pressure": 0.7903,
+     "farfield_queries": 0.7887,
+     "farfield_queries/velocity": 0.7283,
+     "farfield_queries/pressure": 0.892,
+     "in_distribution": 0.1845,
+     "in_distribution/velocity": 0.1497,
+     "in_distribution/pressure": 0.2275,
+     "unseen_geometry_modes": 0.236,
+     "unseen_geometry_modes/velocity": 0.195,
+     "unseen_geometry_modes/pressure": 0.287,
+     "wilder_shapes": 0.3587,
+     "wilder_shapes/velocity": 0.3058,
+     "wilder_shapes/pressure": 0.4125
+    },
+    {
+     "seed": 29,
+     "circulation_ood": 0.6926,
+     "circulation_ood/velocity": 0.6622,
+     "circulation_ood/pressure": 0.7248,
+     "farfield_queries": 0.7719,
+     "farfield_queries/velocity": 0.7445,
+     "farfield_queries/pressure": 0.8215,
+     "in_distribution": 0.1797,
+     "in_distribution/velocity": 0.1541,
+     "in_distribution/pressure": 0.2129,
+     "unseen_geometry_modes": 0.2329,
+     "unseen_geometry_modes/velocity": 0.2009,
+     "unseen_geometry_modes/pressure": 0.2747,
+     "wilder_shapes": 0.3435,
+     "wilder_shapes/velocity": 0.2916,
+     "wilder_shapes/pressure": 0.3897
+    },
+    {
+     "seed": 43,
+     "circulation_ood": 1.6443,
+     "circulation_ood/velocity": 1.5087,
+     "circulation_ood/pressure": 1.7572,
+     "farfield_queries": 0.8432,
+     "farfield_queries/velocity": 0.823,
+     "farfield_queries/pressure": 0.8797,
+     "in_distribution": 0.1725,
+     "in_distribution/velocity": 0.1482,
+     "in_distribution/pressure": 0.204,
+     "unseen_geometry_modes": 0.2238,
+     "unseen_geometry_modes/velocity": 0.1918,
+     "unseen_geometry_modes/pressure": 0.2649,
+     "wilder_shapes": 0.3221,
+     "wilder_shapes/velocity": 0.2558,
+     "wilder_shapes/pressure": 0.3847
+    },
+    {
+     "seed": 61,
+     "circulation_ood": 0.7303,
+     "circulation_ood/velocity": 0.6867,
+     "circulation_ood/pressure": 0.7753,
+     "farfield_queries": 0.8192,
+     "farfield_queries/velocity": 0.7817,
+     "farfield_queries/pressure": 0.887,
+     "in_distribution": 0.1657,
+     "in_distribution/velocity": 0.1438,
+     "in_distribution/pressure": 0.1946,
+     "unseen_geometry_modes": 0.2252,
+     "unseen_geometry_modes/velocity": 0.1907,
+     "unseen_geometry_modes/pressure": 0.2692,
+     "wilder_shapes": 0.3357,
+     "wilder_shapes/velocity": 0.2785,
+     "wilder_shapes/pressure": 0.3888
+    },
+    {
+     "seed": 79,
+     "circulation_ood": 0.8639,
+     "circulation_ood/velocity": 0.8606,
+     "circulation_ood/pressure": 0.8694,
+     "farfield_queries": 0.8193,
+     "farfield_queries/velocity": 0.8166,
+     "farfield_queries/pressure": 0.8247,
+     "in_distribution": 0.1799,
+     "in_distribution/velocity": 0.1545,
+     "in_distribution/pressure": 0.2132,
+     "unseen_geometry_modes": 0.2332,
+     "unseen_geometry_modes/velocity": 0.1994,
+     "unseen_geometry_modes/pressure": 0.2773,
+     "wilder_shapes": 0.3099,
+     "wilder_shapes/velocity": 0.2568,
+     "wilder_shapes/pressure": 0.3598
+    }
+   ]
+  },
+  "means_key_splits": {
+   "linear": {
+    "vel_ID": 0.134,
+    "prs_ID": 1.0,
+    "circ_v": 0.646,
+    "circ_p": 1.0
+   },
+   "nl": {
+    "vel_ID": 0.15,
+    "prs_ID": 0.21,
+    "circ_v": 0.882,
+    "circ_p": 0.983
+   },
+   "nl_pseudo": {
+    "vel_ID": 0.031,
+    "prs_ID": 0.063,
+    "circ_v": 0.346,
+    "circ_p": 0.348
+   }
+  },
+  "findings": [
+   "SECOND STRUCTURAL WALL CONFIRMED AT 5 SEEDS: linear-mode pressure pinned at exactly 1.000 on every split (bitwise drive-odd proof); nonlinear mode breaks it (0.210), and nonlinear+parity multiplies (0.063 pressure, 0.031 velocity - 5x/3x better than plain nl).",
+   "The 200-step amplitude blowup (circ-OOD 37-147) largely resolved with training: 3000-step circ-OOD 0.35 (pseudo) - drive-amplitude extrapolation remains the worst split but is no longer catastrophic; the pre-registered degree-grading hypothesis is demoted to a moderate-priority open item (Armijo: one-split gain).",
+   "The parity and nonlinearity mechanisms compose: their joint arm dominates every split."
+  ]
+ },
+ "iteration_26_stream_factorization": {
+  "date": "2026-07-05",
+  "design": "Two-stream operator/drive separation vs single-stream control (drive re-declared as operator features + unit-drive propagation; example-level wrapper, zero core changes; matched params within 0.03%). Control documented as measurement-only. Pre-registered H1 (ID parity on linear), H2 (two-stream wins freq-OOD), H3 (measure control contract violation).",
+  "laplace_3seed": {
+   "two_stream": {
+    "ID": 0.0485,
+    "geo": 0.0686,
+    "freq": 0.2111,
+    "zero_drive": 0.0,
+    "superposition_violation": 1e-07
+   },
+   "single_stream": {
+    "ID": 0.0606,
+    "geo": 0.0813,
+    "freq": 0.1794,
+    "zero_drive": 0.0378,
+    "superposition_violation": 0.0421
+   }
+  },
+  "liouville_3seed": {
+   "singlestream_nl": [
+    {
+     "seed": 17,
+     "zero_drive_rms": 0.7042,
+     "in_distribution": 0.3656,
+     "stronger_deformation": 0.4574,
+     "unseen_geometry_modes": 0.5436
+    },
+    {
+     "seed": 29,
+     "zero_drive_rms": 0.5454,
+     "in_distribution": 0.5365,
+     "stronger_deformation": 0.6175,
+     "unseen_geometry_modes": 0.4685
+    },
+    {
+     "seed": 43,
+     "zero_drive_rms": 0.6332,
+     "in_distribution": 0.5318,
+     "stronger_deformation": 0.6222,
+     "unseen_geometry_modes": 0.5069
+    }
+   ],
+   "twostream_nl_singpair": [
+    {
+     "seed": 17,
+     "zero_drive_rms": 0.0,
+     "in_distribution": 0.7001,
+     "stronger_deformation": 0.5238,
+     "unseen_geometry_modes": 0.6975
+    },
+    {
+     "seed": 29,
+     "zero_drive_rms": 0.0,
+     "in_distribution": 0.4635,
+     "stronger_deformation": 0.5562,
+     "unseen_geometry_modes": 0.5019
+    },
+    {
+     "seed": 43,
+     "zero_drive_rms": 0.0,
+     "in_distribution": 0.4369,
+     "stronger_deformation": 0.4627,
+     "unseen_geometry_modes": 0.5577
+    }
+   ]
+  },
+  "findings": [
+   "H1 SUPPORTED: two-stream wins Laplace ID by 3.6x seed-sd at matched params - the factorization costs nothing on linear problems; it helps.",
+   "H2 FALSIFIED (honest refutation of a motivating belief): structural drive-linearity did NOT buy freq-OOD (single-stream 0.179 vs 0.211, and more seed-stable). Frequency extrapolation comes from the dictionary/conditioning, not the linearity contract.",
+   "H3: the control learns APPROXIMATE linearity (zero-drive 0.038, superposition 0.042 - plateaus ~5 decades above the structural roundoff-exact contract).",
+   "LIOUVILLE: statistical tie (0.478+-0.097 vs 0.533+-0.145) - AND a misspecification insight: zero-preservation is only correct physics when the homogeneous problem has the zero solution; Liouville with zero Dirichlet data has u = log 4 != 0 inside, the structural contract pins the wrong value (two-stream zero-drive = 0 exactly; the free control learns 0.55-0.70). Structural priors need a per-problem correctness check."
+  ]
+ },
+ "iteration_27_farfield_strong_inference": {
+  "date": "2026-07-05",
+  "design": "Strong inference on the farfield_queries failure (0.67-0.88 all arms): three rival mechanisms, each with a pre-registered discriminator. Artifacts: farfield_inference_2026-07-04.json (+ annulus8 supplement).",
+  "verdicts": {
+   "M1_annulus_coverage": "AMBIGUOUS/PARTIAL: widening train annulus [1.05,4]->[1.05,8] cuts farfield 0.694->0.179 (74%) but stays 6.2x above ID even inside the new annulus - strong mitigation, not the cause.",
+   "M2_member_decay": "EXCLUDED: member basis exactly analytic on [4,12] (DL -1.9, SL +1/ln r); prediction SUPER-decays (exponent -24 vs exact -2) - opposite direction from member tails; the basis cannot out-decay r^-2 so the pathology cannot live there.",
+   "M3_coefficient_extrapolation": "SUPPORTED, smoking gun: output-projection sigmoid gate collapses at the training edge (0.52@r=1.1 -> 0.010@r=4 -> 2.3e-17@r=12; local exponents -13/-26/-51), imprinting identical collapse on direct and message parts. OUT-OF-SAMPLE CONFIRMATION: on the annulus-8 checkpoint the collapse onset MOVES to the new training edge - the pathology tracks the training boundary, not the dictionary."
+  },
+  "process_note": "verdict_m2 as first coded implemented only the magnitude half of its pre-registered rule; the directional qualifier (written in the docstring before measurement) flips it to EXCLUDED - disclosed; annulus-8 edge-tracking independently corroborates M3.",
+  "followup_prediction": "Iteration 28: reparameterize/bound the radius-saturating gate -> far-field decay restored to ~r^-2 beyond the training annulus and farfield split drops substantially at UNCHANGED annulus; falsifier: no improvement means the gate is symptom, not cause."
+ },
+ "iteration_28_bounded_gate": {
+  "date": "2026-07-05",
+  "design": "Fix attempt for the diagnosed gate collapse: compactify the output-projection gate inputs (v -> v/sqrt(1+|v|^2), s -> s/sqrt(1+s^2)); bounded pre-activation, no saturation regime; default-off knob, bitwise-preserved.",
+  "pre_registered": "far decay ~ -2; farfield < 0.35 supported / < 0.10 fixed; ID within 0.01.",
+  "measured": {
+   "far_exponents": [
+    -1.3,
+    6.25,
+    3.77
+   ],
+   "farfield": 2.98,
+   "baseline_farfield": 0.694,
+   "ID": 0.0215,
+   "baseline_ID": 0.0269,
+   "circ_ood": 0.018,
+   "gate_trace": [
+    0.375,
+    0.039,
+    0.019
+   ]
+  },
+  "verdict": "FALSIFIER FIRED - honest refutation: the gate fix worked as designed (smooth nonzero gate, no saturation) yet farfield got 4.3x WORSE. The collapse was LOAD-BEARING: it suppressed polynomially growing query-side direct-drive linear branches (vector_from_scalar 0.026@r=1.1 -> 1.45@r=12; lifted drive norms grow ~r-r^2, geometry vectors ~r). Root cause = the PAIR of unbounded radial dependences (saturating gate AND growing linear branches). Silver lining: bounded gates IMPROVE in-annulus accuracy (ID 0.0215 vs 0.0269, circ 0.018 vs 0.033).",
+  "next": "Iteration 29: bound the query-side inputs at the SOURCE (compactify the injected query position channel), so every learned coefficient sees bounded invariants and radial extrapolation is carried solely by the exactly-analytic kernel members."
+ },
+ "iteration_29_source_bounded_query": {
+  "date": "2026-07-05",
+  "design": "Bound at the source: injected query position x -> x/sqrt(1+|x|^2) (equivariant compactification) so every learned coefficient sees bounded invariants; kernel members verified to read RAW positions (bitwise-pinned) - the physics path exact.",
+  "measured": {
+   "farfield": 0.452,
+   "baseline": 0.694,
+   "iter28_regression": 2.98,
+   "ID": 0.0259,
+   "far_exponents": [
+    -1.75,
+    0.63,
+    1.34
+   ],
+   "coeff_trace_far_near_ratio": 1.03
+  },
+  "verdict": "M3 EXCLUDED for the first time (coefficient traces flat to r=12; source-bounding did exactly what it claims); farfield 0.452 - between bars (partial). Residual is purely REPRESENTATIONAL (M2 survives): bounded != decaying - the direct-drive part converges to a direction-dependent constant (~0.24, exponent ~0) while the exact field decays r^-2, and the single-layer log-r tail (state norm 2.4 @ r=12) is fit by near-cancellation in-annulus. HONEST DECOMPOSITION: far-field error = coefficient extrapolation (fixed by construction) + missing decay structure (needs coverage [M1, 74%] or explicit structure).",
+  "next": "Iteration 30 (4th rung): decaying radial multiplier on query-side direct-drive branches + monopole-controlled single-layer coefficients."
+ },
+ "iteration_30_decay_structure": {
+  "date": "2026-07-05",
+  "design": "Fourth rung: (1) decaying_direct_drive - exact analytic envelope 1/(1+|x|^2) on the direct query-side drive path (2D exterior zero-flux velocity leading order = doublet r^-2; the direct drive may not outlive it); (2) monopole_free_single_layer - measure-weighted rank-one deflation of the SL member column (exact zero net charge per member -> log tail dead by construction for ANY coefficients; corollary: 2D log gauge cancels, deflated member exactly similarity invariant). Both opt-in, licensed for zero-net-flux exteriors only; no parameters added.",
+  "measured_seed17": {
+   "farfield": 0.133,
+   "chain": [
+    0.694,
+    2.98,
+    0.452,
+    0.133
+   ],
+   "far_exponents": [
+    -1.81,
+    -1.66,
+    -1.5
+   ],
+   "mean_far_abs_delta": 0.341,
+   "ID": 0.0229,
+   "circ_ood": 0.0227,
+   "wilder": 0.122,
+   "geo": 0.032
+  },
+  "verdict": "SUPPORTED (<0.35 bar met; not the <0.10 fully-fixed bar): 5.2x farfield improvement at UNCHANGED training annulus, beating the coverage lever (0.179), with ID and every side split improved. The four-rung ladder closes: coefficient extrapolation fixed by construction (source-bounding) + decay structure supplied by licensed exact physics (envelope + deflation). Remaining leak to <0.10: the r^-1 member tails' zero-circulation cancellation to r^-2 is still fitted.",
+  "five_seed_extension": "seeds 18-21 launched (p19b) to close at the 5-seed bar.",
+  "five_seed_close": {
+   "runs": [
+    {
+     "seed": 18,
+     "circulation_ood": 0.016,
+     "farfield_queries": 0.0609,
+     "in_distribution": 0.0187,
+     "unseen_geometry_modes": 0.0301,
+     "wilder_shapes": 0.1315
+    },
+    {
+     "seed": 19,
+     "circulation_ood": 0.0151,
+     "farfield_queries": 0.0743,
+     "in_distribution": 0.014,
+     "unseen_geometry_modes": 0.0294,
+     "wilder_shapes": 0.1196
+    },
+    {
+     "seed": 20,
+     "circulation_ood": 0.0152,
+     "farfield_queries": 0.1472,
+     "in_distribution": 0.0167,
+     "unseen_geometry_modes": 0.0275,
+     "wilder_shapes": 0.0888
+    },
+    {
+     "seed": 21,
+     "circulation_ood": 0.0153,
+     "farfield_queries": 0.0356,
+     "in_distribution": 0.0148,
+     "unseen_geometry_modes": 0.0319,
+     "wilder_shapes": 0.1182
+    },
+    {
+     "seed": 17,
+     "circulation_ood": 0.0227,
+     "farfield_queries": 0.133,
+     "in_distribution": 0.0229,
+     "unseen_geometry_modes": 0.0324,
+     "wilder_shapes": 0.1219
+    }
+   ],
+   "means": {
+    "farfield": 0.0902,
+    "farfield_sd": 0.0479,
+    "ID": 0.0174,
+    "circ_ood": 0.0168,
+    "wilder": 0.116,
+    "geo": 0.0303
+   },
+   "verdict": "LADDER CLOSED AT 5 SEEDS: farfield mean 0.090 crosses the fully-fixed bar (<0.10) - 7.7x improvement at UNCHANGED training annulus (per-seed spread 0.036-0.147, two seeds above 0.10 - stated honestly). Every other split at best-ever levels for the family (ID 0.0174, circ 0.0168, geo 0.0303). The four physics-licensed knobs (bounded gates, bounded query source, r^-2 direct-drive envelope, monopole-free SL) compose into a strictly dominant configuration."
+  }
+ },
+ "iteration_31_heads_vs_rank": {
+  "date": "2026-07-04",
+  "design": "Heads-versus-rank probe (pre-registered in studies/heads_rank_study.py): three singpair arms at fixed total score capacity H*(R0 + 2*R1) = 80 on the 2D Laplace reference bank, 3000 steps, seeds 17/29/43, iteration-26 finalist evaluation bank. One layer's pair-coefficient class depends only on the total, so any difference localizes in the per-head value/output structure. Rule: per arm and split, |3-seed mean delta vs reference| <= 2 * max(seed sd); all within -> heads are bookkeeping; any outside -> the per-head value/output structure carries a real effect.",
+  "session_artifacts": "scratch/brev/results/p20_headsrank (9 train.py reports + aggregate.json)",
+  "laplace_3seed": {
+   "h4_reference": {
+    "model": "mesh_transformer_kernel_singpair",
+    "heads": 4,
+    "scalar_rank": 12,
+    "vector_rank": 4,
+    "parameters": 104537,
+    "splits": {
+     "interpolation": {
+      "per_seed_17_29_43": [
+       0.0512,
+       0.0479,
+       0.0463
+      ],
+      "mean": 0.0485,
+      "seed_sd": 0.0025
+     },
+     "stronger_deformation": {
+      "per_seed_17_29_43": [
+       0.0889,
+       0.0994,
+       0.0702
+      ],
+      "mean": 0.0862,
+      "seed_sd": 0.0148
+     },
+     "unseen_boundary_frequencies": {
+      "per_seed_17_29_43": [
+       0.1673,
+       0.197,
+       0.269
+      ],
+      "mean": 0.2111,
+      "seed_sd": 0.0523
+     },
+     "unseen_geometry_modes": {
+      "per_seed_17_29_43": [
+       0.0746,
+       0.0704,
+       0.0609
+      ],
+      "mean": 0.0686,
+      "seed_sd": 0.007
+     }
+    }
+   },
+   "h1": {
+    "model": "mesh_transformer_kernel_singpair_h1",
+    "heads": 1,
+    "scalar_rank": 48,
+    "vector_rank": 16,
+    "parameters": 104123,
+    "splits": {
+     "interpolation": {
+      "per_seed_17_29_43": [
+       0.0432,
+       0.0391,
+       0.0414
+      ],
+      "mean": 0.0413,
+      "seed_sd": 0.0021
+     },
+     "stronger_deformation": {
+      "per_seed_17_29_43": [
+       0.0819,
+       0.0885,
+       0.077
+      ],
+      "mean": 0.0825,
+      "seed_sd": 0.0058
+     },
+     "unseen_boundary_frequencies": {
+      "per_seed_17_29_43": [
+       0.2006,
+       0.1789,
+       0.1698
+      ],
+      "mean": 0.1831,
+      "seed_sd": 0.0158
+     },
+     "unseen_geometry_modes": {
+      "per_seed_17_29_43": [
+       0.0634,
+       0.0604,
+       0.0635
+      ],
+      "mean": 0.0624,
+      "seed_sd": 0.0018
+     }
+    }
+   },
+   "h8": {
+    "model": "mesh_transformer_kernel_singpair_h8",
+    "heads": 8,
+    "scalar_rank": 6,
+    "vector_rank": 2,
+    "parameters": 104897,
+    "splits": {
+     "interpolation": {
+      "per_seed_17_29_43": [
+       0.0476,
+       0.0456,
+       0.0449
+      ],
+      "mean": 0.0461,
+      "seed_sd": 0.0014
+     },
+     "stronger_deformation": {
+      "per_seed_17_29_43": [
+       0.098,
+       0.0706,
+       0.0749
+      ],
+      "mean": 0.0812,
+      "seed_sd": 0.0147
+     },
+     "unseen_boundary_frequencies": {
+      "per_seed_17_29_43": [
+       0.2025,
+       0.2572,
+       0.1634
+      ],
+      "mean": 0.2077,
+      "seed_sd": 0.0471
+     },
+     "unseen_geometry_modes": {
+      "per_seed_17_29_43": [
+       0.064,
+       0.065,
+       0.0717
+      ],
+      "mean": 0.0669,
+      "seed_sd": 0.0041
+     }
+    }
+   }
+  },
+  "comparisons": [
+   {
+    "arm": "h1",
+    "split": "interpolation",
+    "mean_difference": -0.0072,
+    "tolerance_2x_max_seed_sd": 0.005,
+    "within_tolerance": false
+   },
+   {
+    "arm": "h1",
+    "split": "unseen_geometry_modes",
+    "mean_difference": -0.0062,
+    "tolerance_2x_max_seed_sd": 0.014,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h1",
+    "split": "stronger_deformation",
+    "mean_difference": -0.0037,
+    "tolerance_2x_max_seed_sd": 0.0296,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h1",
+    "split": "unseen_boundary_frequencies",
+    "mean_difference": -0.028,
+    "tolerance_2x_max_seed_sd": 0.1046,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h8",
+    "split": "interpolation",
+    "mean_difference": -0.0024,
+    "tolerance_2x_max_seed_sd": 0.005,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h8",
+    "split": "unseen_geometry_modes",
+    "mean_difference": -0.0017,
+    "tolerance_2x_max_seed_sd": 0.014,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h8",
+    "split": "stronger_deformation",
+    "mean_difference": -0.005,
+    "tolerance_2x_max_seed_sd": 0.0296,
+    "within_tolerance": true
+   },
+   {
+    "arm": "h8",
+    "split": "unseen_boundary_frequencies",
+    "mean_difference": -0.0034,
+    "tolerance_2x_max_seed_sd": 0.1046,
+    "within_tolerance": true
+   }
+  ],
+  "verdict": "difference_localizes_in_per_head_value_output_structure",
+  "findings": [
+   "H8 IS BOOKKEEPING: at halved ranks (6/2) the 8-head arm matches the reference within tolerance on every split (largest |delta| 0.0050, on stronger_deformation vs its 0.0296 tolerance; ID delta -0.0024 vs 0.0050).",
+   "H1 IS NOT: the single-head arm (ranks 48/16, value/output maps unblocked) is decisively BETTER on interpolation (0.0413 vs 0.0485, delta -0.0072 vs tolerance 0.0050, i.e. 2.9x the larger seed sd) and directionally better on all four splits, with the FEWEST parameters of the three arms (104,123, -0.40%).",
+   "SEED STABILITY: h1 is also the most seed-stable arm (geometry sd 0.0018 vs reference 0.0070; freq-OOD sd 0.0158 vs 0.0523).",
+   "LOCALIZATION: score capacity was matched by construction, so the h1 gain prices the head-blocking of the value/output maps - blocking values into 4 aligned groups is a restriction that buys nothing measured here. The parsimony question opens in the FEWER-heads direction: one full-width head.",
+   "SCOPE: one PDE (2D Laplace), three seeds, one capacity point; h1's win is decisive under the pre-registered rule but is a 15% ID error reduction, not an order of magnitude."
+  ]
+ },
+ "iteration_32_one_head_cross_suite": {
+  "date": "2026-07-04",
+  "design": "One-head cross-suite confirmation of iteration 31 (pre-registered in studies/one_head_cross_suite.py before any run): capacity-preserving h1 variants (heads 1, scalar_rank 48, vector_rank 16; H*(R0+D*R1) fixed at the reference 4*(12+D*4) = 1*(48+D*16) in every D) on screened Laplace (mesh_transformer_kernel_singonly_h1, 2000 steps), potential-flow velocity (mesh_transformer_kernel_singpair_pseudo_h1, drive_pseudo_dim=8, 3000 steps), and 3D Laplace (mesh_transformer_kernel_singpair_h1, 3000 steps), 3 seeds (17/18/19) each, compared against the ARCHIVED h4 comparator runs (protocols matched run-for-run; nothing re-trained on the h4 side). Pre-registered flip rule: h1 matches-or-beats on a split iff mean(h1) - mean(h4) <= 2 * max(seed sd of the two arms); flip the reference configuration to one head iff every split of >= 2 suites matches-or-beats AND no split anywhere is a decisive loss; any decisive loss -> heads stay at 4 and iteration 31 is recorded as Laplace-specific.",
+  "session_artifacts": "scratch/brev/results/p21_onehead (9 driver reports + aggregate.json), jobs p21_oh_*",
+  "suites_3seed_h1_vs_archived_h4": {
+   "screened": {
+    "h1_model": "mesh_transformer_kernel_singonly_h1",
+    "h1_parameters": 104086,
+    "h4_parameters": 104293,
+    "steps": 2000,
+    "h1_seeds": [
+     17,
+     18,
+     19
+    ],
+    "h4_comparator": "iteration_13_singonly_universality / screened_singonly_2000steps.runs (seeds 17/18/19)",
+    "splits": {
+     "in_distribution": {
+      "h1_per_seed": [
+       0.0131,
+       0.0263,
+       0.0222
+      ],
+      "h1_mean": 0.0205,
+      "h1_seed_sd": 0.0067,
+      "h4_mean": 0.0099,
+      "h4_seed_sd": 0.0029
+     },
+     "ood_high_screening": {
+      "h1_per_seed": [
+       0.1919,
+       0.2743,
+       0.1957
+      ],
+      "h1_mean": 0.2206,
+      "h1_seed_sd": 0.0465,
+      "h4_mean": 0.1657,
+      "h4_seed_sd": 0.033
+     },
+     "ood_low_screening": {
+      "h1_per_seed": [
+       0.0344,
+       0.0569,
+       0.0613
+      ],
+      "h1_mean": 0.0509,
+      "h1_seed_sd": 0.0144,
+      "h4_mean": 0.0345,
+      "h4_seed_sd": 0.009
+     },
+     "unseen_modes": {
+      "h1_per_seed": [
+       0.0237,
+       0.0114,
+       0.0249
+      ],
+      "h1_mean": 0.02,
+      "h1_seed_sd": 0.0074,
+      "h4_mean": 0.0206,
+      "h4_seed_sd": 0.0062
+     }
+    },
+    "all_splits_match_or_beat": true
+   },
+   "pf_velocity": {
+    "h1_model": "mesh_transformer_kernel_singpair_pseudo_h1",
+    "h1_parameters": 132227,
+    "h4_parameters": 132641,
+    "steps": 3000,
+    "h1_seeds": [
+     17,
+     18,
+     19
+    ],
+    "h4_comparator": "iteration_23_pseudoscalar_extension / runs_3000steps.mesh_transformer_kernel_singpair_pseudo (seeds 17-21, all five used)",
+    "splits": {
+     "circulation_ood": {
+      "h1_per_seed": [
+       0.0383,
+       0.064,
+       0.0405
+      ],
+      "h1_mean": 0.0476,
+      "h1_seed_sd": 0.0142,
+      "h4_mean": 0.0371,
+      "h4_seed_sd": 0.0158
+     },
+     "farfield_queries": {
+      "h1_per_seed": [
+       0.666,
+       0.7738,
+       0.6507
+      ],
+      "h1_mean": 0.6968,
+      "h1_seed_sd": 0.0671,
+      "h4_mean": 0.6731,
+      "h4_seed_sd": 0.0852
+     },
+     "in_distribution": {
+      "h1_per_seed": [
+       0.0305,
+       0.0445,
+       0.0212
+      ],
+      "h1_mean": 0.0321,
+      "h1_seed_sd": 0.0117,
+      "h4_mean": 0.0278,
+      "h4_seed_sd": 0.0149
+     },
+     "unseen_geometry_modes": {
+      "h1_per_seed": [
+       0.0433,
+       0.0545,
+       0.0406
+      ],
+      "h1_mean": 0.0461,
+      "h1_seed_sd": 0.0074,
+      "h4_mean": 0.0408,
+      "h4_seed_sd": 0.0114
+     },
+     "wilder_shapes": {
+      "h1_per_seed": [
+       0.167,
+       0.1717,
+       0.1443
+      ],
+      "h1_mean": 0.161,
+      "h1_seed_sd": 0.0146,
+      "h4_mean": 0.1305,
+      "h4_seed_sd": 0.0295
+     }
+    },
+    "all_splits_match_or_beat": true
+   },
+   "laplace3d": {
+    "h1_model": "mesh_transformer_kernel_singpair_h1",
+    "h1_parameters": 104123,
+    "h4_parameters": 104537,
+    "steps": 3000,
+    "h1_seeds": [
+     17,
+     18,
+     19
+    ],
+    "h4_comparator": "iteration_16_single_layer_member / runs_3d_singpair (seeds 17/18/19)",
+    "splits": {
+     "shell_topology": {
+      "h1_per_seed": [
+       0.4244,
+       0.2232,
+       1.1137
+      ],
+      "h1_mean": 0.5871,
+      "h1_seed_sd": 0.467,
+      "h4_mean": 0.4589,
+      "h4_seed_sd": 0.2149
+     },
+     "sphere": {
+      "h1_per_seed": [
+       0.0124,
+       0.011,
+       0.0045
+      ],
+      "h1_mean": 0.0093,
+      "h1_seed_sd": 0.0042,
+      "h4_mean": 0.0064,
+      "h4_seed_sd": 0.0021
+     },
+     "star": {
+      "h1_per_seed": [
+       0.0167,
+       0.0162,
+       0.0148
+      ],
+      "h1_mean": 0.0159,
+      "h1_seed_sd": 0.001,
+      "h4_mean": 0.0146,
+      "h4_seed_sd": 0.0016
+     },
+     "star_unseen_modes": {
+      "h1_per_seed": [
+       0.052,
+       0.0652,
+       0.0697
+      ],
+      "h1_mean": 0.0623,
+      "h1_seed_sd": 0.0092,
+      "h4_mean": 0.0724,
+      "h4_seed_sd": 0.0087
+     }
+    },
+    "all_splits_match_or_beat": true
+   }
+  },
+  "comparisons": [
+   {
+    "suite": "screened",
+    "split": "in_distribution",
+    "mean_difference": 0.0107,
+    "tolerance_2x_max_seed_sd": 0.0135,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "screened",
+    "split": "ood_low_screening",
+    "mean_difference": 0.0164,
+    "tolerance_2x_max_seed_sd": 0.0288,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "screened",
+    "split": "ood_high_screening",
+    "mean_difference": 0.0549,
+    "tolerance_2x_max_seed_sd": 0.093,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "screened",
+    "split": "unseen_modes",
+    "mean_difference": -0.0006,
+    "tolerance_2x_max_seed_sd": 0.0149,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "pf_velocity",
+    "split": "in_distribution",
+    "mean_difference": 0.0043,
+    "tolerance_2x_max_seed_sd": 0.0298,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "pf_velocity",
+    "split": "unseen_geometry_modes",
+    "mean_difference": 0.0053,
+    "tolerance_2x_max_seed_sd": 0.0227,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "pf_velocity",
+    "split": "wilder_shapes",
+    "mean_difference": 0.0304,
+    "tolerance_2x_max_seed_sd": 0.0589,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "pf_velocity",
+    "split": "circulation_ood",
+    "mean_difference": 0.0105,
+    "tolerance_2x_max_seed_sd": 0.0317,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "pf_velocity",
+    "split": "farfield_queries",
+    "mean_difference": 0.0238,
+    "tolerance_2x_max_seed_sd": 0.1705,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "laplace3d",
+    "split": "sphere",
+    "mean_difference": 0.0029,
+    "tolerance_2x_max_seed_sd": 0.0084,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "laplace3d",
+    "split": "star",
+    "mean_difference": 0.0013,
+    "tolerance_2x_max_seed_sd": 0.0032,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "laplace3d",
+    "split": "star_unseen_modes",
+    "mean_difference": -0.0101,
+    "tolerance_2x_max_seed_sd": 0.0183,
+    "matches_or_beats": true
+   },
+   {
+    "suite": "laplace3d",
+    "split": "shell_topology",
+    "mean_difference": 0.1282,
+    "tolerance_2x_max_seed_sd": 0.934,
+    "matches_or_beats": true
+   }
+  ],
+  "passing_suites": "3/3 (rule requires >= 2)",
+  "any_decisive_loss": false,
+  "verdict": "flip_default_to_one_head",
+  "findings": [
+   "NO DECISIVE LOSS ANYWHERE: all 13 suite-split cells match-or-beat under the pre-registered tolerance; all three suites pass on every split; the falsifier did not fire.",
+   "THE ITERATION-31 WIN DID NOT TRAVEL: the 15% Laplace ID gain reappears nowhere - h1's 3-seed mean is directionally worse on 11 of 13 cells, and both exceptions are mode-OOD splits (screened unseen_modes -0.0006, 3D star_unseen_modes -0.0101). The cross-suite evidence is non-inferiority, not superiority.",
+   "CLOSEST CELLS, STATED PLAINLY: screened ID +0.0107 vs tolerance 0.0135 (1.6x the larger sd) and pf wilder_shapes +0.0304 vs 0.0589 (1.0x); several tolerances are widened by the h1 arm's OWN larger seed sd (the rule keys tolerance to max of the two sds), a bias worth naming - the noisier arm buys itself slack.",
+   "VERDICT - FLIP ON PARSIMONY, NOT ON SUPERIORITY: per the pre-registered rule the reference configuration flips to one full-width head (heads=1, scalar_rank=48, vector_rank=16): fewer heads, fewer parameters on every suite (-0.20%/-0.31%/-0.40%), one less architectural degree of freedom, and no split anywhere measurably worse. The flip lands in the documented reference configuration (book sec-reference-config, 1-layer singpair: 81,961 -> 81,547 params); the frozen benchmark capacity configs and every archived arm stay bitwise as recorded, per the program's comparability convention.",
+   "PSEUDO-SECTOR COMPOSITION CONFIRMED: the one-head trade composes with drive_pseudo_dim=8 unchanged (per-head pseudo split 8/heads goes 2 -> 8 exactly as the scalar channels); circulation_ood stays at the typed-circulation level (0.0476 vs 0.0371, within tolerance) - the iteration-23 fix survives the head change.",
+   "STANDING FALSIFIER: the flip reverts if any suite ever shows a decisive h1 loss; at three seeds these cells are within-tolerance ties, not proof of equivalence."
+  ]
+ },
+ "iteration_33_euler_rotational": {
+  "date": "2026-07-04",
+  "design": "Iteration 33: euler_rotational -- the first genuinely ROTATIONAL steady Euler family. omega = c^2 psi (vorticity linear in the streamfunction) => lap psi + c^2 psi = 0 (Helmholtz; Bessel J_m series on disks, the oscillatory sibling of screened's I_m/K_m); u = (psi_y, -psi_x) (psi pseudoscalar, u polar); pressure from the rotational Bernoulli relation H(psi) = -c^2 psi^2/2 (gauge H0=0): p = -c^2 psi^2/2 - |u|^2/2, exactly drive-quadratic. Targets {velocity rank-1, pressure rank-0}; drive = boundary velocity on cells; c~ = c R as a global operator scalar. All couplings kept strictly below the first disk Dirichlet eigenvalue j_{0,1} = 2.404826 (at eigenvalues the interior is not determined by boundary data). Pre-registered third structural wall: the linear arm's pressure pins at ~1.0. Arms carry the flipped one-head reference (iteration 32).",
+  "certification_fp64_exact_labels": {
+   "note": "float64 autograd through the closed-form fields at the sample query points, worst over 5 seeds per split; the momentum row verifies the rotational Bernoulli derivation itself. Thresholds: momentum <= 1e-10, incompressibility <= 1e-12, Helmholtz <= 1e-10 (tests/test_euler_rotational.py)",
+   "euler_momentum_residual": {
+    "in_distribution": 2.73e-16,
+    "unseen_coupling": 7.93e-16,
+    "unseen_modes": 2.23e-16,
+    "near_eigenvalue": 7.01e-16
+   },
+   "incompressibility_residual": {
+    "in_distribution": 2.52e-16,
+    "unseen_coupling": 2.2e-16,
+    "unseen_modes": 6.77e-16,
+    "near_eigenvalue": 1.05e-16
+   },
+   "helmholtz_residual": {
+    "in_distribution": 6.03e-16,
+    "unseen_coupling": 1.08e-15,
+    "unseen_modes": 4.89e-15,
+    "near_eigenvalue": 1.5e-15
+   }
+  },
+  "protocol": {
+   "driver": "problems/euler_rotational.py",
+   "steps": 3000,
+   "seeds": [
+    17,
+    29,
+    43
+   ],
+   "splits": {
+    "in_distribution": "c~ in [0.5, 1.8], drive modes 0-3",
+    "unseen_coupling": "c~ in [1.9, 2.2] (parameter OOD, safe band)",
+    "unseen_modes": "drive modes 4-6",
+    "near_eigenvalue": "c~ in [2.25, 2.38], approaching j_{0,1}"
+   },
+   "evaluation": "16 cases/split, eval seed 97000037, float32",
+   "capacity": "one-head flipped reference (heads=1, ranks 48/16); singpair kernel dictionary; multi-field output {velocity:1, pressure:0}",
+   "jobs": "p22_er_* on mesh-xform-a100 (A100 80GB)"
+  },
+  "parameters": {
+   "floor": 0,
+   "mt_singpair_linear": 106408,
+   "mt_singpair_nl_pseudo": 233108,
+   "mt_singpair_nl": 172564
+  },
+  "runs_3000steps_3seed": {
+   "floor": [
+    {
+     "seed": 17,
+     "in_distribution": 0.9443,
+     "in_distribution/pressure": 1.0,
+     "in_distribution/velocity": 0.9111,
+     "near_eigenvalue": 0.9995,
+     "near_eigenvalue/pressure": 1.0,
+     "near_eigenvalue/velocity": 0.9963,
+     "unseen_coupling": 0.9939,
+     "unseen_coupling/pressure": 1.0,
+     "unseen_coupling/velocity": 0.9799,
+     "unseen_modes": 1.0,
+     "unseen_modes/pressure": 1.0,
+     "unseen_modes/velocity": 1.0
+    }
+   ],
+   "mt_singpair_linear": [
+    {
+     "seed": 17,
+     "in_distribution": 0.5815,
+     "in_distribution/pressure": 1.0001,
+     "in_distribution/velocity": 0.026,
+     "near_eigenvalue": 0.974,
+     "near_eigenvalue/pressure": 1.0,
+     "near_eigenvalue/velocity": 0.1877,
+     "unseen_coupling": 0.8809,
+     "unseen_coupling/pressure": 0.9999,
+     "unseen_coupling/velocity": 0.115,
+     "unseen_modes": 0.8816,
+     "unseen_modes/pressure": 1.0,
+     "unseen_modes/velocity": 0.073
+    },
+    {
+     "seed": 29,
+     "in_distribution": 0.5815,
+     "in_distribution/pressure": 1.0,
+     "in_distribution/velocity": 0.0263,
+     "near_eigenvalue": 0.9736,
+     "near_eigenvalue/pressure": 1.0,
+     "near_eigenvalue/velocity": 0.155,
+     "unseen_coupling": 0.8808,
+     "unseen_coupling/pressure": 1.0,
+     "unseen_coupling/velocity": 0.1013,
+     "unseen_modes": 0.8809,
+     "unseen_modes/pressure": 1.0,
+     "unseen_modes/velocity": 0.0166
+    },
+    {
+     "seed": 43,
+     "in_distribution": 0.5819,
+     "in_distribution/pressure": 1.0007,
+     "in_distribution/velocity": 0.0254,
+     "near_eigenvalue": 0.9746,
+     "near_eigenvalue/pressure": 0.9999,
+     "near_eigenvalue/velocity": 0.2601,
+     "unseen_coupling": 0.8821,
+     "unseen_coupling/pressure": 0.9996,
+     "unseen_coupling/velocity": 0.1657,
+     "unseen_modes": 0.8844,
+     "unseen_modes/pressure": 1.0,
+     "unseen_modes/velocity": 0.1677
+    }
+   ],
+   "mt_singpair_nl": [
+    {
+     "seed": 17,
+     "in_distribution": 0.112,
+     "in_distribution/pressure": 0.1807,
+     "in_distribution/velocity": 0.0444,
+     "near_eigenvalue": 3436557.083,
+     "near_eigenvalue/pressure": 3419371.6085,
+     "near_eigenvalue/velocity": 9777871.2742,
+     "unseen_coupling": 0.3034,
+     "unseen_coupling/pressure": 0.3298,
+     "unseen_coupling/velocity": 0.1844,
+     "unseen_modes": 2.4389,
+     "unseen_modes/pressure": 2.5893,
+     "unseen_modes/velocity": 1.904
+    },
+    {
+     "seed": 29,
+     "in_distribution": 0.1124,
+     "in_distribution/pressure": 0.1742,
+     "in_distribution/velocity": 0.0605,
+     "near_eigenvalue": 929750988585.4495,
+     "near_eigenvalue/pressure": 645767511428.4089,
+     "near_eigenvalue/velocity": 18134423531436.727,
+     "unseen_coupling": 0.8805,
+     "unseen_coupling/pressure": 0.8137,
+     "unseen_coupling/velocity": 1.8016,
+     "unseen_modes": 160.9344,
+     "unseen_modes/pressure": 124.0164,
+     "unseen_modes/velocity": 352.4097
+    },
+    {
+     "seed": 43,
+     "in_distribution": 0.1264,
+     "in_distribution/pressure": 0.1867,
+     "in_distribution/velocity": 0.0791,
+     "near_eigenvalue": 215999190.1785,
+     "near_eigenvalue/pressure": 209343879.0522,
+     "near_eigenvalue/velocity": 1457414048.5835,
+     "unseen_coupling": 0.1977,
+     "unseen_coupling/pressure": 0.2021,
+     "unseen_coupling/velocity": 0.2232,
+     "unseen_modes": 138.555,
+     "unseen_modes/pressure": 139.6347,
+     "unseen_modes/velocity": 126.6087
+    }
+   ],
+   "mt_singpair_nl_pseudo": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0721,
+     "in_distribution/pressure": 0.1036,
+     "in_distribution/velocity": 0.0522,
+     "near_eigenvalue": 4240461.3128,
+     "near_eigenvalue/pressure": 4239310.3053,
+     "near_eigenvalue/velocity": 5008148.6042,
+     "unseen_coupling": 0.2253,
+     "unseen_coupling/pressure": 0.2439,
+     "unseen_coupling/velocity": 0.1323,
+     "unseen_modes": 1.4471,
+     "unseen_modes/pressure": 1.6162,
+     "unseen_modes/velocity": 0.3517
+    },
+    {
+     "seed": 29,
+     "in_distribution": 0.085,
+     "in_distribution/pressure": 0.1071,
+     "in_distribution/velocity": 0.0688,
+     "near_eigenvalue": 15430487980.1096,
+     "near_eigenvalue/pressure": 15436374174.4284,
+     "near_eigenvalue/velocity": 10273437665.7996,
+     "unseen_coupling": 0.3346,
+     "unseen_coupling/pressure": 0.3504,
+     "unseen_coupling/velocity": 0.1978,
+     "unseen_modes": 21.2045,
+     "unseen_modes/pressure": 22.0122,
+     "unseen_modes/velocity": 9.9448
+    },
+    {
+     "seed": 43,
+     "in_distribution": 0.0812,
+     "in_distribution/pressure": 0.0975,
+     "in_distribution/velocity": 0.0683,
+     "near_eigenvalue": 1540337779.3402,
+     "near_eigenvalue/pressure": 1529376300.8019,
+     "near_eigenvalue/velocity": 5201215758.8428,
+     "unseen_coupling": 0.1857,
+     "unseen_coupling/pressure": 0.2007,
+     "unseen_coupling/velocity": 0.0982,
+     "unseen_modes": 2.0756,
+     "unseen_modes/pressure": 2.2962,
+     "unseen_modes/velocity": 0.3491
+    }
+   ]
+  },
+  "aggregates_mean_sd": {
+   "floor": {
+    "in_distribution": {
+     "mean": 0.9443,
+     "sd": 0.0
+    },
+    "in_distribution/pressure": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "in_distribution/velocity": {
+     "mean": 0.9111,
+     "sd": 0.0
+    },
+    "near_eigenvalue": {
+     "mean": 0.9995,
+     "sd": 0.0
+    },
+    "near_eigenvalue/pressure": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "near_eigenvalue/velocity": {
+     "mean": 0.9963,
+     "sd": 0.0
+    },
+    "unseen_coupling": {
+     "mean": 0.9939,
+     "sd": 0.0
+    },
+    "unseen_coupling/pressure": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "unseen_coupling/velocity": {
+     "mean": 0.9799,
+     "sd": 0.0
+    },
+    "unseen_modes": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "unseen_modes/pressure": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "unseen_modes/velocity": {
+     "mean": 1.0,
+     "sd": 0.0
+    }
+   },
+   "mt_singpair_linear": {
+    "in_distribution": {
+     "mean": 0.5816,
+     "sd": 0.0002
+    },
+    "in_distribution/pressure": {
+     "mean": 1.0003,
+     "sd": 0.0004
+    },
+    "in_distribution/velocity": {
+     "mean": 0.0259,
+     "sd": 0.0005
+    },
+    "near_eigenvalue": {
+     "mean": 0.9741,
+     "sd": 0.0005
+    },
+    "near_eigenvalue/pressure": {
+     "mean": 1.0,
+     "sd": 0.0001
+    },
+    "near_eigenvalue/velocity": {
+     "mean": 0.2009,
+     "sd": 0.0538
+    },
+    "unseen_coupling": {
+     "mean": 0.8813,
+     "sd": 0.0007
+    },
+    "unseen_coupling/pressure": {
+     "mean": 0.9998,
+     "sd": 0.0002
+    },
+    "unseen_coupling/velocity": {
+     "mean": 0.1273,
+     "sd": 0.0339
+    },
+    "unseen_modes": {
+     "mean": 0.8823,
+     "sd": 0.0019
+    },
+    "unseen_modes/pressure": {
+     "mean": 1.0,
+     "sd": 0.0
+    },
+    "unseen_modes/velocity": {
+     "mean": 0.0858,
+     "sd": 0.0764
+    }
+   },
+   "mt_singpair_nl": {
+    "in_distribution": {
+     "mean": 0.1169,
+     "sd": 0.0082
+    },
+    "in_distribution/pressure": {
+     "mean": 0.1805,
+     "sd": 0.0063
+    },
+    "in_distribution/velocity": {
+     "mean": 0.0613,
+     "sd": 0.0174
+    },
+    "near_eigenvalue": {
+     "mean": 309990141444.237,
+     "sd": 536728648418.0002
+    },
+    "near_eigenvalue/pressure": {
+     "mean": 215326758226.3565,
+     "sd": 372772641316.5112
+    },
+    "near_eigenvalue/velocity": {
+     "mean": 6045296907785.528,
+     "sd": 10469490790669.658
+    },
+    "unseen_coupling": {
+     "mean": 0.4605,
+     "sd": 0.3675
+    },
+    "unseen_coupling/pressure": {
+     "mean": 0.4485,
+     "sd": 0.3226
+    },
+    "unseen_coupling/velocity": {
+     "mean": 0.7364,
+     "sd": 0.9227
+    },
+    "unseen_modes": {
+     "mean": 100.6428,
+     "sd": 85.78
+    },
+    "unseen_modes/pressure": {
+     "mean": 88.7468,
+     "sd": 75.0221
+    },
+    "unseen_modes/velocity": {
+     "mean": 160.3075,
+     "sd": 177.6662
+    }
+   },
+   "mt_singpair_nl_pseudo": {
+    "in_distribution": {
+     "mean": 0.0794,
+     "sd": 0.0066
+    },
+    "in_distribution/pressure": {
+     "mean": 0.1027,
+     "sd": 0.0049
+    },
+    "in_distribution/velocity": {
+     "mean": 0.0631,
+     "sd": 0.0094
+    },
+    "near_eigenvalue": {
+     "mean": 5658355406.9209,
+     "sd": 8497695570.7765
+    },
+    "near_eigenvalue/pressure": {
+     "mean": 5656663261.8452,
+     "sd": 8503738581.3664
+    },
+    "near_eigenvalue/velocity": {
+     "mean": 5159887191.0822,
+     "sd": 5134339512.0782
+    },
+    "unseen_coupling": {
+     "mean": 0.2485,
+     "sd": 0.0771
+    },
+    "unseen_coupling/pressure": {
+     "mean": 0.265,
+     "sd": 0.077
+    },
+    "unseen_coupling/velocity": {
+     "mean": 0.1428,
+     "sd": 0.0506
+    },
+    "unseen_modes": {
+     "mean": 8.2424,
+     "sd": 11.2299
+    },
+    "unseen_modes/pressure": {
+     "mean": 8.6415,
+     "sd": 11.5843
+    },
+    "unseen_modes/velocity": {
+     "mean": 3.5485,
+     "sd": 5.5393
+    }
+   }
+  },
+  "fidelity_per_seed": {
+   "floor": [
+    {
+     "seed": 17,
+     "pde_residual": {
+      "in_distribution": 1.3892,
+      "near_eigenvalue": 5.3724,
+      "unseen_coupling": 4.2294,
+      "unseen_modes": 1.3892
+     },
+     "momentum_residual": {
+      "in_distribution": 0.0,
+      "near_eigenvalue": 0.0,
+      "unseen_coupling": 0.0,
+      "unseen_modes": 0.0
+     },
+     "divergence_residual": {
+      "in_distribution": 0.0,
+      "near_eigenvalue": 0.0,
+      "unseen_coupling": 0.0,
+      "unseen_modes": 0.0
+     }
+    }
+   ],
+   "mt_singpair_linear": [
+    {
+     "seed": 17,
+     "pde_residual": {
+      "in_distribution": 0.7772,
+      "near_eigenvalue": 3.7717,
+      "unseen_coupling": 1.968,
+      "unseen_modes": 3.0959
+     },
+     "momentum_residual": {
+      "in_distribution": 0.9654,
+      "near_eigenvalue": 0.7068,
+      "unseen_coupling": 0.8198,
+      "unseen_modes": 0.8255
+     },
+     "divergence_residual": {
+      "in_distribution": 0.09,
+      "near_eigenvalue": 0.0949,
+      "unseen_coupling": 0.1417,
+      "unseen_modes": 0.177
+     }
+    },
+    {
+     "seed": 29,
+     "pde_residual": {
+      "in_distribution": 0.797,
+      "near_eigenvalue": 3.1976,
+      "unseen_coupling": 2.0894,
+      "unseen_modes": 2.6097
+     },
+     "momentum_residual": {
+      "in_distribution": 1.019,
+      "near_eigenvalue": 0.7338,
+      "unseen_coupling": 0.8969,
+      "unseen_modes": 0.9787
+     },
+     "divergence_residual": {
+      "in_distribution": 0.0952,
+      "near_eigenvalue": 0.1173,
+      "unseen_coupling": 0.2375,
+      "unseen_modes": 0.1671
+     }
+    },
+    {
+     "seed": 43,
+     "pde_residual": {
+      "in_distribution": 0.6867,
+      "near_eigenvalue": 4.1822,
+      "unseen_coupling": 2.3611,
+      "unseen_modes": 1.7341
+     },
+     "momentum_residual": {
+      "in_distribution": 0.9625,
+      "near_eigenvalue": 0.5507,
+      "unseen_coupling": 0.7727,
+      "unseen_modes": 0.6968
+     },
+     "divergence_residual": {
+      "in_distribution": 0.1043,
+      "near_eigenvalue": 0.1291,
+      "unseen_coupling": 0.2222,
+      "unseen_modes": 0.3289
+     }
+    }
+   ],
+   "mt_singpair_nl": [
+    {
+     "seed": 17,
+     "pde_residual": {
+      "in_distribution": 1.1076,
+      "near_eigenvalue": 3.1907,
+      "unseen_coupling": 1.3705,
+      "unseen_modes": 3.419
+     },
+     "momentum_residual": {
+      "in_distribution": 0.4172,
+      "near_eigenvalue": 2.7154,
+      "unseen_coupling": 0.6803,
+      "unseen_modes": 0.4958
+     },
+     "divergence_residual": {
+      "in_distribution": 0.1181,
+      "near_eigenvalue": 0.8731,
+      "unseen_coupling": 0.2675,
+      "unseen_modes": 0.383
+     }
+    },
+    {
+     "seed": 29,
+     "pde_residual": {
+      "in_distribution": 1.082,
+      "near_eigenvalue": 3.083,
+      "unseen_coupling": 1.8304,
+      "unseen_modes": 3.9717
+     },
+     "momentum_residual": {
+      "in_distribution": 0.4043,
+      "near_eigenvalue": 64.8771,
+      "unseen_coupling": 0.9542,
+      "unseen_modes": 0.5285
+     },
+     "divergence_residual": {
+      "in_distribution": 0.132,
+      "near_eigenvalue": 2.1243,
+      "unseen_coupling": 0.3753,
+      "unseen_modes": 0.6477
+     }
+    },
+    {
+     "seed": 43,
+     "pde_residual": {
+      "in_distribution": 0.8711,
+      "near_eigenvalue": 2.4429,
+      "unseen_coupling": 1.2041,
+      "unseen_modes": 2.809
+     },
+     "momentum_residual": {
+      "in_distribution": 0.3964,
+      "near_eigenvalue": 0.2837,
+      "unseen_coupling": 0.7804,
+      "unseen_modes": 0.4994
+     },
+     "divergence_residual": {
+      "in_distribution": 0.2576,
+      "near_eigenvalue": 0.5328,
+      "unseen_coupling": 0.311,
+      "unseen_modes": 0.5478
+     }
+    }
+   ],
+   "mt_singpair_nl_pseudo": [
+    {
+     "seed": 17,
+     "pde_residual": {
+      "in_distribution": 0.7303,
+      "near_eigenvalue": 2.2782,
+      "unseen_coupling": 1.37,
+      "unseen_modes": 3.0331
+     },
+     "momentum_residual": {
+      "in_distribution": 0.2037,
+      "near_eigenvalue": 1.1554,
+      "unseen_coupling": 0.5751,
+      "unseen_modes": 0.4567
+     },
+     "divergence_residual": {
+      "in_distribution": 0.1307,
+      "near_eigenvalue": 0.2819,
+      "unseen_coupling": 0.2428,
+      "unseen_modes": 0.3877
+     }
+    },
+    {
+     "seed": 29,
+     "pde_residual": {
+      "in_distribution": 0.8212,
+      "near_eigenvalue": 2.7692,
+      "unseen_coupling": 1.4909,
+      "unseen_modes": 2.819
+     },
+     "momentum_residual": {
+      "in_distribution": 0.228,
+      "near_eigenvalue": 0.4814,
+      "unseen_coupling": 0.6642,
+      "unseen_modes": 0.3898
+     },
+     "divergence_residual": {
+      "in_distribution": 0.1199,
+      "near_eigenvalue": 0.5038,
+      "unseen_coupling": 0.2161,
+      "unseen_modes": 0.4977
+     }
+    },
+    {
+     "seed": 43,
+     "pde_residual": {
+      "in_distribution": 1.0161,
+      "near_eigenvalue": 1.3209,
+      "unseen_coupling": 1.1745,
+      "unseen_modes": 2.9172
+     },
+     "momentum_residual": {
+      "in_distribution": 0.2687,
+      "near_eigenvalue": 0.723,
+      "unseen_coupling": 0.7344,
+      "unseen_modes": 0.4995
+     },
+     "divergence_residual": {
+      "in_distribution": 0.1844,
+      "near_eigenvalue": 0.2389,
+      "unseen_coupling": 0.3,
+      "unseen_modes": 0.3278
+     }
+    }
+   ]
+  },
+  "wall_confirmation": {
+   "pre_registered": "the field_mode='linear' arm is exactly odd in the boundary-velocity drive; the pressure target is exactly even (drive-quadratic); the drive distribution is negation-symmetric; therefore its pressure relative L2 must pin at ~1.0 on every split and seed",
+   "measured_linear_pressure": {
+    "17": {
+     "in_distribution/pressure": 1.0001,
+     "near_eigenvalue/pressure": 1.0,
+     "unseen_coupling/pressure": 0.9999,
+     "unseen_modes/pressure": 1.0
+    },
+    "29": {
+     "in_distribution/pressure": 1.0,
+     "near_eigenvalue/pressure": 1.0,
+     "unseen_coupling/pressure": 1.0,
+     "unseen_modes/pressure": 1.0
+    },
+    "43": {
+     "in_distribution/pressure": 1.0007,
+     "near_eigenvalue/pressure": 0.9999,
+     "unseen_coupling/pressure": 0.9996,
+     "unseen_modes/pressure": 1.0
+    }
+   },
+   "held": true
+  }
+ },
+ "iteration_35_declared_degree": {
+  "date": "2026-07-05",
+  "design": "Iteration 35: the DECLARED-degree fix rung of the nonlinear-fragility ladder (diagnosis: iteration 34, results/nonlinear_fragility_2026-07-04.json -- both nonlinear-mode extrapolation blowups share one engine, the multiplicative zero-preserving read-in's implicit drive degree ~21 against targets of exactly degree 1 and 2).  Fix mirrors how the architecture declares linearity: MeshTransformer(field_mode='quadratic') -- drive-linear machinery end to end (drive lift, LinearMeshFieldBlock stack, linear kernel decode) plus EXACTLY ONE bilinear operator-conditioned typed composition at the query read-in (QuadraticFieldReadIn, the third field-mode class), so the output is an exact degree-<=2 polynomial in the drive for any weights.  Arms mt_singpair_q2 on both suites (3 seeds x 3000 steps, jobs p24_*); typed addendum mt_singpair_q2_pseudo on euler_bernoulli (declared degree AND declared parity, jobs p24_eb_q2p_*) because the untyped arm's circulation-OOD is capped by the iteration-23 parity floor (~0.647), a mechanism orthogonal to degree.  Acceptance study: studies/declared_degree.py, artifact results/declared_degree_2026-07-05.json.",
+  "pre_registered": {
+   "structural_degree": "iteration-34 degree probe becomes the acceptance test: trained checkpoints in float64 must fit output(alpha*drive) as an exact degree-<=2 polynomial, residual <= 1e-9, slopes at target degrees",
+   "er_near_eigenvalue": "combined < 1.0 (bar); stretch 0.24-0.30",
+   "eb_circulation_ood": "combined < 0.15 (bar), below the typed nl 0.35",
+   "id_non_degradation": "within 2x the larger seed sd of the nl arms",
+   "falsifier": "if q2 matches on-range but still detonates off-range, the degree diagnosis was incomplete"
+  },
+  "protocol": {
+   "drivers": [
+    "problems/euler_bernoulli.py",
+    "problems/euler_rotational.py"
+   ],
+   "steps": 3000,
+   "seeds": [
+    17,
+    29,
+    43
+   ],
+   "evaluation": "16 cases/split, eval seed 97000037, float32",
+   "capacity": "euler_rotational: one-head flipped reference; euler_bernoulli: frozen benchmark capacity -- both exactly the archived nl arms' configs with only field_mode changed",
+   "jobs": "p24_{eb,er}_q2_s* and p24_eb_q2p_s* on mesh-xform-a100"
+  },
+  "parameters": {
+   "euler_rotational/mt_singpair_q2": 122272,
+   "euler_bernoulli/mt_singpair_q2": 122798,
+   "euler_bernoulli/mt_singpair_q2_pseudo": 155678
+  },
+  "runs_3000steps_3seed": {
+   "euler_rotational/mt_singpair_q2": [
+    {
+     "seed": 17,
+     "in_distribution": 0.0875,
+     "in_distribution/pressure": 0.1307,
+     "in_distribution/velocity": 0.0475,
+     "near_eigenvalue": 0.7973,
+     "near_eigenvalue/pressure": 0.8246,
+     "near_eigenvalue/velocity": 0.2379,
+     "unseen_coupling": 0.3989,
+     "unseen_coupling/pressure": 0.4529,
+     "unseen_coupling/velocity": 0.16,
+     "unseen_modes": 0.13,
+     "unseen_modes/pressure": 0.139,
+     "unseen_modes/velocity": 0.0893
+    },
+    {
+     "seed": 29,
+     "in_distribution": 0.0665,
+     "in_distribution/pressure": 0.0991,
+     "in_distribution/velocity": 0.0309,
+     "near_eigenvalue": 0.6182,
+     "near_eigenvalue/pressure": 0.6285,
+     "near_eigenvalue/velocity": 0.2175,
+     "unseen_coupling": 0.4144,
+     "unseen_coupling/pressure": 0.4536,
+     "unseen_coupling/velocity": 0.1369,
+     "unseen_modes": 0.1461,
+     "unseen_modes/pressure": 0.1598,
+     "unseen_modes/velocity": 0.0813
+    },
+    {
+     "seed": 43,
+     "in_distribution": 0.0613,
+     "in_distribution/pressure": 0.0885,
+     "in_distribution/velocity": 0.0332,
+     "near_eigenvalue": 0.5941,
+     "near_eigenvalue/pressure": 0.6051,
+     "near_eigenvalue/velocity": 0.1913,
+     "unseen_coupling": 0.4027,
+     "unseen_coupling/pressure": 0.4448,
+     "unseen_coupling/velocity": 0.1196,
+     "unseen_modes": 0.156,
+     "unseen_modes/pressure": 0.1692,
+     "unseen_modes/velocity": 0.0949
+    }
+   ],
+   "euler_bernoulli/mt_singpair_q2": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.6828,
+     "circulation_ood/pressure": 0.7191,
+     "circulation_ood/velocity": 0.6487,
+     "farfield_queries": 0.8197,
+     "farfield_queries/pressure": 0.8231,
+     "farfield_queries/velocity": 0.8182,
+     "in_distribution": 0.16,
+     "in_distribution/pressure": 0.1865,
+     "in_distribution/velocity": 0.14,
+     "unseen_geometry_modes": 0.2179,
+     "unseen_geometry_modes/pressure": 0.2552,
+     "unseen_geometry_modes/velocity": 0.1897,
+     "wilder_shapes": 0.301,
+     "wilder_shapes/pressure": 0.3281,
+     "wilder_shapes/velocity": 0.2705
+    },
+    {
+     "seed": 29,
+     "circulation_ood": 0.6795,
+     "circulation_ood/pressure": 0.715,
+     "circulation_ood/velocity": 0.6463,
+     "farfield_queries": 0.7819,
+     "farfield_queries/pressure": 0.8088,
+     "farfield_queries/velocity": 0.7677,
+     "in_distribution": 0.1629,
+     "in_distribution/pressure": 0.1917,
+     "in_distribution/velocity": 0.141,
+     "unseen_geometry_modes": 0.2212,
+     "unseen_geometry_modes/pressure": 0.2624,
+     "unseen_geometry_modes/velocity": 0.1896,
+     "wilder_shapes": 0.3322,
+     "wilder_shapes/pressure": 0.3875,
+     "wilder_shapes/velocity": 0.2707
+    },
+    {
+     "seed": 43,
+     "circulation_ood": 0.6851,
+     "circulation_ood/pressure": 0.7219,
+     "circulation_ood/velocity": 0.6506,
+     "farfield_queries": 0.7326,
+     "farfield_queries/pressure": 0.7528,
+     "farfield_queries/velocity": 0.7222,
+     "in_distribution": 0.1614,
+     "in_distribution/pressure": 0.188,
+     "in_distribution/velocity": 0.1414,
+     "unseen_geometry_modes": 0.2184,
+     "unseen_geometry_modes/pressure": 0.256,
+     "unseen_geometry_modes/velocity": 0.1897,
+     "wilder_shapes": 0.3117,
+     "wilder_shapes/pressure": 0.3547,
+     "wilder_shapes/velocity": 0.2645
+    }
+   ],
+   "euler_bernoulli/mt_singpair_q2_pseudo": [
+    {
+     "seed": 17,
+     "circulation_ood": 0.1537,
+     "circulation_ood/pressure": 0.2087,
+     "circulation_ood/velocity": 0.0658,
+     "farfield_queries": 0.6844,
+     "farfield_queries/pressure": 0.6756,
+     "farfield_queries/velocity": 0.6886,
+     "in_distribution": 0.0361,
+     "in_distribution/pressure": 0.0426,
+     "in_distribution/velocity": 0.0303,
+     "unseen_geometry_modes": 0.0532,
+     "unseen_geometry_modes/pressure": 0.0654,
+     "unseen_geometry_modes/velocity": 0.0429,
+     "wilder_shapes": 0.2178,
+     "wilder_shapes/pressure": 0.2377,
+     "wilder_shapes/velocity": 0.1893
+    },
+    {
+     "seed": 29,
+     "circulation_ood": 0.044,
+     "circulation_ood/pressure": 0.0532,
+     "circulation_ood/velocity": 0.0324,
+     "farfield_queries": 0.6274,
+     "farfield_queries/pressure": 0.6446,
+     "farfield_queries/velocity": 0.6183,
+     "in_distribution": 0.0297,
+     "in_distribution/pressure": 0.0352,
+     "in_distribution/velocity": 0.025,
+     "unseen_geometry_modes": 0.0469,
+     "unseen_geometry_modes/pressure": 0.0599,
+     "unseen_geometry_modes/velocity": 0.0357,
+     "wilder_shapes": 0.164,
+     "wilder_shapes/pressure": 0.1757,
+     "wilder_shapes/velocity": 0.1429
+    },
+    {
+     "seed": 43,
+     "circulation_ood": 0.0613,
+     "circulation_ood/pressure": 0.0355,
+     "circulation_ood/velocity": 0.0783,
+     "farfield_queries": 0.6919,
+     "farfield_queries/pressure": 0.6698,
+     "farfield_queries/velocity": 0.7033,
+     "in_distribution": 0.0288,
+     "in_distribution/pressure": 0.0262,
+     "in_distribution/velocity": 0.0302,
+     "unseen_geometry_modes": 0.0493,
+     "unseen_geometry_modes/pressure": 0.0565,
+     "unseen_geometry_modes/velocity": 0.0427,
+     "wilder_shapes": 0.1851,
+     "wilder_shapes/pressure": 0.2054,
+     "wilder_shapes/velocity": 0.1549
+    }
+   ]
+  },
+  "acceptance_verdicts": {
+   "structural_degree": {
+    "passes": true,
+    "worst_fit_residual": 2.1379261059099044e-15,
+    "residual_rule": 1e-09,
+    "amplitude_slopes": {
+     "seed17": {
+      "velocity": {
+       "target_degree": 1.0,
+       "on_range": 1.00107720791237,
+       "extrapolated": 1.00354875894058
+      },
+      "pressure": {
+       "target_degree": 2.0,
+       "on_range": 1.9970895112359535,
+       "extrapolated": 1.9994114209335718
+      }
+     },
+     "seed29": {
+      "velocity": {
+       "target_degree": 1.0,
+       "on_range": 0.999495637797074,
+       "extrapolated": 0.9986759058502674
+      },
+      "pressure": {
+       "target_degree": 2.0,
+       "on_range": 2.0050258989205214,
+       "extrapolated": 2.001757108840029
+      }
+     },
+     "seed43": {
+      "velocity": {
+       "target_degree": 1.0,
+       "on_range": 0.9984403410400201,
+       "extrapolated": 0.995592351224281
+      },
+      "pressure": {
+       "target_degree": 2.0,
+       "on_range": 1.985993477128587,
+       "extrapolated": 1.995844573574283
+      }
+     }
+    },
+    "slopes_at_target_degree": true,
+    "typed_arm_passes": true
+   },
+   "er_near_eigenvalue": {
+    "per_seed_report": [
+     0.7972646482866018,
+     0.618206611494645,
+     0.5940594024042071
+    ],
+    "mean_report": 0.669843554061818,
+    "mean_sweep_near_tier": 0.6786155063207903,
+    "bar": 1.0,
+    "passes_bar": true,
+    "meets_stretch": false,
+    "stretch_band": [
+     0.24,
+     0.3
+    ]
+   },
+   "eb_circulation_ood": {
+    "untyped": {
+     "per_seed": [
+      0.6827672934310135,
+      0.6795050976521497,
+      0.6850636620199214
+     ],
+     "mean": 0.6824453510343615,
+     "note": "the untyped arm is capped by the iteration-23 parity floor (~0.647 circulation velocity), a mechanism orthogonal to drive degree; rule 3's matched-typing subject is the typed arm below"
+    },
+    "bar": 0.15,
+    "nl_level_typed_comparator": 0.35,
+    "typed": {
+     "arm": "mt_singpair_q2_pseudo",
+     "per_seed": [
+      0.15369809122983455,
+      0.043998093713869466,
+      0.061275053258227526
+     ],
+     "mean": 0.08632374606731051,
+     "passes_bar": true,
+     "below_nl_level": true
+    }
+   },
+   "id_non_degradation": {
+    "euler_bernoulli": {
+     "passes": false,
+     "checks": {
+      "in_distribution/velocity_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.14081937540322542,
+       "q2_sd": 0.0007452357845765677,
+       "reference_mean": 0.031180000000000003,
+       "reference_sd": 0.0030458168034207186,
+       "delta": 0.10963937540322542,
+       "tolerance": 0.006091633606841437,
+       "passes": false,
+       "matched_typing": false
+      },
+      "in_distribution/velocity_vs_mt_singpair_nl": {
+       "q2_mean": 0.14081937540322542,
+       "q2_sd": 0.0007452357845765677,
+       "reference_mean": 0.15006,
+       "reference_sd": 0.00443880614580091,
+       "delta": -0.009240624596774577,
+       "tolerance": 0.00887761229160182,
+       "passes": true,
+       "matched_typing": true
+      },
+      "in_distribution/pressure_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.18875051755458117,
+       "q2_sd": 0.0026912596325636283,
+       "reference_mean": 0.06266000000000001,
+       "reference_sd": 0.007611044606359892,
+       "delta": 0.12609051755458117,
+       "tolerance": 0.015222089212719784,
+       "passes": false,
+       "matched_typing": false
+      },
+      "in_distribution/pressure_vs_mt_singpair_nl": {
+       "q2_mean": 0.18875051755458117,
+       "q2_sd": 0.0026912596325636283,
+       "reference_mean": 0.21044000000000002,
+       "reference_sd": 0.012217733013943305,
+       "delta": -0.02168948244541885,
+       "tolerance": 0.02443546602788661,
+       "passes": true,
+       "matched_typing": true
+      }
+     },
+     "matched_arm": "mt_singpair_nl",
+     "matched_typing_passes": true
+    },
+    "euler_rotational": {
+     "passes": true,
+     "checks": {
+      "in_distribution/velocity_vs_mt_singpair_nl": {
+       "q2_mean": 0.03719206808212524,
+       "q2_sd": 0.009016517171174406,
+       "reference_mean": 0.06133333333333333,
+       "reference_sd": 0.017365003119300997,
+       "delta": -0.02414126525120809,
+       "tolerance": 0.03473000623860199,
+       "passes": true,
+       "matched_typing": true
+      },
+      "in_distribution/velocity_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.03719206808212524,
+       "q2_sd": 0.009016517171174406,
+       "reference_mean": 0.0631,
+       "reference_sd": 0.00944298681562142,
+       "delta": -0.025907931917874764,
+       "tolerance": 0.01888597363124284,
+       "passes": true,
+       "matched_typing": false
+      },
+      "in_distribution/pressure_vs_mt_singpair_nl": {
+       "q2_mean": 0.10609676064147304,
+       "q2_sd": 0.021987057008820792,
+       "reference_mean": 0.18053333333333332,
+       "reference_sd": 0.006251666444503689,
+       "delta": -0.07443657269186028,
+       "tolerance": 0.043974114017641584,
+       "passes": true,
+       "matched_typing": true
+      },
+      "in_distribution/pressure_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.10609676064147304,
+       "q2_sd": 0.021987057008820792,
+       "reference_mean": 0.10273333333333334,
+       "reference_sd": 0.004858326186386965,
+       "delta": 0.0033634273081396965,
+       "tolerance": 0.043974114017641584,
+       "passes": true,
+       "matched_typing": false
+      }
+     },
+     "matched_arm": "mt_singpair_nl",
+     "matched_typing_passes": true
+    },
+    "euler_bernoulli_typed": {
+     "passes": true,
+     "checks": {
+      "in_distribution/velocity_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.028488959826063365,
+       "q2_sd": 0.0029920417269390974,
+       "reference_mean": 0.031180000000000003,
+       "reference_sd": 0.0030458168034207186,
+       "delta": -0.002691040173936638,
+       "tolerance": 0.006091633606841437,
+       "passes": true,
+       "matched_typing": true
+      },
+      "in_distribution/pressure_vs_mt_singpair_nl_pseudo": {
+       "q2_mean": 0.03464442786450187,
+       "q2_sd": 0.008245174811982628,
+       "reference_mean": 0.06266000000000001,
+       "reference_sd": 0.007611044606359892,
+       "delta": -0.028015572135498136,
+       "tolerance": 0.016490349623965256,
+       "passes": true,
+       "matched_typing": true
+      }
+     },
+     "matched_arm": "mt_singpair_nl_pseudo",
+     "matched_typing_passes": true
+    }
+   }
+  },
+  "comparators": {
+   "euler_rotational_nl": "iteration_33_euler_rotational",
+   "euler_bernoulli_nl": "iteration_25_euler_bernoulli_multifield",
+   "diagnosis": "results/nonlinear_fragility_2026-07-04.json"
+  }
+ },
+ "iteration_36_navier_stokes": {
+  "date": "2026-07-05",
+  "design": "Iteration 36: the first SOLVER-LABELED suite on a genuinely nonlinear PDE -- steady incompressible Navier-Stokes (-nu lap u + (u.grad)u + grad p = 0, div u = 0), Taylor-Hood P2-P1 with analytic-Jacobian Newton (datasets/fem_navier_stokes.py), on the bank's star domains with a smooth band-limited TANGENTIAL boundary velocity on an arc (exact continuous compatibility by construction) and Re = 1/nu as the family parameter (operator scalar fed to arms: viscosity = 1/Re).  Fixed-dataset regime (dataset_train_ns.py), 15 epochs, seeds 17/29/43.",
+  "solver_verification": {
+   "mms_velocity_order": 2.916,
+   "mms_pressure_order": 1.8987,
+   "mms_star_velocity_rel_l2_at_production_h0.02": 4.701656364016617e-06,
+   "mms_star_velocity_rel_l2_at_h0.01": 6.152429303930826e-07,
+   "reynolds_grid_converged": 12,
+   "reynolds_grid_total": 12,
+   "reynolds_grid_max": 400.0,
+   "artifact": "results/ns_solver_verification_2026-07-05.json"
+  },
+  "dataset": {
+   "version": "v1",
+   "n_cases": 1400,
+   "split_sizes": {
+    "eval_id": 140,
+    "eval_unseen_Re": 140,
+    "eval_unseen_drive_profile": 140,
+    "eval_unseen_geometry": 140,
+    "train": 840
+   },
+   "reynolds_bands": {
+    "train": [
+     10.0,
+     200.0
+    ],
+    "eval_unseen_Re": [
+     200.0,
+     300.0
+    ]
+   },
+   "label_noise_floor_velocity_max": 5.821403909956515e-05,
+   "label_noise_floor_pressure_max": 0.0012571116709616415,
+   "self_consistency_velocity_max": 0.02947563082609623,
+   "self_consistency_pressure_max": 0.018249283452995983,
+   "newton_rejections_total": 4,
+   "wall_seconds_per_case": 6.921073051017146,
+   "workers": 20
+  },
+  "results_3seed": {
+   "boundary_mean": {
+    "eval_id": {
+     "combined": 1.1931,
+     "combined_sd": 0.0,
+     "velocity": 1.206,
+     "pressure": 1.0
+    },
+    "eval_unseen_Re": {
+     "combined": 1.1819,
+     "combined_sd": 0.0,
+     "velocity": 1.1834,
+     "pressure": 1.0
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 1.0017,
+     "combined_sd": 0.0,
+     "velocity": 1.0025,
+     "pressure": 1.0
+    },
+    "eval_unseen_geometry": {
+     "combined": 1.1998,
+     "combined_sd": 0.0,
+     "velocity": 1.2106,
+     "pressure": 1.0
+    },
+    "parameters": 0
+   },
+   "mt_singpair_linear": {
+    "eval_id": {
+     "combined": 0.4374,
+     "combined_sd": 0.0013,
+     "velocity": 0.4281,
+     "pressure": 0.6906
+    },
+    "eval_unseen_Re": {
+     "combined": 0.5753,
+     "combined_sd": 0.0078,
+     "velocity": 0.5699,
+     "pressure": 1.0038
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.6942,
+     "combined_sd": 0.011,
+     "velocity": 0.6747,
+     "pressure": 0.747
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.4991,
+     "combined_sd": 0.0272,
+     "velocity": 0.4783,
+     "pressure": 0.9245
+    },
+    "parameters": 106408
+   },
+   "mt_singpair_nl_pseudo": {
+    "eval_id": {
+     "combined": 0.2305,
+     "combined_sd": 0.0049,
+     "velocity": 0.2154,
+     "pressure": 0.3563
+    },
+    "eval_unseen_Re": {
+     "combined": 0.3693,
+     "combined_sd": 0.0089,
+     "velocity": 0.3676,
+     "pressure": 0.5332
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.6625,
+     "combined_sd": 0.0476,
+     "velocity": 0.6421,
+     "pressure": 0.682
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.3193,
+     "combined_sd": 0.0198,
+     "velocity": 0.2935,
+     "pressure": 0.6549
+    },
+    "parameters": 233108
+   },
+   "mt_singpair_q2_pseudo": {
+    "eval_id": {
+     "combined": 0.2776,
+     "combined_sd": 0.06,
+     "velocity": 0.2599,
+     "pressure": 0.4552
+    },
+    "eval_unseen_Re": {
+     "combined": 0.4521,
+     "combined_sd": 0.0514,
+     "velocity": 0.4492,
+     "pressure": 0.6997
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.7427,
+     "combined_sd": 0.1128,
+     "velocity": 0.7184,
+     "pressure": 0.7893
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.4057,
+     "combined_sd": 0.1364,
+     "velocity": 0.3785,
+     "pressure": 0.7711
+    },
+    "parameters": 153848
+   },
+   "transolver_intree_matched": {
+    "eval_id": {
+     "combined": 0.9534,
+     "combined_sd": 0.0796,
+     "velocity": 0.9541,
+     "pressure": 0.94
+    },
+    "eval_unseen_Re": {
+     "combined": 0.9661,
+     "combined_sd": 0.061,
+     "velocity": 0.9652,
+     "pressure": 1.0491
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 1.0633,
+     "combined_sd": 0.0759,
+     "velocity": 1.08,
+     "pressure": 1.1003
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.9619,
+     "combined_sd": 0.0683,
+     "velocity": 0.962,
+     "pressure": 0.9684
+    },
+    "parameters": 103375
+   }
+  },
+  "re_wall": {
+   "splits_pooled": [
+    "eval_id",
+    "eval_unseen_Re"
+   ],
+   "bin_edges": [
+    10.0140038421401,
+    19.76334677590324,
+    39.004366479365316,
+    76.97788343781704,
+    151.92131223823353,
+    299.82748396597606
+   ],
+   "per_arm": {
+    "boundary_mean": {
+     "bin_centers": [
+      14.068057099238768,
+      27.76430839236074,
+      54.79483165787155,
+      108.14148632784251,
+      213.42489266530987
+     ],
+     "n_cases": [
+      90,
+      99,
+      93,
+      108,
+      450
+     ],
+     "velocity": [
+      1.249024013678233,
+      1.2092121658903179,
+      1.1849132084077405,
+      1.1943081749810114,
+      1.1827573879559834
+     ],
+     "pressure": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+     ],
+     "combined": [
+      1.2126013045060475,
+      1.1946230418370125,
+      1.1803788967363267,
+      1.1920347181539084,
+      1.181251251599951
+     ]
+    },
+    "mt_singpair_linear": {
+     "bin_centers": [
+      14.068057099238768,
+      27.76430839236074,
+      54.79483165787155,
+      108.14148632784251,
+      213.42489266530987
+     ],
+     "n_cases": [
+      90,
+      99,
+      93,
+      108,
+      450
+     ],
+     "velocity": [
+      0.3436434235837724,
+      0.3986415966893687,
+      0.44031049743775397,
+      0.4750804724516692,
+      0.569984887043635
+     ],
+     "pressure": [
+      0.42658226721816594,
+      0.5578587214754085,
+      0.7483455900863935,
+      0.9088586281847071,
+      1.0006837872664134
+     ],
+     "combined": [
+      0.35350796690795094,
+      0.4091561457811458,
+      0.450080051471514,
+      0.48340156055509936,
+      0.575389686569933
+     ]
+    },
+    "mt_singpair_nl_pseudo": {
+     "bin_centers": [
+      14.068057099238768,
+      27.76430839236074,
+      54.79483165787155,
+      108.14148632784251,
+      213.42489266530987
+     ],
+     "n_cases": [
+      90,
+      99,
+      93,
+      108,
+      450
+     ],
+     "velocity": [
+      0.1550182328455978,
+      0.17956900777238788,
+      0.22973144006344579,
+      0.24982625328832203,
+      0.3661735463804669
+     ],
+     "pressure": [
+      0.3142933631936709,
+      0.32446907400482833,
+      0.3802009585403627,
+      0.36392899864801653,
+      0.5300131544470787
+     ],
+     "combined": [
+      0.19521620198230644,
+      0.1990641272078355,
+      0.23518778876549795,
+      0.2519949178677633,
+      0.3678612845786131
+     ]
+    },
+    "mt_singpair_q2_pseudo": {
+     "bin_centers": [
+      14.068057099238768,
+      27.76430839236074,
+      54.79483165787155,
+      108.14148632784251,
+      213.42489266530987
+     ],
+     "n_cases": [
+      90,
+      99,
+      93,
+      108,
+      450
+     ],
+     "velocity": [
+      0.2060144018795755,
+      0.2219512779453788,
+      0.26191015886042707,
+      0.2958929131704348,
+      0.4466140821907255
+     ],
+     "pressure": [
+      0.39590749707486894,
+      0.39732644910162146,
+      0.4696251275718853,
+      0.49230448211784716,
+      0.696048893266254
+     ],
+     "combined": [
+      0.25105023284923617,
+      0.2437452469959261,
+      0.2700354999625873,
+      0.2996141728811245,
+      0.44947940638559847
+     ]
+    },
+    "transolver_intree_matched": {
+     "bin_centers": [
+      14.068057099238768,
+      27.76430839236074,
+      54.79483165787155,
+      108.14148632784251,
+      213.42489266530987
+     ],
+     "n_cases": [
+      90,
+      99,
+      93,
+      108,
+      450
+     ],
+     "velocity": [
+      0.9454562137524287,
+      0.9533874118568921,
+      0.9500428165799828,
+      0.9590197078607701,
+      0.9660047475496928
+     ],
+     "pressure": [
+      0.9193158990807003,
+      0.9099241751010971,
+      0.9611459521837132,
+      0.9563371020334738,
+      1.0442473137378692
+     ],
+     "combined": [
+      0.9423017330457732,
+      0.9516143763364237,
+      0.9511293586886744,
+      0.9594859828505233,
+      0.9668897626826509
+     ]
+    }
+   }
+  },
+  "verdicts": {
+   "P1_linear_wall_grows_with_Re": {
+    "velocity_gap_bottom_bin": 0.18862519073817463,
+    "velocity_gap_top_bin": 0.20381134066316814,
+    "pressure_gap_bottom_bin": 0.11228890402449504,
+    "pressure_gap_top_bin": 0.47067063281933463,
+    "velocity_gap_ratio_top_over_bottom": 1.0805096597414339,
+    "pressure_gap_ratio_top_over_bottom": 4.19160412071224
+   },
+   "P2_declared_degree_approximation": {
+    "q2_eval_id_combined": {
+     "mean": 0.2776217197424652,
+     "sd": 0.060046875639403835,
+     "seeds": [
+      0.2396050129594241,
+      0.3468463531443891,
+      0.24641379312358233
+     ]
+    },
+    "nl_eval_id_combined": {
+     "mean": 0.23050605450453207,
+     "sd": 0.004882273734214765,
+     "seeds": [
+      0.2283943701356894,
+      0.23608872655770177,
+      0.227035066820205
+     ]
+    },
+    "difference": 0.04711566523793312,
+    "within_2x_seed_sd": true
+   },
+   "P3_boundary_mean_pressure_floor": {
+    "boundary_mean_pressure_eval_id": {
+     "mean": 1.0,
+     "sd": 0.0,
+     "seeds": [
+      1.0,
+      1.0,
+      1.0
+     ]
+    },
+    "exactly_one": true
+   }
+  },
+  "artifacts": [
+   "results/ns_cavity_star_2026-07-05.json",
+   "results/ns_solver_verification_2026-07-05.json"
+  ],
+  "caveats": [
+   "the 1e-6 MMS bar is met at h=0.01 (6.2e-7); production labels run at h=0.02 (MMS 4.7e-6) where the finer-mesh label-noise floor -- the bound that matters against ~1e-2 model errors -- is reported per split in the manifest",
+   "the pressure label floor is the binding field (P1, O(h^2)); velocity labels sit two orders below it",
+   "no operator-fidelity (strong-form residual) block is emitted by dataset_train_ns.py yet -- future work"
+  ]
+ },
+ "iteration_37_lowre_band": {
+  "date": "2026-07-05",
+  "design": "Iteration 37: two closers for iteration 36's logged gaps. (1) The Re<=1 discriminating band: supplementary catalog slice ns_cavity_star/v1-lowre (180 cases, Re log-uniform [0.5, 5] with eval_unseen_Re at (5, 10]; same geometry/drive family, same h = 0.0105 and verification discipline, via the new --reynolds-range slice mechanism), linear and nl_pseudo arms at the fixed-dataset protocol (15 epochs, seeds 17/29/43); the per-case velocity gap joins the archived iteration-36 curve into one Re 0.5-300 measurement, completing the pre-registered P1 velocity leg.  (2) The N-S operator-fidelity block: dataset_train_ns.py now emits the strong-form momentum residual of the model's own prediction (nu~ lap u - (u.grad)u - grad p, float64 autograd, 32 interior queries, 2 cases/split, normalized by the prediction's advection norm; nu~ = 1/Re read from the CASE -- the model never sees the PDE, the metric does) plus the divergence norm, instrument-certified in-tree against the exact Kovasznay solution (scores ~0 only when the case viscosity is used) and a rigid rotation with dropped pressure (scores exactly 1).",
+  "dataset": {
+   "version": "v1-lowre",
+   "n_cases": 180,
+   "split_sizes": {
+    "eval_id": 18,
+    "eval_unseen_Re": 18,
+    "eval_unseen_drive_profile": 18,
+    "eval_unseen_geometry": 18,
+    "train": 108
+   },
+   "reynolds_bands": {
+    "train": [
+     0.5,
+     5.0
+    ],
+    "eval_unseen_Re": [
+     5.0,
+     10.0
+    ]
+   },
+   "label_noise_floor_velocity_max": 6.125375952897136e-05,
+   "label_noise_floor_pressure_max": 0.0005046782207720976,
+   "self_consistency_velocity_max": 0.0034499480257300422,
+   "self_consistency_pressure_max": 0.007366730419687878,
+   "newton_rejections_total": 0,
+   "wall_seconds_per_case": 4.989348079077738,
+   "workers": 20
+  },
+  "results_3seed": {
+   "mt_singpair_linear": {
+    "eval_id": {
+     "combined": 0.4788,
+     "combined_sd": 0.0138,
+     "velocity": 0.453,
+     "pressure": 0.4784,
+     "momentum_residual": 47.6612,
+     "divergence_residual": 2.7035
+    },
+    "eval_unseen_Re": {
+     "combined": 0.679,
+     "combined_sd": 0.0338,
+     "velocity": 0.4158,
+     "pressure": 0.9701,
+     "momentum_residual": 9.1727,
+     "divergence_residual": 2.7546
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.7945,
+     "combined_sd": 0.0431,
+     "velocity": 0.701,
+     "pressure": 0.7949,
+     "momentum_residual": 185.7925,
+     "divergence_residual": 12.4931
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.5547,
+     "combined_sd": 0.0333,
+     "velocity": 0.5006,
+     "pressure": 0.5642,
+     "momentum_residual": 20.6313,
+     "divergence_residual": 2.1945
+    },
+    "parameters": 106408
+   },
+   "mt_singpair_nl_pseudo": {
+    "eval_id": {
+     "combined": 0.481,
+     "combined_sd": 0.0373,
+     "velocity": 0.2968,
+     "pressure": 0.4939,
+     "momentum_residual": 16.0581,
+     "divergence_residual": 1.0652
+    },
+    "eval_unseen_Re": {
+     "combined": 0.5656,
+     "combined_sd": 0.0954,
+     "velocity": 0.2908,
+     "pressure": 0.822,
+     "momentum_residual": 7.6702,
+     "divergence_residual": 1.1663
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.8297,
+     "combined_sd": 0.0443,
+     "velocity": 0.7499,
+     "pressure": 0.8301,
+     "momentum_residual": 158.1711,
+     "divergence_residual": 6.0627
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.5012,
+     "combined_sd": 0.0514,
+     "velocity": 0.3471,
+     "pressure": 0.5121,
+     "momentum_residual": 18.6489,
+     "divergence_residual": 1.0301
+    },
+    "parameters": 233108
+   }
+  },
+  "joined_gap_vs_re": {
+   "bin_centers": [
+    0.7876289388238912,
+    1.6101253230669894,
+    3.2915290794835106,
+    6.72877044157563,
+    14.068057099238768,
+    27.76430839236074,
+    54.79483165787155,
+    108.14148632784251,
+    213.42489266530987
+   ],
+   "n_cases": [
+    24,
+    9,
+    21,
+    54,
+    90,
+    99,
+    93,
+    108,
+    450
+   ],
+   "velocity_gap": [
+    0.18449847276012105,
+    0.15030268993642598,
+    0.1266200989484787,
+    0.1250109253106294,
+    0.18862519073817463,
+    0.21907258891698084,
+    0.21057905737430818,
+    0.22525421916334715,
+    0.20381134066316814
+   ],
+   "pressure_gap": [
+    -0.005565318589409229,
+    0.019573483202192488,
+    -0.042102193548565814,
+    0.14801706152933614,
+    0.11228890402449504,
+    0.23338964747058016,
+    0.3681446315460308,
+    0.5449296295366906,
+    0.47067063281933463
+   ],
+   "catalog": [
+    "v1-lowre",
+    "v1-lowre",
+    "v1-lowre",
+    "v1-lowre",
+    "v1",
+    "v1",
+    "v1",
+    "v1",
+    "v1"
+   ],
+   "note": "gap = linear minus nl_pseudo per-case mean per log-Re bin, seeds 17/29/43 pooled, eval_id + eval_unseen_Re; the join is between two separately trained catalogs (108- vs 840-case train splits) -- the GAP is the internally controlled wall measure on each side, absolute levels are not comparable across the join"
+  },
+  "verdicts": {
+   "P1_velocity_completed": {
+    "rule": "P1v-a: bottom joined bin velocity gap <= 0.05 and <= 0.25x top bin; P1v-b: nondecreasing within 0.02 tolerance and top >= 3x bottom; falsifier (representation-deficit reading): bottom gap >= 0.1",
+    "velocity_gap_bottom_bin": 0.18449847276012105,
+    "velocity_gap_top_bin": 0.20381134066316814,
+    "velocity_gap_ratio_top_over_bottom": 1.1046776572950663,
+    "P1v_a_stokes_approach": false,
+    "P1v_b_graded_growth": false,
+    "falsifier_representation_deficit": true,
+    "pressure_gap_bottom_bin": -0.005565318589409229,
+    "pressure_gap_top_bin": 0.47067063281933463
+   }
+  },
+  "artifacts": [
+   "results/ns_lowre_band_2026-07-05.json"
+  ],
+  "caveats": [
+   "the two sides of the joined curve are separately trained catalogs (108- vs 840-case train splits); the GAP is the internally controlled wall measure on each side, absolute error levels are not comparable across the Re = 10 join",
+   "the iteration-36 archived runs predate the fidelity block; their fidelity columns are em-dashes by the @sec-fidelity-columns convention, populated for the lowre arms from this iteration onward"
+  ],
+  "confound_check": {
+   "note": "iteration 37's velocity reading (linear-read-in deficit) was confounded with the pseudo sector and parameter count; iteration 38 ran the fair control (linear + pseudo)",
+   "see": "iteration_38_linear_pseudo_confound",
+   "linear_pseudo_velocity_gap_bottom_bin": -0.0238,
+   "outcome": "revised: deficit was parity/capacity"
+  }
+ },
+ "iteration_38_linear_pseudo_confound": {
+  "date": "2026-07-05",
+  "design": "Iteration 38: the small confound closer on iteration 37's velocity verdict.  Iteration 37 read the flat Stokes-band velocity gap as a linear-READ-IN representation deficit, but its linear arm (106,408 params, no pseudo sector) differed from nl_pseudo (233,108 params, drive_pseudo_dim=8) in parity machinery and capacity as well as read-in class.  The fair control, registered as mt_singpair_linear_pseudo (field_mode='linear' + drive_pseudo_dim=8, 131,248 params -- as matched to nl_pseudo as the mode allows; the residual difference IS the nonlinear read-in stack), trained on BOTH catalogs (v1 and v1-lowre) at the identical 15-epoch/3-seed protocol, and the gap-vs-Re curve recomputed with three arms at iteration-37 binning.  Pre-registered before the first linear_pseudo run, both outcomes stated in advance: bottom joined-bin velocity gap <= 0.05 REVISES iteration 37 (the deficit was parity/capacity); >= 0.1 means the read-in-class reading STANDS, now unconfounded.",
+  "protocol": {
+   "regime": "fixed-dataset (dataset_train_ns.py; iteration-17 protocol)",
+   "epochs": 15,
+   "seeds": [
+    17,
+    29,
+    43
+   ],
+   "arms": [
+    "mt_singpair_linear",
+    "mt_singpair_linear_pseudo",
+    "mt_singpair_nl_pseudo"
+   ],
+   "new_arm": "mt_singpair_linear_pseudo",
+   "comparators": "mt_singpair_linear / mt_singpair_nl_pseudo reports from iterations 36 (v1) and 37 (v1-lowre), re-aggregated at identical binning"
+  },
+  "parameters": {
+   "mt_singpair_linear": 106408,
+   "mt_singpair_linear_pseudo": 131248,
+   "mt_singpair_nl_pseudo": 233108
+  },
+  "results_3seed_lowre": {
+   "mt_singpair_linear": {
+    "eval_id": {
+     "combined": 0.4788,
+     "combined_sd": 0.0138,
+     "velocity": 0.453,
+     "pressure": 0.4784,
+     "momentum_residual": 47.6612,
+     "divergence_residual": 2.7035
+    },
+    "eval_unseen_Re": {
+     "combined": 0.679,
+     "combined_sd": 0.0338,
+     "velocity": 0.4158,
+     "pressure": 0.9701,
+     "momentum_residual": 9.1727,
+     "divergence_residual": 2.7546
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.7945,
+     "combined_sd": 0.0431,
+     "velocity": 0.701,
+     "pressure": 0.7949,
+     "momentum_residual": 185.7925,
+     "divergence_residual": 12.4931
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.5547,
+     "combined_sd": 0.0333,
+     "velocity": 0.5006,
+     "pressure": 0.5642,
+     "momentum_residual": 20.6313,
+     "divergence_residual": 2.1945
+    },
+    "parameters": 106408
+   },
+   "mt_singpair_linear_pseudo": {
+    "eval_id": {
+     "combined": 0.4662,
+     "combined_sd": 0.0329,
+     "velocity": 0.2627,
+     "pressure": 0.477,
+     "momentum_residual": 22.2115,
+     "divergence_residual": 0.8519
+    },
+    "eval_unseen_Re": {
+     "combined": 0.571,
+     "combined_sd": 0.0137,
+     "velocity": 0.2432,
+     "pressure": 0.8626,
+     "momentum_residual": 8.1931,
+     "divergence_residual": 0.9261
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.8104,
+     "combined_sd": 0.031,
+     "velocity": 0.7033,
+     "pressure": 0.8109,
+     "momentum_residual": 100.6864,
+     "divergence_residual": 6.7304
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.544,
+     "combined_sd": 0.0564,
+     "velocity": 0.3065,
+     "pressure": 0.5615,
+     "momentum_residual": 21.3599,
+     "divergence_residual": 0.8224
+    },
+    "parameters": 131248
+   },
+   "mt_singpair_nl_pseudo": {
+    "eval_id": {
+     "combined": 0.481,
+     "combined_sd": 0.0373,
+     "velocity": 0.2968,
+     "pressure": 0.4939,
+     "momentum_residual": 16.0581,
+     "divergence_residual": 1.0652
+    },
+    "eval_unseen_Re": {
+     "combined": 0.5656,
+     "combined_sd": 0.0954,
+     "velocity": 0.2908,
+     "pressure": 0.822,
+     "momentum_residual": 7.6702,
+     "divergence_residual": 1.1663
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.8297,
+     "combined_sd": 0.0443,
+     "velocity": 0.7499,
+     "pressure": 0.8301,
+     "momentum_residual": 158.1711,
+     "divergence_residual": 6.0627
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.5012,
+     "combined_sd": 0.0514,
+     "velocity": 0.3471,
+     "pressure": 0.5121,
+     "momentum_residual": 18.6489,
+     "divergence_residual": 1.0301
+    },
+    "parameters": 233108
+   }
+  },
+  "results_3seed_v1": {
+   "mt_singpair_linear": {
+    "eval_id": {
+     "combined": 0.4374,
+     "combined_sd": 0.0013,
+     "velocity": 0.4281,
+     "pressure": 0.6906
+    },
+    "eval_unseen_Re": {
+     "combined": 0.5753,
+     "combined_sd": 0.0078,
+     "velocity": 0.5699,
+     "pressure": 1.0038
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.6942,
+     "combined_sd": 0.011,
+     "velocity": 0.6747,
+     "pressure": 0.747
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.4991,
+     "combined_sd": 0.0272,
+     "velocity": 0.4783,
+     "pressure": 0.9245
+    },
+    "parameters": 106408
+   },
+   "mt_singpair_linear_pseudo": {
+    "eval_id": {
+     "combined": 0.3138,
+     "combined_sd": 0.0045,
+     "velocity": 0.2847,
+     "pressure": 0.6839,
+     "momentum_residual": 1.8318,
+     "divergence_residual": 1.086
+    },
+    "eval_unseen_Re": {
+     "combined": 0.4712,
+     "combined_sd": 0.0213,
+     "velocity": 0.4638,
+     "pressure": 0.9876,
+     "momentum_residual": 1.0359,
+     "divergence_residual": 0.7465
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.6519,
+     "combined_sd": 0.0328,
+     "velocity": 0.6255,
+     "pressure": 0.725,
+     "momentum_residual": 15.2262,
+     "divergence_residual": 4.0201
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.4005,
+     "combined_sd": 0.0139,
+     "velocity": 0.3555,
+     "pressure": 0.9727,
+     "momentum_residual": 2.0397,
+     "divergence_residual": 0.7761
+    },
+    "parameters": 131248
+   },
+   "mt_singpair_nl_pseudo": {
+    "eval_id": {
+     "combined": 0.2305,
+     "combined_sd": 0.0049,
+     "velocity": 0.2154,
+     "pressure": 0.3563
+    },
+    "eval_unseen_Re": {
+     "combined": 0.3693,
+     "combined_sd": 0.0089,
+     "velocity": 0.3676,
+     "pressure": 0.5332
+    },
+    "eval_unseen_drive_profile": {
+     "combined": 0.6625,
+     "combined_sd": 0.0476,
+     "velocity": 0.6421,
+     "pressure": 0.682
+    },
+    "eval_unseen_geometry": {
+     "combined": 0.3193,
+     "combined_sd": 0.0198,
+     "velocity": 0.2935,
+     "pressure": 0.6549
+    },
+    "parameters": 233108
+   }
+  },
+  "joined_gap_vs_re": {
+   "mt_singpair_linear": {
+    "bin_centers": [
+     0.7876289388238912,
+     1.6101253230669894,
+     3.2915290794835106,
+     6.72877044157563,
+     14.068057099238768,
+     27.76430839236074,
+     54.79483165787155,
+     108.14148632784251,
+     213.42489266530987
+    ],
+    "n_cases": [
+     24,
+     9,
+     21,
+     54,
+     90,
+     99,
+     93,
+     108,
+     450
+    ],
+    "velocity_gap": [
+     0.18449847276012105,
+     0.15030268993642598,
+     0.1266200989484787,
+     0.1250109253106294,
+     0.18862519073817463,
+     0.21907258891698084,
+     0.21057905737430818,
+     0.22525421916334715,
+     0.20381134066316814
+    ],
+    "pressure_gap": [
+     -0.005565318589409229,
+     0.019573483202192488,
+     -0.042102193548565814,
+     0.14801706152933614,
+     0.11228890402449504,
+     0.23338964747058016,
+     0.3681446315460308,
+     0.5449296295366906,
+     0.47067063281933463
+    ],
+    "catalog": [
+     "v1-lowre",
+     "v1-lowre",
+     "v1-lowre",
+     "v1-lowre",
+     "v1",
+     "v1",
+     "v1",
+     "v1",
+     "v1"
+    ]
+   },
+   "mt_singpair_linear_pseudo": {
+    "bin_centers": [
+     0.7876289388238912,
+     1.6101253230669894,
+     3.2915290794835106,
+     6.72877044157563,
+     14.068057099238768,
+     27.76430839236074,
+     54.79483165787155,
+     108.14148632784251,
+     213.42489266530987
+    ],
+    "n_cases": [
+     24,
+     9,
+     21,
+     54,
+     90,
+     99,
+     93,
+     108,
+     450
+    ],
+    "velocity_gap": [
+     -0.023791429897149385,
+     -0.04962718155648971,
+     -0.039174332505180764,
+     -0.04758109621427675,
+     0.03318088899056118,
+     0.039855192857559285,
+     0.0727098923857494,
+     0.11561949937431898,
+     0.09628444499439665
+    ],
+    "pressure_gap": [
+     0.01607392728328705,
+     -0.012547694974475443,
+     -0.056685738620303905,
+     0.04058909471388217,
+     0.11478841834598119,
+     0.22603463659984896,
+     0.3586003198739021,
+     0.53808502232035,
+     0.45395900107092324
+    ],
+    "catalog": [
+     "v1-lowre",
+     "v1-lowre",
+     "v1-lowre",
+     "v1-lowre",
+     "v1",
+     "v1",
+     "v1",
+     "v1",
+     "v1"
+    ]
+   },
+   "note": "gap = arm minus nl_pseudo per-case mean per log-Re bin, seeds 17/29/43 pooled, eval_id + eval_unseen_Re; the join is between two separately trained catalogs (108- vs 840-case train splits) -- the GAP is the internally controlled measure on each side, absolute levels are not comparable across the join"
+  },
+  "verdicts": {
+   "iteration_38_confound_check": {
+    "rule": "REVISION outcome: bottom joined bin velocity gap (linear_pseudo minus nl_pseudo) <= 0.05 means the iteration-37 deficit was parity/capacity and its velocity reading is REVISED; STANDS outcome (falsifier of the revision): bottom gap >= 0.1 means the read-in-class reading stands, now unconfounded; between 0.05 and 0.1: partial closure",
+    "iteration_37_measured_bottom_bin_gap": 0.184,
+    "linear_bottom_bin_gap_this_rerun": 0.18449847276012105,
+    "linear_pseudo_velocity_gap_bottom_bin": -0.023791429897149385,
+    "linear_pseudo_velocity_gap_top_bin": 0.09628444499439665,
+    "linear_pseudo_pressure_gap_bottom_bin": 0.01607392728328705,
+    "linear_pseudo_pressure_gap_top_bin": 0.45395900107092324,
+    "revision_gap_closed": true,
+    "stands_read_in_deficit": false
+   }
+  },
+  "revises": "iteration_37_lowre_band",
+  "artifacts": [
+   "results/ns_linear_pseudo_confound_2026-07-05.json"
+  ],
+  "caveats": [
+   "the linear_pseudo arm matches nl_pseudo's pseudo sector but not its full parameter count (131,248 vs 233,108): the remaining difference is the nonlinear read-in stack itself, which is the treatment variable, but a pure width-matched linear control at 233k params was not run",
+   "the two sides of the joined curve are separately trained catalogs (108- vs 840-case train splits); only gaps cross the Re = 10 join",
+   "the archived iteration-36 v1 comparator reports predate the fidelity block, so the v1-side fidelity columns exist only for the new arm"
+  ]
+ }
+}

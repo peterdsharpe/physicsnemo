@@ -1,0 +1,358 @@
+# The architecture, plainly {#sec-architecture}
+
+This chapter is the **source of truth** for what the MeshTransformer *is*:
+what goes in, what comes out, and what happens in between, in that order,
+with as little jargon as we can manage. The mathematics behind each piece
+lives in @sec-mesh-attention; the experimental evidence that shaped the
+design lives in @sec-benchmarks and, blow by blow, in the lab notebook
+(@sec-notebook). When the architecture changes because an experiment says it
+should, **this chapter changes in the same commit.**
+
+## What goes in, what comes out
+
+The model computes one thing:
+
+> Given the **boundary** of a domain — its shape, the *type* of boundary
+> condition on each patch, and the boundary *values* — predict a physical
+> field at **any set of points inside**.
+
+Concretely, the input is a boundary mesh: a collection of small surface
+elements ("cells" — line segments in 2D, triangles in 3D), each carrying
+
+- its **position** (centroid), **size** (length or area), and outward
+  **normal** direction;
+- which kind of boundary condition it carries (Dirichlet, Neumann, …), as a
+  one-hot label;
+- the boundary **data** on it (a temperature, a flux, …), plus any global
+  scalars (a material parameter) or global vectors (a far-field velocity).
+
+The output is the predicted field at a list of **query points** — points,
+not a grid, and each prediction is independent of which other queries were
+requested. Nothing about the interior is given: no interior mesh, no
+initial guess, no source terms (the problem class is homogeneous —
+@sec-pde-theory).
+
+## The forward pass at a glance {#sec-forward-pass}
+
+The model is an encode/decode pair. **Encode** runs once per boundary;
+**decode** runs for any number of query points afterward, reusing the
+encoded boundary.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   The MeshTransformer forward pass, reference configuration. Encode runs
+%%|   once per boundary in O(boundary cells); decode runs per query batch in
+%%|   O(queries x boundary cells) and never lets query points interact.
+flowchart TB
+    classDef stage fill:#fff8e8,stroke:#8a6d1a,color:#1a1a1a
+    classDef data fill:#eef4ff,stroke:#2a4a8a,color:#1a1a1a
+    classDef out fill:#eaf7ea,stroke:#2a6a2a,color:#1a1a1a
+
+    A["boundary mesh<br/>cells: centroid, size, normal,<br/>BC type, BC values"]:::data
+    B["nondimensionalize<br/>(subtract boundary center, divide by<br/>intrinsic reference length =<br/>RMS boundary radius; explicit override)"]:::stage
+    C["per-cell lift<br/>geometry &rarr; scalar + vector channels"]:::stage
+    D["boundary self-attention &times; 1<br/>(every cell sees every cell,<br/>signed weights, no softmax)"]:::stage
+    E["drive read-in<br/>(zero-preserving; linear, quadratic, or<br/>nonlinear mode, per problem)"]:::stage
+    F["encoded boundary<br/>(cached; reusable)"]:::data
+    G["query points"]:::data
+    H["kernel decode, per query:<br/>exact single- + double-layer panel<br/>integrals &times; conditioned coefficients"]:::stage
+    I["predicted field at queries"]:::out
+
+    A --> B --> C --> D --> E --> F
+    F --> H
+    G --> H
+    H --> I
+```
+
+In words:
+
+1. **Nondimensionalize.** Subtract the boundary's (measure-weighted)
+   center and divide by a reference length. The reference length is
+   **derived intrinsically by default**: the measure-weighted RMS radius
+   of the boundary about its center (the radius of gyration) — a smooth,
+   differentiable function of the geometry itself. A user-supplied key
+   remains available as an explicit override for applications with a
+   canonical dimension (an aerodynamic chord, say). Why this matters:
+   with the gauge computed from the geometry, scale equivariance is
+   **unconditional** — there is no convention left for a caller to get
+   wrong, because the last externally-trusted input has moved inside the
+   architecture (evidence: @sec-intrinsic-gauge). After this step,
+   nothing downstream ever sees an absolute position or an absolute
+   scale.
+2. **Lift.** Each cell's geometry and labels become a vector of latent
+   *scalar channels* and a set of latent *vector channels* (next section
+   explains the distinction and why we keep it).
+3. **Boundary self-attention.** One attention layer lets every cell
+   exchange information with every other cell — this is where the global
+   character of an elliptic boundary-value problem lives. The couplings are
+   *signed* (no softmax): boundary-integral kernels change sign, and a
+   normalized, all-positive attention could not represent them.
+4. **Drive read-in.** The boundary *values* (the "drive") enter through a
+   layer that is **zero-preserving**: zero boundary data produces exactly
+   zero output, for any weights — a homogeneous PDE with nothing driving it
+   has the zero solution, and the architecture makes that structural. The
+   read-in has three modes, chosen per problem. In *linear* mode the layer is
+   additionally exactly linear in the drive, so superposition (doubling the
+   data doubles the solution) holds to floating point — a guarantee worth
+   taking **when** the governing PDE is linear, but a straitjacket when it
+   is not. In *quadratic* mode the drive **degree is declared the way
+   linearity is**: the linear machinery plus exactly one bilinear typed
+   composition at the query read-in makes the output an exact
+   degree-$\le 2$ polynomial in the drive for any weights — built for
+   targets of known drive degree (a Bernoulli pressure is exactly
+   quadratic), after the nonlinear mode's *implicit* degree ~21 was
+   measured detonating off-range (@sec-nonlinear-fragility). In
+   *nonlinear* mode the drive enters through structurally
+   multiplicative updates: zero-preservation survives, superposition is
+   deliberately given up, and the model can represent nonlinear solution
+   operators (this mode, not the linear one, broke the superposition wall
+   on the Liouville benchmark). The program targets **any** steady PDE
+   without interior data — linearity, like polynomial degree, is a
+   property of a *problem*, offered as a contract, never an assumption of
+   the architecture. One measured caveat: zero-preservation itself
+   *presumes the homogeneous problem has the zero solution* — true for
+   the linear class, an approximation for problems like Liouville, where
+   zero boundary data has a nonzero interior solution and the contract
+   pins the wrong value exactly (measured in
+   @sec-stream-factorization).
+5. **Kernel decode.** For each query point, the model evaluates the two
+   classical singular kernels of potential theory — the single-layer and
+   double-layer potentials — *exactly integrated* over every boundary cell
+   (closed-form panel integrals, not point samples), and combines them with
+   coefficients produced from the encoded boundary. The learning is in the
+   coefficients; the singular structure is exact.
+
+The reference configuration shown — one attention layer, two exact kernel
+members, no other dictionary members — is the smallest configuration that
+matches everything measured so far (~82k parameters; evidence in
+@sec-benchmarks). Knobs exist to widen it (more layers, more members,
+learned smooth members), and the notebook records what each knob was found
+to be worth.
+
+## Scalars, vectors, and the mirror test {#sec-typed-channels}
+
+Every latent quantity in the network is one of exactly two types, and the
+distinction is physical, not a software convenience.
+
+An **invariant scalar** is a number that every observer agrees on no matter
+how the scene is rotated or reflected: a temperature, a distance, a dot
+product of two arrows. A **polar vector** is an ordinary arrow — a
+displacement, a velocity, a surface normal: rotate the scene and the arrow
+rotates with it.
+
+There is a third kind of quantity we deliberately *exclude*, and the
+cleanest way to see it is the **mirror test**. Hold a spinning wheel in
+front of a mirror. Its velocity arrows reflect like ordinary arrows — a
+velocity pointing at the mirror comes back pointing out of it. But its
+*angular momentum* arrow does something strange: the mirror image spins the
+opposite way, so the reflected arrow points where the rule "reflect like an
+ordinary arrow" says it shouldn't. Quantities like that — cross products,
+curls, rotation axes — are called **axial vectors** (or *pseudovectors*).
+Similarly a **pseudoscalar** is a number that flips sign in the mirror (the
+signed volume of three arrows, for example).
+
+```{python}
+#| fig-cap: >
+#|   The mirror test. A polar vector (velocity, left) reflects like an
+#|   ordinary arrow. An axial vector (the spin axis of the wheel, right)
+#|   comes back flipped relative to naive reflection: the mirror image spins
+#|   the other way. The MeshTransformer carries scalars and polar vectors
+#|   only; axial quantities are rejected at the type level.
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.0))
+for ax, title, flipped in ((axes[0], "polar vector (velocity)", False),
+                           (axes[1], "axial vector (spin axis)", True)):
+    ax.axvline(0, color="#0b0b0b", lw=2.5)
+    ax.text(0, 1.32, "mirror", ha="center", fontsize=9, color="#0b0b0b")
+    circle = plt.Circle((-1.0, 0.0), 0.52, fill=False, color="#52514e", lw=1.4)
+    ax.add_patch(circle)
+    circle2 = plt.Circle((1.0, 0.0), 0.52, fill=False, color="#52514e",
+                         lw=1.4, ls="--")
+    ax.add_patch(circle2)
+    if not flipped:
+        ax.annotate("", xy=(-0.35, 0.0), xytext=(-1.0, 0.0),
+                    arrowprops=dict(arrowstyle="-|>", color="#2a78d6", lw=2.4))
+        ax.annotate("", xy=(0.35, 0.0), xytext=(1.0, 0.0),
+                    arrowprops=dict(arrowstyle="-|>", color="#2a78d6", lw=2.4,
+                                    ls="--"))
+    else:
+        for cx, up, ls in ((-1.0, True, "-"), (1.0, False, "--")):
+            dy = 0.62 if up else -0.62
+            ax.annotate("", xy=(cx, dy), xytext=(cx, 0.0),
+                        arrowprops=dict(arrowstyle="-|>", color="#e34948",
+                                        lw=2.4, ls=ls))
+            theta = np.linspace(0.35 * np.pi, 1.15 * np.pi, 40)
+            direction = 1.0 if up else -1.0
+            ax.plot(cx + 0.40 * np.cos(direction * theta),
+                    0.40 * np.sin(direction * theta),
+                    color="#52514e", lw=1.1)
+    ax.set_title(title, fontsize=10)
+    ax.set_xlim(-1.9, 1.9); ax.set_ylim(-1.05, 1.5)
+    ax.set_aspect("equal"); ax.axis("off")
+plt.tight_layout()
+```
+
+Why the fuss? Because the physics of our problem class has a symmetry:
+rotate or reflect a domain and its boundary data, and the solution rotates
+or reflects with it, with no handedness anywhere (a Laplace problem cannot
+tell left from right). The clean way to guarantee a network respects this
+is to allow only quantities with definite, correct behavior under rotations
+and reflections, and to combine them only in ways that preserve that
+behavior. In representation-theory language, scalars and polar vectors are
+two **irreducible representations** ("irreps") of the rotation-reflection
+group — the smallest families of quantities that transform only among
+themselves. We use exactly these two irreps and no others; anything a layer
+tries to produce outside them is rejected at construction time rather than
+silently mangled.
+
+The combination rules are the ones your hands already know:
+
+- scalar × scalar → scalar; any function of scalars is a scalar;
+- dot products of vectors → scalar (this is how vector information reaches
+  scalar channels);
+- scalar × vector → vector; sums of vectors with scalar coefficients →
+  vector (this is the *only* way the network makes new vectors — it never
+  invents an arrow from nothing).
+
+The practical consequence is strong: no layer ever sees a raw coordinate,
+so equivariance holds **to machine precision, for any weights** — measured
+at ~3×10⁻⁷ on trained models under rotations, reflections, translations,
+and 0.2–5× rescalings (@sec-transolver compares this to the ~0.1 of a
+coordinate-consuming baseline). Boundary *scalar* data rides along freely
+through all of this — scalars are directionless, so they can modulate
+everything without ever breaking the symmetry.
+
+This refusal is not hypothetical: it has been measured, diagnosed, and
+lifted. When a benchmark's target was a pseudoscalar, the model refused
+it exactly as the type system predicts (relative error ~1.0, every
+seed) rather than faking handedness from noise — and the principled
+fix was one **opt-in extension for parity-odd 2D problems**: pseudoscalar
+channels with the wedge product as a typed operation. (Irrep labels,
+used from here on: `0e` = ordinary even scalar, `0o` = pseudoscalar,
+`1o` = polar vector.) The 3D analogue (axial vectors) remains excluded,
+and the reference configuration of @sec-reference-config is unchanged.
+The full measured arc — wall, diagnosis, resolution, five-seed
+confirmation — is @sec-fluid-suites.
+
+## Attention as a boundary solve {#sec-attention-role}
+
+Why attention at all? Elliptic boundary-value problems are global: the
+solution at one end of the domain depends on boundary data at the other
+end. Classical boundary-integral methods make this global coupling explicit
+by solving a dense linear system over all boundary elements. The
+MeshTransformer's boundary self-attention is the learned analogue: every
+cell reads a weighted combination of every other cell's state, with weights
+computed from geometry. Three departures from textbook transformer
+attention, each forced by physics:
+
+- **signed weights, no softmax** — integral-equation kernels take both
+  signs;
+- **quadrature weighting** — cells contribute in proportion to their
+  surface measure, so refining the mesh converges instead of double-counting;
+- **separable (low-rank) form** — the all-pairs coupling is factored
+  through a small set of global "moments," making encode O(cells) instead
+  of O(cells²) per layer. What that factorization *cannot* represent, and
+  how the decoder compensates, is the subject of @sec-ceiling.
+
+How much attention does the physics actually need? Measured answer: **one
+layer, one full-width head**. On every all-Dirichlet benchmark, even
+*zero* layers nearly suffices (the boundary system is dominated by its
+local part — a second-kind Fredholm property; see @sec-encoder-depth); on
+mixed Dirichlet/Neumann problems, where the boundary solve is genuinely
+nonlocal, zero layers becomes unreliable and one layer restores full
+accuracy (@sec-mixed-bc). Splitting that layer into multiple heads at
+fixed total score capacity turned out to be pure bookkeeping — one
+full-width head matches or beats it everywhere measured
+(@sec-one-head-cross-suite).
+
+## The decoder: classical kernels, learned coefficients {#sec-decoder-role}
+
+The decoder answers: *given the encoded boundary, what is the field at
+point $x$?* Its form is lifted directly from potential theory. Any solution
+of a homogeneous elliptic problem can be written as boundary integrals of
+known singular kernels against unknown boundary densities — that is the
+Green representation (@sec-pde-theory). The decoder mirrors it:
+
+$$
+u(x) \;=\; \sum_{\text{cells } j}
+\Big[\, c^{S}_j(\text{encoding})\cdot
+\underbrace{\textstyle\int_{\text{cell }j} G\, \mathrm{d}s}_{\text{single layer}}
+\;+\; c^{D}_j(\text{encoding})\cdot
+\underbrace{\textstyle\int_{\text{cell }j} \partial_n G\, \mathrm{d}s}_{\text{double layer}}
+\,\Big],
+$$
+
+with two crucial choices. First, the panel integrals are **closed forms**,
+exact for every query-cell pair including queries arbitrarily close to the
+boundary — "singular kernels need singular quadrature" is the program's
+oldest lesson, and point-sampling these integrals is the classic way to
+lose an order of magnitude near walls. Second, everything *learned* is in
+the smooth coefficients $c_j$, produced per cell (and per head) from the
+encoded boundary state. The division of labor is the chapter's motto:
+
+> **The dictionary carries the singularity; the conditioning carries the
+> smoothness.**
+
+Earlier configurations also carried polynomial and free-form (MLP) "smooth
+members" alongside the exact kernels. Systematic ablation removed them: on
+linear problems they ranged from useless to actively harmful for
+extrapolation, and the two exact members alone are best-in-class on every
+linear benchmark (the nonlinear mode is the exception — there the
+polynomial members are load-bearing; @sec-dictionary-ablation and
+@sec-single-layer hold the evidence). The far-field study added a second
+design rule to the motto: **learned coefficients should be bounded
+functions of query position — trust nothing learned beyond its data —
+with all radial physics carried by exact, licensed structure**; the
+corresponding knobs (bounded gates, a compactified query source, an
+$r^{-2}$ drive envelope, a monopole-free single layer) are **opt-in**,
+licensed per problem class, and the reference configuration below is
+unchanged (@sec-farfield-ladder).
+
+Because each query's decode reads only the cached encoding and its own
+position, predictions are **query-independent** — bitwise, by test: asking
+for one point or a million, in any order, gives identical values at shared
+points. Evaluation streams and parallelizes trivially.
+
+## What the architecture refuses to do
+
+Each refusal is a falsifiable contract with a test attached, not a slogan:
+
+| Refusal | Why | Where tested |
+|---|---|---|
+| Never read absolute coordinates or orientations | equivariance to machine precision for any weights | similarity-contract eval, every run |
+| Never mix scalar/vector types outside the allowed products | no symmetry leaks, no hidden pseudo-quantities | construction-time rejection + unit tests |
+| Never couple query points to each other | streaming evaluation; predictions independent of the query set | bitwise row-stability tests |
+| Never respond to zero drive | homogeneous problems with no data have the zero solution | zero-drive eval, every field mode |
+| Never break superposition *in linear mode* | when the problem is linear, its law should be structural, not learned | drive-linearity contract eval |
+| Never point-sample a singular kernel | near-boundary accuracy | quadrature-vs-closed-form tests to ~1e-14 |
+
+## Reference configuration {#sec-reference-config}
+
+The configuration that current evidence selects (the "emerging
+architecture" of @sec-future), used as the default comparison arm:
+
+| Piece | Setting | Parameters |
+|---|---|---|
+| Typed lift | scalar + vector channels (32/8 operator, 48/12 drive) | — |
+| Boundary self-attention | **1 layer**, **1 full-width head**, separable rank 48 (scalar) + 16 (vector) | — |
+| Drive read-in | zero-preserving; linear mode on linear benchmarks, quadratic (declared-degree) mode on known-degree targets, nonlinear mode otherwise | — |
+| Decoder dictionary | **2 exact members** (single + double layer), 0 smooth members | — |
+| Total | | **81,547** |
+
+Caveats that keep this a synthesis rather than a verdict: the vector
+channels are prunable on easy 2D geometry but load-bearing in 3D and on
+parametric problems (keep them); the single-layer member costs some
+extrapolation on very easy geometry while being decisively necessary on
+hard geometry; the nonlinear field mode re-admits polynomial members;
+and the one-head setting (flipped from 4 heads at matched total score
+capacity $H(R_0+DR_1)$ — heads $H$, scalar/vector separable ranks
+$R_0$/$R_1$, defined in @sec-mesh-attention — by the cross-suite rule,
+@sec-one-head-cross-suite) rests on a decisive 2D-Laplace win plus
+three-suite *non-inferiority* — it reverts if any suite ever shows a
+decisive one-head loss. The frozen benchmark capacity configuration
+(4 heads, ranks 12/4, two encoder layers) is unchanged for
+comparability with every archived arm.
+Chapter @sec-benchmarks carries every number; the notebook (@sec-notebook)
+carries every step of how they were obtained.

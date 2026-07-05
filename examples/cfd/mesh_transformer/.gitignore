@@ -1,0 +1,23 @@
+# Machine/session-local fleet-ops notes (launch/rsync procedures for
+# ephemeral cloud instances) — not meaningful outside the authoring machine.
+brev_ops.md
+
+# Generated dataset cases: regenerable with datasets/generate_datasets.py;
+# each catalog's manifest.json (config, hashes, measured noise floors) stays
+# tracked. Exception: the 8-case star_random_trace/v0-demo catalog is
+# deliberately checked in because tests/test_dataset_train.py runs against it.
+datasets/**/*.npz
+!datasets/star_random_trace/v0-demo/*.npz
+
+# Quarto build artifacts and render intermediates.
+book/_book/
+book/.quarto/
+book/.jupyter_cache/
+book/*.quarto_ipynb*
+
+# NOT ignored on purpose:
+# - results/       frozen result archives; the book's provenance requires them
+#                  checked in (every figure cell reads these JSONs).
+# - book/data/     precomputed inputs read by live figure cells at render time.
+# - book/figures/  pre-rendered images whose inputs (checkpoints, session
+#                  training histories) no longer exist.

@@ -1,0 +1,407 @@
+# Where the program stands, and where it goes {#sec-future}
+
+This chapter does three things: it reviews what is established and what
+is honestly incomplete, it lays out the program's agenda — a deliberate
+redirect away from architecture-driven iteration, adopted once the
+dictionary program ran to completion and closed
+(@sec-dictionary-ablation, @sec-singonly-universality) — and it closes
+with an engineering review of the implementation as read end-to-end,
+including one live bug found (and confirmed) during figure generation.
+
+## Where the program stands
+
+**Established — multi-seed, checked in:**
+
+- **The kernel-basis query decoder repairs the proved ceiling.** The
+  moment decoder's $m \le 2$ angular nullspace is proved and removed;
+  three seeds, reference bank, ID 0.4503 $\to$ 0.0399 (11.3$\times$)
+  (@sec-kernel-decoder).
+- **The dictionary question is closed**, after an arc that
+  survived two of its own wrong hypotheses (@sec-dictionary-selection,
+  @sec-dictionary-ablation): *the dictionary carries the singularity;
+  conditioning carries the smoothness; nonlinearity needs a smooth
+  basis.* In drive-linear operation, one exact singular member plus
+  operator-conditioned coefficients is best-in-class on 2D Laplace,
+  screened Laplace, and 3D Laplace alike; in nonlinear field mode the
+  polynomial members are load-bearing; MLP members are prunable
+  everywhere.
+- **Dimensional genericity, end to end.** The same architecture at a
+  bitwise-identical parameter count trains in 3D with zero core changes,
+  and 3D singular-only beats the double-layer oracle 2$\times$ on the
+  multiply connected shell tier with tight seed variance
+  (@sec-3d-meshtransformer, @sec-dictionary-3d).
+- **The nonlinear wall break.** The zero-preserving-nonlinear field mode
+  leaves the drive-linear regime on Liouville — 0.77 $\to$ 0.46 ID with
+  no seed overlap against the superposition wall (@sec-liouville).
+- **The discipline earned its keep.** Pre-registration, multi-seed
+  replication, and dated ledgers caught at least three would-be wrong
+  conclusions: the single-seed Liouville MLP verdicts (both directions),
+  the span hypothesis (killed by its own pre-registered test), and the
+  3D "MLPs help" reading (an artifact of polynomial-member harm).
+- **The mainstream baseline is steel-manned, and beaten in both
+  regimes.** Transolver, at matched and native capacity, streaming and
+  dataset-backed (its own published regime): 20$\times$ / 7.7$\times$
+  at matched budget respectively, with two of the gaps — drive-spectrum
+  extrapolation and exact equivariance — not closing at any budget
+  tested (@sec-transolver, @sec-transolver-dataset). The earlier
+  external rows (GLOBE, radius-free GeoTransolver) were deliberately
+  under-optimized controls at 1,000 updates and are superseded as
+  evidence.
+- **The cost curves are measured and the scaling wall is named.** The
+  cost law is the designed dense $O(QS)$ ($R^2$ = 0.999), the encoder
+  is not the wall, and inference fits one A100 at the product scope
+  ($\sim 10^5$ boundary elements $\times$ $10^6$ queries) today; the
+  wall is training memory, $\approx$742 GiB, with two characterized
+  fixes — checkpointing over query chunks (exact) or a hierarchical
+  backend (approximate) (@sec-scale).
+- **Where attention earns its keep is settled in both directions.** The
+  encoder-stress suites exist with results (@sec-encoder-stress,
+  @sec-single-layer); the encoder-depth null is confirmed on the
+  all-Dirichlet family at two seeds (@sec-encoder-depth); and the
+  mixed-BC discriminator shows where attention is genuinely
+  load-bearing — enc0 is unreliable on the mixed shell while one
+  encoder layer matches two (@sec-mixed-bc).
+- **The vector channels are measured, and they stay.** Not load-bearing
+  on 2D Laplace (matched accuracy at 60% fewer parameters);
+  load-bearing on screened and 3D in-distribution splits; the
+  capacity-matched wide-scalar control did not recover the gap, so it
+  is oriented transport, not width (@sec-scalar-only).
+- **The parity contract: measured, diagnosed, lifted, composed.** The
+  first pseudoscalar-target benchmark met the type system's predicted
+  no-response; the diagnosis was one line of group theory; the $0o$
+  extension lifted it exactly as pre-registered (circulation 0.647
+  $\to$ 0.037 at five seeds, the whole velocity field
+  $\sim$5$\times$ better), and on the first multi-field suite the
+  parity and nonlinearity mechanisms *compose* (@sec-fluid-suites,
+  @sec-pseudo-extension, @sec-euler-bernoulli).
+- **The scale gauge is intrinsic, and equivariance is unconditional.**
+  The reference length is derived from the geometry (radius of
+  gyration), accuracy-neutral at three seeds, with the convention-drift
+  demonstration on record: a 3$\times$ corrupted external gauge costs
+  the explicit-key model 4.64$\times$ while the intrinsic model is
+  bitwise immune (@sec-intrinsic-gauge).
+- **One full-width head.** Heads at fixed score capacity are
+  bookkeeping; the single full-width head won decisively on 2D Laplace
+  and confirmed non-inferior on all 13 suite-split cells cross-suite,
+  flipping the reference configuration on parsimony
+  (@sec-heads-vs-rank, @sec-one-head-cross-suite).
+- **The far-field ladder is closed at five seeds.** Strong inference
+  (three rivals, pre-registered discriminators), an instructive
+  refutation (the gate collapse was load-bearing), exclusion by
+  construction, then licensed exact decay structure: 0.694 $\to$ 0.090
+  at an unchanged training annulus — coverage mitigates, structure
+  fixes (@sec-farfield-ladder).
+- **A genuinely rotational Euler family exists, with exact labels.**
+  Helmholtz/Bessel streamfunctions with fp64 certification against the
+  steady momentum equation, couplings kept below the first Dirichlet
+  eigenvalue — and the pressure parity wall's third instance, pinned at
+  exactly 1.0 as pre-registered (@sec-euler-rotational).
+- **The nonlinear-fragility ladder is closed, and the degree is now
+  declared.** One engine behind both nonlinear extrapolation blowups —
+  the multiplicative read-in's implicit drive degree $\sim$21 against
+  targets of degree 1 and 2; the fix mirrors how linearity is declared:
+  `field_mode="quadratic"` makes the output an exact degree-$\le 2$
+  polynomial in the drive for any weights (structural test at
+  $10^{-15}$), turning near-eigenvalue detonations of
+  $10^{6}$–$10^{13}$ into 0.67 and closing the EB amplitude axis at
+  0.086 when composed with parity (@sec-nonlinear-fragility).
+- **The first solver-labeled nonlinear suite exists, with a measured
+  label credential.** Steady incompressible Navier–Stokes on the bank's
+  stars (Taylor–Hood P2–P1, analytic-Jacobian Newton; MMS orders
+  2.92/1.90, velocity 5.9e-7 at production resolution, Newton
+  grid-verified through Re 400, 4 rejected attempts in 1,400 cases,
+  noise floors reported per split) — and the first *graded* structural
+  wall: the linear arm's pressure gap to the nonlinear arms grows
+  from zero (within seed noise) in the genuinely-Stokes band to
+  $\approx 0.5$ at Re 300 once iteration 37's low-Re slice completes
+  the curve. Its velocity gap stayed flat at $\approx 0.18$ across
+  the *entire* Re 0.5–300 band — first read as a linear-read-in
+  deficit, then revised by iteration 38's pre-registered confound
+  check: a linear arm carrying the nonlinear arm's pseudo sector
+  closes the Stokes-band velocity gap entirely (bottom bin $-0.024$),
+  leaving a graded 0-to-0.1 velocity wall that tracks Re just as the
+  pressure wall does — the flat gap was the missing parity sector,
+  not the read-in class (@sec-ns-lowre). The
+  declared-degree arm keeps pace with the unbounded nonlinear arm
+  (0.278 ± 0.060 vs 0.231 ± 0.005 combined ID) without the stability
+  premium it enjoyed on exact families, and Transolver's first
+  measurement on the suite lands at 0.95 (@sec-ns-cavity).
+
+- **Hard geometry needs the second exact member.** On the multiply
+  connected multi-body family the single-layer member sweeps every
+  split-seed comparison and, without it, the model loses to the
+  pair-kernel control; on the simply connected deep cavity it helps
+  too — at an honest extrapolation cost on easy geometry
+  (@sec-single-layer, @sec-encoder-stress).
+- **The stream factorization is priced.** Two-stream wins linear ID by
+  3.6$\times$ the seed spread at matched parameters and is the only arm
+  with roundoff-exact contracts; the motivating belief that structural
+  drive-linearity buys spectrum extrapolation was falsified; and the
+  zero-point misspecification lesson — a contract can be exactly
+  enforced and exactly wrong — is on record
+  (@sec-stream-factorization).
+
+**Honestly incomplete:**
+
+- **Strong-form residuals on the original suites.** Still high for the
+  generalist (0.5–3.0 across Laplace, screened, and Liouville):
+  $L^2$-fit training fits fields without satisfying operators. Now
+  *reported* first-class — every driver emits a per-split fidelity
+  block and the tables carry the column (@sec-fidelity-columns) — but
+  the residuals themselves remain the open problem; neither the
+  declared-degree mode nor the fidelity work changed them. The
+  Navier–Stokes driver emits the block since iteration 37
+  (strong-form momentum residual of the prediction with $\tilde\nu$
+  read from the case, instrument-certified against the exact
+  Kovasznay solution; @sec-ns-lowre), so the solver-labeled port is
+  no longer open.
+- **Rotational-Euler pressure under amplification.** The declared-degree
+  arm holds near eigenvalues (velocity 0.216) but the $A^2$-amplified
+  pressure sits at 0.686 — an accuracy-under-amplification question,
+  not a stability one (@sec-nonlinear-fragility).
+- **The far-field per-seed tail.** The ladder closed at the mean
+  ($< 0.10$) with two of five seeds above the bar; the $r^{-1}$ member
+  tails still reach $r^{-2}$ through fitted zero-circulation
+  cancellation (@sec-farfield-ladder). Low priority.
+- **Solver-labeled RANS (and 3D/higher-Re N-S) remain the next ledge**
+  after iteration 36's steady 2D Navier–Stokes suite (@sec-ns-cavity):
+  turbulence closures, boundary-layer-resolving meshes with a fresh
+  noise-floor measurement, and unsteady statistics are all unpaid
+  (live item 1 of the agenda below).
+- **Product-scale training is gated** on one of the two characterized
+  memory fixes — an engineering task, not an open research question,
+  but not yet done (@sec-scale).
+
+## The redirected agenda
+
+The redirect, stated plainly: **no training-protocol tuning** — LR
+decay, checkpoint policies, and schedule sweeps are protocol hygiene,
+not research. The agenda was (a) benchmarks that stress-test the
+architectural claims, (b) component-level evals, and (c) simplification
+as the chief lens, plus one fair-ground comparison against the
+strongest mainstream baseline. Most of its original directions have
+since completed; their outcomes live in the ledger above and their
+numbers in @sec-benchmarks. What remains live:
+
+1. **Solver-labeled Euler and RANS suites** — the next ledge: fields no
+   longer analytically manufactured, the FEM catalog of
+   @sec-transolver-dataset as the label pipeline, and the
+   operator-fidelity columns no longer optional (@sec-part-ns holds the
+   first rung, Navier–Stokes).
+2. **Product-scale training memory** — gated on one of the two
+   characterized fixes: gradient checkpointing over query chunks
+   (exact) or a hierarchical decode backend (approximate); engineering,
+   not open research (@sec-scale).
+3. **Strong-form residuals on the original suites** — the open problem
+   behind the fidelity columns: $L^2$-fit training fits fields, not
+   operators (@sec-fidelity-columns).
+4. **Rotational-Euler pressure under amplification** — 0.686 near
+   eigenvalues against velocity's 0.216: accuracy under
+   150–6,000$\times$ target amplification, not stability
+   (@sec-nonlinear-fragility).
+5. **The affine zero-point knob** — a problem-declared homogeneous
+   solution with the network predicting the deviation, for problems
+   like Liouville where zero-preservation pins the wrong value;
+   Armijo bar: beat the free single-stream control's Liouville score
+   (@sec-stream-factorization).
+6. **Degree-grading for drive-amplitude extrapolation** — moderate
+   priority; after the composition result it promises a one-split gain
+   (@sec-euler-bernoulli).
+7. **The far-field per-seed tail** — close $< 0.10$ on every seed; the
+   $r^{-1}$ member tails still reach $r^{-2}$ through fitted
+   zero-circulation cancellation; low priority (@sec-farfield-ladder).
+8. **Encoder-stress coverage** — more seeds and harder dials on the
+   multi-body and deep-cavity families (@sec-encoder-stress).
+
+**Parked, with reasons.** The mixed-BC/Green-representation learned
+solve (shells with mixed Cauchy data) is parked, not abandoned — it
+returns with the BC-diversity gap, on which a first installment is now
+paid: the attention-necessity discriminator ran on the
+mixed shell tier through the generalist arms (@sec-mixed-bc); the
+specialist mixed-trace solve itself stays parked, and its 2D lessons
+(orientation gauge, shared relaxation, exact patch quadrature) are
+recorded in @sec-learned-bie. The solver-regime analysis of basis singularities (the
+Yukawa low-$\tilde\kappa$ blowup) is parked with the specialist line it
+belongs to. Asymmetric regularization of smooth members is moot:
+the dictionary ablations answered member selection by pruning
+(@sec-dictionary-ablation). Harmonic dictionary members are moot in
+linear mode — the exact singular member *is* the harmonic structure —
+and the operator-fidelity question they targeted moves to the
+strong-form-residual live item of the agenda.
+LR decay and checkpoint policy are protocol hygiene, not research; the
+single would-be exception, the **nonlinear discriminator** (rerun
+nonlinear singular-only under cosine decay — if it rescues to
+$\sim$0.46, the polynomial members were an optimization crutch; if not,
+they are representational), is parked here with them rather than
+queued: it becomes worth running when the nonlinear line resumes
+(@sec-singonly-universality). Finally, the **drive-depth sweep** that
+would sharpen the mixed-BC attention claim — the genuinely nonlocal
+*data* coupling lives in the drive blocks, held at one layer in every
+iteration-19 arm — is parked unless a sharper claim is needed
+(@sec-mixed-bc).
+
+## The emerging architecture
+
+*(The current best synthesis, not a final claim; every clause cites its
+measurement and carries its caveat.)* The component evidence composes
+into one candidate model:
+
+> **lift $\to$ one encoder layer, one full-width head $\to$ conditioned
+> two-exact-member singular decode** — roughly 82k parameters — covers
+> everything measured so far.
+
+This configuration is stated canonically, piece by piece with its
+settings, in the architecture chapter's reference-configuration table
+(@sec-reference-config); this section records the evidence trail behind
+each clause. The *second* encoder layer is prunable everywhere
+measured, including the mixed-BC tier where attention itself is
+load-bearing (@sec-mixed-bc); *all smooth dictionary members* are
+prunable in drive-linear operation, with the polynomial members
+returning only in nonlinear field mode (@sec-dictionary-ablation,
+@sec-singonly-universality); the *vector channels* are prunable on easy
+2D geometry but are genuine oriented-transport capacity on 3D and
+screened problems, so they stay (@sec-scalar-only); the
+*single-layer member* is load-bearing on hard geometry — multiply
+connected or deep-cavity — at an honest extrapolation cost on easy
+geometry (@sec-single-layer); and the *head count* collapses to one
+full-width head at matched total score capacity — decisively better on
+2D Laplace ID, nowhere decisively worse across screened, fluid-velocity,
+and 3D suites, with fewer parameters (@sec-heads-vs-rank,
+@sec-one-head-cross-suite). The synthesis also has
+**measured cost curves and a named path to product scale**: decode
+$O(Q^{0.97}S^{0.96})$, inference within one A100 at the product scope
+today, and product-scale training gated on checkpointing or a
+hierarchical backend (@sec-scale). The caveats that keep this a
+synthesis rather than a conclusion: one mixed tier, two-to-three seeds
+on the newest results, drive depth unswept, product-scope costs
+extrapolated rather than measured, and no encoder-stress benchmark yet
+where even one attention layer fails.
+
+## Engineering review
+
+Findings from reading the sources end-to-end while writing this book. None
+are speculative; each was verified in the code or by execution.
+
+**A found-and-fixed bug: the 3D star tier used to hang.**
+As originally written, `build_laplace3d_sample(tier="star")` never returned:
+its interior-query rejection bound used `max_star += abs(amplitude) * 35.0`
+per mode — but 35 is the *coefficient* of the leading term of the $(4,0)$
+harmonic, not its maximum on the sphere (which is 8; most table entries are
+$\le 2$), so the acceptance window `hi_factor = 1.0 - 0.08 - max_star` went
+negative and the rejection loop spun forever. The bug was caught during the
+book's own figure generation (the gallery could not sample star-tier
+queries) and fixed by replacing the analytic bound with the **sampled
+surface's actual radial extrema** — exact for the mesh by construction; the
+star tier now builds in milliseconds and all 3D results in @sec-benchmarks
+postdate the fix. The residual lesson stands: `laplace3d.py` gained coverage
+only after the incident, and a loose analytic bound in a rejection sampler
+fails *silently* as an infinite loop rather than loudly as an error —
+per-surface empirical bounds are the robust default.
+
+**Dead and orphaned code.**
+
+- `icosphere()`'s edge-midpoint helper assigns
+  `edge_midpoint[key] = points.shape[0] + len(new_points) - 1` and
+  immediately overwrites it with the recomputed value on the next line — the
+  first assignment is dead.
+- `_STAR_MODES_OOD` in `laplace3d.py` declares the degree-4 geometry-OOD
+  modes but has no consumer: the 3D study driver that would use it does not
+  exist yet.
+- `solid_angle_influence` — the exact 3D double-layer quadrature — is
+  exported but unused by any model or test. Both are *planned*-use code (the
+  iteration-5 model), but until that model lands they are untested public
+  surface.
+
+**Duplication: the panel-influence math exists four times.** The
+subtended-angle singular integral and the entire-order antiderivatives are
+implemented in `layer_potential.py` (`double_layer_influence`),
+`HarmonicPanelBIE._influence`, `NeumannHarmonicPanelBIE._influence`, and
+`screened_laplace.harmonic_panel_influence` (whose docstring itself says
+"functional twin of `HarmonicPanelBIE._influence`"). This was a deliberate
+choice — benchmark-local isolation while a parallel session owned the core
+module — and each copy is separately tested. But the copies share a subtle
+convention (`zeta = n·r − i n×r`, the *conjugate* of the docstring frame,
+invisible for conjugation-even Dirichlet terms — the exact trap iteration 2
+fell into and documented) that is currently re-explained per file.
+Consolidation into one panel-quadrature helper, with the frame convention
+stated once and the brute-force quadrature tests attached to it, is the
+right refactor once the research surface stabilizes.
+
+**Evidence-orphaned defaults.** The pruning study (@sec-pruning) proved that `regular_orders=0`
+plus a single shared relaxation is lossless (identical to four decimals) and
+*better* than the 13-parameter original — yet `HarmonicPanelBIE` still
+defaults to `regular_orders=3, shared_relaxation=False`. The archived runs
+that used the old defaults are reproducible from their recorded configs
+either way; new users get a strictly dominated default. Similarly, the
+refuted-hypothesis machinery in `SelfConsistentPairKernel` (`trace_loss`,
+`kernel_pde_loss`, `tied=False`, the midpoint-quadrature
+`_HarmonicPairKernel` family) remains live, maintained, tested surface. It
+is legitimate as an executable record of the falsification ladder, but it
+should be explicitly frozen (or moved to a clearly-labeled ladder module) so
+its options are not mistaken for recommendations — three of its four flags
+reproduce *refuted* configurations.
+
+**Dead work in the dense hot loop** *(found while
+profiling the scale study, @sec-scale)*. `PairInvariantFeatures` computes
+unconditionally inside the dense $O(N_qN_s)$ decode even when the
+dictionary has no smooth members to consume its output — roughly ten
+dead floats per pair on the flagship singular-only and singpair arms,
+i.e. on precisely the models the emerging architecture keeps. A
+straightforward conditional skip; queued as engineering hygiene, not
+research.
+
+**A latent contract bug, found by de-biasing the test data** *(found
+during the intrinsic-gauge work, @sec-intrinsic-gauge)*. The
+pair-invariant einsum took a CUDA batched-GEMM path with 1-ulp drift
+that broke *bitwise* query independence for any reference length
+$L \neq 1$ — invisible until then because every contract test ran on
+$L = 1$ data. Found and fixed; the general lesson is the test-data
+bias, not the einsum: a contract test whose fixtures all sit at a
+special value of an input is a contract test with a hole in it.
+
+**Two reference numbers, two banks.** The reference `MeshTransformer` row is
+0.458 on the 64-case reference bank and 0.425 on the 32-case finalist bank.
+Both are correct, both appear in the README, and they are one careless
+citation apart from contradicting each other. A single canonical comparison
+bank (or an explicit cross-reference table) would remove the trap.
+
+**Upstream gap worth contributing.** `torch.special.modified_bessel_k0/k1`
+lack autograd derivatives; the iteration-3 custom `Function`s with analytic
+recurrences ($K_0' = -K_1$, $K_1' = -K_0 - K_1/z$) are small,
+nested-derivative-tested, and generally useful — a candidate for
+PhysicsNeMo's utility layer or an upstream PyTorch contribution.
+
+## Standing caveats, restated
+
+Everything in this book is 2D except the 3D suite and its model rows
+(@sec-3d-results, @sec-3d-meshtransformer, @sec-dictionary-3d); the
+harmonic Laurent basis is Laplace-specific; the parametric and pruning
+ablations are seed-17-only where marked; the Neumann seeds 29/43 were stopped
+mid-transit at 3,000 steps (destination established by the seed-17 10k
+run); the old external baselines are under-optimized controls at 1,000
+updates, superseded as evidence by the steel-manned Transolver
+comparison in both regimes (@sec-transolver, @sec-transolver-dataset);
+the kernel-decoder fix of @sec-kernel-decoder is three-seed confirmed on
+the reference bank, and the dictionary program that followed it is
+closed across 2D Laplace, screened Laplace, 3D Laplace, and Liouville
+(@sec-dictionary-ablation, @sec-dictionary-3d,
+@sec-singonly-universality), with one parked discriminator — whether the
+nonlinear singular-only failure is representational or an optimization
+instability; the single-layer-member rule of @sec-single-layer rests on
+three seeds per encoder-stress family (deep-cavity closed at three,
+downgrading the deep-slot failure to the singular-only arm); the
+encoder-depth null of @sec-encoder-depth is two-seed on the Dirichlet
+family and resolved by the mixed-BC discriminator, which itself rests
+on a single mixed geometry tier with drive depth unswept
+(@sec-mixed-bc); the Liouville 5,000-step oscillation is a
+protocol-hygiene note, and its earlier "no best-checkpoint selection"
+reading is corrected in the checked-in artifact (the val-vs-eval gap is
+4-case-vs-16-case on an unstable model; @sec-liouville); the
+rotational-Euler family is disk-only at three seeds (the star
+generalization is declared future work, and its exact-label
+certification is the family's boundary of validity;
+@sec-euler-rotational); and the
+training histories, checkpoints, and the mode-response comparison behind
+@fig-kernel, @fig-convergence, and @sec-kernel-decoder are
+single-machine `/tmp` artifacts. The checked-in JSONs under `results/`
+are the durable record.

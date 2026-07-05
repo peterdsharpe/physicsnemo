@@ -142,11 +142,12 @@ def _randomize_all_parameters(layer: torch.nn.Module) -> torch.nn.Module:
     return layer
 
 
-def test_geometry_conditioned_map_is_linear_in_field(device):
+@pytest.mark.parametrize("bounded_gate_invariants", [False, True])
+def test_geometry_conditioned_map_is_linear_in_field(device, bounded_gate_invariants):
     layer = _randomize_all_parameters(
-        GeometryConditionedLinear(3, 2, 2, 2, 4, 3).to(
-            device=device, dtype=torch.float64
-        )
+        GeometryConditionedLinear(
+            3, 2, 2, 2, 4, 3, bounded_gate_invariants=bounded_gate_invariants
+        ).to(device=device, dtype=torch.float64)
     )
     geometry = _state(7, 3, 2, device, seed=1)
     first = _state(7, 2, 2, device, seed=2)
@@ -174,11 +175,14 @@ def test_geometry_conditioned_map_supports_vector_only_fields(device):
 
 
 @pytest.mark.parametrize("reflection", [False, True])
-def test_geometry_conditioned_map_is_o3_equivariant(device, reflection):
+@pytest.mark.parametrize("bounded_gate_invariants", [False, True])
+def test_geometry_conditioned_map_is_o3_equivariant(
+    device, reflection, bounded_gate_invariants
+):
     layer = _randomize_all_parameters(
-        GeometryConditionedLinear(3, 2, 2, 2, 4, 3).to(
-            device=device, dtype=torch.float64
-        )
+        GeometryConditionedLinear(
+            3, 2, 2, 2, 4, 3, bounded_gate_invariants=bounded_gate_invariants
+        ).to(device=device, dtype=torch.float64)
     )
     geometry = _state(7, 3, 2, device, seed=4)
     field = _state(7, 2, 2, device, seed=5)
@@ -187,6 +191,98 @@ def test_geometry_conditioned_map_is_o3_equivariant(device, reflection):
     output = layer(geometry, field)
     transformed = layer(_rotate(geometry, transform), _rotate(field, transform))
     _assert_close(transformed, _rotate(output, transform))
+
+
+def test_bounded_gate_knob_default_is_bitwise_noop(device):
+    """Explicitly passing the default knob must not change anything.
+
+    Mirrors the established knob discipline (see the polynomial-member and
+    pseudoscalar knobs): the knob adds no parameters and consumes no RNG, so
+    same-seed construction gives the same parameter tensors in the same
+    order for off, explicit-off, AND on; outputs are bitwise identical with
+    the knob off.  The knob must also be live: away from the zero gate
+    initialization (where both parameterizations gate by exactly one) the
+    bounded map must change the output.
+    """
+
+    def build(**overrides) -> GeometryConditionedLinear:
+        torch.manual_seed(907)
+        return GeometryConditionedLinear(3, 2, 2, 2, 4, 3, **overrides).to(
+            device=device, dtype=torch.float64
+        )
+
+    reference = build()
+    explicit = build(bounded_gate_invariants=False)
+    bounded = build(bounded_gate_invariants=True)
+    assert reference.bounded_gate_invariants is False
+    assert bounded.bounded_gate_invariants is True
+    reference_state = reference.state_dict()
+    for other in (explicit, bounded):
+        other_state = other.state_dict()
+        assert list(reference_state) == list(other_state)
+        for name, expected in reference_state.items():
+            torch.testing.assert_close(
+                other_state[name], expected, rtol=0.0, atol=0.0
+            )
+
+    geometry = _state(7, 3, 2, device, seed=31)
+    field = _state(7, 2, 2, device, seed=32)
+    _assert_close(explicit(geometry, field), reference(geometry, field), exact=True)
+
+    _randomize_all_parameters(reference)
+    bounded.load_state_dict(reference.state_dict())
+    assert not torch.allclose(
+        bounded(geometry, field).vectors, reference(geometry, field).vectors
+    )
+
+
+def test_bounded_gate_invariants_eliminate_the_saturation_regime(device):
+    """Bounded gate inputs converge along rays and cannot collapse the gate.
+
+    The raw parameterization's gate reads unbounded ``|x|^2``-type
+    invariants, so its sigmoid saturates doubly-exponentially far from the
+    training region (the measured exterior-flow far-field collapse).  With
+    the knob on, every gate input lives in ``[-1, 1]``: the pre-activation
+    is bounded by ``||W||_1 + |b|`` for every input, the invariants converge
+    to angular limits as the geometry scale grows, and the gate stays inside
+    a weight-determined compact subset of ``(0, 2)``.
+    """
+    torch.manual_seed(911)
+    layer = _randomize_all_parameters(
+        GeometryConditionedLinear(3, 2, 2, 2, 4, 3, bounded_gate_invariants=True).to(
+            device=device, dtype=torch.float64
+        )
+    )
+    geometry = _state(7, 3, 2, device, seed=41)
+
+    def scaled(scale: float) -> ScalarVectorState:
+        return ScalarVectorState(geometry.scalars * scale, geometry.vectors * scale)
+
+    invariants_far = layer._geometry_invariants(scaled(1.0e3))
+    assert invariants_far.abs().max() <= 1.0
+    # Radial convergence to the angular limit is O(1/|v|^2); the smallest
+    # random channel here has |v| ~ 40 at scale 1e3, hence the tolerance.
+    invariants_farther = layer._geometry_invariants(scaled(1.0e6))
+    torch.testing.assert_close(
+        invariants_farther, invariants_far, rtol=0.0, atol=1.0e-3
+    )
+
+    bound = layer.vector_gate.weight.abs().sum(dim=-1) + layer.vector_gate.bias.abs()
+    gates = 2.0 * torch.sigmoid(layer.vector_gate(invariants_far))
+    floor = 2.0 * torch.sigmoid(-bound)
+    assert (gates >= floor[None, :] - 1.0e-12).all()
+    assert (gates <= 2.0 - floor[None, :] + 1.0e-12).all()
+
+    # Contrast: the identical weights under the raw parameterization are
+    # fully saturated at the same far geometry.
+    raw = GeometryConditionedLinear(3, 2, 2, 2, 4, 3).to(
+        device=device, dtype=torch.float64
+    )
+    raw.load_state_dict(layer.state_dict())
+    raw_gates = 2.0 * torch.sigmoid(
+        raw.vector_gate(raw._geometry_invariants(scaled(1.0e3)))
+    )
+    assert ((raw_gates < 1.0e-6) | (raw_gates > 2.0 - 1.0e-6)).all()
 
 
 def test_linear_field_block_obeys_joint_cross_superposition(device):

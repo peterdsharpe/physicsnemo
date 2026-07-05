@@ -41,8 +41,11 @@ def _model(
     device: torch.device | str,
     *,
     field_mode: str = "linear",
+    query_decoder: str = "moment",
     dtype: torch.dtype = torch.float64,
     query_chunk_size: int = 2,
+    reference_length_key: str | None = "reference.length",
+    bounded_query_geometry: bool = False,
 ) -> MeshTransformer:
     torch.manual_seed(732)
     model = MeshTransformer(
@@ -50,8 +53,10 @@ def _model(
         output_field_ranks=_OUTPUT_RANKS,
         boundary_field_ranks=_BOUNDARY_RANKS,
         global_field_ranks=_GLOBAL_RANKS,
-        reference_length_key="reference.length",
+        reference_length_key=reference_length_key,
         field_mode=field_mode,
+        query_decoder=query_decoder,
+        bounded_query_geometry=bounded_query_geometry,
         operator_scalar_dim=5,
         operator_vector_dim=3,
         drive_scalar_dim=6,
@@ -402,8 +407,8 @@ def test_constructor_schemas_are_frozen_from_caller_mutation():
     assert model.boundary_names == ("wall",)
 
 
-def test_none_reference_length_means_already_dimensionless(device):
-    model = MeshTransformer(
+def _intrinsic_gauge_model(device, **overrides):
+    kwargs = dict(
         n_spatial_dims=3,
         output_field_ranks={"pressure": 0},
         boundary_field_ranks=_BOUNDARY_RANKS,
@@ -419,26 +424,46 @@ def test_none_reference_length_means_already_dimensionless(device):
         heads=1,
         scalar_rank=1,
         vector_rank=1,
-    ).to(device=device, dtype=torch.float64)
+    )
+    kwargs.update(overrides)
+    return MeshTransformer(**kwargs).to(device=device, dtype=torch.float64)
 
-    encoded = model.encode(_domain(device))
+
+def test_none_reference_length_uses_intrinsic_radius_of_gyration(device):
+    r"""The default gauge is the measure-weighted RMS boundary radius.
+
+    ``reference_length_key=None`` derives :math:`L` intrinsically as the
+    radius of gyration of the boundary quadrature about its measure-weighted
+    centroid, accumulated in float64.  Degree-1 positive homogeneity makes
+    the normalized source frame exactly scale invariant.
+    """
+    model = _intrinsic_gauge_model(device)
+
+    domain = _domain(device)
+    encoded = model.encode(domain)
     scale = 3.1
     scaled = model.encode(_domain(device, scale=scale))
 
+    boundary = domain.boundaries["wall"]
+    weights = boundary.cell_areas.double()
+    centroids = boundary.cell_centroids.double()
+    center = torch.einsum("n,nd->d", weights, centroids) / weights.sum()
+    expected = torch.sqrt(
+        torch.einsum("n,n->", weights, (centroids - center).square().sum(-1))
+        / weights.sum()
+    )
+
     torch.testing.assert_close(
-        encoded.reference_length,
-        torch.ones((), device=device, dtype=torch.float64),
-        rtol=0,
-        atol=0,
+        encoded.reference_length, expected, rtol=2.0e-15, atol=0.0
     )
     torch.testing.assert_close(
         scaled.reference_length,
-        torch.ones((), device=device, dtype=torch.float64),
-        rtol=0,
-        atol=0,
+        scale * encoded.reference_length,
+        rtol=2.0e-14,
+        atol=0.0,
     )
-    # ``None`` means the coordinates already have their final units. It must
-    # not trigger an implicit diameter, bounding-box, or RMS normalization.
+    # The intrinsic gauge cancels the physical scale: the normalized source
+    # frame and its quadrature are invariants of the similarity class.
     torch.testing.assert_close(
         scaled.center,
         scale * encoded.center,
@@ -447,16 +472,103 @@ def test_none_reference_length_means_already_dimensionless(device):
     )
     torch.testing.assert_close(
         scaled.source_mesh.points,
-        scale * encoded.source_mesh.points,
-        rtol=2.0e-14,
-        atol=2.0e-14,
+        encoded.source_mesh.points,
+        rtol=2.0e-13,
+        atol=2.0e-13,
     )
     torch.testing.assert_close(
         scaled.source_mesh.cell_areas,
-        scale ** (model.n_spatial_dims - 1) * encoded.source_mesh.cell_areas,
-        rtol=3.0e-14,
-        atol=3.0e-14,
+        encoded.source_mesh.cell_areas,
+        rtol=3.0e-13,
+        atol=3.0e-13,
     )
+
+
+def test_explicit_reference_length_key_bypasses_intrinsic_gauge(device, monkeypatch):
+    """The explicit-key override is bitwise the pre-intrinsic behavior.
+
+    Mirrors the knob-discipline regressions (polynomial/single-layer/
+    scalar-only/pseudo): with a key supplied the model must consume exactly
+    the declared scalar and never touch the intrinsic estimator, so its
+    numerics are unchanged from before the intrinsic default existed.
+    """
+    model = _model(device)
+    domain = _domain(device)
+
+    def _forbidden(self, *args, **kwargs):
+        raise AssertionError(
+            "intrinsic gauge must not run when reference_length_key is set"
+        )
+
+    monkeypatch.setattr(MeshTransformer, "_intrinsic_reference_length", _forbidden)
+    encoded = model.encode(domain)
+    torch.testing.assert_close(
+        encoded.reference_length,
+        domain.global_data["reference", "length"].reshape(()),
+        rtol=0.0,
+        atol=0.0,
+    )
+    prediction = model.decode(encoded)
+    assert torch.isfinite(prediction.point_data["pressure"]).all()
+
+
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+@pytest.mark.parametrize("scale", [0.2, 5.0])
+def test_intrinsic_gauge_similarity_contract_across_scales(
+    device, scale, query_decoder
+):
+    """Scale equivariance without any declared reference length.
+
+    The intrinsic gauge is degree-1 homogeneous, so the similarity contract
+    holds unconditionally -- no global-data length has to be kept consistent
+    by the caller across the 0.2x-5x range.
+    """
+    intrinsic = _model(device, query_decoder=query_decoder, reference_length_key=None)
+
+    original = intrinsic(_domain(device))
+    transformed = intrinsic(
+        _domain(
+            device,
+            scale=scale,
+            translation=torch.tensor([8.2, -4.3, 1.7]),
+        )
+    )
+    _assert_output_close(transformed, original)
+
+
+def test_intrinsic_gauge_is_immune_to_reference_length_corruption(device):
+    """Convention-drift immunity: no scale input exists to corrupt.
+
+    An explicit-key model changes its predictions when the declared
+    reference length drifts (here scaled 3x at evaluation time); the
+    intrinsic-gauge model with identical weights has no such input, so the
+    identical corruption is a bitwise no-op.  This asserts the structural
+    contrast only; the magnitude of the accuracy degradation on a trained
+    model is demonstrated in the mesh_transformer example's gauge tests.
+    """
+    explicit = _model(device)
+    intrinsic = _model(device, reference_length_key=None)
+
+    def corrupted_domain():
+        domain = _domain(device)
+        domain.global_data["reference", "length"] = (
+            3.0 * domain.global_data["reference", "length"]
+        )
+        return domain
+
+    with torch.no_grad():
+        explicit_clean = explicit(_domain(device)).point_data["pressure"]
+        explicit_drift = explicit(corrupted_domain()).point_data["pressure"]
+        intrinsic_clean = intrinsic(_domain(device)).point_data["pressure"]
+        intrinsic_drift = intrinsic(corrupted_domain()).point_data["pressure"]
+
+    torch.testing.assert_close(intrinsic_drift, intrinsic_clean, rtol=0.0, atol=0.0)
+    relative_drift = torch.linalg.norm(
+        explicit_drift - explicit_clean
+    ) / torch.linalg.norm(explicit_clean)
+    # An untrained model shows a genuine (not roundoff) sensitivity; trained
+    # models degrade by orders of magnitude more (see the example demo).
+    assert float(relative_drift) > 1.0e-6
 
 
 @pytest.mark.parametrize("length", [0.0, float("nan"), float("inf"), -float("inf")])
@@ -599,8 +711,9 @@ def test_heterogeneous_boundary_schemas_share_one_canonical_source(device):
     assert first.point_data["velocity"].shape == (2, 2)
 
 
-def test_forward_mesh_contract_and_target_data_nonleakage(device):
-    model = _model(device)
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_forward_mesh_contract_and_target_data_nonleakage(device, query_decoder):
+    model = _model(device, query_decoder=query_decoder)
     first_domain = _domain(device, target_scale=1.0)
     second_domain = _domain(device, target_scale=913.0)
 
@@ -619,8 +732,9 @@ def test_forward_mesh_contract_and_target_data_nonleakage(device):
     _assert_output_close(first, second, rtol=0.0, atol=0.0)
 
 
-def test_linear_mode_has_zero_and_superposition_laws(device):
-    model = _model(device, field_mode="linear")
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_linear_mode_has_zero_and_superposition_laws(device, query_decoder):
+    model = _model(device, field_mode="linear", query_decoder=query_decoder)
     dtype = torch.float64
     first_forcing = torch.tensor([0.2, -0.7, 1.1, 0.4], dtype=dtype)
     second_forcing = torch.tensor([-0.5, 0.8, 0.3, -1.2], dtype=dtype)
@@ -672,8 +786,11 @@ def test_linear_mode_has_zero_and_superposition_laws(device):
     assert torch.count_nonzero(zero.point_data["velocity"]).item() == 0
 
 
-def test_nonlinear_mode_is_exactly_zero_preserving(device):
-    model = _model(device, field_mode="zero_preserving_nonlinear")
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_nonlinear_mode_is_exactly_zero_preserving(device, query_decoder):
+    model = _model(
+        device, field_mode="zero_preserving_nonlinear", query_decoder=query_decoder
+    )
     zero = model(
         _domain(
             device,
@@ -686,9 +803,17 @@ def test_nonlinear_mode_is_exactly_zero_preserving(device):
     assert torch.count_nonzero(zero.point_data["velocity"]).item() == 0
 
 
-def test_full_model_backward_reaches_geometry_fields_and_parameters(device):
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_full_model_backward_reaches_geometry_fields_and_parameters(
+    device, query_decoder
+):
     """Training gradients reach every physical input path and model parameter."""
-    model = _model(device, field_mode="linear", query_chunk_size=2)
+    model = _model(
+        device,
+        field_mode="linear",
+        query_decoder=query_decoder,
+        query_chunk_size=2,
+    )
     domain = _domain(device)
     boundary = domain.boundaries["wall"]
     differentiable_inputs = {
@@ -774,7 +899,8 @@ def test_query_read_in_and_residual_scales_have_distinct_initialization(device):
         torch.testing.assert_close(scale, torch.full_like(scale, 1.0e-2))
 
 
-def test_global_only_drive_uses_every_decoder_parameter(device):
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_global_only_drive_uses_every_decoder_parameter(device, query_decoder):
     """A pointwise global seed must not bypass the order-one query read path."""
     torch.manual_seed(733)
     model = MeshTransformer(
@@ -784,6 +910,7 @@ def test_global_only_drive_uses_every_decoder_parameter(device):
         global_field_ranks={"drive": {"source_strength": 0}},
         reference_length_key="reference.length",
         field_mode="linear",
+        query_decoder=query_decoder,
         operator_scalar_dim=4,
         operator_vector_dim=2,
         drive_scalar_dim=4,
@@ -809,8 +936,9 @@ def test_global_only_drive_uses_every_decoder_parameter(device):
         assert torch.isfinite(parameter.grad).all(), name
 
 
-def test_amp_preserves_mesh_geometry_precision(device):
-    model = _model(device, dtype=torch.float32)
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_amp_preserves_mesh_geometry_precision(device, query_decoder):
+    model = _model(device, query_decoder=query_decoder, dtype=torch.float32)
     domain = _domain(device, dtype=torch.float32)
     device_type = torch.device(device).type
     autocast_dtype = torch.float16 if device_type == "cuda" else torch.bfloat16
@@ -825,9 +953,20 @@ def test_amp_preserves_mesh_geometry_precision(device):
     assert torch.isfinite(output.point_data["velocity"]).all()
 
 
+@pytest.mark.parametrize("bounded_query_geometry", [False, True])
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
 @pytest.mark.parametrize("reflection", [False, True])
-def test_model_is_o3_equivariant_with_consistent_orientation(device, reflection):
-    model = _model(device)
+def test_model_is_o3_equivariant_with_consistent_orientation(
+    device, reflection, query_decoder, bounded_query_geometry
+):
+    # The compactified query-position injection rescales each position by a
+    # function of its own invariant norm, so O(3) equivariance must be
+    # exactly preserved with the knob on.
+    model = _model(
+        device,
+        query_decoder=query_decoder,
+        bounded_query_geometry=bounded_query_geometry,
+    )
     original = model(_domain(device))
     transform = _orthogonal(device, reflection=reflection)
     transformed = model(
@@ -899,8 +1038,19 @@ def test_encoded_frame_uses_boundary_measure_and_explicit_length(device):
     )
 
 
-def test_similarity_and_source_query_permutation_contracts(device):
-    model = _model(device)
+@pytest.mark.parametrize("bounded_query_geometry", [False, True])
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_similarity_and_source_query_permutation_contracts(
+    device, query_decoder, bounded_query_geometry
+):
+    # The compactification acts on the nondimensionalized coordinate, after
+    # the reference-length division, so similarity covariance must be exactly
+    # preserved with the knob on.
+    model = _model(
+        device,
+        query_decoder=query_decoder,
+        bounded_query_geometry=bounded_query_geometry,
+    )
     original = model(_domain(device))
 
     transformed = model(
@@ -971,10 +1121,11 @@ def _smooth_circle_domain(
     return DomainMesh(interior=query, boundaries={"wall": boundary})
 
 
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
 @pytest.mark.parametrize("field_mode", ["linear", "zero_preserving_nonlinear"])
 @pytest.mark.parametrize("graded", [False, True])
 def test_mesh_transformer_converges_under_smooth_boundary_refinement(
-    device, field_mode, graded
+    device, field_mode, graded, query_decoder
 ):
     r"""The learned operator has a stable continuum quadrature limit.
 
@@ -995,6 +1146,7 @@ def test_mesh_transformer_converges_under_smooth_boundary_refinement(
         },
         reference_length_key=None,
         field_mode=field_mode,
+        query_decoder=query_decoder,
         operator_scalar_dim=4,
         operator_vector_dim=2,
         drive_scalar_dim=4,
@@ -1038,9 +1190,17 @@ def test_mesh_transformer_converges_under_smooth_boundary_refinement(
     assert errors[2] <= torch.maximum(0.45 * errors[1], errors[1].new_tensor(roundoff))
 
 
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
 @pytest.mark.parametrize("field_mode", ["linear", "zero_preserving_nonlinear"])
-def test_encode_decode_reuse_and_query_chunk_invariance(device, field_mode):
-    model = _model(device, field_mode=field_mode, query_chunk_size=1)
+def test_encode_decode_reuse_and_query_chunk_invariance(
+    device, field_mode, query_decoder
+):
+    model = _model(
+        device,
+        field_mode=field_mode,
+        query_decoder=query_decoder,
+        query_chunk_size=1,
+    )
     domain = _domain(device)
     encoded = model.encode(domain)
     assert not encoded.query_mesh.point_data.keys(include_nested=True, leaves_only=True)
@@ -1100,8 +1260,9 @@ def test_decode_reuses_cached_query_moments(device, monkeypatch):
     _assert_output_close(actual, expected)
 
 
-def test_mdlus_checkpoint_roundtrip(device, tmp_path):
-    model = _model(device, dtype=torch.float32)
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_mdlus_checkpoint_roundtrip(device, tmp_path, query_decoder):
+    model = _model(device, query_decoder=query_decoder, dtype=torch.float32)
     domain = _domain(device, dtype=torch.float32)
     expected = model(domain)
     checkpoint = tmp_path / "mesh_transformer.mdlus"

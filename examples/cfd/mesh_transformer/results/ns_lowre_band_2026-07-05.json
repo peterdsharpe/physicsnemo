@@ -1,0 +1,1449 @@
+{
+  "title": "ns_cavity_star/v1-lowre: the Re<=1 discriminating band (iteration 37; completes iteration 36's P1)",
+  "date": "2026-07-05",
+  "protocol": {
+    "regime": "fixed-dataset (dataset_train_ns.py; iteration-17 protocol)",
+    "epochs": 15,
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "arms": [
+      "mt_singpair_linear",
+      "mt_singpair_nl_pseudo"
+    ],
+    "v1_comparators": "archived iteration-36 reports (per_case blocks)"
+  },
+  "dataset": {
+    "family": "ns_cavity_star",
+    "version": "v1-lowre",
+    "n_cases": 180,
+    "split_sizes": {
+      "eval_id": 18,
+      "eval_unseen_Re": 18,
+      "eval_unseen_drive_profile": 18,
+      "eval_unseen_geometry": 18,
+      "train": 108
+    },
+    "split_params": {
+      "eval_id": {
+        "deformation_range": [
+          0.05,
+          0.35
+        ],
+        "drive_band": [
+          0,
+          2
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          0.5,
+          5.0
+        ]
+      },
+      "eval_unseen_Re": {
+        "deformation_range": [
+          0.05,
+          0.35
+        ],
+        "drive_band": [
+          0,
+          2
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          5.0,
+          10.0
+        ]
+      },
+      "eval_unseen_drive_profile": {
+        "deformation_range": [
+          0.05,
+          0.35
+        ],
+        "drive_band": [
+          3,
+          5
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          0.5,
+          5.0
+        ]
+      },
+      "eval_unseen_geometry": {
+        "deformation_range": [
+          0.45,
+          0.65
+        ],
+        "drive_band": [
+          0,
+          2
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          0.5,
+          5.0
+        ]
+      },
+      "train": {
+        "deformation_range": [
+          0.05,
+          0.35
+        ],
+        "drive_band": [
+          0,
+          2
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          0.5,
+          5.0
+        ]
+      }
+    },
+    "generator_settings": {
+      "base_seed": 0,
+      "drive_decay": 1.0,
+      "family": "ns_cavity_star",
+      "interior_margin": 0.12,
+      "max_attempts": 8,
+      "max_newton_iterations": 25,
+      "n_boundary": 64,
+      "n_fem_boundary": 1024,
+      "n_query_interior": 128,
+      "n_query_near": 32,
+      "near_band": [
+        0.02,
+        0.08
+      ],
+      "newton_tolerance": 1e-10,
+      "noise_floor_stride": 15,
+      "reynolds_range": [
+        0.5,
+        5.0
+      ],
+      "self_check_h_factor": 1.5,
+      "target_h": 0.0105,
+      "unseen_reynolds_range": [
+        5.0,
+        10.0
+      ],
+      "verify": true
+    },
+    "solver_settings": {
+      "element": "Taylor-Hood P2-P1 triangles",
+      "equation": "steady incompressible Navier-Stokes: -nu lap(u) + (u.grad)u + grad p = 0, div u = 0",
+      "linear_solver": "pypardiso",
+      "mesher": "triangle (constrained Delaunay, flags pq30a<area>)",
+      "n_fem_boundary": 1024,
+      "newton_tolerance": 1e-10,
+      "noise_floor_stride": 15,
+      "nonlinear_solver": "Newton with analytic Jacobian, Stokes initial guess, backtracking, viscosity continuation ladder 8-4-2-1",
+      "pressure_gauge": "zero mean pressure via Lagrange multiplier",
+      "reynolds_convention": "Re = U L / nu with peak drive speed U = 1 (normalized) and reference length L = 1, so nu = 1/Re; the loader exposes viscosity = 1/Re as the global operator scalar",
+      "self_check_h_factor": 1.5,
+      "solver": "fem_navier_stokes.solve_navier_stokes",
+      "target_h": 0.0105
+    },
+    "verification": {
+      "eval_id": {
+        "boundary_flux_max_abs": 4.415334037597215e-06,
+        "continuation_solves_total": 0,
+        "divergence_l2_normalized_max": 0.0012206173489337762,
+        "generation_seconds_mean": 86.0505332316065,
+        "label_noise_floor_pressure_cases": 1,
+        "label_noise_floor_pressure_max": 0.0002482678758705567,
+        "label_noise_floor_pressure_mean": 0.0002482678758705567,
+        "label_noise_floor_velocity_cases": 1,
+        "label_noise_floor_velocity_max": 1.3091411788150085e-06,
+        "label_noise_floor_velocity_mean": 1.3091411788150085e-06,
+        "max_snap_distance_max": 0.0,
+        "momentum_balance_error_max": 6.702722985515849e-14,
+        "n_cases": 18,
+        "newton_iterations_max": 2,
+        "queries_snapped_total": 0,
+        "rejected_attempts_total": 0,
+        "relative_residual_max": 1.2655349199949897e-13,
+        "self_consistency_rel_l2_pressure_max": 0.002801338071450741,
+        "self_consistency_rel_l2_pressure_mean": 0.000727717774838631,
+        "self_consistency_rel_l2_velocity_max": 0.0005769971694368301,
+        "self_consistency_rel_l2_velocity_mean": 0.00022749007181596236
+      },
+      "eval_unseen_Re": {
+        "boundary_flux_max_abs": 8.634123803059375e-06,
+        "continuation_solves_total": 0,
+        "divergence_l2_normalized_max": 0.00074277569262489,
+        "generation_seconds_mean": 90.05636039455486,
+        "label_noise_floor_pressure_cases": 1,
+        "label_noise_floor_pressure_max": 0.00036012420164421833,
+        "label_noise_floor_pressure_mean": 0.00036012420164421833,
+        "label_noise_floor_velocity_cases": 1,
+        "label_noise_floor_velocity_max": 5.363351013561654e-06,
+        "label_noise_floor_velocity_mean": 5.363351013561654e-06,
+        "max_snap_distance_max": 0.0,
+        "momentum_balance_error_max": 8.396133037661569e-14,
+        "n_cases": 18,
+        "newton_iterations_max": 2,
+        "queries_snapped_total": 0,
+        "rejected_attempts_total": 0,
+        "relative_residual_max": 3.472034440352424e-11,
+        "self_consistency_rel_l2_pressure_max": 0.0009618543701716449,
+        "self_consistency_rel_l2_pressure_mean": 0.00046114796876159717,
+        "self_consistency_rel_l2_velocity_max": 0.0003926751127223153,
+        "self_consistency_rel_l2_velocity_mean": 0.00019549646673390323
+      },
+      "eval_unseen_drive_profile": {
+        "boundary_flux_max_abs": 8.16095235518451e-07,
+        "continuation_solves_total": 0,
+        "divergence_l2_normalized_max": 0.00402861882992651,
+        "generation_seconds_mean": 83.45485518421629,
+        "label_noise_floor_pressure_cases": 1,
+        "label_noise_floor_pressure_max": 0.0005046782207720976,
+        "label_noise_floor_pressure_mean": 0.0005046782207720976,
+        "label_noise_floor_velocity_cases": 1,
+        "label_noise_floor_velocity_max": 6.125375952897136e-05,
+        "label_noise_floor_velocity_mean": 6.125375952897136e-05,
+        "max_snap_distance_max": 0.0,
+        "momentum_balance_error_max": 1.9113414953985536e-14,
+        "n_cases": 18,
+        "newton_iterations_max": 2,
+        "queries_snapped_total": 0,
+        "rejected_attempts_total": 0,
+        "relative_residual_max": 4.11123589644391e-14,
+        "self_consistency_rel_l2_pressure_max": 0.007366730419687878,
+        "self_consistency_rel_l2_pressure_mean": 0.003075995953744551,
+        "self_consistency_rel_l2_velocity_max": 0.0034499480257300422,
+        "self_consistency_rel_l2_velocity_mean": 0.0017770685415248386
+      },
+      "eval_unseen_geometry": {
+        "boundary_flux_max_abs": 1.2410511037044067e-05,
+        "continuation_solves_total": 0,
+        "divergence_l2_normalized_max": 0.0006191474754753757,
+        "generation_seconds_mean": 95.5708873902234,
+        "label_noise_floor_pressure_cases": 1,
+        "label_noise_floor_pressure_max": 0.00011432817860454417,
+        "label_noise_floor_pressure_mean": 0.00011432817860454417,
+        "label_noise_floor_velocity_cases": 1,
+        "label_noise_floor_velocity_max": 4.991256230673038e-07,
+        "label_noise_floor_velocity_mean": 4.991256230673038e-07,
+        "max_snap_distance_max": 0.0,
+        "momentum_balance_error_max": 6.354310824826004e-14,
+        "n_cases": 18,
+        "newton_iterations_max": 2,
+        "queries_snapped_total": 0,
+        "rejected_attempts_total": 0,
+        "relative_residual_max": 1.2451722792693278e-13,
+        "self_consistency_rel_l2_pressure_max": 0.000998202056054007,
+        "self_consistency_rel_l2_pressure_mean": 0.0004226251493071484,
+        "self_consistency_rel_l2_velocity_max": 0.0004908518322212055,
+        "self_consistency_rel_l2_velocity_mean": 0.00019304743749180722
+      },
+      "train": {
+        "boundary_flux_max_abs": 8.009073910797261e-06,
+        "continuation_solves_total": 0,
+        "divergence_l2_normalized_max": 0.0015262221571552457,
+        "generation_seconds_mean": 91.77612904895257,
+        "label_noise_floor_pressure_cases": 8,
+        "label_noise_floor_pressure_max": 0.00039472469440176937,
+        "label_noise_floor_pressure_mean": 0.00020211071726949708,
+        "label_noise_floor_velocity_cases": 8,
+        "label_noise_floor_velocity_max": 9.551703017206475e-06,
+        "label_noise_floor_velocity_mean": 2.6176670751266234e-06,
+        "max_snap_distance_max": 0.0,
+        "momentum_balance_error_max": 1.0395924588680457e-13,
+        "n_cases": 108,
+        "newton_iterations_max": 2,
+        "queries_snapped_total": 0,
+        "rejected_attempts_total": 0,
+        "relative_residual_max": 9.562348691610678e-13,
+        "self_consistency_rel_l2_pressure_max": 0.0017699632236148485,
+        "self_consistency_rel_l2_pressure_mean": 0.0005355763989077776,
+        "self_consistency_rel_l2_velocity_max": 0.0006290758179172698,
+        "self_consistency_rel_l2_velocity_mean": 0.00020804099626639354
+      },
+      "wall_seconds_per_case": 4.989348079077738,
+      "wall_seconds_total": 898.0826542339928,
+      "workers": 20
+    }
+  },
+  "arms": {
+    "mt_singpair_linear": {
+      "parameters": 106408,
+      "best_validation": {
+        "mean": 0.5216694046307907,
+        "sd": 0.019720077881111645,
+        "seeds": [
+          0.5269780600468469,
+          0.4998383956433468,
+          0.5381917582021781
+        ]
+      },
+      "elapsed_seconds": {
+        "mean": 74.44371096299922,
+        "sd": 1.0094904279807944,
+        "seeds": [
+          75.5960139700037,
+          74.0199381299899,
+          73.71518078900408
+        ]
+      },
+      "splits": {
+        "eval_id": {
+          "combined": {
+            "mean": 0.4788405196442411,
+            "sd": 0.01375452427864342,
+            "seeds": [
+              0.4801860462074246,
+              0.4644626804112868,
+              0.49187283231401197
+            ]
+          },
+          "velocity": {
+            "mean": 0.4530481227018215,
+            "sd": 0.013905290453222464,
+            "seeds": [
+              0.45535975529087913,
+              0.4381318787733714,
+              0.465652734041214
+            ]
+          },
+          "pressure": {
+            "mean": 0.4783633577602881,
+            "sd": 0.014868084292338442,
+            "seeds": [
+              0.48102331906557083,
+              0.46234483106268776,
+              0.4917219231526057
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.40027572214603424,
+            "sd": 0.03913752477907551,
+            "seeds": [
+              0.44089752435684204,
+              0.36281408535109627,
+              0.3971155567301644
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.479092589131108,
+            "sd": 0.018678934960909145,
+            "seeds": [
+              0.4628819872935613,
+              0.47487657103273606,
+              0.4995192090670268
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.5588346592806004,
+            "sd": 0.025160928990370167,
+            "seeds": [
+              0.5596285661061605,
+              0.5332861724827025,
+              0.5835892392529382
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.34555522545620243,
+            "sd": 0.006672913901321661,
+            "seeds": [
+              0.3512120478683048,
+              0.3472576033737924,
+              0.3381960251265102
+            ]
+          }
+        },
+        "eval_unseen_Re": {
+          "combined": {
+            "mean": 0.6789966850803072,
+            "sd": 0.03381792193703757,
+            "seeds": [
+              0.6578034668258377,
+              0.7179972986638398,
+              0.6611892897512444
+            ]
+          },
+          "velocity": {
+            "mean": 0.41576419881096593,
+            "sd": 0.013462472968148453,
+            "seeds": [
+              0.40551939772235024,
+              0.4107613232400682,
+              0.4310118754704793
+            ]
+          },
+          "pressure": {
+            "mean": 0.9700628949536217,
+            "sd": 0.06230642287432477,
+            "seeds": [
+              0.9254272447692024,
+              1.0412461923228369,
+              0.943515247768826
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.363157836927308,
+            "sd": 0.050116053467114,
+            "seeds": [
+              0.3932204643885295,
+              0.3053036597039964,
+              0.39094938668939805
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.44479285235758187,
+            "sd": 0.025559686332440663,
+            "seeds": [
+              0.41600319743156433,
+              0.46481479207674664,
+              0.45356056756443447
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 1.0095293356312645,
+            "sd": 0.1285481809105274,
+            "seeds": [
+              0.8711856090360217,
+              1.1252886950969696,
+              1.0321137027608023
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.9382390821421588,
+            "sd": 0.08554348978729806,
+            "seeds": [
+              1.0163309458229277,
+              0.9515757262706757,
+              0.846810574332873
+            ]
+          }
+        },
+        "eval_unseen_drive_profile": {
+          "combined": {
+            "mean": 0.7944666673149715,
+            "sd": 0.043118046365244404,
+            "seeds": [
+              0.8152022253717043,
+              0.7448982072158347,
+              0.8232995693573757
+            ]
+          },
+          "velocity": {
+            "mean": 0.7010126312573751,
+            "sd": 0.028180805174497007,
+            "seeds": [
+              0.6898886031574674,
+              0.6800916360484229,
+              0.7330576545662351
+            ]
+          },
+          "pressure": {
+            "mean": 0.7949122836192449,
+            "sd": 0.04332132217298878,
+            "seeds": [
+              0.8159061769644419,
+              0.7450938506258858,
+              0.8237368232674069
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.5725391341580285,
+            "sd": 0.016103559532380546,
+            "seeds": [
+              0.5668093380000856,
+              0.5600840548674265,
+              0.5907240096065733
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.878488803351367,
+            "sd": 0.04276975313157376,
+            "seeds": [
+              0.8627944323751662,
+              0.8457833462291293,
+              0.9268886314498054
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.806830296361888,
+            "sd": 0.04347053233522745,
+            "seeds": [
+              0.8300722042719523,
+              0.756679516699579,
+              0.8337391681141324
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.648417000969251,
+            "sd": 0.05059827159534237,
+            "seeds": [
+              0.6345206565327115,
+              0.6062189241250356,
+              0.704511422250006
+            ]
+          }
+        },
+        "eval_unseen_geometry": {
+          "combined": {
+            "mean": 0.5547396754859207,
+            "sd": 0.03327730422935849,
+            "seeds": [
+              0.5379180224414494,
+              0.5332313949290364,
+              0.5930696090872765
+            ]
+          },
+          "velocity": {
+            "mean": 0.5005695742589457,
+            "sd": 0.03755723053451504,
+            "seeds": [
+              0.5438179042604234,
+              0.4817260619666841,
+              0.47616475654972923
+            ]
+          },
+          "pressure": {
+            "mean": 0.5641515155633291,
+            "sd": 0.038658226169607665,
+            "seeds": [
+              0.5427663938866721,
+              0.5409108201662699,
+              0.6087773326370451
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.49626985716599004,
+            "sd": 0.04724738190119974,
+            "seeds": [
+              0.550819542672899,
+              0.4697459836800893,
+              0.4682440451449818
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.5158223360776901,
+            "sd": 0.034426181909457634,
+            "seeds": [
+              0.5552390300565295,
+              0.5005755109919442,
+              0.4916524671845966
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.6301096650185408,
+            "sd": 0.09933230678401801,
+            "seeds": [
+              0.5904983265532388,
+              0.5566945556137297,
+              0.7431361128886541
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.4850509315729141,
+            "sd": 0.05868872600973177,
+            "seeds": [
+              0.5171739359696707,
+              0.5206658360030916,
+              0.41731302274598014
+            ]
+          }
+        }
+      },
+      "fidelity": {
+        "momentum_residual": {
+          "eval_id": {
+            "mean": 47.6611573008792,
+            "sd": 6.340209504960694,
+            "seeds": [
+              45.97376460040048,
+              54.67435816708841,
+              42.335349135148725
+            ]
+          },
+          "eval_unseen_Re": {
+            "mean": 9.172722533312566,
+            "sd": 0.7753722825901853,
+            "seeds": [
+              8.584237727659367,
+              8.882613670421701,
+              10.051316201856629
+            ]
+          },
+          "eval_unseen_drive_profile": {
+            "mean": 185.792492129831,
+            "sd": 5.292263495453291,
+            "seeds": [
+              188.88444859934992,
+              188.8113695114364,
+              179.68165827870672
+            ]
+          },
+          "eval_unseen_geometry": {
+            "mean": 20.63130190007723,
+            "sd": 1.9725280973823862,
+            "seeds": [
+              20.42662130414428,
+              18.76909479846298,
+              22.698189597624424
+            ]
+          }
+        },
+        "divergence_residual": {
+          "eval_id": {
+            "mean": 2.7035225972292967,
+            "sd": 0.2498807881357127,
+            "seeds": [
+              2.4231070092868645,
+              2.902600857552496,
+              2.7848599248485293
+            ]
+          },
+          "eval_unseen_Re": {
+            "mean": 2.754593065359991,
+            "sd": 0.234441498582294,
+            "seeds": [
+              2.522570250382415,
+              2.9913806139318706,
+              2.749828331765687
+            ]
+          },
+          "eval_unseen_drive_profile": {
+            "mean": 12.493133703735076,
+            "sd": 0.5978447268575936,
+            "seeds": [
+              12.324115800957234,
+              11.997993598507094,
+              13.1572917117409
+            ]
+          },
+          "eval_unseen_geometry": {
+            "mean": 2.194467289081682,
+            "sd": 0.1600853425725817,
+            "seeds": [
+              2.0098881199212544,
+              2.2954295111278302,
+              2.2780842361959612
+            ]
+          }
+        },
+        "notes": {
+          "momentum_residual_note": "||nu~ lap u_pred - (u_pred . grad) u_pred - grad p_pred|| / ||(u_pred . grad) u_pred||: the strong-form steady N-S momentum residual of the model's own two output fields (float64 autograd, 32 interior queries, two cases per split); nu~ = 1/Re comes from the CASE, not the model -- the model never sees the governing equations, the metric does.  The normalizer is the prediction's own advection norm (no closed-form scale exists on a solver-labeled family); solver-exact fields score ~0",
+          "divergence_residual_note": "||div u_pred|| L / ||u_pred||: the incompressibility strong form of the predicted velocity at the same subsample"
+        }
+      }
+    },
+    "mt_singpair_nl_pseudo": {
+      "parameters": 233108,
+      "best_validation": {
+        "mean": 0.5220474615462959,
+        "sd": 0.037759789491953355,
+        "seeds": [
+          0.5430360430826076,
+          0.5446501689244498,
+          0.4784561726318304
+        ]
+      },
+      "elapsed_seconds": {
+        "mean": 105.09791236266999,
+        "sd": 2.643194117266089,
+        "seeds": [
+          104.27030738201574,
+          102.96754944199347,
+          108.05588026400073
+        ]
+      },
+      "splits": {
+        "eval_id": {
+          "combined": {
+            "mean": 0.48097503259621693,
+            "sd": 0.03728716981407115,
+            "seeds": [
+              0.48146697335694877,
+              0.5180137980799996,
+              0.44344432635170244
+            ]
+          },
+          "velocity": {
+            "mean": 0.2967572035612884,
+            "sd": 0.039369336752285274,
+            "seeds": [
+              0.28821685165166855,
+              0.3396957317988078,
+              0.26235902723338866
+            ]
+          },
+          "pressure": {
+            "mean": 0.49394766075743574,
+            "sd": 0.03994352711725464,
+            "seeds": [
+              0.4935588290294011,
+              0.534084184302224,
+              0.4541999689406819
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.25408888125309237,
+            "sd": 0.013244238813782405,
+            "seeds": [
+              0.23975461845596632,
+              0.26587191389666665,
+              0.25664011140664417
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.3150221857207793,
+            "sd": 0.05440879789474559,
+            "seeds": [
+              0.31312429077095455,
+              0.37035509943962097,
+              0.2615871669517623
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.5746915986140569,
+            "sd": 0.04096056041224429,
+            "seeds": [
+              0.5712602436542511,
+              0.6172598997751871,
+              0.5355546524127325
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.3577528753214412,
+            "sd": 0.03075460685717538,
+            "seeds": [
+              0.35627075284719467,
+              0.3892217468884256,
+              0.3277661262287034
+            ]
+          }
+        },
+        "eval_unseen_Re": {
+          "combined": {
+            "mean": 0.5656071640081134,
+            "sd": 0.09541650529375945,
+            "seeds": [
+              0.5869710507373538,
+              0.4613196773229229,
+              0.6485307639640635
+            ]
+          },
+          "velocity": {
+            "mean": 0.2907532735003366,
+            "sd": 0.06488029870830896,
+            "seeds": [
+              0.27639398392703796,
+              0.3616103182236354,
+              0.23425551835033628
+            ]
+          },
+          "pressure": {
+            "mean": 0.8220458334242856,
+            "sd": 0.2168440836704459,
+            "seeds": [
+              0.8963471468951967,
+              0.5778182761536704,
+              0.9919720772239897
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.2223371150041068,
+            "sd": 0.023652738602083594,
+            "seeds": [
+              0.19547990005877283,
+              0.23146810134251913,
+              0.24006334361102846
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.323507610294554,
+            "sd": 0.09550306131229355,
+            "seeds": [
+              0.31748326785034603,
+              0.42188023030757904,
+              0.23115933272573683
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.7829028207946708,
+            "sd": 0.13193710862726535,
+            "seeds": [
+              0.8483068380090926,
+              0.6310406823952993,
+              0.8693609419796202
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.8814495261068697,
+            "sd": 0.32851554486704143,
+            "seeds": [
+              0.9760278546147876,
+              0.5160194055901633,
+              1.1523013181156583
+            ]
+          }
+        },
+        "eval_unseen_drive_profile": {
+          "combined": {
+            "mean": 0.8296972426041727,
+            "sd": 0.04432818857697956,
+            "seeds": [
+              0.8256002227313686,
+              0.8759317132479945,
+              0.7875597918331548
+            ]
+          },
+          "velocity": {
+            "mean": 0.7498705249141763,
+            "sd": 0.06788232171882078,
+            "seeds": [
+              0.740298201640447,
+              0.8220309217770895,
+              0.6872824513249927
+            ]
+          },
+          "pressure": {
+            "mean": 0.830103752789674,
+            "sd": 0.04429055046527249,
+            "seeds": [
+              0.8259726266066233,
+              0.87631513343917,
+              0.7880234983232286
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.6509543226824867,
+            "sd": 0.057034305849107826,
+            "seeds": [
+              0.6423172338141335,
+              0.7118145558569167,
+              0.5987311783764098
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.8954443192040479,
+            "sd": 0.08960979873299378,
+            "seeds": [
+              0.8739439513948228,
+              0.993848462899526,
+              0.8185405433177948
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.8397623775181947,
+            "sd": 0.042829100650877694,
+            "seeds": [
+              0.8346290058559842,
+              0.8849268125163184,
+              0.7997313141822815
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.7419266253709793,
+            "sd": 0.06719837687555817,
+            "seeds": [
+              0.7365553975105286,
+              0.8116494251622094,
+              0.6775750534402
+            ]
+          }
+        },
+        "eval_unseen_geometry": {
+          "combined": {
+            "mean": 0.5012209743817034,
+            "sd": 0.05141609286944959,
+            "seeds": [
+              0.5554482136163157,
+              0.49503985341372175,
+              0.453174856115073
+            ]
+          },
+          "velocity": {
+            "mean": 0.347053080521248,
+            "sd": 0.055193047658587124,
+            "seeds": [
+              0.3218397605750296,
+              0.41034986658228767,
+              0.30896961440642673
+            ]
+          },
+          "pressure": {
+            "mean": 0.5121270881758796,
+            "sd": 0.05439642826943572,
+            "seeds": [
+              0.571499745051066,
+              0.5001928615901206,
+              0.46468865788645214
+            ]
+          },
+          "velocity/near_wall": {
+            "mean": 0.3155277525937116,
+            "sd": 0.08969603454121486,
+            "seeds": [
+              0.25497949454519486,
+              0.41857419742478263,
+              0.2730295658111572
+            ]
+          },
+          "velocity/interior": {
+            "mean": 0.37126347919305164,
+            "sd": 0.03542294227219291,
+            "seeds": [
+              0.3726291408141454,
+              0.4059838412536515,
+              0.335177455511358
+            ]
+          },
+          "pressure/near_wall": {
+            "mean": 0.5616610229567246,
+            "sd": 0.055940628276616895,
+            "seeds": [
+              0.625713457663854,
+              0.5368679306573338,
+              0.5224016805489858
+            ]
+          },
+          "pressure/interior": {
+            "mean": 0.46089603503545123,
+            "sd": 0.04992845917640849,
+            "seeds": [
+              0.5142334865199195,
+              0.45317957136366105,
+              0.41527504722277325
+            ]
+          }
+        }
+      },
+      "fidelity": {
+        "momentum_residual": {
+          "eval_id": {
+            "mean": 16.058136982499637,
+            "sd": 3.2113981834397136,
+            "seeds": [
+              12.792614922632119,
+              16.169269756258828,
+              19.21252626860796
+            ]
+          },
+          "eval_unseen_Re": {
+            "mean": 7.670246784101988,
+            "sd": 1.3452863106836543,
+            "seeds": [
+              7.189277236352295,
+              6.631553510042956,
+              9.189909605910714
+            ]
+          },
+          "eval_unseen_drive_profile": {
+            "mean": 158.1711252640848,
+            "sd": 91.2175255710186,
+            "seeds": [
+              107.02142720782737,
+              263.4856649290896,
+              104.00628365533737
+            ]
+          },
+          "eval_unseen_geometry": {
+            "mean": 18.648858796128394,
+            "sd": 2.0354517188186056,
+            "seeds": [
+              18.609395854389025,
+              16.633425480841055,
+              20.703755053155106
+            ]
+          }
+        },
+        "divergence_residual": {
+          "eval_id": {
+            "mean": 1.0651968792368494,
+            "sd": 0.09239608372513884,
+            "seeds": [
+              0.9843351472032297,
+              1.1659027110946714,
+              1.0453527794126471
+            ]
+          },
+          "eval_unseen_Re": {
+            "mean": 1.1662632279167073,
+            "sd": 0.05252807873291728,
+            "seeds": [
+              1.2250947734700262,
+              1.1240671581471222,
+              1.1496277521329736
+            ]
+          },
+          "eval_unseen_drive_profile": {
+            "mean": 6.062666918500969,
+            "sd": 1.2945894766947035,
+            "seeds": [
+              7.528264429006034,
+              5.074956676512979,
+              5.584779649983891
+            ]
+          },
+          "eval_unseen_geometry": {
+            "mean": 1.0300751356429432,
+            "sd": 0.03855297197429619,
+            "seeds": [
+              1.0704415021704867,
+              1.0261476894610104,
+              0.9936362152973324
+            ]
+          }
+        },
+        "notes": {
+          "momentum_residual_note": "||nu~ lap u_pred - (u_pred . grad) u_pred - grad p_pred|| / ||(u_pred . grad) u_pred||: the strong-form steady N-S momentum residual of the model's own two output fields (float64 autograd, 32 interior queries, two cases per split); nu~ = 1/Re comes from the CASE, not the model -- the model never sees the governing equations, the metric does.  The normalizer is the prediction's own advection norm (no closed-form scale exists on a solver-labeled family); solver-exact fields score ~0",
+          "divergence_residual_note": "||div u_pred|| L / ||u_pred||: the incompressibility strong form of the predicted velocity at the same subsample"
+        }
+      }
+    }
+  },
+  "re_gap_curves": {
+    "lowre": {
+      "curve": {
+        "splits_pooled": [
+          "eval_id",
+          "eval_unseen_Re"
+        ],
+        "bin_edges": [
+          0.5508744837542039,
+          1.1261355600373908,
+          2.3021238720989317,
+          4.70616017339139,
+          9.620656753549145
+        ],
+        "per_arm": {
+          "mt_singpair_linear": {
+            "bin_centers": [
+              0.7876289388238912,
+              1.6101253230669894,
+              3.2915290794835106,
+              6.72877044157563
+            ],
+            "n_cases": [
+              24,
+              9,
+              21,
+              54
+            ],
+            "velocity": [
+              0.43492162972688675,
+              0.4257019625769721,
+              0.48548389758382526,
+              0.41576419881096593
+            ],
+            "pressure": [
+              0.4576027387132247,
+              0.46997422642178005,
+              0.5056851215305782,
+              0.9700628949536217
+            ],
+            "combined": [
+              0.45797054610073634,
+              0.46735383195435226,
+              0.5076147841324846,
+              0.6789966850803073
+            ]
+          },
+          "mt_singpair_nl_pseudo": {
+            "bin_centers": [
+              0.7876289388238912,
+              1.6101253230669894,
+              3.2915290794835106,
+              6.72877044157563
+            ],
+            "n_cases": [
+              24,
+              9,
+              21,
+              54
+            ],
+            "velocity": [
+              0.2504231569667657,
+              0.27539927264054614,
+              0.35886379863534656,
+              0.29075327350033653
+            ],
+            "pressure": [
+              0.46316805730263394,
+              0.45040074321958756,
+              0.547787315079144,
+              0.8220458334242856
+            ],
+            "combined": [
+              0.4611592275245387,
+              0.441383279713809,
+              0.5205895610563097,
+              0.5656071640081134
+            ]
+          }
+        }
+      },
+      "gaps": {
+        "bin_centers": [
+          0.7876289388238912,
+          1.6101253230669894,
+          3.2915290794835106,
+          6.72877044157563
+        ],
+        "n_cases": [
+          24,
+          9,
+          21,
+          54
+        ],
+        "velocity_gap": [
+          0.18449847276012105,
+          0.15030268993642598,
+          0.1266200989484787,
+          0.1250109253106294
+        ],
+        "pressure_gap": [
+          -0.005565318589409229,
+          0.019573483202192488,
+          -0.042102193548565814,
+          0.14801706152933614
+        ]
+      }
+    },
+    "v1_archived": {
+      "curve": {
+        "splits_pooled": [
+          "eval_id",
+          "eval_unseen_Re"
+        ],
+        "bin_edges": [
+          10.0140038421401,
+          19.76334677590324,
+          39.004366479365316,
+          76.97788343781704,
+          151.92131223823353,
+          299.82748396597606
+        ],
+        "per_arm": {
+          "mt_singpair_linear": {
+            "bin_centers": [
+              14.068057099238768,
+              27.76430839236074,
+              54.79483165787155,
+              108.14148632784251,
+              213.42489266530987
+            ],
+            "n_cases": [
+              90,
+              99,
+              93,
+              108,
+              450
+            ],
+            "velocity": [
+              0.3436434235837724,
+              0.3986415966893687,
+              0.44031049743775397,
+              0.4750804724516692,
+              0.569984887043635
+            ],
+            "pressure": [
+              0.42658226721816594,
+              0.5578587214754085,
+              0.7483455900863935,
+              0.9088586281847071,
+              1.0006837872664134
+            ],
+            "combined": [
+              0.35350796690795094,
+              0.4091561457811458,
+              0.450080051471514,
+              0.48340156055509936,
+              0.575389686569933
+            ]
+          },
+          "mt_singpair_nl_pseudo": {
+            "bin_centers": [
+              14.068057099238768,
+              27.76430839236074,
+              54.79483165787155,
+              108.14148632784251,
+              213.42489266530987
+            ],
+            "n_cases": [
+              90,
+              99,
+              93,
+              108,
+              450
+            ],
+            "velocity": [
+              0.1550182328455978,
+              0.17956900777238788,
+              0.22973144006344579,
+              0.24982625328832203,
+              0.3661735463804669
+            ],
+            "pressure": [
+              0.3142933631936709,
+              0.32446907400482833,
+              0.3802009585403627,
+              0.36392899864801653,
+              0.5300131544470787
+            ],
+            "combined": [
+              0.19521620198230644,
+              0.1990641272078355,
+              0.23518778876549795,
+              0.2519949178677633,
+              0.3678612845786131
+            ]
+          }
+        }
+      },
+      "gaps": {
+        "bin_centers": [
+          14.068057099238768,
+          27.76430839236074,
+          54.79483165787155,
+          108.14148632784251,
+          213.42489266530987
+        ],
+        "n_cases": [
+          90,
+          99,
+          93,
+          108,
+          450
+        ],
+        "velocity_gap": [
+          0.18862519073817463,
+          0.21907258891698084,
+          0.21057905737430818,
+          0.22525421916334715,
+          0.20381134066316814
+        ],
+        "pressure_gap": [
+          0.11228890402449504,
+          0.23338964747058016,
+          0.3681446315460308,
+          0.5449296295366906,
+          0.47067063281933463
+        ]
+      }
+    },
+    "joined": {
+      "bin_centers": [
+        0.7876289388238912,
+        1.6101253230669894,
+        3.2915290794835106,
+        6.72877044157563,
+        14.068057099238768,
+        27.76430839236074,
+        54.79483165787155,
+        108.14148632784251,
+        213.42489266530987
+      ],
+      "n_cases": [
+        24,
+        9,
+        21,
+        54,
+        90,
+        99,
+        93,
+        108,
+        450
+      ],
+      "velocity_gap": [
+        0.18449847276012105,
+        0.15030268993642598,
+        0.1266200989484787,
+        0.1250109253106294,
+        0.18862519073817463,
+        0.21907258891698084,
+        0.21057905737430818,
+        0.22525421916334715,
+        0.20381134066316814
+      ],
+      "pressure_gap": [
+        -0.005565318589409229,
+        0.019573483202192488,
+        -0.042102193548565814,
+        0.14801706152933614,
+        0.11228890402449504,
+        0.23338964747058016,
+        0.3681446315460308,
+        0.5449296295366906,
+        0.47067063281933463
+      ],
+      "catalog": [
+        "v1-lowre",
+        "v1-lowre",
+        "v1-lowre",
+        "v1-lowre",
+        "v1",
+        "v1",
+        "v1",
+        "v1",
+        "v1"
+      ],
+      "note": "gap = linear minus nl_pseudo per-case mean per log-Re bin, seeds 17/29/43 pooled, eval_id + eval_unseen_Re; the join is between two separately trained catalogs (108- vs 840-case train splits) -- the GAP is the internally controlled wall measure on each side, absolute levels are not comparable across the join"
+    }
+  },
+  "verdicts": {
+    "P1_velocity_completed": {
+      "rule": "P1v-a: bottom joined bin velocity gap <= 0.05 and <= 0.25x top bin; P1v-b: nondecreasing within 0.02 tolerance and top >= 3x bottom; falsifier (representation-deficit reading): bottom gap >= 0.1",
+      "velocity_gap_bottom_bin": 0.18449847276012105,
+      "velocity_gap_top_bin": 0.20381134066316814,
+      "velocity_gap_ratio_top_over_bottom": 1.1046776572950663,
+      "P1v_a_stokes_approach": false,
+      "P1v_b_graded_growth": false,
+      "falsifier_representation_deficit": true,
+      "pressure_gap_bottom_bin": -0.005565318589409229,
+      "pressure_gap_top_bin": 0.47067063281933463
+    }
+  },
+  "provenance": {
+    "git_sha": "05d57e3b763fff06771ab9675712f12c9843368f",
+    "relevant_worktree_dirty": true,
+    "relevant_status": [
+      "M physicsnemo/experimental/nn/mesh_attention/__init__.py",
+      " M physicsnemo/experimental/nn/mesh_attention/attention.py",
+      " M physicsnemo/experimental/nn/mesh_attention/block.py",
+      " M physicsnemo/experimental/nn/mesh_attention/model.py",
+      "?? examples/cfd/mesh_transformer/datasets/_paths.py",
+      "?? examples/cfd/mesh_transformer/datasets/dataset_catalog.py",
+      "?? examples/cfd/mesh_transformer/datasets/dataset_train.py",
+      "?? examples/cfd/mesh_transformer/datasets/dataset_train_ns.py",
+      "?? examples/cfd/mesh_transformer/datasets/fem_navier_stokes.py",
+      "?? examples/cfd/mesh_transformer/datasets/fem_reference.py",
+      "?? examples/cfd/mesh_transformer/datasets/generate_datasets.py",
+      "?? examples/cfd/mesh_transformer/metrics.py",
+      "?? examples/cfd/mesh_transformer/models/_paths.py",
+      "?? examples/cfd/mesh_transformer/models/external_baselines.py",
+      "?? examples/cfd/mesh_transformer/models/layer_potential.py",
+      "?? examples/cfd/mesh_transformer/models/models.py",
+      "?? examples/cfd/mesh_transformer/models/research_models.py",
+      "?? examples/cfd/mesh_transformer/models/self_consistent_kernel.py",
+      "?? examples/cfd/mesh_transformer/models/stf_multipole.py",
+      "?? examples/cfd/mesh_transformer/models/transolver.py",
+      "?? examples/cfd/mesh_transformer/models/transolver_intree.py",
+      "?? examples/cfd/mesh_transformer/problems/_paths.py",
+      "?? examples/cfd/mesh_transformer/problems/conformal_laplace.py",
+      "?? examples/cfd/mesh_transformer/problems/encoder_stress.py",
+      "?? examples/cfd/mesh_transformer/problems/euler_bernoulli.py",
+      "?? examples/cfd/mesh_transformer/problems/euler_rotational.py",
+      "?? examples/cfd/mesh_transformer/problems/laplace3d.py",
+      "?? examples/cfd/mesh_transformer/problems/laplace3d_study.py",
+      "?? examples/cfd/mesh_transformer/problems/liouville.py",
+      "?? examples/cfd/mesh_transformer/problems/mixed_bc_study.py",
+      "?? examples/cfd/mesh_transformer/problems/potential_flow.py",
+      "?? examples/cfd/mesh_transformer/problems/screened_laplace.py",
+      "?? examples/cfd/mesh_transformer/problems/train.py",
+      "?? examples/cfd/mesh_transformer/provenance.py",
+      "?? examples/cfd/mesh_transformer/studies/_paths.py",
+      "?? examples/cfd/mesh_transformer/studies/aggregate.py",
+      "?? examples/cfd/mesh_transformer/studies/benchmark.py",
+      "?? examples/cfd/mesh_transformer/studies/declared_degree.py",
+      "?? examples/cfd/mesh_transformer/studies/farfield_inference.py",
+      "?? examples/cfd/mesh_transformer/studies/globe_backend_study.py",
+      "?? examples/cfd/mesh_transformer/studies/heads_rank_study.py",
+      "?? examples/cfd/mesh_transformer/studies/nonlinear_fragility.py",
+      "?? examples/cfd/mesh_transformer/studies/ns_solver_verification.py",
+      "?? examples/cfd/mesh_transformer/studies/one_head_cross_suite.py",
+      "?? examples/cfd/mesh_transformer/studies/scale_study.py",
+      "?? examples/cfd/mesh_transformer/studies/spectral_diagnostics.py",
+      "?? examples/cfd/mesh_transformer/studies/study.py",
+      "?? physicsnemo/experimental/nn/mesh_attention/kernel_decoder.py"
+    ],
+    "relevant_source_sha256": "1bedf28dfb9149c392f73a4494921300cf592558f32f4c54cba6e50f29bd8ebe",
+    "source_files": [
+      "examples/cfd/mesh_transformer/datasets/_paths.py",
+      "examples/cfd/mesh_transformer/datasets/dataset_catalog.py",
+      "examples/cfd/mesh_transformer/datasets/dataset_train.py",
+      "examples/cfd/mesh_transformer/datasets/dataset_train_ns.py",
+      "examples/cfd/mesh_transformer/datasets/fem_navier_stokes.py",
+      "examples/cfd/mesh_transformer/datasets/fem_reference.py",
+      "examples/cfd/mesh_transformer/datasets/generate_datasets.py",
+      "examples/cfd/mesh_transformer/metrics.py",
+      "examples/cfd/mesh_transformer/models/_paths.py",
+      "examples/cfd/mesh_transformer/models/external_baselines.py",
+      "examples/cfd/mesh_transformer/models/layer_potential.py",
+      "examples/cfd/mesh_transformer/models/models.py",
+      "examples/cfd/mesh_transformer/models/research_models.py",
+      "examples/cfd/mesh_transformer/models/self_consistent_kernel.py",
+      "examples/cfd/mesh_transformer/models/stf_multipole.py",
+      "examples/cfd/mesh_transformer/models/transolver.py",
+      "examples/cfd/mesh_transformer/models/transolver_intree.py",
+      "examples/cfd/mesh_transformer/problems/_paths.py",
+      "examples/cfd/mesh_transformer/problems/conformal_laplace.py",
+      "examples/cfd/mesh_transformer/problems/encoder_stress.py",
+      "examples/cfd/mesh_transformer/problems/euler_bernoulli.py",
+      "examples/cfd/mesh_transformer/problems/euler_rotational.py",
+      "examples/cfd/mesh_transformer/problems/laplace3d.py",
+      "examples/cfd/mesh_transformer/problems/laplace3d_study.py",
+      "examples/cfd/mesh_transformer/problems/liouville.py",
+      "examples/cfd/mesh_transformer/problems/mixed_bc_study.py",
+      "examples/cfd/mesh_transformer/problems/potential_flow.py",
+      "examples/cfd/mesh_transformer/problems/screened_laplace.py",
+      "examples/cfd/mesh_transformer/problems/train.py",
+      "examples/cfd/mesh_transformer/provenance.py",
+      "examples/cfd/mesh_transformer/studies/_paths.py",
+      "examples/cfd/mesh_transformer/studies/aggregate.py",
+      "examples/cfd/mesh_transformer/studies/benchmark.py",
+      "examples/cfd/mesh_transformer/studies/declared_degree.py",
+      "examples/cfd/mesh_transformer/studies/farfield_inference.py",
+      "examples/cfd/mesh_transformer/studies/globe_backend_study.py",
+      "examples/cfd/mesh_transformer/studies/heads_rank_study.py",
+      "examples/cfd/mesh_transformer/studies/nonlinear_fragility.py",
+      "examples/cfd/mesh_transformer/studies/ns_solver_verification.py",
+      "examples/cfd/mesh_transformer/studies/one_head_cross_suite.py",
+      "examples/cfd/mesh_transformer/studies/scale_study.py",
+      "examples/cfd/mesh_transformer/studies/spectral_diagnostics.py",
+      "examples/cfd/mesh_transformer/studies/study.py",
+      "physicsnemo/experimental/nn/mesh_attention/__init__.py",
+      "physicsnemo/experimental/nn/mesh_attention/attention.py",
+      "physicsnemo/experimental/nn/mesh_attention/block.py",
+      "physicsnemo/experimental/nn/mesh_attention/kernel_decoder.py",
+      "physicsnemo/experimental/nn/mesh_attention/model.py",
+      "physicsnemo/mesh/calculus/integration.py",
+      "physicsnemo/mesh/domain_mesh.py",
+      "physicsnemo/mesh/fields.py",
+      "physicsnemo/mesh/mesh.py"
+    ]
+  }
+}

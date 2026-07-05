@@ -25,6 +25,50 @@ one another.
 No spatial neighbourhood, radial cutoff, softmax, or tree is part of the
 operator.  Hierarchical acceleration for a future non-separable kernel belongs
 behind a separate numerical backend and must converge to a dense oracle.
+
+The pseudoscalar (``0o``) sector
+--------------------------------
+
+The type system carries three sectors: true scalars (``0e``), polar vectors
+(``1o``), and -- in two spatial dimensions only -- pseudoscalars (``0o``,
+rotation invariant, sign-flipping under reflection).  The pseudoscalar sector
+is the program's first type-system extension, forced by two measured failures
+of the original ``{0e, 1o}`` system on the exterior potential-flow benchmark:
+
+1. **Streamfunction targets are pseudoscalars and produced a provable
+   no-response.**  Every scalar the ``{0e, 1o}`` system can emit is built
+   from dot products of polar vectors and is therefore mirror-even, while
+   the disturbance streamfunction is mirror-odd (its uniform-flow part is
+   the wedge :math:`U \wedge x`).  The only O(2)-equivariant fit of an odd
+   target by an even model is the zero function: every trained global-drive
+   arm sat at relative L2 :math:`\approx 1.0`.
+2. **Even with polar-vector outputs, circulation was unreachable.**  The
+   circulation component of the velocity is
+   :math:`\Gamma\, x^\perp / (2\pi\lvert x\rvert^2)`.  With :math:`\Gamma`
+   typed as a true scalar the product :math:`\Gamma\, x^\perp` is axial
+   (parity-odd where a polar vector must be parity-even under the combined
+   data-and-frame mirror) and hence unrepresentable; circulation-OOD was
+   pinned at relative L2 0.647 across all velocity arms and seeds while
+   in-distribution reached 0.14.
+
+The complete closed product set over ``{0e (s), 0o (p), 1o (v)}`` in 2D adds
+exactly four typed products to the existing dot-product algebra:
+
+- wedge: :math:`v \wedge w = v_x w_y - v_y w_x \to 0o`
+  (:func:`_wedge_invariants`, :func:`_pair_wedges`);
+- rotation: :math:`p \cdot v^\perp` with :math:`v^\perp = (-v_y, v_x)
+  \to 1o` (:func:`_vector_perp`; how :math:`\Gamma\,x^\perp` becomes
+  representable);
+- :math:`p \cdot q \to 0e` (:func:`_pseudo_pair_invariants`);
+- :math:`s \cdot p \to 0o` (plain products against pseudo bases).
+
+Pseudoscalars behave exactly like scalars under rotations, so the attention
+and moment machinery treats them identically (they ride alongside the scalar
+value features); only invariant formation and the product rules differ.  In
+3D the analogous parity-odd object is the axial vector, which is out of
+scope: pseudoscalar channels are rejected outside 2D rather than silently
+mistreated.  With every pseudo width at zero this module is bitwise
+identical to its pre-extension behavior.
 """
 
 from __future__ import annotations
@@ -45,25 +89,41 @@ from physicsnemo.mesh.calculus.integration import (
 
 @dataclass(frozen=True)
 class ScalarVectorState:
-    r"""A packed collection of invariant scalars and polar vectors.
+    r"""A packed collection of invariant scalars, polar vectors, and (in 2D)
+    pseudoscalars.
 
-    ``scalars`` has shape ``(N, C_s)`` and ``vectors`` has shape
-    ``(N, C_v, D)``.  Zero vector channels are represented by an empty tensor,
-    not ``None``; this keeps compiled call signatures stable.
+    ``scalars`` has shape ``(N, C_s)``, ``vectors`` has shape ``(N, C_v, D)``,
+    and ``pseudos`` has shape ``(N, C_p)``.  Zero channels of any sector are
+    represented by an empty tensor, not ``None``; this keeps compiled call
+    signatures stable.  ``pseudos`` may be omitted at construction, in which
+    case it materializes as a zero-width tensor.
 
-    In representation-theoretic terms, this state carries exactly two O(D)
+    In representation-theoretic terms, this state carries up to three O(D)
     irreducible-representation sectors in Cartesian basis: ``scalars`` is the
-    even-parity trivial irrep (``0e``; true scalars) and ``vectors`` is the
-    odd-parity defining irrep (``1o``; polar vectors).  Pseudoscalars
-    (``0o``), axial vectors (``1e``), and higher orders are deliberately not
-    representable: any new physical type must arrive as a new typed sector
-    with its own transformation law, never packed into an existing tensor.
-    This per-sector packing is the "Irreps" abstraction of libraries such as
-    e3nn, minus the dependency; a future migration is a container swap.
+    even-parity trivial irrep (``0e``; true scalars), ``vectors`` is the
+    odd-parity defining irrep (``1o``; polar vectors), and ``pseudos`` is the
+    odd-parity trivial irrep (``0o``; rotation invariant, sign-flipping under
+    reflection) -- supported in two spatial dimensions only (see the module
+    docstring for the measured failures that forced this first type-system
+    extension).  Axial vectors (``1e``; the 3D analogue of the pseudoscalar)
+    and higher orders remain deliberately not representable: any new physical
+    type must arrive as a new typed sector with its own transformation law,
+    never packed into an existing tensor.  This per-sector packing is the
+    "Irreps" abstraction of libraries such as e3nn, minus the dependency; a
+    future migration is a container swap.
     """
 
     scalars: Float[torch.Tensor, "n scalar_channels"]
     vectors: Float[torch.Tensor, "n vector_channels spatial_dims"]
+    pseudos: Float[torch.Tensor, "n pseudo_channels"] | None = None
+
+    def __post_init__(self) -> None:
+        if self.pseudos is None:
+            object.__setattr__(
+                self,
+                "pseudos",
+                self.scalars.new_empty(self.scalars.shape[0], 0),
+            )
 
     @property
     def n_entities(self) -> int:
@@ -84,15 +144,29 @@ class ScalarVectorState:
                 f"{label}.vectors must have shape (N, C, D), got "
                 f"{tuple(self.vectors.shape)}"
             )
+        if self.pseudos.ndim != 2:
+            raise ValueError(
+                f"{label}.pseudos must have shape (N, C), got "
+                f"{tuple(self.pseudos.shape)}"
+            )
         if self.scalars.shape[0] != self.vectors.shape[0]:
             raise ValueError(
                 f"{label} scalar/vector entity counts differ: "
                 f"{self.scalars.shape[0]} != {self.vectors.shape[0]}"
             )
+        if self.scalars.shape[0] != self.pseudos.shape[0]:
+            raise ValueError(
+                f"{label} scalar/pseudoscalar entity counts differ: "
+                f"{self.scalars.shape[0]} != {self.pseudos.shape[0]}"
+            )
         if self.scalars.device != self.vectors.device:
             raise ValueError(f"{label} scalar/vector devices differ")
         if self.scalars.dtype != self.vectors.dtype:
             raise ValueError(f"{label} scalar/vector dtypes differ")
+        if self.scalars.device != self.pseudos.device:
+            raise ValueError(f"{label} scalar/pseudoscalar devices differ")
+        if self.scalars.dtype != self.pseudos.dtype:
+            raise ValueError(f"{label} scalar/pseudoscalar dtypes differ")
 
     @classmethod
     def zeros(
@@ -102,6 +176,7 @@ class ScalarVectorState:
         vector_channels: int,
         n_spatial_dims: int,
         *,
+        pseudo_channels: int = 0,
         device: torch.device | str,
         dtype: torch.dtype,
     ) -> "ScalarVectorState":
@@ -116,6 +191,9 @@ class ScalarVectorState:
                 device=device,
                 dtype=dtype,
             ),
+            pseudos=torch.zeros(
+                n_entities, pseudo_channels, device=device, dtype=dtype
+            ),
         )
 
     def cat(self, other: "ScalarVectorState") -> "ScalarVectorState":
@@ -126,10 +204,13 @@ class ScalarVectorState:
         return ScalarVectorState(
             torch.cat((self.scalars, other.scalars), dim=-1),
             torch.cat((self.vectors, other.vectors), dim=1),
+            torch.cat((self.pseudos, other.pseudos), dim=-1),
         )
 
     def slice(self, item: slice | torch.Tensor) -> "ScalarVectorState":
-        return ScalarVectorState(self.scalars[item], self.vectors[item])
+        return ScalarVectorState(
+            self.scalars[item], self.vectors[item], self.pseudos[item]
+        )
 
 
 @dataclass(frozen=True)
@@ -140,16 +221,30 @@ class TypedQK:
 
 @dataclass(frozen=True)
 class TypedValues:
-    scalars: torch.Tensor  # (N, H, F_s)
+    r"""Projected per-head value features.
+
+    ``scalars`` packs the rotation-invariant value features as
+    ``(N, H, F_s + F_p)``: true-scalar (``0e``) features first, then
+    pseudoscalar (``0o``) features.  Both are invariant under rotation and
+    multiply the invariant pair score identically, so the moment machinery
+    treats them as one block; they are split again -- with separate output
+    maps that never mix the two parities -- at read-out.
+    """
+
+    scalars: torch.Tensor  # (N, H, F_s + F_p)
     vectors: torch.Tensor  # (N, H, F_v, D)
 
 
 @dataclass(frozen=True)
 class AttentionMoments:
-    r"""Quadrature-integrated source moments for typed attention."""
+    r"""Quadrature-integrated source moments for typed attention.
 
-    scalar_key_scalar_value: torch.Tensor  # (H, R_s, F_s)
-    vector_key_scalar_value: torch.Tensor  # (H, R_v, D, F_s)
+    The scalar-value axis has width ``F_s + F_p``: true-scalar value features
+    followed by pseudoscalar value features (see :class:`TypedValues`).
+    """
+
+    scalar_key_scalar_value: torch.Tensor  # (H, R_s, F_s + F_p)
+    vector_key_scalar_value: torch.Tensor  # (H, R_v, D, F_s + F_p)
     scalar_key_vector_value: torch.Tensor  # (H, R_s, F_v, D)
     vector_key_vector_value: torch.Tensor  # (H, R_v, D, F_v, D)
 
@@ -159,7 +254,9 @@ def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
 
     This is the ``1o x 1o -> 0e`` Clebsch-Gordan contraction (up to a fixed
     normalization); the upper triangle is complete because the antisymmetric
-    combination lands in the axial sector this state does not carry.
+    combination is parity-odd -- in 2D it is the wedge, which feeds the
+    pseudoscalar sector via :func:`_wedge_invariants` when that sector is
+    enabled, and in 3D it is the axial sector this state does not carry.
     """
     n, channels, _ = vectors.shape
     if channels == 0:
@@ -169,14 +266,93 @@ def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
     return gram[:, rows, cols]
 
 
+def _pseudo_pair_invariants(pseudos: torch.Tensor) -> torch.Tensor:
+    """Return the upper triangle (with diagonal) of per-entity ``p_i p_j``.
+
+    This is the ``0o x 0o -> 0e`` product: each entry is even under
+    reflection, so the result may feed any true-scalar (invariant) path.
+    """
+    n, channels = pseudos.shape
+    if channels == 0:
+        return pseudos.new_empty(n, 0)
+    outer = pseudos[:, :, None] * pseudos[:, None, :]
+    rows, cols = torch.triu_indices(channels, channels, device=pseudos.device)
+    return outer[:, rows, cols]
+
+
+def _require_planar(vectors: torch.Tensor, *, operation: str) -> None:
+    """Reject non-2D inputs to the parity-odd planar products."""
+    if vectors.shape[-1] != 2:
+        raise ValueError(
+            f"{operation} requires 2D (planar) vectors: the pseudoscalar "
+            "(0o) sector is two-dimensional by design, and in 3D the "
+            "analogous parity-odd object is the axial vector, which is out "
+            f"of scope; got {vectors.shape[-1]} spatial dimensions"
+        )
+
+
+def _pair_wedges(first: torch.Tensor, second: torch.Tensor) -> torch.Tensor:
+    r"""All pairwise 2D wedges ``first_i ∧ second_j`` per entity.
+
+    ``first`` is ``(N, C_1, 2)`` and ``second`` is ``(N, C_2, 2)``; the result
+    is ``(N, C_1, C_2)`` with entries :math:`a_x b_y - a_y b_x`.  This is the
+    ``1o x 1o -> 0o`` product: rotation invariant, sign-flipping under
+    reflection (``det`` of the orthogonal map).
+    """
+    _require_planar(first, operation="_pair_wedges")
+    _require_planar(second, operation="_pair_wedges")
+    return (
+        first[:, :, None, 0] * second[:, None, :, 1]
+        - first[:, :, None, 1] * second[:, None, :, 0]
+    )
+
+
+def _wedge_invariants(vectors: torch.Tensor) -> torch.Tensor:
+    r"""Strict-upper-triangle wedges ``v_i ∧ v_j`` (``i < j``) per entity.
+
+    The pseudoscalar (``0o``) companion of :func:`_gram_invariants`: the
+    antisymmetric half of the ``1o x 1o`` product, complete in 2D with the
+    strict upper triangle because the wedge is antisymmetric and its diagonal
+    vanishes.
+    """
+    _require_planar(vectors, operation="_wedge_invariants")
+    n, channels, _ = vectors.shape
+    if channels < 2:
+        return vectors.new_empty(n, 0)
+    wedges = _pair_wedges(vectors, vectors)
+    rows, cols = torch.triu_indices(channels, channels, offset=1, device=vectors.device)
+    return wedges[:, rows, cols]
+
+
+def _vector_perp(vectors: torch.Tensor) -> torch.Tensor:
+    r"""Rotate each 2D vector by ``+90``: ``v = (v_x, v_y) -> (-v_y, v_x)``.
+
+    ``v^\perp`` transforms as an *axial* vector (``R v^\perp`` times
+    ``det R``), so it must always be paired with exactly one pseudoscalar
+    coefficient -- the ``0o x 1o -> 1o`` rotation product -- before it may
+    join a polar-vector channel.
+    """
+    _require_planar(vectors, operation="_vector_perp")
+    return torch.stack((-vectors[..., 1], vectors[..., 0]), dim=-1)
+
+
 class TypedProjection(nn.Module):
-    r"""Project scalar/vector state without mixing Cartesian components.
+    r"""Project scalar/pseudoscalar/vector state without mixing parities.
 
     The vector path (channel mixing with one shared weight per Cartesian
     component, no bias) is exactly the equivariant linear map Schur's lemma
     permits on an isotypic component; the scalar path additionally lifts the
-    ``1o x 1o -> 0e`` Gram invariants, making the whole map linear plus one
-    quadratic invariant lift.
+    quadratic invariants (``1o x 1o -> 0e`` Gram products and, with pseudo
+    inputs, ``0o x 0o -> 0e`` pair products), making the whole map linear
+    plus one quadratic invariant lift.  Pseudoscalar outputs are a bias-free
+    linear map of the pseudo inputs plus the quadratic ``1o x 1o -> 0o``
+    wedge invariants of the input vectors (2D only); a bias is forbidden on
+    that path because a constant does not flip under reflection.
+
+    ``include_vector_invariants`` gates *every* quadratic lift -- vector
+    Grams, pseudo pair products, and vector wedges -- so field-linear value
+    paths (superposition contracts) that set it ``False`` remain exactly
+    linear in all three sectors.
     """
 
     def __init__(
@@ -188,18 +364,31 @@ class TypedProjection(nn.Module):
         *,
         scalar_bias: bool,
         include_vector_invariants: bool = True,
+        pseudo_in: int = 0,
+        pseudo_out: int = 0,
     ) -> None:
         super().__init__()
+        if pseudo_in < 0 or pseudo_out < 0:
+            raise ValueError("pseudo channel counts must be non-negative")
         self.scalar_in = scalar_in
         self.vector_in = vector_in
         self.scalar_out = scalar_out
         self.vector_out = vector_out
+        self.pseudo_in = pseudo_in
+        self.pseudo_out = pseudo_out
         self.include_vector_invariants = include_vector_invariants
         n_invariants = (
             vector_in * (vector_in + 1) // 2 if include_vector_invariants else 0
         )
+        n_pseudo_invariants = (
+            pseudo_in * (pseudo_in + 1) // 2 if include_vector_invariants else 0
+        )
         self.scalar = (
-            nn.Linear(scalar_in + n_invariants, scalar_out, bias=scalar_bias)
+            nn.Linear(
+                scalar_in + n_invariants + n_pseudo_invariants,
+                scalar_out,
+                bias=scalar_bias,
+            )
             if scalar_out
             else None
         )
@@ -213,14 +402,34 @@ class TypedProjection(nn.Module):
             )
         else:
             self.register_parameter("vector_weight", None)
+        n_wedges = vector_in * (vector_in - 1) // 2 if include_vector_invariants else 0
+        self._n_pseudo_features = pseudo_in + n_wedges
+        if pseudo_out and not self._n_pseudo_features:
+            raise ValueError(
+                "TypedProjection cannot create a pseudoscalar without a "
+                "pseudo or vector-pair (wedge) input basis"
+            )
+        if pseudo_out:
+            self.pseudo_weight = nn.Parameter(
+                torch.randn(pseudo_out, self._n_pseudo_features)
+                / math.sqrt(self._n_pseudo_features)
+            )
+        else:
+            self.register_parameter("pseudo_weight", None)
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        if state.pseudos.shape[1] != self.pseudo_in:
+            raise ValueError(
+                f"state has {state.pseudos.shape[1]} pseudoscalar channels; "
+                f"expected {self.pseudo_in}"
+            )
         if self.scalar is not None:
             scalar_input = state.scalars
             if self.include_vector_invariants:
-                scalar_input = torch.cat(
-                    (scalar_input, _gram_invariants(state.vectors)), dim=-1
-                )
+                scalar_parts = [scalar_input, _gram_invariants(state.vectors)]
+                if self.pseudo_in:
+                    scalar_parts.append(_pseudo_pair_invariants(state.pseudos))
+                scalar_input = torch.cat(scalar_parts, dim=-1)
             scalars = self.scalar(scalar_input)
         else:
             scalars = None
@@ -228,11 +437,25 @@ class TypedProjection(nn.Module):
             vectors = torch.einsum("oc,ncd->nod", self.vector_weight, state.vectors)
         else:
             vectors = state.vectors.new_empty(state.n_entities, 0, state.n_spatial_dims)
+        if self.pseudo_out:
+            pseudo_parts = []
+            if self.pseudo_in:
+                pseudo_parts.append(state.pseudos)
+            if self.include_vector_invariants and self.vector_in >= 2:
+                pseudo_parts.append(_wedge_invariants(state.vectors))
+            pseudo_features = (
+                pseudo_parts[0]
+                if len(pseudo_parts) == 1
+                else torch.cat(pseudo_parts, dim=-1)
+            )
+            pseudos = torch.einsum("of,nf->no", self.pseudo_weight, pseudo_features)
+        else:
+            pseudos = state.scalars.new_empty(state.n_entities, 0)
         if scalars is None:
             scalars = vectors.new_empty(state.n_entities, 0)
         else:
             vectors = vectors.to(dtype=scalars.dtype)
-        return ScalarVectorState(scalars, vectors)
+        return ScalarVectorState(scalars, vectors, pseudos.to(dtype=scalars.dtype))
 
 
 class MeshAttention(nn.Module):
@@ -252,6 +475,17 @@ class MeshAttention(nn.Module):
     autograd enabled, PyTorch retains each chunk's saved activations for the
     backward pass, so total saved activation memory remains linear in entity
     count rather than being bounded by one chunk.
+
+    Pseudoscalar (``0o``) channels (2D only; all pseudo widths default to
+    zero, which is bitwise identical to the pre-extension layer): query/key
+    pseudo channels enter the pair coefficient only through their invariant
+    ``0o x 0o -> 0e`` pair products inside the scalar-rank projection, so the
+    coefficient stays a true scalar.  Pseudo *value* channels are rotation
+    invariant exactly like scalar values, so they ride the scalar-value
+    moment machinery (packed after the scalar features; see
+    :class:`TypedValues`) and are split back out at read-out through a
+    dedicated bias-free output map -- a bias, or any linear mixing with true
+    scalars, would break the reflection sign flip.
     """
 
     def __init__(
@@ -276,6 +510,11 @@ class MeshAttention(nn.Module):
         output_scalar_bias: bool = False,
         accumulation_dtype: torch.dtype | None = torch.float32,
         entity_chunk_size: int | None = 65536,
+        query_pseudo_dim: int = 0,
+        key_pseudo_dim: int = 0,
+        value_pseudo_dim: int = 0,
+        out_pseudo_dim: int = 0,
+        pseudo_value_dim: int = 0,
     ) -> None:
         super().__init__()
         if heads < 1:
@@ -286,6 +525,17 @@ class MeshAttention(nn.Module):
             raise ValueError("at least one scalar or vector key rank is required")
         if scalar_value_dim < 0 or vector_value_dim < 0:
             raise ValueError("value dimensions must be non-negative")
+        if (
+            min(
+                query_pseudo_dim,
+                key_pseudo_dim,
+                value_pseudo_dim,
+                out_pseudo_dim,
+                pseudo_value_dim,
+            )
+            < 0
+        ):
+            raise ValueError("pseudoscalar dimensions must be non-negative")
         if entity_chunk_size is not None and (
             isinstance(entity_chunk_size, bool)
             or not isinstance(entity_chunk_size, int)
@@ -306,6 +556,11 @@ class MeshAttention(nn.Module):
         self.vector_value_dim = vector_value_dim
         self.out_scalar_dim = out_scalar_dim
         self.out_vector_dim = out_vector_dim
+        self.query_pseudo_dim = query_pseudo_dim
+        self.key_pseudo_dim = key_pseudo_dim
+        self.value_pseudo_dim = value_pseudo_dim
+        self.out_pseudo_dim = out_pseudo_dim
+        self.pseudo_value_dim = pseudo_value_dim
         self.accumulation_dtype = accumulation_dtype
         self.entity_chunk_size = entity_chunk_size
 
@@ -315,6 +570,7 @@ class MeshAttention(nn.Module):
             heads * scalar_rank,
             heads * vector_rank,
             scalar_bias=qk_scalar_bias,
+            pseudo_in=query_pseudo_dim,
         )
         self.key_projection = TypedProjection(
             key_scalar_dim,
@@ -322,6 +578,7 @@ class MeshAttention(nn.Module):
             heads * scalar_rank,
             heads * vector_rank,
             scalar_bias=qk_scalar_bias,
+            pseudo_in=key_pseudo_dim,
         )
         self.value_projection = TypedProjection(
             value_scalar_dim,
@@ -330,6 +587,8 @@ class MeshAttention(nn.Module):
             heads * vector_value_dim,
             scalar_bias=value_scalar_bias,
             include_vector_invariants=value_include_vector_invariants,
+            pseudo_in=value_pseudo_dim,
+            pseudo_out=heads * pseudo_value_dim,
         )
 
         if out_scalar_dim and not scalar_value_dim:
@@ -352,6 +611,16 @@ class MeshAttention(nn.Module):
             )
         else:
             self.register_parameter("vector_output_weight", None)
+        if out_pseudo_dim and not pseudo_value_dim:
+            raise ValueError(
+                "Pseudoscalar output requires at least one pseudo value channel"
+            )
+        # Never a bias: a constant offset does not flip under reflection.
+        self.pseudo_output = (
+            nn.Linear(heads * pseudo_value_dim, out_pseudo_dim, bias=False)
+            if out_pseudo_dim
+            else None
+        )
 
     def _accumulation_type(self, *tensors: torch.Tensor) -> torch.dtype:
         """Promote inputs with a precision floor, never downcast FP64."""
@@ -368,6 +637,7 @@ class MeshAttention(nn.Module):
         *,
         scalar_dim: int,
         vector_dim: int,
+        pseudo_dim: int,
         label: str,
     ) -> None:
         state.validate(label=label)
@@ -381,12 +651,18 @@ class MeshAttention(nn.Module):
                 f"{label}.vectors has {state.vectors.shape[1]} channels; "
                 f"expected {vector_dim}"
             )
+        if state.pseudos.shape[1] != pseudo_dim:
+            raise ValueError(
+                f"{label}.pseudos has {state.pseudos.shape[1]} channels; "
+                f"expected {pseudo_dim}"
+            )
 
     def project_queries(self, state: ScalarVectorState) -> TypedQK:
         self._validate_projection_state(
             state,
             scalar_dim=self.query_scalar_dim,
             vector_dim=self.query_vector_dim,
+            pseudo_dim=self.query_pseudo_dim,
             label="query_state",
         )
         projected = self.query_projection(state)
@@ -404,6 +680,7 @@ class MeshAttention(nn.Module):
             state,
             scalar_dim=self.key_scalar_dim,
             vector_dim=self.key_vector_dim,
+            pseudo_dim=self.key_pseudo_dim,
             label="key_state",
         )
         projected = self.key_projection(state)
@@ -418,12 +695,25 @@ class MeshAttention(nn.Module):
             state,
             scalar_dim=self.value_scalar_dim,
             vector_dim=self.value_vector_dim,
+            pseudo_dim=self.value_pseudo_dim,
             label="value_state",
         )
         projected = self.value_projection(state)
         n, d = state.n_entities, state.n_spatial_dims
+        scalars = projected.scalars.reshape(n, self.heads, self.scalar_value_dim)
+        if self.pseudo_value_dim:
+            # Pseudo value features are rotation invariant like scalars, so
+            # they share the invariant-value moment machinery; the parity
+            # split is restored at read-out (see the class docstring).
+            scalars = torch.cat(
+                (
+                    scalars,
+                    projected.pseudos.reshape(n, self.heads, self.pseudo_value_dim),
+                ),
+                dim=-1,
+            )
         return TypedValues(
-            projected.scalars.reshape(n, self.heads, self.scalar_value_dim),
+            scalars,
             projected.vectors.reshape(n, self.heads, self.vector_value_dim, d),
         )
 
@@ -482,7 +772,8 @@ class MeshAttention(nn.Module):
                 )
 
             scalar_rank = self.scalar_rank
-            scalar_value_dim = self.scalar_value_dim
+            # Invariant value features: scalar values then pseudo values.
+            scalar_value_dim = self.scalar_value_dim + self.pseudo_value_dim
             spatial_dim = keys.vectors.shape[-1]
             return AttentionMoments(
                 scalar_key_scalar_value=joint_moment[
@@ -494,7 +785,7 @@ class MeshAttention(nn.Module):
                     self.heads,
                     self.vector_rank,
                     spatial_dim,
-                    self.scalar_value_dim,
+                    scalar_value_dim,
                 ),
                 scalar_key_vector_value=joint_moment[
                     :, :scalar_rank, scalar_value_dim:
@@ -556,9 +847,10 @@ class MeshAttention(nn.Module):
     ) -> ScalarVectorState:
         r"""Evaluate cached source moments independently at each receiver."""
         d = query_state.n_spatial_dims
+        invariant_value_dim = self.scalar_value_dim + self.pseudo_value_dim
         expected_shapes = (
-            (self.heads, self.scalar_rank, self.scalar_value_dim),
-            (self.heads, self.vector_rank, d, self.scalar_value_dim),
+            (self.heads, self.scalar_rank, invariant_value_dim),
+            (self.heads, self.vector_rank, d, invariant_value_dim),
             (self.heads, self.scalar_rank, self.vector_value_dim, d),
             (self.heads, self.vector_rank, d, self.vector_value_dim, d),
         )
@@ -600,6 +892,7 @@ class MeshAttention(nn.Module):
             return ScalarVectorState(
                 torch.cat([output.scalars for output in outputs], dim=0),
                 torch.cat([output.vectors for output in outputs], dim=0),
+                torch.cat([output.pseudos for output in outputs], dim=0),
             )
         queries = self.project_queries(query_state)
         output_dtype = query_state.scalars.dtype
@@ -626,15 +919,38 @@ class MeshAttention(nn.Module):
                 "nhr,hrfd->nhfd", qs, scalar_key_vector_value
             ) + torch.einsum("nhrd,hrdfe->nhfe", qv, vector_key_vector_value)
 
+        return self._typed_read_out(
+            scalar_heads, vector_heads, query_state, output_dtype
+        )
+
+    def _typed_read_out(
+        self,
+        scalar_heads: torch.Tensor,
+        vector_heads: torch.Tensor,
+        query_state: ScalarVectorState,
+        output_dtype: torch.dtype,
+    ) -> ScalarVectorState:
+        r"""Split the invariant heads by parity and apply the typed outputs.
+
+        ``scalar_heads`` carries the joint invariant value features
+        ``(N, H, F_s + F_p)``; scalar and pseudoscalar features receive
+        separate output maps because a shared linear map would mix parities.
+        """
+        n = query_state.n_entities
+        if self.pseudo_value_dim:
+            pseudo_heads = scalar_heads[..., self.scalar_value_dim :]
+            scalar_heads = scalar_heads[..., : self.scalar_value_dim]
+        else:
+            pseudo_heads = None
         scalars = (
             self.scalar_output(
                 scalar_heads.to(output_dtype).reshape(
-                    query_state.n_entities,
+                    n,
                     self.heads * self.scalar_value_dim,
                 )
             )
             if self.scalar_output is not None
-            else query_state.scalars.new_empty(query_state.n_entities, 0)
+            else query_state.scalars.new_empty(n, 0)
         )
         if self.out_vector_dim:
             vectors = torch.einsum(
@@ -643,10 +959,21 @@ class MeshAttention(nn.Module):
                 vector_heads.to(output_dtype),
             )
         else:
-            vectors = query_state.vectors.new_empty(
-                query_state.n_entities, 0, query_state.n_spatial_dims
+            vectors = query_state.vectors.new_empty(n, 0, query_state.n_spatial_dims)
+        if self.pseudo_output is not None:
+            pseudos = self.pseudo_output(
+                pseudo_heads.to(output_dtype).reshape(
+                    n,
+                    self.heads * self.pseudo_value_dim,
+                )
             )
-        return ScalarVectorState(scalars, vectors.to(dtype=scalars.dtype))
+        else:
+            pseudos = scalars.new_empty(n, 0)
+        return ScalarVectorState(
+            scalars,
+            vectors.to(dtype=scalars.dtype),
+            pseudos.to(dtype=scalars.dtype),
+        )
 
     def forward(
         self,
@@ -704,27 +1031,9 @@ class MeshAttention(nn.Module):
                 "mnh,nhfd->mhfd", weighted_score, v.vectors.to(dtype)
             )
         output_dtype = query_state.scalars.dtype
-        scalars = (
-            self.scalar_output(
-                scalar_heads.to(output_dtype).reshape(
-                    query_state.n_entities,
-                    self.heads * self.scalar_value_dim,
-                )
-            )
-            if self.scalar_output is not None
-            else query_state.scalars.new_empty(query_state.n_entities, 0)
+        return self._typed_read_out(
+            scalar_heads, vector_heads, query_state, output_dtype
         )
-        if self.out_vector_dim:
-            vectors = torch.einsum(
-                "ohf,nhfd->nod",
-                self.vector_output_weight,
-                vector_heads.to(output_dtype),
-            )
-        else:
-            vectors = query_state.vectors.new_empty(
-                query_state.n_entities, 0, query_state.n_spatial_dims
-            )
-        return ScalarVectorState(scalars, vectors.to(dtype=scalars.dtype))
 
 
 __all__ = [

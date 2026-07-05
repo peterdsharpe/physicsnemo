@@ -99,9 +99,11 @@ operator scalar, prescribed velocity as a drive vector, Reynolds number as a
 global operator scalar, and freestream velocity as a global drive vector.
 
 All declared fields are expected to be nondimensional before entering the
-model. `reference_length_key` nondimensionalizes coordinates and geometric
-measure only; it is not a general units system and does not rescale physical
-input or output fields.
+model. The scale gauge nondimensionalizes coordinates and geometric measure
+only; it is not a general units system and does not rescale physical input or
+output fields. By default the gauge is intrinsic (the measure-weighted RMS
+boundary radius, section 4); `reference_length_key` optionally overrides it
+with a declared global scalar for canonically dimensioned applications.
 
 Mesh coordinates and declared fields must share a device and use `float32` or
 `float64`. Mixed-precision learned layers are supported through autocast, but
@@ -161,8 +163,9 @@ new_prediction: Mesh = model.decode(encoded, query_mesh)
 velocity = new_prediction.point_data["velocity"]
 ```
 
-Changing `field_mode` to `"zero_preserving_nonlinear"` keeps the same schemas
-and API while changing the field-dependence guarantee described in Section 9.
+Changing `field_mode` to `"quadratic"` or `"zero_preserving_nonlinear"` keeps
+the same schemas and API while changing the field-dependence guarantee
+described in Section 9.
 
 The implementation defaults are deliberately modest capacity settings, not
 physical constants:
@@ -172,10 +175,11 @@ physical constants:
 | Operator scalar / vector channels | 32 / 8 |
 | Drive scalar / vector channels | 64 / 16 |
 | Operator / boundary-drive blocks | 3 / 2 |
-| Query blocks | 1 (`linear`), 2 (nonlinear) |
+| Query blocks | 1 (`linear`, `quadratic`), 2 (nonlinear) |
 | Heads | 4 |
 | Scalar / vector separable rank | 8 / 4 |
 | Query / attention projection chunk | 65,536 / 65,536 |
+| Query decoder | `"moment"` (`"kernel"` selects Section 6.4) |
 
 Changing these values changes finite-rank capacity or execution memory, not
 the symmetry group, quadrature semantics, or any physical interaction length.
@@ -223,15 +227,32 @@ c=\frac{\sum_j w_jx_j}{\sum_jw_j}.
 It is computed from the union of all source boundaries. Query points do not
 affect it, and separate boundary patches are not centered independently.
 
-The scale \(L\) is **not** estimated from the geometry:
+The scale gauge \(L\) is intrinsic by default:
 
+- if `reference_length_key is None` (the default), the model derives \(L\)
+  from the boundary itself as the measure-weighted RMS radius (radius of
+  gyration) about the measure-weighted centroid,
+
+  \[
+  L=\sqrt{\frac{\sum_j w_j\lVert y_j-c\rVert^2}{\sum_j w_j}},
+  \]
+
+  over cell centroids \(y_j\) and measures \(w_j\), accumulated in float64
+  (then cast to the geometry dtype) and differentiable through the mesh.
+  Because this statistic is positively homogeneous of degree one in the
+  geometry, scale equivariance is **unconditional**: there is no
+  caller-supplied convention to drift between training and inference. The
+  estimate is refinement-convergent and smooth in the boundary shape.
+  (Rejected intrinsic gauges: whitening grants affine invariance, which is
+  the wrong physics; total boundary measure is wrinkliness-sensitive;
+  diameter is non-smooth; conformal radius is PDE-specific and requires a
+  solve.)
 - if `reference_length_key` is a string, that nested `global_data` leaf must
-  be a finite positive scalar and supplies \(L\);
-- if `reference_length_key is None`, the model uses \(L=1\) and interprets the
-  coordinates as already dimensionless.
+  be a finite positive scalar and supplies \(L\) explicitly, for canonically
+  dimensioned applications; this override path is bitwise identical to
+  models predating the intrinsic default.
 
-There is no fitted RMS radius or other data-dependent length. The normalized
-source and query coordinates are
+The normalized source and query coordinates are
 
 \[
 z_j=\frac{x_j-c}{L},\qquad
@@ -251,20 +272,23 @@ Consider the physical similarity action
 x'=sRx+t,\qquad s>0,\qquad R\in O(D).
 \]
 
-If the supplied reference length transforms as \(L'=sL\), then
+If the reference length transforms as \(L'=sL\), then
 
 \[
 c'=sRc+t,\qquad z_j'=Rz_j,qquad
 \zeta_i'=R\zeta_i,qquad \omega_j'=\omega_j.
 \]
 
+Under the intrinsic gauge, \(L'=sL\) holds automatically (degree-1
+homogeneity), so the scale part of the contract is unconditional. With an
+explicit `reference_length_key`, the caller must update the declared length
+consistently -- a stale or re-conventioned length silently breaks the
+contract, which is why the intrinsic gauge is the default.
+
 Thus the model is translation invariant, O(\(D\))-covariant, and
 positive-scale covariant under the full declared problem transformation. The
-caller must transform every polar-vector field by \(R\), keep dimensionless
-scalar parameters consistent, and update the explicit reference length. With
-`reference_length_key=None`, no automatic scale covariance is inferred from
-newly rescaled coordinates; that option means the caller has already performed
-nondimensionalization.
+caller must transform every polar-vector field by \(R\) and keep
+dimensionless scalar parameters consistent.
 
 The reference-length leaf is reserved exclusively for geometric
 nondimensionalization. The constructor rejects a `reference_length_key` that
@@ -467,6 +491,12 @@ statement are:
   not certify a pure order-two channel or its successful transmission to the
   output.
 
+This ceiling is a property of the separable moment **query decoder**, not of
+the boundary encoder or drive solve. `query_decoder="kernel"` (Section 6.4)
+replaces that decoder with a dense pair kernel and removes the ceiling; the
+random-weight ring tests that prove the ceiling for the moment decoder verify
+\(m\ge3\) content for the kernel decoder.
+
 ### 6.3 Dense oracle
 
 `MeshAttention.forward_reference` explicitly forms the signed pair scores and
@@ -477,6 +507,64 @@ evaluates the same quadrature sum in \(O(N_sN_q)\) work. It is intended for:
 - diagnosing a change to the moment contractions.
 
 It is not the production execution path or a more expressive model.
+
+### 6.4 Kernel-basis query decoder (`query_decoder="kernel"`)
+
+The constructor switch `query_decoder="kernel"` replaces the separable query
+cross blocks with one dense, operator-conditioned pair kernel
+(`kernel_decoder.py`). Per head \(h\), the boundary-to-query message is
+
+\[
+u_{hf}(x)=\sum_j\kappa_h(x,y_j)\,V_{jhf},
+\qquad
+\kappa_h(x,y_j)=\sum_m C_{mh}(\mathrm{op}_j)\,\varphi_m(x,y_j),
+\]
+
+with drive-linear, bias-free values \(V\) and coefficients \(C\) given by a
+linear map of each source token's operator-state invariants. The member
+dictionary \(\varphi\) combines:
+
+- one **exact-quadrature double-layer member**: the closed-form integral of
+  \(\partial G/\partial n_y\) over each boundary cell (signed subtended angle
+  on 2D segments, including the \(\sigma=n\times\tau\) orientation factor;
+  van Oosterom--Strackee signed solid angle on 3D triangles). Its value is
+  the cell-integrated influence with measure included and is never
+  multiplied by the cell weight again;
+- optionally (`kernel_include_single_layer_member=True`, default off) one
+  **exact-quadrature single-layer member**: the closed-form integral of the
+  free-space Green's function itself over each cell
+  (\(-\log(|x-y|/L_{\mathrm{ref}})/2\pi\) on segments,
+  \(1/(4\pi|x-y|)\) on triangles), orientation independent (no \(\sigma\)
+  factor). A double-layer-only dictionary cannot carry net flux through
+  handles of multiply connected domains (e.g. \(u=a+b\log r\) on an annulus
+  has zero double-layer representation); Green's representation requires
+  both layers, and the shell-topology tier probes exactly this; and
+- **smooth members** (low-order polynomials \(\{1,\ n\cdot r,\ |r|^2\}\) plus
+  a small MLP of the joint pair invariants), evaluated at centroids and
+  multiplied by the cell measure. Midpoint quadrature is consistent for
+  smooth integrands; only the singular member needs exact integration.
+
+All pair features are joint O(\(D\)) invariants of relative geometry, so
+every symmetry, similarity, quadrature, zero-drive, and linear-mode
+superposition guarantee of Section 13 is preserved; the field-mode
+linearity disciplines remain separate decoder classes (the `quadratic`
+mode reuses the linear decoder: its declared degree is added by the query
+read-in composition, never inside the kernel). In
+`zero_preserving_nonlinear` mode the kernel may additionally read drive
+invariants while values stay bias-free.
+
+The trade is cost: one decode is a dense \(O(N_qN_s)\) evaluation, chunked
+over queries for memory only, instead of the moment decoder's
+\(O(N_s+N_q)\). Query rows are evaluated with batch-shape-independent
+reductions, so decoded values are bitwise independent of which other query
+points are requested. The boundary-to-boundary drive blocks, the operator
+stream, and the encode/decode cache contract are unchanged;
+`EncodedBoundary` additionally carries the decoder's query-independent
+source cache (normalized cell vertices, kernel coefficients, projected
+values). The decoder requires 2D segment or 3D triangle boundary cells and
+rejects other configurations at construction or encode time. A future
+hierarchical acceleration of this nonseparable kernel falls under the
+Section 12 policy, with this dense evaluation as its oracle.
 
 ## 7. Finite-rank separability: benefit and tradeoff
 
@@ -574,9 +662,10 @@ operator state. This map may convert scalar and vector types through geometry,
 but it remains exactly linear in the drive argument at fixed operator state.
 
 The selected field block then performs global boundary-to-boundary propagation.
-The implementation uses different block classes for the two field modes so a
-normalization, bias, or activation added to nonlinear mode cannot silently
-invalidate the linear-mode proof.
+The implementation uses a different Python class per declared field-mode law
+(`LinearMeshFieldBlock`, `QuadraticFieldReadIn`, `NonlinearZeroMeshFieldBlock`)
+so a normalization, bias, or activation added to nonlinear mode cannot
+silently invalidate the linear-mode or declared-degree proof.
 
 ### 8.3 Reusable boundary encoding and queries
 
@@ -620,7 +709,10 @@ ordinary floating-point summation order.
 
 ## 9. Field modes
 
-The canonical modes are `linear` and `zero_preserving_nonlinear`.
+The canonical modes are `linear`, `quadratic`, and
+`zero_preserving_nonlinear`.  Each declares a structural law of the
+drive-to-output map: exact linearity, exact polynomial degree at most two,
+or zero preservation alone.
 
 ### 9.1 `linear`
 
@@ -646,7 +738,45 @@ The linear field path contains no field-amplitude normalization, activation,
 content-dependent score, or additive field bias. Query/key scalar biases are
 permitted because those projections read only the operator state.
 
-### 9.2 `zero_preserving_nonlinear`
+### 9.2 `quadratic` (declared degree)
+
+The quadratic mode DECLARES the drive degree the way the linear mode declares
+linearity. Structurally it is the linear machinery end to end — the drive
+lift, `LinearMeshFieldBlock` stack, and linear query decoder, each exactly
+drive-linear — plus exactly one bilinear, operator-conditioned typed
+composition (`QuadraticFieldReadIn`) applied to the assembled query field
+state \(u\) immediately before the drive-linear output projection:
+
+\[
+F = u + s \odot g(\mathrm{op}) \odot B(L_2 u,\ L_3 u),
+\]
+
+with \(L_2, L_3\) bias-free typed linear maps, \(B\) a bilinear product drawn
+from the closed \(\{0e, 0o, 1o\}\) typed product set, and gates \(g\) that
+never read the field. Every learned ingredient is linear in the field,
+bilinear in the field, or field-independent, so for fixed geometry and
+operator data
+
+\[
+\mathcal N_\Gamma(\alpha b) = c_1(\Gamma, b)\,\alpha + c_2(\Gamma, b)\,\alpha^2
+\]
+
+exactly, for any weights — provable and machine-precision testable (the
+drive-scaling contract test fits the polynomial and asserts the residual at
+float64 roundoff). Zero preservation is inherited; superposition is not
+claimed. The composition is applied once at the query read-in rather than
+inside a stackable block because residual bilinear updates would compose to
+degree \(2^k\) over \(k\) layers — exactly the implicit-degree escalation this
+mode exists to forbid (the nonlinear mode's measured effective drive degree
+is ~21 against targets of degree 1 and 2, and off-range drive amplification
+detonates on it). A single composition of query-side drive-linear states
+spans products of boundary integrals (e.g. a Bernoulli pressure
+\(|u(x)|^2\)), which per-source products transported by a linear kernel
+cannot represent. The construction generalizes to declared degree \(k\)
+(a degree-graded tuple with \(k-1\) compositions); degree 2 is the first
+instance, matching every current benchmark target.
+
+### 9.3 `zero_preserving_nonlinear`
 
 `NonlinearZeroMeshFieldBlock` concatenates operator and field states when
 forming queries and keys. Its value projection may include invariant vector
@@ -668,9 +798,9 @@ boundary values are zero, it must be declared as a global or boundary `drive`
 field. The zero-input statement zeros all drive-role fields; it does not erase
 geometry or operator-role conditioning.
 
-### 9.3 Shared implementation and guarantees
+### 9.4 Shared implementation and guarantees
 
-Both modes share:
+All modes share:
 
 - boundary cell quadrature;
 - boundary-measure centering and explicit coordinate scaling;
@@ -682,13 +812,14 @@ Both modes share:
 
 They differ only in field-dependent hooks:
 
-| Property | `linear` | `zero_preserving_nonlinear` |
-| --- | --- | --- |
-| Query/key may read the field | No | Yes |
-| Value dependence on field | Linear | Nonlinear, zero at zero |
-| Pointwise field update | Linear, bias-free | Nonlinear, zero-preserving |
-| Exact zero-input behavior | Yes | Yes |
-| Exact fixed-operator superposition | Yes | No |
+| Property | `linear` | `quadratic` | `zero_preserving_nonlinear` |
+| --- | --- | --- | --- |
+| Query/key may read the field | No | No | Yes |
+| Value dependence on field | Linear | Linear | Nonlinear, zero at zero |
+| Pointwise field update | Linear, bias-free | Linear + one bilinear read-in | Nonlinear, zero-preserving |
+| Exact zero-input behavior | Yes | Yes | Yes |
+| Exact fixed-operator superposition | Yes | No | No |
+| Exact drive-degree bound | 1 | 2 | None (implicit, measured ~21) |
 
 ## 10. Why there are no neighborhoods or trees
 
@@ -755,6 +886,12 @@ vector-key/vector-value moment.
 `query_chunk_size` is an execution setting, not a model-semantic cutoff. Source
 moments are reused across chunks and across different query meshes evaluated
 from the same `EncodedBoundary`.
+
+With `query_decoder="kernel"`, the \(L_q(N_s+N_q)\) decoder term above is
+replaced by one dense \(O(N_qN_s)\) pair evaluation whose per-chunk workspace
+is proportional to the query chunk times \(N_s\); every other term is
+unchanged. This is the documented price of the nonseparable decoder in
+Section 6.4.
 
 `attention_chunk_size` is likewise an exact live-workspace setting, not a
 semantic cutoff. It is especially relevant to no-grad evaluation in
@@ -846,7 +983,10 @@ Tests should distinguish exact algebraic properties from empirical convergence:
   and vector outputs together;
 - uniformly scale geometry and the explicit reference length together, checking
   the normalized cell measures;
-- verify that `reference_length_key=None` performs no data-dependent scale fit;
+- verify that the default intrinsic gauge equals the measure-weighted RMS
+  boundary radius, scales homogeneously, and leaves the normalized source
+  frame scale invariant, while an explicit `reference_length_key` consumes
+  exactly the declared scalar and never invokes the intrinsic estimator;
 - split identical quadrature samples with conserved measure and separately test
   convergence under genuine surface refinement;
 - verify that data attached only to `domain.interior` cannot affect output;
@@ -863,14 +1003,14 @@ OOD-geometry accuracy.
 ## 15. Empirical and diagnostic status
 
 The exact conformal-Laplace benchmark in
-[`examples/cfd/laplace_mesh_transformer`](../../../../examples/cfd/laplace_mesh_transformer)
+[`examples/cfd/mesh_transformer`](../../../../examples/cfd/mesh_transformer)
 tests this distinction directly. It uses analytic labels on certified smooth
 variable domains, balanced boundary modes, fresh paired geometry-OOD splits,
 physical-area losses, continuous maximum-principle enclosures, Laplacian
 diagnostics, and boundary-resolution studies. The checked-in
-[reference summary](../../../../examples/cfd/laplace_mesh_transformer/results/reference_2026-07-01.json)
+[reference summary](../../../../examples/cfd/mesh_transformer/results/reference_2026-07-01.json)
 preserves the exploratory measurements. The subsequent
-[architectural-ablation artifact](../../../../examples/cfd/laplace_mesh_transformer/results/architectural_ablation_2026-07-01.json)
+[architectural-ablation artifact](../../../../examples/cfd/mesh_transformer/results/architectural_ablation_2026-07-01.json)
 records the prespecified one-seed eliminations, three-seed finalist study,
 spectral extractions, gate decisions, external controls, and exact relevant
 source fingerprint.
@@ -955,11 +1095,15 @@ The current model is intentionally narrow:
 - body/volume forcing has no separate source mesh;
 - analytic singular and nearly singular boundary quadrature is not provided;
 - interior connectivity is preserved in the returned mesh but is not used by
-  the pointwise decoder; and
-- finite-rank separability cannot represent a general nonseparable or singular
-  pair kernel; and
-- under the assumptions in Section 6.2, the scalar/vector linear decoder has
-  an exact low-order angular ceiling.
+  the pointwise decoder;
+- the moment decoder's finite-rank separability cannot represent a general
+  nonseparable or singular pair kernel, and under the assumptions in Section
+  6.2 its scalar/vector linear decode has an exact low-order angular ceiling;
+  and
+- the kernel query decoder removes that ceiling and carries exact singular
+  quadrature, but at dense \(O(N_qN_s)\) decode cost and only for 2D segment
+  or 3D triangle boundaries; the boundary-to-boundary solve remains
+  separable in both modes.
 
 These limitations make the reference semantics precise: a global signed
 operator with exact quadrature moments, exact linear entity-count scaling, and

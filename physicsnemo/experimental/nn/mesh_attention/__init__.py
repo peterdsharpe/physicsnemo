@@ -28,21 +28,42 @@ from .block import (
     MeshOperatorBlock,
     NonlinearZeroMeshFieldBlock,
     PointwiseGeometryBlock,
+    QuadraticFieldReadIn,
 )
-from .model import EncodedBoundary, FieldMode, FieldRoleRanks, MeshTransformer
+from .kernel_decoder import (
+    KernelBasisCrossDecoder,
+    KernelDecoderCache,
+    LinearKernelBasisCrossDecoder,
+    NonlinearZeroKernelBasisCrossDecoder,
+    PairInvariantFeatures,
+)
+from .model import (
+    EncodedBoundary,
+    FieldMode,
+    FieldRoleRanks,
+    MeshTransformer,
+    QueryDecoder,
+)
 
 __all__ = [
     "AttentionMoments",
     "FieldMode",
     "FieldRoleRanks",
     "GeometryConditionedLinear",
+    "KernelBasisCrossDecoder",
+    "KernelDecoderCache",
+    "LinearKernelBasisCrossDecoder",
     "LinearMeshFieldBlock",
     "MeshAttention",
     "MeshOperatorBlock",
     "MeshTransformer",
+    "NonlinearZeroKernelBasisCrossDecoder",
     "NonlinearZeroMeshFieldBlock",
+    "PairInvariantFeatures",
     "PointwiseGeometryBlock",
+    "QuadraticFieldReadIn",
     "EncodedBoundary",
+    "QueryDecoder",
     "ScalarVectorState",
     "TypedProjection",
 ]

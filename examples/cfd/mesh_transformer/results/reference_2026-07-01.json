@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "status": "exploratory_reference",
+  "date": "2026-07-01",
+  "source": {
+    "git_sha": "02656d0225d6341ef13a78fa4d6283738a8a3f6a",
+    "measurement_source_sha256": "d8c965a861a9ef89fa7d909b7569836bcb574fc6c5cfdd93c97b9ca11fcc73c0",
+    "current_source_sha256": "6990528401d5b382d17601e003f6e900cc63680dffd39a759c9b1543797c3345",
+    "worktree_was_dirty": true,
+    "post_measurement_change": "After the learning measurements, full license headers, deterministic aggregation, loaded-checkpoint provenance, benchmark-scope metadata, and a query-coupling-safe Laplacian diagnostic were added. The learned core and reported candidate predictions are unchanged; the revised diagnostic is algebraically identical for these pointwise decoders."
+  },
+  "environment": {
+    "device": "NVIDIA GeForce RTX 4090 Laptop GPU",
+    "python": "3.13.8",
+    "torch": "2.12.0+cu130",
+    "cuda_runtime": "13.0",
+    "float32_matmul_precision": "highest"
+  },
+  "learning_protocol": {
+    "training_seeds": [17, 29, 43],
+    "validation_seed": 71000011,
+    "final_evaluation_seed": 97000037,
+    "training_updates": 1000,
+    "training_boundary_panels": 64,
+    "training_query_points": 128,
+    "evaluation_cases_per_split": 64,
+    "evaluation_boundary_panels": 128,
+    "evaluation_query_points": 512,
+    "validation_cases": 8,
+    "boundary_trace_cases_per_split": 16,
+    "paired_similarity_cases": 16,
+    "mode_response_geometries": 8,
+    "resolution_cases": 8,
+    "harmonic_residual_cases": 4,
+    "harmonic_residual_query_points": 32
+  },
+  "statistics": {
+    "seed_aggregate": "arithmetic mean and sample standard deviation over training seeds",
+    "paired_difference": "mean corresponding cases across training seeds for each model, then subtract aligned model case means",
+    "bootstrap_sampling_unit": "continuous PDE case",
+    "bootstrap_method": "percentile interval from paired case resampling with replacement",
+    "bootstrap_seed": 20260701,
+    "bootstrap_resamples": 100000,
+    "bootstrap_confidence": 0.95,
+    "reproduction_script": "examples/cfd/laplace_mesh_transformer/aggregate.py"
+  },
+  "accuracy": {
+    "boundary_mean": {
+      "parameters": 0,
+      "replicates": 1,
+      "relative_l2": {
+        "interpolation": {"mean": 0.799896, "seed_std": 0.0},
+        "unseen_geometry_modes": {"mean": 0.825030, "seed_std": 0.0},
+        "stronger_deformation": {"mean": 0.789594, "seed_std": 0.0},
+        "mixed_geometry_modes": {"mean": 0.822569, "seed_std": 0.0},
+        "unseen_boundary_frequencies": {"mean": 0.999998, "seed_std": 0.0}
+      },
+      "seed_values": {
+        "interpolation": [0.7998957447707653],
+        "unseen_geometry_modes": [0.8250299021601677],
+        "stronger_deformation": [0.7895939964801073],
+        "mixed_geometry_modes": [0.8225685018114746],
+        "unseen_boundary_frequencies": [0.9999980833381414]
+      }
+    },
+    "mesh_transformer": {
+      "parameters": 135945,
+      "replicates": 3,
+      "relative_l2": {
+        "interpolation": {"mean": 0.457955, "seed_std": 0.002106},
+        "unseen_geometry_modes": {"mean": 0.486922, "seed_std": 0.000913},
+        "stronger_deformation": {"mean": 0.480644, "seed_std": 0.009120},
+        "mixed_geometry_modes": {"mean": 0.468268, "seed_std": 0.001608},
+        "unseen_boundary_frequencies": {"mean": 1.000093, "seed_std": 0.000013}
+      },
+      "seed_values": {
+        "interpolation": [0.4597080518724397, 0.45561937952879816, 0.4585364294471219],
+        "unseen_geometry_modes": [0.4875346031039953, 0.48587289126589894, 0.4873592462390661],
+        "stronger_deformation": [0.49103839648887515, 0.47691062092781067, 0.4739831939805299],
+        "mixed_geometry_modes": [0.46947297593578696, 0.46644207229837775, 0.46889007929712534],
+        "unseen_boundary_frequencies": [1.0001074112951756, 1.0000906400382519, 1.000082379207015]
+      }
+    },
+    "lifted_mesh_transformer": {
+      "parameters": 135945,
+      "replicates": 3,
+      "relative_l2": {
+        "interpolation": {"mean": 0.452201, "seed_std": 0.000656},
+        "unseen_geometry_modes": {"mean": 0.482627, "seed_std": 0.000482},
+        "stronger_deformation": {"mean": 0.464459, "seed_std": 0.006071},
+        "mixed_geometry_modes": {"mean": 0.464949, "seed_std": 0.000627},
+        "unseen_boundary_frequencies": {"mean": 1.000090, "seed_std": 0.000023}
+      },
+      "seed_values": {
+        "interpolation": [0.45282685954589397, 0.45151934085879475, 0.4522570156259462],
+        "unseen_geometry_modes": [0.4831451834179461, 0.4821919701062143, 0.4825449362397194],
+        "stronger_deformation": [0.46900740277487785, 0.45756591868121177, 0.46680500777438283],
+        "mixed_geometry_modes": [0.4656558796996251, 0.46446088748052716, 0.46473021036945283],
+        "unseen_boundary_frequencies": [1.000111342407763, 1.0000649616122246, 1.0000924104824662]
+      }
+    },
+    "invariant_pair_kernel": {
+      "parameters": 19008,
+      "replicates": 3,
+      "relative_l2": {
+        "interpolation": {"mean": 0.106836, "seed_std": 0.025454},
+        "unseen_geometry_modes": {"mean": 0.109911, "seed_std": 0.025748},
+        "stronger_deformation": {"mean": 0.138896, "seed_std": 0.017913},
+        "mixed_geometry_modes": {"mean": 0.099965, "seed_std": 0.025799},
+        "unseen_boundary_frequencies": {"mean": 0.642063, "seed_std": 0.024603}
+      },
+      "seed_values": {
+        "interpolation": [0.09591049325536005, 0.13592937227804214, 0.08866908284835517],
+        "unseen_geometry_modes": [0.09821197408018634, 0.13943056698190048, 0.09208948380546644],
+        "stronger_deformation": [0.14259871415561065, 0.1546688406378962, 0.11942184192594141],
+        "mixed_geometry_modes": [0.08748143335105851, 0.12963156454497948, 0.08278141019400209],
+        "unseen_boundary_frequencies": [0.6319301738403738, 0.6701142112724483, 0.6241459054872394]
+      }
+    }
+  },
+  "paired_case_differences": {
+    "mesh_transformer_minus_boundary_mean": {
+      "interpolation": {"mean": -0.341941, "case_bootstrap_95ci": [-0.383322, -0.301148]},
+      "unseen_geometry_modes": {"mean": -0.338108, "case_bootstrap_95ci": [-0.378472, -0.298736]},
+      "stronger_deformation": {"mean": -0.308950, "case_bootstrap_95ci": [-0.353620, -0.265858]},
+      "mixed_geometry_modes": {"mean": -0.354300, "case_bootstrap_95ci": [-0.392999, -0.316731]},
+      "unseen_boundary_frequencies": {"mean": 0.000095, "case_bootstrap_95ci": [-0.000043, 0.000231]}
+    },
+    "invariant_pair_kernel_minus_mesh_transformer": {
+      "interpolation": {"mean": -0.351118, "case_bootstrap_95ci": [-0.388294, -0.314376]},
+      "unseen_geometry_modes": {"mean": -0.377012, "case_bootstrap_95ci": [-0.414794, -0.339715]},
+      "stronger_deformation": {"mean": -0.341748, "case_bootstrap_95ci": [-0.377911, -0.306614]},
+      "mixed_geometry_modes": {"mean": -0.368304, "case_bootstrap_95ci": [-0.399642, -0.336775]},
+      "unseen_boundary_frequencies": {"mean": -0.358030, "case_bootstrap_95ci": [-0.379128, -0.336663]}
+    },
+    "lifted_minus_raw_mesh_transformer": {
+      "interpolation": {"mean": -0.005754, "case_bootstrap_95ci": [-0.007932, -0.003982]},
+      "unseen_geometry_modes": {"mean": -0.004295, "case_bootstrap_95ci": [-0.005258, -0.003405]},
+      "stronger_deformation": {"mean": -0.016185, "case_bootstrap_95ci": [-0.021061, -0.011841]},
+      "mixed_geometry_modes": {"mean": -0.003319, "case_bootstrap_95ci": [-0.004148, -0.002584]},
+      "unseen_boundary_frequencies": {"mean": -0.000004, "case_bootstrap_95ci": [-0.000017, 0.000011]}
+    }
+  },
+  "pure_mode_relative_l2": {
+    "mesh_transformer": {
+      "0": 0.062047,
+      "1": 0.043468,
+      "2": 0.129492,
+      "3": 0.976682,
+      "4": 0.988714,
+      "5": 0.999639,
+      "6": 0.999976,
+      "7": 1.000001,
+      "8": 0.999994,
+      "9": 0.9999991457,
+      "10": 0.9999999975,
+      "11": 1.0000000820,
+      "12": 1.0000000422
+    },
+    "lifted_mesh_transformer": {
+      "0": 0.0,
+      "1": 0.039073,
+      "2": 0.112599,
+      "3": 0.975360,
+      "4": 0.988229,
+      "5": 0.999648,
+      "6": 0.999991,
+      "7": 1.000002,
+      "8": 0.999994,
+      "9": 0.9999989594,
+      "10": 0.9999998684,
+      "11": 1.0000001813,
+      "12": 1.0000000695
+    },
+    "invariant_pair_kernel": {
+      "0": 0.0,
+      "1": 0.101780,
+      "2": 0.094072,
+      "3": 0.100724,
+      "4": 0.224324,
+      "5": 0.389198,
+      "6": 0.584785,
+      "7": 0.755572,
+      "8": 0.878216,
+      "9": 0.954977,
+      "10": 0.995114,
+      "11": 1.009111,
+      "12": 1.013484
+    }
+  },
+  "physics_and_discretization": {
+    "boundary_trace_relative_l2": {
+      "boundary_mean": 0.874814,
+      "mesh_transformer": {"mean": 0.610061, "seed_std": 0.001134},
+      "lifted_mesh_transformer": {"mean": 0.605943, "seed_std": 0.000453},
+      "invariant_pair_kernel": {"mean": 0.161661, "seed_std": 0.026868}
+    },
+    "normalized_laplacian_l2": {
+      "boundary_mean": 0.0,
+      "mesh_transformer": {"mean": 0.401045, "seed_std": 0.052339},
+      "lifted_mesh_transformer": {"mean": 0.427143, "seed_std": 0.107639},
+      "invariant_pair_kernel": {"mean": 9.755942, "seed_std": 0.209089}
+    },
+    "certified_maximum_principle_violation_interpolation": {
+      "boundary_mean": 0.0,
+      "mesh_transformer": {"mean": 0.012219, "seed_std": 0.004062},
+      "lifted_mesh_transformer": {"mean": 0.012895, "seed_std": 0.001149},
+      "invariant_pair_kernel": {"mean": 0.001239, "seed_std": 0.002146}
+    },
+    "paired_similarity_error_per_seed_max": {
+      "boundary_mean": 1.33e-7,
+      "mesh_transformer": {"mean": 6.86e-7, "seed_std": 1.69e-7, "global_max": 8.395343229494756e-7},
+      "lifted_mesh_transformer": {"mean": 5.35e-7, "seed_std": 9.73e-8, "global_max": 6.412897164409515e-7},
+      "invariant_pair_kernel": {"mean": 1.18e-6, "seed_std": 1.89e-7, "global_max": 1.3951903383713216e-6}
+    },
+    "prediction_change_32_to_256_panels": {
+      "boundary_mean": 0.000387,
+      "mesh_transformer": {"mean": 0.004312, "seed_std": 0.001982},
+      "lifted_mesh_transformer": {"mean": 0.003687, "seed_std": 0.001324},
+      "invariant_pair_kernel": {"mean": 0.012063, "seed_std": 0.000080}
+    }
+  },
+  "performance": {
+    "microbenchmark_protocol": {
+      "architecture": {
+        "spatial_dims": 2,
+        "operator_scalar_dim": 16,
+        "operator_vector_dim": 4,
+        "drive_scalar_dim": 24,
+        "drive_vector_dim": 8,
+        "operator_layers": 1,
+        "drive_layers": 1,
+        "query_layers": 1,
+        "heads": 2,
+        "scalar_rank": 4,
+        "vector_rank": 2
+      },
+      "parameters": {
+        "attention_linear": 1744,
+        "attention_zero_preserving_nonlinear": 4144,
+        "model_linear": 18779,
+        "model_zero_preserving_nonlinear": 37275
+      },
+      "timing_repeats": {
+        "attention_inference": {"warmup": 3, "repeats": 7},
+        "attention_training": {"warmup": 2, "repeats": 5},
+        "model_inference": {"warmup": 2, "repeats": 5},
+        "model_training": {"warmup": 3, "repeats": 7}
+      },
+      "training_scope": "zero_grad, forward, and backward; no optimizer step",
+      "model_training_source_sha256": "23b637241a5b50d4585ebc24002b5faf91db0540bc2c790f10abf01087a981fb"
+    },
+    "attention_inference": {
+      "columns": ["mode", "entities", "build_moments_ms", "evaluate_moments_ms", "build_peak_mib"],
+      "rows": [
+        ["linear", 4096, 1.390, 1.328, 2.376],
+        ["linear", 16384, 4.578, 4.581, 9.501],
+        ["linear", 65536, 8.160, 0.936, 38.001],
+        ["linear", 262144, 32.988, 13.836, 38.005],
+        ["zero_preserving_nonlinear", 4096, 2.034, 1.802, 3.470],
+        ["zero_preserving_nonlinear", 16384, 5.489, 2.842, 13.876],
+        ["zero_preserving_nonlinear", 65536, 16.658, 3.615, 56.001],
+        ["zero_preserving_nonlinear", 262144, 52.402, 14.084, 56.005]
+      ]
+    },
+    "attention_training": {
+      "columns": ["mode", "entities", "forward_ms", "backward_ms", "peak_mib"],
+      "rows": [
+        ["linear", 4096, 8.971, 17.275, 5.566],
+        ["linear", 16384, 8.478, 18.763, 22.629],
+        ["linear", 65536, 9.740, 33.150, 89.004],
+        ["zero_preserving_nonlinear", 4096, 6.932, 12.549, 10.691],
+        ["zero_preserving_nonlinear", 16384, 6.006, 14.032, 40.879],
+        ["zero_preserving_nonlinear", 65536, 13.110, 34.589, 160.004]
+      ]
+    },
+    "full_model_inference_65536_sources_and_queries": {
+      "linear": {"encode_ms": 56.754, "decode_ms": 9.685, "encode_peak_mib": 109.503, "decode_peak_mib": 85.000},
+      "zero_preserving_nonlinear": {"encode_ms": 69.791, "decode_ms": 16.037, "encode_peak_mib": 151.003, "decode_peak_mib": 138.500}
+    },
+    "full_model_training_16384_sources_and_queries": {
+      "scope": "zero_grad, forward, and backward; no optimizer step",
+      "linear": {"forward_ms": 149.830, "backward_ms": 237.367, "peak_mib": 168.144},
+      "zero_preserving_nonlinear": {"forward_ms": 242.301, "backward_ms": 302.793, "peak_mib": 274.278}
+    },
+    "packed_moment_ablation_65536_sources": {
+      "provenance": {
+        "baseline_git_sha": "02656d0225d6341ef13a78fa4d6283738a8a3f6a",
+        "measurement_source_sha256": "d8c965a861a9ef89fa7d909b7569836bcb574fc6c5cfdd93c97b9ca11fcc73c0",
+        "retained_evidence": "aggregate values only; raw timing samples were not retained"
+      },
+      "linear": {
+        "old_four_reductions_ms": 50.383,
+        "packed_one_reduction_ms": 12.983,
+        "speedup": 3.881,
+        "old_peak_mib": 24.502,
+        "packed_peak_mib": 38.501
+      },
+      "zero_preserving_nonlinear": {
+        "old_four_reductions_ms": 42.814,
+        "packed_one_reduction_ms": 12.568,
+        "speedup": 3.407,
+        "old_peak_mib": 56.001,
+        "packed_peak_mib": 56.001
+      }
+    }
+  },
+  "rejected_development_ablations": {
+    "three_query_blocks": {
+      "source_sha256": "ae6d43b3667dbd58bc0b5a9f8d6d4e27612ccaedfe79b781e493ac019f6b02bf",
+      "parameters": 209777,
+      "training_seed": 17,
+      "evaluation_cases": 8,
+      "best_validation_relative_l2": 0.501524,
+      "mode_3_relative_l2": 0.975004,
+      "mode_4_relative_l2": 0.986318,
+      "decision": "Not retained: extra equivariant query depth did not improve the one-block validation ceiling or recover higher trained modes."
+    }
+  },
+  "interpretation": [
+    "The current MeshTransformer is materially better than a non-spatial boundary mean and transfers from the training geometry family to unseen geometry modes without a large additional penalty.",
+    "This trained MeshTransformer configuration learns harmonic modes one and two but fails on trained modes three and four under the mixed physical-area objective; equal boundary variance does not equalize interior solution energy.",
+    "The dense invariant pair kernel is much more accurate but has quadratic source-query cost and still extrapolates poorly to unseen high boundary frequencies.",
+    "Low supervised value error does not imply PDE fidelity: the pair kernel has the best value error and the worst autograd Laplacian residual.",
+    "The learned core satisfies similarity covariance to ordinary fp32 roundoff and remains stable under boundary quadrature refinement.",
+    "The next controlled experiment should equalize solution-space energy or train pure modes before attributing the remaining gap to representation; higher-order equivariant representations and controlled nonseparable kernels are principled follow-ups."
+  ]
+}
