@@ -31,10 +31,11 @@ library):
 - Equations: Laplace :math:`-\Delta u = 0` and the screened variant
   :math:`-\Delta u + \kappa^2 u = 0` (both homogeneous, Dirichlet only).
 - Geometry: one outer closed polyline loop plus zero or more inner hole
-  loops.  Meshing uses the ``triangle`` package (Shewchuk's Triangle):
-  constrained Delaunay with a global area constraint and a 30-degree
-  minimum-angle quality bound (flags ``pq30a<area>``); holes are marked via
-  interior seed points obtained by triangulating each hole loop alone.
+  loops.  Meshing uses
+  :func:`physicsnemo.mesh.tessellation.delaunay_mesh` (constrained
+  Delaunay + Ruppert refinement): a global area constraint and a 30-degree
+  minimum-angle quality bound, with holes handled natively from their
+  loops.
 - Elements: straight P2 (quadratic Lagrange) triangles.  Stiffness and mass
   matrices are assembled with a 6-point order-4 Dunavant rule (exact for the
   quartic mass integrand; the quadratic stiffness integrand needs only
@@ -238,41 +239,6 @@ def _validate_loops(boundary_loops: Sequence[np.ndarray]) -> list[np.ndarray]:
     return loops
 
 
-def _loop_segments(loops: Sequence[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
-    """Concatenate loop vertices and build closed per-loop segment lists."""
-
-    vertices = np.concatenate(loops, axis=0)
-    segments = []
-    offset = 0
-    for loop in loops:
-        n = loop.shape[0]
-        first = np.arange(n, dtype=np.int32) + offset
-        second = np.roll(first, -1)
-        segments.append(np.stack((first, second), axis=1))
-        offset += n
-    return vertices, np.concatenate(segments, axis=0)
-
-
-def _polygon_interior_point(loop: np.ndarray) -> np.ndarray:
-    """Return a point strictly inside a simple closed polygon.
-
-    Robust for arbitrary simple polygons: constrained-Delaunay triangulate
-    the polygon alone (cheap, no refinement) and take the centroid of any
-    resulting triangle.
-    """
-
-    import triangle as _triangle
-
-    n = loop.shape[0]
-    ring = np.stack(
-        (np.arange(n, dtype=np.int32), np.roll(np.arange(n, dtype=np.int32), -1)),
-        axis=1,
-    )
-    result = _triangle.triangulate({"vertices": loop, "segments": ring}, "pQ")
-    first = result["triangles"][0]
-    return result["vertices"][first].mean(axis=0)
-
-
 def _triangulate(
     loops: Sequence[np.ndarray], target_h: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -280,26 +246,23 @@ def _triangulate(
 
     Returns ``(vertices, triangles, vertex_markers, boundary_segments)``.
     The area constraint is the area of an equilateral triangle with edge
-    ``target_h``; together with the ``q30`` quality flag this bounds edge
-    lengths near ``target_h`` away from the (finer) boundary polyline.
+    ``target_h``; together with the 30-degree minimum-angle quality bound
+    this keeps edge lengths near ``target_h`` away from the (finer)
+    boundary polyline.  Hole loops are passed through directly;
+    ``delaunay_mesh`` seeds hole removal internally.
     """
 
-    import triangle as _triangle
+    from physicsnemo.mesh.tessellation import delaunay_mesh
 
-    vertices, segments = _loop_segments(loops)
-    pslg: dict = {"vertices": vertices, "segments": segments}
-    if len(loops) > 1:
-        pslg["holes"] = np.stack(
-            [_polygon_interior_point(loop) for loop in loops[1:]], axis=0
-        )
     max_area = math.sqrt(3.0) / 4.0 * target_h * target_h
-    flags = f"pq30a{max_area:.15f}Q"
-    result = _triangle.triangulate(pslg, flags)
+    points, triangles, vertex_markers, boundary_segments = delaunay_mesh(
+        loops, max_area=max_area, min_angle_degrees=30.0
+    )
     return (
-        np.asarray(result["vertices"], dtype=np.float64),
-        np.asarray(result["triangles"], dtype=np.int64),
-        np.asarray(result["vertex_markers"], dtype=np.int64).reshape(-1),
-        np.asarray(result["segments"], dtype=np.int64),
+        points.numpy(),
+        triangles.numpy(),
+        vertex_markers.numpy(),
+        boundary_segments.numpy(),
     )
 
 

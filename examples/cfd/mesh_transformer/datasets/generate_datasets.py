@@ -1153,7 +1153,11 @@ def generate_dataset(
                 "-nu lap(u) + (u.grad)u + grad p = 0, div u = 0"
             ),
             "element": "Taylor-Hood P2-P1 triangles",
-            "mesher": "triangle (constrained Delaunay, flags pq30a<area>)",
+            "mesher": (
+                "physicsnemo.mesh.tessellation.delaunay_mesh (constrained "
+                "Delaunay + Ruppert refinement, 30 deg min angle, "
+                "max_area = sqrt(3)/4 h^2)"
+            ),
             "pressure_gauge": "zero mean pressure via Lagrange multiplier",
             "nonlinear_solver": (
                 "Newton with analytic Jacobian, Stokes initial guess, "
@@ -1184,7 +1188,11 @@ def generate_dataset(
         solver_settings = {
             "solver": "fem_reference.solve_dirichlet",
             "element": "P2 triangles",
-            "mesher": "triangle (constrained Delaunay, flags pq30a<area>)",
+            "mesher": (
+                "physicsnemo.mesh.tessellation.delaunay_mesh (constrained "
+                "Delaunay + Ruppert refinement, 30 deg min angle, "
+                "max_area = sqrt(3)/4 h^2)"
+            ),
             "target_h": settings.target_h,
             "n_fem_boundary": settings.n_fem_boundary,
             "equation": settings.equation,
