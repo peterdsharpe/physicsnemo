@@ -1451,3 +1451,479 @@ logged not run: *why* does the drive-parity sector carry $\approx
 star-cavity drive does the wedge-product channel encode that the
 polar-vector channels cannot? *(Current section: @sec-ns-lowre,
 @fig-ns-lowre-gap, @tbl-ns-lowre.)*
+
+## 2026-07-05 — Phase pivot: to industrial benchmarks {#sec-nb-industrial-pivot}
+
+Peter's directive after the documentation overhaul: **memory fix →
+AirFRANS → DrivAerML** (via the unified external-aero recipe), each
+industrial campaign with its own book chapter. SimJEB explicitly
+skipped. Compute: k8hsg slurm (4× B200/node, weekend queue) and/or
+Brev; the AirFRANS dataset (1,000 cases, 15 GB, with the official
+task manifest) and the BC-labeled DrivAerML variant (484 cases, five
+typed boundaries per case: vehicle / no-slip ground / slip walls /
+inlet / outlet — the "BC surgery" curation) are both already on
+cluster storage.
+
+**Memory fix implemented (agenda item 2, the checkpointing rung).**
+`checkpoint_query_chunks` on `KernelBasisCrossDecoder` +
+`kernel_checkpoint_query_chunks` on `MeshTransformer`:
+non-reentrant `torch.utils.checkpoint` around each decode chunk, so
+autograd recomputes the dense pair activations per chunk in backward
+instead of retaining all of them (the measured $O(N_qN_s)$ training
+wall, 742 GiB extrapolated at product scope). The decoder is RNG-free
+and shape-deterministic, so recomputation is bitwise — asserted, not
+assumed: 12 new tests (knob-default bitwise noop; training-step
+forward AND per-parameter gradient bitwise equality across multiple
+chunks, in all three field modes, with the pseudo sector, and in 3D
+singpair). Core suite 370 green. Default off, zero parameters added,
+`.mdlus` checkpoint-compatible.
+
+**Measurement in flight**: `scale_study.py` gained a
+`--kernel-checkpoint` arm; a paired dense-vs-checkpointed cost grid
+(subdivisions 4/5/6 × queries $10^4$–$10^6$, seed 17, same GPU) goes
+to a single B200 via sbatch. Pre-registered expectations: the dense
+arm OOMs at the top corner even on 180 GB; the checkpointed arm's
+training peak collapses toward the forward peak ($\propto
+S^{0.95}Q^{0.16}$) plus one chunk, fitting product scope on one
+device; time cost ≈ one extra decode forward per step.
+
+**Pre-registrations written before any run** (the binding versions
+live in the new chapter scaffolds): @sec-airfrans — H1 baseline
+competence vs the four AirFRANS reference baselines; H2 parity (`0o`)
+on lifting flows; H3 far-field decay contract, monopole deflation
+explicitly NOT licensed (circulation); family acceptance within 2× of
+GLOBE's published scarce numbers at matched budget, refutation
+recorded if >5×. @sec-drivaerml — H-ground: five typed boundaries vs
+vehicle-only (no existing recipe model consumes the extra four).
+Chapters renumbered: future → 09, notebook → 10.
+
+Ops notes for the record: the GLOBE example tree on the k8hsg
+checkout (`examples/cfd/external_aerodynamics/globe/{airfrans,
+drivaer}/run.sh`) is the slurm idiom source (account
+`coreai_modulus_cae`, partition `batch`, bare-metal `uv sync
+--extra cu13`, torchrun, USR1 graceful shutdown); AirFRANS raw cases
+are per-dir VTK triples and GLOBE's `dataset.py` is the preprocessing
+reference (ρ=1 verified against the mislabeled 1.204; C_pt>1.02 and
+wall-gradient NaN masks). Local `examples/cfd/external_aerodynamics`
+carries 4.7 GB of stale recipe artifacts — excluded from cluster
+syncs.
+
+## 2026-07-05 (later) — AirFRANS protocol amendment before first training {#sec-nb-airfrans-amendment}
+
+The first catalog conversion (1,000/1,000 cases, ~7 min on a Grace
+node) reported **17.45% of all points masked** — three orders of
+magnitude above GLOBE's published 0.003% figure for the
+energy-conservation screen. Per-case provenance isolated it instantly:
+`n_masked_cpt` 0–35 points/case (matching GLOBE's number);
+`n_masked_grad_cp` 29k–41k of ~180k points/case. The pre-registration
+text had over-reached: GLOBE's $|\nabla C_p \cdot c| > 20$ rule NaN's
+only its *gradient target* (which we don't store), not whole rows, and
+as a row exclusion it deletes precisely the near-wall clustering where
+boundary-layer physics lives — a systematic bias, not hygiene.
+
+**Amendment (before any model saw the data):** the $C_{pt}$ mask stays
+a whole-row exclusion; the gradient screen becomes a recorded
+diagnostic count. Chapter protocol text amended in place with the
+amendment note; catalog regenerated (same `v1` path, provenance
+manifest records the new rule). This is the pre-registration discipline
+working as intended — the provenance line in the conversion log is what
+caught it.
+
+Also this session: `triangle` (LGPL-3) ruled inadmissible by Peter —
+being replaced by a clean-room in-tree quality mesher
+(`physicsnemo.mesh.tessellation.delaunay`: Bowyer–Watson + constrained
+recovery + Ruppert refinement), FEM MMS convergence orders as the
+acceptance gate; the frozen v1 catalogs stay (provenance records the
+old mesher). Ops: cluster QOS requires GPU allocations (no CPU-only
+jobs — history shows only batch+normal/interactive ever used);
+preprocessing rides a batch node's Grace cores with its own venv
+(`mesh-extras` for pyvista) so it can't disturb a concurrent
+measurement in the default venv.
+
+## 2026-07-05 (later still) — the in-tree mesher landed, better than the gate {#sec-nb-delaunay-mesher}
+
+`physicsnemo.mesh.tessellation.delaunay` is in: clean-room planar
+quality meshing (Bowyer–Watson insertion, Sloan constrained-edge
+recovery, Lawson legalization, Ruppert refinement — cited from the
+papers, no Triangle source consulted), Apache-2.0, ~1,400 lines, 16 new
+tests. The acceptance gate was "FEM MMS convergence orders preserved";
+the measured orders on the new meshes are **3.07 velocity / 2.12
+pressure** — at or above the 2.92/1.90 achieved with Triangle.
+Production-resolution star-cavity domains (h=0.0105, ~111k triangles)
+mesh in 2.3–5.5 s; outputs are bitwise-deterministic across processes
+(SHA-256-verified). Robustness notes for the record: unit-box
+normalization with fp64 determinant predicates; the symmetric 2048-gon
+star produces exactly-cocircular quads whose roundoff-sign legalization
+flips cycle forever without a scaled-epsilon guard (found by test,
+fixed with violation > 1e-13 × term magnitudes); cavity retriangulation
+carries an Euler-count check that turns degeneracies into errors
+instead of silent corruption. `triangle` (LGPL-3) is gone from
+pyproject, uv.lock, the venv, and all imports; frozen v1 catalogs keep
+their recorded old-mesher provenance; `generate_datasets.py` manifests
+now record the in-tree mesher for anything generated from here on.
+
+## 2026-07-05 — AirFRANS pilot: first contact, and a sharp error signature {#sec-nb-airfrans-pilot}
+
+The scarce-task pilot (protocol-v0: flat AdamW 3e-4, 1,000 epochs =
+GLOBE's actual budget, 4,096 queries/step, full boundary) completed
+three of four arms; `mt_nl_pseudo` was walltime-killed at epoch 892
+(it runs ~16 s/epoch vs ~12 for the others — resume support being
+added). First-shot z-score MSEs on the published comparison surface,
+seed 17 (seed 18 for `mt_nl` within ~10% on all volume fields):
+
+| field | `mt_nl` | best Bonnet baseline | Transolver | MARIO | GLOBE |
+|---|---|---|---|---|---|
+| $u_x$ | 0.137 | 0.0146 | 0.0211 | 0.0015 | 0.00021 |
+| $p$ (volume) | **0.0182** | 0.0329 | 0.0443 | 0.0024 | 0.00029 |
+| $p$ (surface) | 1.25 | 0.147 | 0.237 | 0.027 | 0.00039 |
+
+Two reads, both provisional (single seed, untuned schedule):
+
+- **Volume pressure beats every Bonnet baseline and Transolver at
+  first shot.** The kernel dictionary's pressure story survives its
+  first industrial contact.
+- **Velocity and surface pressure lag ~9×** — and the signature
+  (good in the volume, bad at the wall; `mt_nl_decay` ≈ `mt_nl`, so
+  it's not far-field) points at a *mechanistic* suspect: at
+  $\mathrm{Re}\sim4\times10^6$ the boundary layer lives at
+  $\delta/c \sim \mathrm{Re}^{-1/2} \approx 5\times10^{-4}$. GLOBE's
+  kernels receive that scale directly (its second reference length
+  $\delta_{FS}$ enters the radial pair features); ours must
+  synthesize it from a chord-scale radial argument conditioned by a
+  global $\ln\mathrm{Re}$ scalar. Hypothesis (logged before the
+  diagnostic): the velocity error concentrates in the
+  $d/c < 10^{-3}$ bands. The decisive test is a distance-banded
+  eval decomposition, runnable from the saved checkpoints without
+  retraining; if confirmed, the admissible fix is a *declared
+  viscous scale* — a second similarity-covariant radial feature
+  $r/(L_{\mathrm{ref}}\,\mathrm{Re}^{-1/2})$, which is a per-problem
+  contract in exactly the program's sense, not a special case.
+
+Protocol notes: v0's flat LR is now recorded as exploration;
+protocol-v1 (the definitive 3-seed arms) adopts GLOBE's own schedule
+(cosine $1.41\times10^{-3} \to /64$ at our query count) as part of
+budget-matching, amendment logged here before any v1 run. Ops: the
+paired scale measurement's checkpointed arm was walltime-killed one
+grid point short with its report unwritten — grid points now stream
+full records to the log, the rerun runs largest-corner-first on
+`batch_long`, and the dense arm's report (complete) already states
+the GB200-fit wall: ~1,765 GiB extrapolated dense training at product
+scope, ~49.5 GiB chunk-bounded inference.
+
+## 2026-07-05 — the banded diagnostic fires: it's the wall, quantified {#sec-nb-airfrans-bands}
+
+The distance-banded eval of the pilot checkpoints (no retraining; 240 s
+for all three) tests the logged hypothesis. Verdict: **confirmed in
+weight, with an instructive tail.** For `mt_nl` seed 17, velocity
+z-score MSE by band of $d/c$:
+
+| band | $[0,10^{-4})$ | $[10^{-4},10^{-3})$ | $[10^{-3},10^{-2})$ | $[10^{-2},10^{-1})$ | $[0.1,1)$ | $[1,\infty)$ |
+|---|---|---|---|---|---|---|
+| $u_x$ MSE | **0.538** | 0.090 | 0.174 | 0.088 | 0.019 | 0.006 |
+| $\|\Delta U\|/\|U_\infty\|$ MAE | 0.383 | 0.160 | 0.184 | 0.122 | 0.066 | 0.039 |
+
+Contribution-weighted: the innermost band holds **49% of total
+velocity MSE on 12.5% of points** (per-point error ~30× the
+$[0.1,1)$ band); everything below $d/c=10^{-3}$ holds ~60%. The
+profile replicates across seed 18 (band0 0.566) and the decay arm
+(0.692) — architecture, not noise. The instructive tail: a secondary
+hump in $[10^{-3},10^{-2})$ (outer boundary layer / near wake,
+~0.15–0.19 in every run) says the deficit is *multi-scale*, not just
+the sublayer — consistent with the GLOBE lineage's multi-scale kernel
+motivation. Volume pressure shows the same shape at 10× lower level
+(band0 0.082, elsewhere ≤0.016), which also explains the bad
+*surface*-pressure headline: it is the band0 restriction of a field
+that is fine everywhere else.
+
+Next experiment pre-registered in the chapter (H4): **declared
+auxiliary length scales** — per-problem similarity-covariant kernel
+scales (the viscous $\delta/c = \mathrm{Re}^{-1/2}$ declared from
+inputs), entering the pair features as additional
+$r/\delta$-normalized invariants. Acceptance: ≥2× reduction of band-0
+velocity MSE vs `mt_nl` at 3 seeds under protocol-v1, no regression in
+outer bands. The protocol-v1 3-seed campaign (11 runs, GLOBE-endpoint
+cosine) is training concurrently.
+
+## 2026-07-05 — the paired measurement lands: the memory wall is closed {#sec-nb-scale-ckpt}
+
+The dense-vs-checkpointed scale measurement completed (dense arm from
+job 4069123; checkpointed arm rerun largest-corner-first on
+`batch_long` after a walltime kill ate its first attempt one point
+short — grid points now stream full records precisely so that cannot
+recur). Same GB200, same seed, same per-point samples. Headline rows
+(training peak):
+
+| S × Q | dense | checkpointed | time cost |
+|---|--:|--:|--:|
+| 5,120 × 10⁶ | 122.9 GiB | 8.0 GiB | 1.9× |
+| 20,480 × 10⁶ | OOM (189 GB) | 20.7 GiB | — |
+| 81,920 × 10⁶ | OOM (189 GB) | **71.4 GiB** | — |
+
+The checkpointed peak is query-count-independent at fixed boundary
+size — the designed retained-set behavior, measured. The near-product
+corner trains inside a single 80 GiB-class device. Step-time cost is a
+consistent ~1.9× (the recomputed decode inside backward); outputs and
+gradients bitwise unchanged (asserted in the core suite). Agenda item
+2 is closed; the hierarchical backend demotes from memory-necessity to
+speed lever (dense product-scope forward ≈ 978 s — that is now the
+binding constraint at scale, and it is a wall-clock one).
+
+Archive: `results/scale_checkpoint_paired_2026-07-05.json` (both arms
++ provenance; note therein: the ckpt report's auto-generated
+"what_breaks_first" prose describes the dense pathology — the analysis
+helper doesn't know which arm it is; the flag in the same JSON does).
+Booked: @sec-scale-ckpt (live table from the archive), ledger + agenda
+in @sec-future, knob prose in @sec-decoder-role.
+
+## 2026-07-05 — protocol-v1 verdicts: H2 confirmed, H3 refuted instructively {#sec-nb-airfrans-v1}
+
+The 11-run protocol-v1 matrix completed (GLOBE-endpoint cosine,
+1,000 epochs, scarce task). Verdicts against the pre-registration:
+
+- **`mt_nl`, 5 seeds**: $u_x$ 0.115–0.128, $p$ 0.0133–0.0184
+  (z-score MSE). The schedule change alone bought ~13% on velocity
+  over the flat-LR pilot. Volume pressure beats every published
+  baseline except MARIO and GLOBE at all five seeds.
+- **H2 CONFIRMED, 4 seeds, clean separation.** `mt_nl_pseudo` beats
+  `mt_nl` on every volume field at every seed; the $u_x$ seed ranges
+  do not overlap (0.097–0.108 vs 0.115–0.128); pressure ~19% better;
+  surface pressure crosses below 1.0 on 3 of 4 seeds. The 2D
+  pseudoscalar sector earns its fourth wall-break, now on
+  solver-labeled industrial RANS.
+- **H3 REFUTED — instructively.** `mt_nl_decay` is ~20% *worse* on
+  velocity (3/3 seeds), and the banded eval had already shown its far
+  bands no better than `mt_nl`'s. Interpretation (marked as such): the
+  $r^{-2}$ decay envelope that closed the exact-label far-field ladder
+  encodes point-singularity asymptotics; a lifting airfoil sheds a
+  *wake* — a persistent, directional structure that does not decay
+  like any power of $r$ in the downstream direction. Second measured
+  instance of the stream-factorization lesson: **a contract can be
+  exactly enforced and exactly wrong.** The far-field contract needs a
+  wake-aware variant before it is licensed for RANS exteriors.
+- **H4 arms in flight, with a striking early signal**: the
+  member-carrying arms train ~5× slower per epoch (dense pair-MLP
+  path) and fit the training set ~10× better than the singpair arms
+  at 1/3 of the budget (train loss ~0.05 vs ~0.45 converged). Whether
+  that is representation or overfitting is exactly what the
+  capacity-controlled comparison exists to decide. Resume chains are
+  queued (jobs 4109436–39) so the 8 runs complete across walltime
+  kills.
+
+Ops note for the recipe track: the DrivAerML smoke iterated through
+five one-line environment fixes (uv PATH, ARM wheel, pyvista extra,
+uv-pip target env, per-machine dataset_paths file, torchrun launcher)
+— all baked into the sbatch scripts now; the fifth attempt runs
+against real BC-labeled `.pdmsh` cases.
+
+## 2026-07-06 — DrivAerML: the drive-stream overflow, and the pilot launch {#sec-nb-drivaer-smoke}
+
+The five-boundary smoke's step-1 NaN root-caused to something worth
+recording as a *model* lesson, not a pipeline bug: the zero-preserving
+drive stream is **norm-free by construction** (an RMSNorm would break
+the zero-drive ⇒ zero-output contract), so its operating magnitude is
+set entirely by the inputs — and the recipe fed it two multiplicative
+amplifiers at once. The declared freestream arrived as a *raw physical*
+38.9 m/s (the recipe's nondimensionalizer never touches
+`global_data`), and the tunnel-scale source coordinates (|x| ≈ 16
+gauge units under the vehicle-scale gauge) blew the drive-block score
+products to 6×10²³ → inf → NaN. A measured gauge dose-response (NaN at
+gauge 1 → healthy 0.46 at gauge 8 — and the intrinsic merged-boundary
+RMS radius is 8.54, landing exactly in the healthy regime) pinned the
+fix: a derived unit `U_inf_dir` drive plus gauge 8 (= 40 m, tunnel
+scale), identical across arms. A regression test with teeth (old
+config: 4000/4000 non-finite; new: 0) pins it. Bonus finding: the
+"clean" vehicle-only smoke had been training out of an O(10⁹) init
+for the same reason — both arms improve. The 9× allbc slowdown was
+the 165.8M-point volume interior riding through the early transforms
+(the `.pdmsh` interior is a point *cloud*, so the cells-only reader
+cap never touched it) — re-target-first ordering plus a points cap
+fixed it (14 vs 15 min/epoch, arms matched).
+
+Smoke v6: both arms finite from step 1, checkpointed, complete.
+**Pilot launched** (jobs 4127442/43): both arms, 4-GPU DDP, recipe
+default 500 epochs, `sampling_resolution=10000` (wall-clock-bound
+dense decode; identical across arms so H-ground is unaffected;
+absolute cross-model numbers carry the resolution caveat), ~29 h
+each. The H-ground verdict — do the four labeled tunnel boundaries
+beat shape-only? — lands when they do.
+
+## 2026-07-06 — a convention audit, and the scale-completeness insight {#sec-nb-convention-scales}
+
+**Convention audit (Peter's catch, confirmed against GLOBE's benchmark
+source).** The published AirFRANS tables are per-sample z-scores of the
+*nondimensional* fields: each sample's error divided by the std of
+*that sample's* true field, averaged over samples (GLOBE's
+`benchmark.py`, which also documents that the AirFRANS *paper* claims
+freestream normalization while the AirFRANS *code* implements the
+z-score scheme). Our eval used train-split-pooled std of *raw physical*
+fields — a different measure. Every cross-table comparison logged so
+far is therefore convention-mismatched, direction unknown until
+re-scored (the pooled σ_u ≈ 29 m/s is inflated by the across-case
+freestream spread; per-sample σ of U/|U∞| is ~4× smaller in relative
+terms — the two effects pull opposite ways). The reference convention
+is being ported exactly, with a with-teeth identity test (per-sample
+mean predictor ⇒ z-score MSE ≡ 1.0), and all finished checkpoints get
+re-scored eval-only. Until then, the published-table comparisons in
+the two preceding entries are provisional. Within-program arm
+comparisons (H2 confirmed, H3 refuted, band structure) are unaffected
+— same convention on both sides.
+
+**The scale-completeness insight (Peter, discussing H4).** Declaring a
+"viscous scale" is doubly wrong for this program: semantically (it
+names fluid physics in a general-PDE surrogate) and philosophically
+(declared rather than learned). But the deeper point: **geometric
+scale-equivariance via the intrinsic gauge is complete only for
+geometry-borne scales.** Equation-borne scales (boundary-layer
+thickness from ν; screening length from κ) originate in the
+*dimensional parameters of the governing equations and boundary data*,
+i.e. from Buckingham-Π analysis — and any such scale is expressible as
+gauge × f(Π groups), with f a power law up to an unknown constant.
+Resolution adopted (task H4-L): a power-law scale r/(L·Π^α) is a
+*linear* object in log space (ln r − α ln Π), so giving the smooth
+members **log-radial pair features** alongside the already-present
+dimensionless-group conditioning makes every power-law scale learnable
+— no declared exponent, no semantic naming, PDE-general. The declared
+H4 arm is thereby reframed as the **oracle-in-family** (what is the
+right scale worth if known?), exactly the program's specialist-oracle
+pattern; H4-L tests whether the product path learns it. Corollary for
+datasets: they should carry the dimensional parameters with dimension
+vectors (the BC-labeled DrivAerML already does: ρ, ν, U∞, L_ref), so
+Π groups are computable mechanically — "units" enter as metadata that
+licenses nondimensionalization, not as quantities the math ever sees.
+
+## 2026-07-06 — the re-scored table: conventions nearly cancel, conclusions stand {#sec-nb-rescore}
+
+All twelve v1 checkpoints re-scored under the exact published
+convention (per-sample unbiased-std z-score of nondimensional fields,
+ported from GLOBE's benchmark with a hand-built-literal test and the
+exact (N−1)/N floor identity). Result: the pooled-vs-per-sample and
+physical-vs-nondimensional differences **largely canceled for
+velocity** and improved surface pressure ~2×; every qualitative
+conclusion survives. Best arm (`mt_nl_pseudo`, 4 seeds), now
+directly comparable to the published table:
+
+| field | mt_nl_pseudo | best Bonnet baseline | Transolver | MARIO | GLOBE |
+|---|---|---|---|---|---|
+| $u_x$ | 0.120–0.134 | 0.0146 | 0.0211 | 0.0015 | 0.00021 |
+| $C_p$ | **0.0176–0.0208** | 0.0329 | 0.0443 | 0.0024 | 0.00029 |
+| $C_p$ surf | 0.59–0.67 | 0.147 | 0.237 | 0.027 | 0.00039 |
+
+Reality, confirmed: volume pressure beats all four dataset baselines
+and Transolver; velocity ~9× behind the baselines; surface pressure
+~4× behind the weakest baseline; GLOBE far ahead everywhere. The
+hoped-for ×10⁻² windfall does not exist — the earlier table's
+conclusions were right despite the convention mismatch, which is
+luck, not method; the convention is now pinned by test and both
+blocks are reported in every eval. H2/H3/band conclusions unaffected
+(within-program). The H4 verdict (one node requeued mid-run; resume
+checkpoints recovering it) remains the gate for the
+continue-vs-refute decision on the GLOBE family-acceptance bar.
+
+## 2026-07-06 — H4 verdict: the control wins, the declaration loses {#sec-nb-h4-verdict}
+
+The capacity-controlled H4 experiment resolved — **against the declared
+scale and for Peter's learnability instinct**, emphatically. Pooled
+convention, scarce test (reference-convention re-score in flight):
+
+| arm | u_x | p | p_surface |
+|---|---|---|---|
+| `mt_nl` (baseline, 5 seeds) | 0.115–0.128 | 0.013–0.018 | 0.93–1.93 |
+| `mt_nl_scale` (declared δ, 4 seeds) | 0.065–0.141 | 0.0065–0.016 | 0.039–0.24 |
+| `mt_nl_members` (control, 3 clean seeds) | **0.018–0.023** | **0.0024–0.0039** | **0.0098–0.022** |
+
+- **The pre-registered falsifier fired in its strongest form**: the
+  control doesn't merely match the declared-scale arm, it beats it
+  ~6× on velocity. The wall deficit was *capacity* (no learned
+  pair-radial pathway at all in the singpair arm), not the missing
+  scale declaration. Plain smooth members, conditioned by the
+  already-present ln Re, learn what the boundary layer needs.
+- **The declared arm likely self-sabotaged numerically**: dividing
+  pair invariants by λ ≈ 5×10⁻⁴ feeds the member MLP features scaled
+  by ~4×10⁶ — un-normalized giant inputs, an optimization handicap.
+  (A cleaner declared variant would log-scale; moot now.)
+- **Magnitudes**: 6× on velocity over baseline, 5× on volume pressure
+  (MARIO-class 0.0024–0.0039), and **60–100× on surface pressure** —
+  the band-0 pathology all but eliminated (0.98→0.01–0.02), consistent
+  with the members carrying near-wall radial structure.
+- **One anomaly, logged**: `mt_nl_members` seed 20 blew up (u_x 0.287)
+  — the arm has a seed-instability tail; seed 21 queued, 5-seed rule
+  applies before any load-bearing claim.
+- **The dictionary story extends coherently**: exact-members-only was
+  best-in-class on *linear* problems (the closed dictionary question);
+  nonlinear problems measurably need learned smooth members — first
+  seen with polynomial members on Liouville, now decisive on RANS.
+
+Follow-ups launched: reference-convention re-score of all 8 H4
+checkpoints; `mt_nl_members_pseudo` (composition of the two confirmed
+wins — pre-registered expectation: independent mechanisms compose),
+seeds 17–19; members seed 21; members full-split (3 seeds + composed
+s17). Decision-rule status: the ladder is *working* (two
+mechanism-driven rungs took velocity from 600× to ~100×-behind GLOBE
+and surface pressure to baseline-beating) — continue climbing, no
+refutation write-up yet. H4-L (task #42) reframes: log-radial features
+are now about *further* gains and generality, not rescuing a failed
+declaration.
+
+## 2026-07-06 — members, re-scored: surface pressure beats everything but GLOBE {#sec-nb-members-rescore}
+
+The reference-convention re-score of the H4 checkpoints (per-sample
+z-score, directly comparable to the published scarce table).
+`mt_nl_members`, 3 clean seeds (seed 20's blowup confirmed under both
+conventions — a real seed-tail, reported, not excluded silently):
+
+| field | mt_nl_members | Bonnet baselines | Transolver | MARIO | GLOBE |
+|---|---|---|---|---|---|
+| $u_x$ | 0.020–0.025 | 0.0146–0.0311 | 0.0211 | 0.0015 | 0.00021 |
+| $C_p$ | **0.0044–0.0057** | 0.033–0.047 | 0.0443 | 0.0024 | 0.00029 |
+| $C_p$ surface | **0.0062–0.0118** | 0.147–0.219 | 0.2367 | 0.027 | 0.00039 |
+
+Standing after three mechanism rungs (schedule → parity → members):
+
+- **Velocity: inside the baseline pack.** Better than PointNet,
+  comparable to Transolver, slightly behind MLP/GraphSAGE/GUNet. H1's
+  velocity clause is not yet met; this is the open front (composition
+  arm and H4-L aim exactly here).
+- **Volume pressure: beats every baseline and Transolver ~8×; within
+  ~2× of MARIO.**
+- **Surface pressure: beats every published model except GLOBE** —
+  2–4× better than MARIO, 20–30× better than the Bonnet baselines and
+  Transolver. From 1,500× behind GLOBE at the pilot to ~20× now.
+- Family-acceptance bar (≤2× GLOBE): still far (velocity ~100×), but
+  the trajectory across rungs is steep and mechanism-driven, so the
+  continue-the-ladder branch of the decision rule holds.
+
+Awaiting: `mt_nl_members_pseudo` composition (3 seeds), members seed
+21, full-split chains. The chapter's results section gets its first
+full write-up when those land.
+
+## 2026-07-07 — DrivAerML pilot verdict: H-ground's falsifier fires {#sec-nb-hground-pilot}
+
+Both pilot arms completed 500 epochs (4-GPU DDP, 10k sampling
+resolution, recipe-default schedule, 1 seed each). **The five-boundary
+arm is *worse*, not better**: val loss 0.096 vs the vehicle-only
+arm's 0.068 (Huber, normalized fields, identical protocol) — and it
+underfits on train too (0.098 vs 0.067), so this is an optimization
+or representation effect, not overfitting. The pre-registered
+falsifier ("five-boundary no better than vehicle-only") fires at
+pilot scale, in its stronger form.
+
+Mechanistic suspect, logged before any diagnostic: **measure-scale
+asymmetry in the attention integrals.** The tunnel boundaries carry
+per-cell areas of 1.2–7.3 m² against the vehicle's 10⁻⁹–10⁻⁵ m² —
+a ~10⁶ ratio — so a few thousand giant far-field panels dominate every
+measure-weighted moment against ~10k tiny vehicle cells. The typed
+one-hots let the model *distinguish* the boundaries, but nothing
+rebalances their quadrature weight. Candidate diagnostics/fixes for
+the next round: per-boundary attention-moment normalization; checking
+whether the allbc arm's error concentrates where ground effect should
+help (underbody/wake) or degrades uniformly (the latter would support
+the measure-domination story).
+
+Caveats: 1 seed/arm, 10k resolution, recipe-default schedule; the
+verdict is provisional at pilot scale. In flight: GeoTransolver under
+the identical harness at matched resolution (the fair-comparison
+anchor, job 4222285) and test-split inference for both arms at 50k
+points (field metrics + force coefficients with a subsample-bias
+caveat; full-resolution reserved for final numbers — the dense decode
+prices it at ~473 GPU-h, another argument for the hierarchical
+backend, task #41).

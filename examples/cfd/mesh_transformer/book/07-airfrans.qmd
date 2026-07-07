@@ -1,0 +1,203 @@
+# AirFRANS: the first industrial benchmark {#sec-airfrans}
+
+::: {.callout-warning title="Status: pre-registered, not yet run"}
+This chapter currently holds the **pre-registration** for the AirFRANS
+campaign: the hypotheses, the arms, the protocol, and the acceptance
+criteria, written before any training run. Results will replace this
+notice as they land; until then, every number quoted here is from the
+published literature, not from this program.
+:::
+
+## Why AirFRANS, and why now
+
+The program's benchmarks so far pose exact-label or solver-labeled
+problems that we designed ourselves. AirFRANS (Bonnet et al., NeurIPS
+2022, arXiv [2212.07564](https://arxiv.org/abs/2212.07564)) is the
+first *external* benchmark: 1,000 cases of steady incompressible
+RANS (OpenFOAM, eddy-viscosity closure) over NACA airfoils spanning
+Reynolds numbers of 2–6 million and angles of attack from $-5°$ to
+$+15°$, with volume fields (velocity, pressure, turbulent viscosity) at
+roughly 180k mesh points per case. It fits the program's scope exactly:
+a steady, homogeneous PDE system, driven entirely from the boundary (an
+airfoil with a no-slip label plus a freestream), with no interior
+forcing and no interior data at the query points — and the governing
+equations are genuinely not knowable, because the turbulence closure is
+an empirical model, not a derived operator.
+
+Two further reasons make it the *right* first industrial benchmark:
+
+1. **It is the rare public dataset whose boundary-value problem is
+   actually recoverable.** The freestream and no-slip conditions are
+   explicit, the label pathologies are small and characterizable
+   (energy-conservation violations at 0.003% of points; near-wall
+   pressure-gradient artifacts), and the working constants
+   ($\rho = 1$, $\nu = 1.56\times10^{-5}$ m²/s) can be verified from
+   the data itself.
+2. **It is GLOBE's flagship result.** The `MeshTransformer` exists to
+   generalize GLOBE (arXiv
+   [2511.15856](https://arxiv.org/abs/2511.15856)) — keep its theory
+   (similarity equivariance, boundary-integral information flow,
+   nondimensionalization), replace its bespoke machinery with
+   transformer-native simplicity. GLOBE's published AirFRANS numbers
+   (roughly 200× lower z-score MSE than the dataset's four reference
+   baselines on the full split; 7–70× below the strongest newer
+   surrogates on the scarce split, at 117k parameters) are therefore
+   the direct test of the program's founding bet: *does the
+   simplification retain the family's advantage?*
+
+One honest framing note, stated before any result: 2D airfoil RANS is
+classically solvable — integral-boundary-layer codes deliver
+XFOIL-quality answers in milliseconds on a CPU. AirFRANS is a
+*benchmark with unusually good labels*, never the use case. The use
+case remains the 3D configurations of @sec-drivaerml, where no XFOIL
+exists.
+
+## The mapping, in this program's terms
+
+AirFRANS poses precisely the mapping this program learns:
+
+$$
+\{\underbrace{\text{airfoil boundary}}_{\text{no-slip, geometry only}},\
+\underbrace{\hat U_\infty}_{\text{global drive vector}},\
+\underbrace{\ln \mathrm{Re}_c}_{\text{global operator scalar}}\}
+\;\longmapsto\;
+\{\Delta U/|U_\infty|,\ C_p,\ \ln(1+\nu_t/\nu)\}
+\ \text{at interior query points.}
+$$
+
+Three declared representation choices, each with a first-principles
+license:
+
+- **The freestream enters as a global drive direction, and the model
+  predicts the disturbance field** $\Delta U = U - U_\infty$. The
+  additive freestream baseline is exact structure (it is the solution
+  at infinite distance), and the disturbance decays — which is what the
+  far-field machinery of @sec-farfield-ladder was built for.
+- **Reynolds number enters as one dimensionless global scalar**,
+  $\ln\mathrm{Re}_c$ — scalars condition kernels freely without
+  breaking equivariance (@sec-pde-theory). This replaces GLOBE's
+  two-reference-length construction (chord plus viscous scale
+  $\delta_{FS} = \sqrt{\nu c/|U_\infty|}$, whose log-ratio is
+  $\tfrac12\ln\mathrm{Re}_c$) with the intrinsic gauge plus one scalar:
+  the same information, less machinery — itself a parsimony test.
+- **The monopole-free deflation stays OFF.** A lifting airfoil carries
+  net circulation — exactly the topological sector that knob
+  structurally kills (@sec-farfield-ladder). Its physics license does
+  not hold here, so the contract is not declared.
+
+## Pre-registered hypotheses and arms
+
+All arms use the reference configuration (one encoder layer, one
+full-width head, two exact kernel members) in
+`field_mode="zero_preserving_nonlinear"` — RANS is nonlinear, so
+drive-linearity is not declared. The arms:
+
+| arm | adds | tests |
+|---|---|---|
+| `mt_nl` | — (baseline) | the plain architecture on industrial RANS |
+| `mt_nl_pseudo` | 2D pseudoscalar (`0o`) sector | **H2**: lift/circulation is handed content |
+| `mt_nl_decay` | `decaying_direct_drive` | **H3**: exterior far-field structure transfers |
+
+- **H1 (baseline competence).** `mt_nl` beats all four AirFRANS
+  reference baselines (MLP, GraphSAGE, PointNet, Graph U-Net) on all
+  four published z-score metrics of the scarce task. *Falsifier: worse
+  than the best of the four on any metric.*
+- **H2 (parity contract).** A lifting flow at angle of attack is
+  handed: reflecting the geometry and freestream flips the sign of
+  circulation and lift. The measured parity floor and its `0o` break
+  (@sec-fluid-suites) predict the pseudo arm improves lift-linked
+  content specifically. *Falsifier: no improvement of `mt_nl_pseudo`
+  over `mt_nl` outside seed noise at 5 seeds.*
+- **H3 (far-field structure).** The decay-envelope contract closed the
+  far-field ladder on exact-label suites (0.694 → 0.090,
+  @sec-farfield-ladder); AirFRANS's exterior domain is its first
+  solver-labeled test. *Falsifier: `mt_nl_decay` no better than
+  `mt_nl` on far-from-body error bands.*
+- **Family acceptance (the head-to-head).** At matched training budget
+  and matched inputs, the best arm lands within **2×** of GLOBE's
+  published scarce-split z-score MSE on velocity and pressure —
+  supporting "the transformer-native simplification retains the
+  family's advantage." *Refutation condition, reported as first-class
+  if hit: worse than GLOBE by more than 5× on any headline metric,
+  which would mean GLOBE's bespoke machinery (hyperlayers, Padé
+  kernels, multi-scale expansion) is load-bearing, not removable.*
+- **Stretch (pre-registered, exploratory).** GLOBE's one partial loss
+  is AoA-extrapolation volume pressure (11.38×10⁻², tied with the
+  dataset baselines). Whether declared contracts help a global
+  flow-topology shift is a genuine coin-flip; we record the prediction
+  "parity typing helps AoA asymmetry" and will report either outcome.
+- **H4 (declared viscous scale — added 2026-07-05 after the banded
+  diagnostic, before the arm was built).** The pilot's error is
+  wall-concentrated: 49% of velocity MSE inside $d/c < 10^{-4}$ (12.5%
+  of points; profile replicated across seeds and arms). The boundary
+  layer lives at $\delta/c \sim \mathrm{Re}^{-1/2} \approx
+  5\times10^{-4}$, a scale our kernels only see through scalar
+  conditioning of a chord-scale radial argument. H4 declares it: an
+  auxiliary per-problem length scale ($\mathrm{Re}^{-1/2}$ times the
+  gauge, similarity-covariant by construction) entering the pair
+  kernels as additional $r/\delta$-normalized invariants.
+  One structural fact sharpens the design (noted before building): the
+  singpair reference arm has *no learned pair-radial pathway* — its
+  only $r$-dependence is the two exact singular members, so there is
+  no carrier for a boundary-layer-scale profile even in principle. The
+  H4 arm therefore adds smooth MLP members fed by the
+  $r/\delta$-scaled invariants, and the experiment carries a
+  **capacity control**: identical MLP members *without* the auxiliary
+  scale. *Pre-registered acceptance: the aux-scale arm reduces band-0
+  velocity MSE ≥2× vs both the singpair baseline AND the
+  plain-members control at 3 seeds under protocol-v1, without outer-band
+  regression. Falsifiers: control ≈ aux-scale (capacity, not
+  declaration, was the deficit) or no band-0 movement at all (deficit
+  is supervision/optimization, not kernel scale).*
+
+## Protocol
+
+- **Tasks, in order:** `scarce` (200 train / 200 test; cheapest, most
+  decorated comparison surface), then `full` (800/200), then the
+  official `reynolds` and `aoa` extrapolation tasks evaluated from the
+  full-trained arms.
+- **Metrics:** z-score-normalized MSE per field, matching the AirFRANS
+  reference implementation exactly (for direct comparability with the
+  published table: the four dataset baselines, GLOBE, Transolver,
+  MARIO, enf2enf), *plus* physically nondimensionalized MAE
+  (velocity/|U∞|, C_p), which we regard as the more honest unit and
+  report alongside.
+- **Loss:** Huber, matching GLOBE's declared choice (robust to the
+  dataset's known label artifacts); stated here so it is not a
+  post-hoc degree of freedom.
+- **Schedule (protocol-v1, adopted 2026-07-05 after the flat-LR
+  pilot, before any v1 run):** cosine from GLOBE's scaled peak
+  ($10^{-3}\sqrt{\text{queries}/2048} = 1.41\times10^{-3}$ at 4,096)
+  to peak/64, GLOBE's endpoints. Disclosure: GLOBE's own scheduler is
+  ReduceLROnPlateau between the same endpoints; we use the
+  deterministic cosine so no validation-coupled control flow enters
+  the protocol, and record the difference in every run report. The
+  flat-LR pilot (protocol-v0) is retained as exploration, reported
+  separately.
+- **Sampling:** full airfoil boundary every step (no boundary
+  downsampling); 4,096 volume query points per iteration
+  (GLOBE-matched).
+- **Label hygiene:** energy-conservation violations ($C_{pt} > 1.02$,
+  ~0.003% of points) are excluded identically from training and
+  evaluation of every arm, and $\rho = 1$ (the verified value, not the
+  mislabeled 1.204). **Protocol amendment, 2026-07-05 (pre-training,
+  before any run):** this section originally also excluded
+  $|\nabla C_p \cdot c| > 20$ rows. The first conversion pass measured
+  that screen deleting 16–23% of each case's points, concentrated in
+  exactly the near-wall region — it is a *gradient-target* hygiene rule
+  in GLOBE's pipeline (a target we do not predict), not a row exclusion.
+  The screen is now recorded per case as a diagnostic count only. No
+  model was trained under the earlier text; the amendment is logged in
+  the notebook.
+- **Seeds:** 3 per arm during the campaign; 5 for any load-bearing
+  claim, per the program's standing rule.
+- **Compute:** single-GPU per seed (the airfoil boundary is ~10³
+  segments — far below the dense-decode wall), seeds packed 4-per-node
+  on B200 nodes.
+
+## Results
+
+*(Pre-registered structure; to be filled from the archive as runs
+land: per-task tables against the published comparison surface, the
+H1–H3 verdicts with seeds and distributions, and the standard
+operator-fidelity columns.)*

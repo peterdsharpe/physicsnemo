@@ -3026,7 +3026,76 @@ hot loop even when the dictionary has no smooth members to consume it —
 roughly ten dead floats per pair on the flagship singular-only and
 singpair arms. A straightforward speed fix (@sec-future).
 
-*History: @sec-nb-iter20.*
+### The wall, broken {#sec-scale-ckpt}
+
+The training-memory wall named above is now **measured closed**. The
+exact fix — `kernel_checkpoint_query_chunks`, backward-pass
+recomputation of each decode chunk's dense pair activations
+(@sec-decoder-role; bitwise identical outputs and gradients, by test) —
+was run against the retained-graph default in a paired measurement:
+same GB200, same seed, same per-point samples, identical protocol.
+
+```{python}
+#| label: tbl-scale-ckpt
+#| output: asis
+import json
+from pathlib import Path
+
+paired = json.load(
+    open(Path("..") / "results" / "scale_checkpoint_paired_2026-07-05.json")
+)
+GB = 1024.0**3
+
+
+def grid_rows(report):
+    rows = {}
+    for g in report["cost"]["grid"]:
+        rows[(g["n_boundary_cells"], g["n_query"])] = g
+    return rows
+
+
+dense = grid_rows(paired["dense"])
+ckpt = grid_rows(paired["checkpointed"])
+lines = [
+    "| boundary cells $\\times$ queries | dense train peak | checkpointed "
+    "train peak | step-time ratio |",
+    "|---|--:|--:|--:|",
+]
+for key in sorted(ckpt):
+    d, c = dense.get(key, {}), ckpt[key]
+    if d.get("train_peak_bytes"):
+        dtxt = f"{d['train_peak_bytes'] / GB:.1f} GiB"
+    else:
+        dtxt = "**OOM** (189 GB)"
+    ctxt = f"{c['train_peak_bytes'] / GB:.1f} GiB"
+    dfb = (d.get("forward_backward_ms") or {}).get("median_ms")
+    cfb = (c.get("forward_backward_ms") or {}).get("median_ms")
+    ratio = f"{cfb / dfb:.1f}$\\times$" if (dfb and cfb) else "—"
+    lines.append(
+        f"| {key[0]:,} $\\times$ {key[1]:,} | {dtxt} | {ctxt} | {ratio} |"
+    )
+lines.append(
+    ": Paired training-memory measurement, GB200, seed 17, identical "
+    "samples per point (archive: `scale_checkpoint_paired_2026-07-05."
+    "json`). {#tbl-scale-ckpt-paired}"
+)
+print("\n".join(lines))
+```
+
+Three facts carry the section's conclusion. The checkpointed peak is
+essentially **query-count-independent at fixed boundary size** — the
+designed behavior, since only one chunk's activations plus the outputs
+are ever retained. The near-product corner (81,920 boundary cells
+$\times$ $10^6$ queries), where the dense graph OOMs a 189 GB device
+and extrapolates to the terabyte scale, **trains in 71.4 GiB — inside
+a single 80 GiB-class accelerator**. And the price is a consistent
+$\approx$1.9$\times$ step time (the recomputed decode forward inside
+backward), with the operator, outputs, and gradients bitwise unchanged.
+Agenda item 2 of @sec-future is thereby closed; the hierarchical decode
+backend remains as the (approximate) speed lever, not a memory
+necessity.
+
+*History: @sec-nb-iter20, @sec-nb-industrial-pivot.*
 
 ## Part V — against the strongest mainstream baseline {#sec-part-baseline}
 

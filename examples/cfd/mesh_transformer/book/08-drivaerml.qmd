@@ -1,0 +1,72 @@
+# DrivAerML: the industrial target {#sec-drivaerml}
+
+::: {.callout-warning title="Status: pre-registered outline, gated"}
+This campaign is **gated on two predecessors**: the training-memory fix
+(gradient checkpointing over decode chunks, whose paired measurement is
+in flight) and the AirFRANS campaign of @sec-airfrans. This chapter
+holds the standing hypothesis and the integration plan; the full
+pre-registration sharpens after AirFRANS lands and will be recorded
+here before any DrivAerML training run.
+:::
+
+## The dataset, and what makes our variant special
+
+DrivAerML is 484 parametrically morphed DrivAer notchback variants with
+time-averaged fields from scale-resolving CFD — surface pressure and
+wall shear on ~8.8M-point vehicle surfaces, plus volume fields. It is
+"steady" in the statistically-stationary sense of the RANS charter:
+the labels are time averages of a turbulent flow, which is exactly the
+setting the program's scope was written for (the closure is empirical;
+the equations are not given).
+
+The variant used here (the internal BC-labeled curation) differs from
+the public distribution in the one way this program cares about most:
+**every case carries the actual boundary-value problem.** Five named,
+BC-typed boundary meshes — the `vehicle`, a `no_slip` ground plane
+beginning just ahead of the car, `slip` tunnel walls and ceiling, an
+`inlet`, and an `outlet` — plus per-case freestream values
+($U_\infty$, $p_\infty$, $\rho_\infty$, $\nu$, $L_{\mathrm{ref}}$) as
+global data. The public release ships only the vehicle geometry, which
+is the interesting *shape* but not the posed *problem*.
+
+## The standing hypothesis
+
+Every model currently wired into the unified external-aero recipe
+consumes only the vehicle surface; the other four labeled boundaries
+sit in the data unused. The `MeshTransformer`'s typed-boundary schema
+consumes all five natively — and the mixed-BC discriminator suite
+(@sec-mixed-bc) measured exactly this setting as the place attention
+earns its keep.
+
+- **H-ground (the headline experiment).** Feeding all five typed
+  boundaries beats the vehicle-only formulation on surface pressure
+  near the underbody and wake, because ground effect is real physics
+  that the vehicle-only formulation must hallucinate from shape priors.
+  *Falsifier: five-boundary arm no better than vehicle-only at matched
+  budget and matched sampling — which would mean the fixed far
+  boundaries are adequately encoded in the freestream vector alone,
+  itself a publishable negative.*
+
+## Integration plan
+
+The recipe is `DomainMesh`-native and registry-free: a new model is one
+YAML under `conf/model/` declaring `forward_kwargs` resolved from
+DomainMesh paths. The `MeshTransformer` enters as a mesh-native model
+(the same pattern the in-tree GLOBE configs use), with two arms:
+
+1. `mesh_transformer_vehicle` — `boundaries.vehicle` only, matching
+   every existing model's information diet (the fair-comparison arm);
+2. `mesh_transformer_allbc` — all five typed boundaries (the
+   H-ground arm).
+
+Surface task first (pressure + wall shear at surface centroids;
+force-coefficient integration comes free from the recipe's inference
+path), volume task second. Training at the recipe's sampling
+resolution (50k–200k surface points, batch 1) requires the
+checkpointed decode — the wall and its fix are @sec-scale's story,
+whose paired B200 measurement accompanies this campaign.
+
+## Results
+
+*(To be filled from the archive; the pre-registered acceptance
+criteria land here first, before any training run.)*

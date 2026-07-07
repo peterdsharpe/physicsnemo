@@ -47,13 +47,17 @@ including one live bug found (and confirmed) during figure generation.
   external rows (GLOBE, radius-free GeoTransolver) were deliberately
   under-optimized controls at 1,000 updates and are superseded as
   evidence.
-- **The cost curves are measured and the scaling wall is named.** The
-  cost law is the designed dense $O(QS)$ ($R^2$ = 0.999), the encoder
-  is not the wall, and inference fits one A100 at the product scope
-  ($\sim 10^5$ boundary elements $\times$ $10^6$ queries) today; the
-  wall is training memory, $\approx$742 GiB, with two characterized
-  fixes — checkpointing over query chunks (exact) or a hierarchical
-  backend (approximate) (@sec-scale).
+- **The cost curves are measured, the scaling wall was named — and is
+  now measured closed.** The cost law is the designed dense $O(QS)$
+  ($R^2$ = 0.999), the encoder is not the wall, and inference fits one
+  A100 at the product scope ($\sim 10^5$ boundary elements $\times$
+  $10^6$ queries). Training memory — $\approx$742 GiB retained-graph
+  extrapolated on the A100 fit, OOM on a 189 GB GB200 at the measured
+  corners — is closed by the exact checkpointing fix: the near-product
+  corner trains in **71.4 GiB** at $\approx$1.9$\times$ step time, with
+  bitwise-unchanged outputs and gradients (@sec-scale-ckpt,
+  @sec-decoder-role; paired archive
+  `scale_checkpoint_paired_2026-07-05.json`).
 - **Where attention earns its keep is settled in both directions.** The
   encoder-stress suites exist with results (@sec-encoder-stress,
   @sec-single-layer); the encoder-depth null is confirmed on the
@@ -188,10 +192,13 @@ numbers in @sec-benchmarks. What remains live:
    @sec-transolver-dataset as the label pipeline, and the
    operator-fidelity columns no longer optional (@sec-part-ns holds the
    first rung, Navier–Stokes).
-2. **Product-scale training memory** — gated on one of the two
-   characterized fixes: gradient checkpointing over query chunks
-   (exact) or a hierarchical decode backend (approximate); engineering,
-   not open research (@sec-scale).
+2. **Hierarchical decode backend** — now a *speed* lever, not a memory
+   necessity: the training-memory wall is measured closed
+   (@sec-scale-ckpt), and the remaining cost of the dense decode is
+   wall-clock ($\approx$978 s per product-scope forward,
+   $\approx$1.9$\times$ that for a checkpointed training step). An
+   FMM-style backend with the dense implementation as its oracle is
+   the standing answer.
 3. **Strong-form residuals on the original suites** — the open problem
    behind the fidelity columns: $L^2$-fit training fits fields, not
    operators (@sec-fidelity-columns).

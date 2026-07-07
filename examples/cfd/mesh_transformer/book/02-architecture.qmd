@@ -310,10 +310,41 @@ $r^{-2}$ drive envelope, a monopole-free single layer) are **opt-in**,
 licensed per problem class, and the reference configuration below is
 unchanged (@sec-farfield-ladder).
 
+One further opt-in contract extends the smooth members rather than the
+exact ones: a **declared auxiliary length scale**
+(`kernel_auxiliary_scale_key`). Some problems carry a second physical
+scale the reference gauge cannot see — on AirFRANS the boundary layer
+lives at $\delta/c \sim \mathrm{Re}^{-1/2} \approx 5\times10^{-4}$, and
+the pilot's velocity error concentrated exactly there (49% of MSE inside
+$d/c < 10^{-4}$) while every pair-radial feature was chord-scale. The
+contract declares it: a rank-0 global operator field supplies the
+dimensionless per-case ratio $\lambda = \delta/L_{\mathrm{ref}}$ (e.g.
+$\mathrm{Re}^{-1/2}$), and the decoder appends a second copy of its pair
+invariants rescaled to the $\delta$ gauge, feeding the learned smooth
+members only — its carrier is the member MLP (so the knob requires MLP
+members, which the reference configuration omits) and the exact members
+are untouched. Because $r$ is already gauge-normalized and $\lambda$ is a
+declared dimensionless input, similarity covariance holds by
+construction. Licensed per problem class, exactly when such a scale is
+physically known; default off.
+
 Because each query's decode reads only the cached encoding and its own
 position, predictions are **query-independent** — bitwise, by test: asking
 for one point or a million, in any order, gives identical values at shared
 points. Evaluation streams and parallelizes trivially.
+
+The same independence sets the decode's cost and its one training-memory
+knob. The dense evaluation is $O(N_qN_s)$ work, chunked over queries so
+the *forward* peak is one chunk; during training, however, autograd
+retains every chunk's pair activations, and that retained $O(N_qN_s)$ is
+the measured product-scope wall (@sec-scale). The
+`kernel_checkpoint_query_chunks` knob recomputes each chunk's activations
+in the backward pass instead of retaining them — and because the decoder
+is RNG-free and shape-deterministic, the recomputation is *bitwise*: the
+knob changes what is stored, never the operator, its outputs, or any
+gradient (asserted by test in all field modes, with the pseudo sector,
+and in 3D). The price is one extra decode forward inside each backward.
+Default off.
 
 ## What the architecture refuses to do
 
