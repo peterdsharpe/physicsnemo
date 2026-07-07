@@ -302,9 +302,16 @@ def run_cost_sweep(
 ) -> list[dict]:
     """Sweep the (resolution x query-count) grid with per-point OOM guards."""
 
+    # Iterate in the CALLER-GIVEN order (largest-first improves walltime-kill
+    # resilience), while the per-point sample seed stays a function of the
+    # subdivision's ascending-sorted position -- so any iteration order
+    # reproduces the exact samples of an ascending-order run and paired arms
+    # measure identical geometry.
+    ascending = sorted(subdivisions)
     grid = []
-    for point_index, s in enumerate(sorted(subdivisions)):
-        for q in sorted(queries):
+    for s in subdivisions:
+        point_index = ascending.index(s)
+        for q in queries:
             grid.append(
                 measure_grid_point(
                     model,
@@ -316,21 +323,10 @@ def run_cost_sweep(
                     repeats=repeats,
                 )
             )
-            print(
-                json.dumps(
-                    {
-                        k: grid[-1].get(k)
-                        for k in (
-                            "subdivisions",
-                            "n_boundary_cells",
-                            "n_query",
-                            "status",
-                            "oom_stages",
-                        )
-                    }
-                ),
-                flush=True,
-            )
+            # Stream the FULL record: if a walltime kill lands before the
+            # end-of-run report is written, each completed point remains
+            # recoverable from the log alone.
+            print("GRID_RECORD " + json.dumps(grid[-1]), flush=True)
     return grid
 
 
@@ -838,6 +834,7 @@ def run_study(
     warmup: int = 1,
     repeats: int = 3,
     eval_cases: int = 6,
+    kernel_checkpoint: bool = False,
 ) -> dict:
     if mode not in ("cost", "transfer", "all"):
         raise ValueError("mode must be 'cost', 'transfer', or 'all'")
@@ -848,10 +845,17 @@ def run_study(
 
     torch.manual_seed(seed)
     model = build_scale_model().to(device_obj)
+    if kernel_checkpoint:
+        # The training-memory arm: recompute decode chunks in backward
+        # instead of retaining every chunk's dense pair activations.  Set on
+        # the built model so the checkpointed arm's parameters are seeded
+        # and initialized identically to the retained-graph arm.
+        model.model.kernel_decoder.checkpoint_query_chunks = True
     report: dict = {
         "study": "scale_study",
         "model": "mesh_transformer_kernel_singpair_enc1",
         "mode": mode,
+        "kernel_checkpoint_query_chunks": kernel_checkpoint,
         "seed": seed,
         "parameters": sum(p.numel() for p in model.parameters()),
         "device": str(device_obj),
@@ -899,6 +903,8 @@ def run_study(
 
     report["elapsed_seconds"] = time.time() - start
     suffix = "" if mode == "all" else f"_{mode}"
+    if kernel_checkpoint:
+        suffix += "_ckpt"
     (out / f"scale_study{suffix}_seed{seed}.json").write_text(
         json.dumps(report, indent=2)
     )
@@ -919,6 +925,16 @@ if __name__ == "__main__":
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--eval-cases", type=int, default=6)
+    parser.add_argument(
+        "--kernel-checkpoint",
+        action="store_true",
+        help=(
+            "Measure the checkpointed-decode arm "
+            "(kernel_checkpoint_query_chunks=True): identical operator and "
+            "parameters, backward recomputes decode chunks instead of "
+            "retaining their dense pair activations."
+        ),
+    )
     arguments = parser.parse_args()
     result = run_study(
         mode=arguments.mode,
@@ -931,6 +947,7 @@ if __name__ == "__main__":
         warmup=arguments.warmup,
         repeats=arguments.repeats,
         eval_cases=arguments.eval_cases,
+        kernel_checkpoint=arguments.kernel_checkpoint,
     )
     summary: dict = {"study": result["study"], "mode": result["mode"]}
     if "cost" in result:
