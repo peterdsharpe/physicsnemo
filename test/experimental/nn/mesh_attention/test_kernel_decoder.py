@@ -33,6 +33,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+    PairInvariantFeatures,
     exact_double_layer_member,
     exact_single_layer_member,
 )
@@ -1268,9 +1269,7 @@ def test_bounded_output_gate_knob_default_is_bitwise_noop(device):
         other_state = other.state_dict()
         assert list(reference_state) == list(other_state)
         for name, expected in reference_state.items():
-            torch.testing.assert_close(
-                other_state[name], expected, rtol=0.0, atol=0.0
-            )
+            torch.testing.assert_close(other_state[name], expected, rtol=0.0, atol=0.0)
 
     queries = torch.tensor(
         [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
@@ -1458,7 +1457,9 @@ def test_bounded_query_geometry_changes_only_the_learned_coefficient_path(device
     potential = bounded(domain).point_data["potential"]
     potential.square().sum().backward()
     gradients = [
-        parameter.grad for parameter in bounded.parameters() if parameter.grad is not None
+        parameter.grad
+        for parameter in bounded.parameters()
+        if parameter.grad is not None
     ]
     assert gradients
     assert all(torch.isfinite(gradient).all() for gradient in gradients)
@@ -1840,8 +1841,543 @@ def test_monopole_free_single_layer_kills_the_monopole_tail_structurally(device)
 
 
 # ---------------------------------------------------------------------------
-# The angular-order capability that motivates the kernel decoder.
+# Declared auxiliary length scale: the per-problem r/delta contract.
+# Motivation (H4, book/07-airfrans.qmd): on AirFRANS the velocity error is
+# wall-concentrated (49% of MSE inside d/c < 1e-4) because the boundary layer
+# lives at delta/c ~ Re^-1/2 ~ 5e-4 -- a scale the kernels saw only through
+# per-source scalar conditioning of chord-scale radial arguments.  The knob
+# declares lambda = delta/L_ref as a dimensionless global operator input and
+# duplicates the pair invariants at the delta gauge, feeding the smooth-member
+# MLP only.
 # ---------------------------------------------------------------------------
+
+
+def _aux_scale_model(device, *, seed: int, **overrides) -> MeshTransformer:
+    """A disk model with the declared-auxiliary-scale contract active."""
+    return _disk_model(
+        "kernel",
+        device,
+        seed=seed,
+        global_field_ranks={"operator": {"viscous_scale": 0}},
+        kernel_auxiliary_scale_key="viscous_scale",
+        **overrides,
+    )
+
+
+def _viscous_disk_domain(
+    n_boundary: int,
+    query_points: torch.Tensor,
+    boundary_values: torch.Tensor,
+    viscous_scale: float,
+) -> DomainMesh:
+    boundary = _circle_boundary(
+        n_boundary, query_points.device, dtype=query_points.dtype
+    )
+    return DomainMesh(
+        interior=Mesh(points=query_points),
+        boundaries={
+            "disk": boundary.with_data(cell_data={"boundary_value": boundary_values})
+        },
+        global_data={
+            "viscous_scale": torch.tensor(
+                viscous_scale,
+                dtype=query_points.dtype,
+                device=query_points.device,
+            )
+        },
+    )
+
+
+def _aux_decoder(device, *, seed: int, auxiliary_scale: bool, **overrides):
+    """A small linear kernel decoder for direct auxiliary-scale contracts."""
+    from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+        LinearKernelBasisCrossDecoder,
+    )
+
+    torch.manual_seed(seed)
+    kwargs = dict(
+        n_spatial_dims=2,
+        operator_scalar_dim=3,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        heads=2,
+        mlp_members=4,
+        mlp_hidden_dim=8,
+    )
+    kwargs.update(overrides)
+    decoder = LinearKernelBasisCrossDecoder(
+        auxiliary_scale=auxiliary_scale, **kwargs
+    ).to(device=device, dtype=torch.float64)
+    decoder.accumulation_dtype = torch.float64
+    return decoder
+
+
+def _aux_decoder_states(device, *, seed: int, n_cells: int = 16):
+    from physicsnemo.experimental.nn.mesh_attention.attention import (
+        ScalarVectorState,
+    )
+
+    mesh = _circle_boundary(n_cells, device)
+    generator = torch.Generator().manual_seed(seed)
+
+    def randn(*shape: int) -> torch.Tensor:
+        return torch.randn(*shape, generator=generator, dtype=torch.float64).to(device)
+
+    operator = ScalarVectorState(randn(n_cells, 3), randn(n_cells, 2, 2))
+    drive = ScalarVectorState(randn(n_cells, 4), randn(n_cells, 2, 2))
+    return mesh, operator, drive
+
+
+def test_auxiliary_scale_knob_default_is_bitwise_noop(device):
+    """Explicitly passing the default knob must not change anything.
+
+    Mirrors ``test_polynomial_member_knob_default_is_bitwise_noop``: with
+    ``kernel_auxiliary_scale_key=None`` spelled out, same seed gives the same
+    parameter tensors in the same order and bitwise identical outputs.  Both
+    models declare the ``viscous_scale`` operator field (so the encoder
+    conditioning is identical); only the decoder contract differs by default.
+    """
+    common = dict(global_field_ranks={"operator": {"viscous_scale": 0}})
+    reference = _disk_model("kernel", device, seed=347, **common)
+    explicit = _disk_model(
+        "kernel", device, seed=347, kernel_auxiliary_scale_key=None, **common
+    )
+    assert reference.kernel_auxiliary_scale_key is None
+    assert explicit.kernel_auxiliary_scale_key is None
+    assert reference.kernel_decoder.auxiliary_scale is False
+
+    reference_state = reference.state_dict()
+    explicit_state = explicit.state_dict()
+    assert list(reference_state) == list(explicit_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(explicit_state[name], expected, rtol=0.0, atol=0.0)
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(348)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _viscous_disk_domain(16, queries, values, 5.0e-2)
+    with torch.no_grad():
+        expected = reference(domain).point_data["potential"]
+        actual = explicit(domain).point_data["potential"]
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+    # The knob-off cache carries no auxiliary scale (old caches stay valid).
+    assert reference.encode(domain).kernel_cache.auxiliary_scale is None
+
+
+def test_auxiliary_scale_decoder_default_is_bitwise_noop(device):
+    """The decoder-level knob default must also be a bitwise no-op.
+
+    Same seed, explicit ``auxiliary_scale=False`` versus the unstated
+    default: identical parameter tensors in the same order (the knob at its
+    default adds no parameters and leaves the MLP input width alone) and
+    bitwise identical messages from the same cache.
+    """
+    reference = _aux_decoder(device, seed=349, auxiliary_scale=False)
+    torch.manual_seed(349)
+    from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+        LinearKernelBasisCrossDecoder,
+    )
+
+    implicit = LinearKernelBasisCrossDecoder(
+        n_spatial_dims=2,
+        operator_scalar_dim=3,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        heads=2,
+        mlp_members=4,
+        mlp_hidden_dim=8,
+    ).to(device=device, dtype=torch.float64)
+    implicit.accumulation_dtype = torch.float64
+    assert reference.auxiliary_scale is False
+    assert implicit.auxiliary_scale is False
+    # Base pair-feature width: 2 + operator_vector_dim, undoubled.
+    assert reference.member_mlp[0].weight.shape[-1] == 2 + 2
+
+    reference_state = reference.state_dict()
+    implicit_state = implicit.state_dict()
+    assert list(reference_state) == list(implicit_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(implicit_state[name], expected, rtol=0.0, atol=0.0)
+
+    mesh, operator, drive = _aux_decoder_states(device, seed=350)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.7, -0.4], [1.5, 0.6]], dtype=torch.float64
+    ).to(device)
+    with torch.no_grad():
+        expected = reference(
+            queries, reference.build_source_cache(mesh, operator, drive)
+        )
+        actual = implicit(queries, implicit.build_source_cache(mesh, operator, drive))
+    torch.testing.assert_close(actual.scalars, expected.scalars, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(actual.vectors, expected.vectors, rtol=0.0, atol=0.0)
+
+
+def test_auxiliary_scale_validation_errors(device):
+    """The contract is validated at construction with clear errors."""
+    base = dict(
+        n_spatial_dims=2,
+        output_field_ranks={"potential": 0},
+        boundary_field_ranks={"disk": {"drive": {"boundary_value": 0}}},
+        query_decoder="kernel",
+    )
+    with pytest.raises(TypeError, match="non-empty string or None"):
+        MeshTransformer(**base, kernel_auxiliary_scale_key="")
+    # The key must name a DECLARED global operator field...
+    with pytest.raises(ValueError, match="declared rank-0 global operator"):
+        MeshTransformer(**base, kernel_auxiliary_scale_key="viscous_scale")
+    # ... with the operator role (a drive declaration is the wrong physics) ...
+    with pytest.raises(ValueError, match="'operator' role"):
+        MeshTransformer(
+            **base,
+            global_field_ranks={"drive": {"viscous_scale": 0}},
+            kernel_auxiliary_scale_key="viscous_scale",
+        )
+    # ... and rank 0 (a dimensionless scalar ratio, not a vector).
+    with pytest.raises(ValueError, match="rank-0"):
+        MeshTransformer(
+            **base,
+            global_field_ranks={"operator": {"viscous_scale": 1}},
+            kernel_auxiliary_scale_key="viscous_scale",
+        )
+    # The moment decoder has no pair-radial argument to rescale.
+    with pytest.raises(ValueError, match="requires query_decoder='kernel'"):
+        MeshTransformer(
+            **{**base, "query_decoder": "moment"},
+            global_field_ranks={"operator": {"viscous_scale": 0}},
+            kernel_auxiliary_scale_key="viscous_scale",
+        )
+    # Without MLP members the auxiliary invariants have no carrier.
+    with pytest.raises(ValueError, match="requires mlp_members > 0"):
+        MeshTransformer(
+            **base,
+            global_field_ranks={"operator": {"viscous_scale": 0}},
+            kernel_auxiliary_scale_key="viscous_scale",
+            kernel_mlp_members=0,
+        )
+    # Decoder-level: a knob-on decoder demands the scale tensor, a knob-off
+    # decoder refuses to silently ignore one.
+    on = _aux_decoder(device, seed=351, auxiliary_scale=True)
+    off = _aux_decoder(device, seed=351, auxiliary_scale=False)
+    mesh, operator, drive = _aux_decoder_states(device, seed=352)
+    with pytest.raises(ValueError, match="requires the declared per-case scale"):
+        on.build_source_cache(mesh, operator, drive)
+    with pytest.raises(ValueError, match="0-dimensional tensor"):
+        on.build_source_cache(
+            mesh,
+            operator,
+            drive,
+            auxiliary_scale=torch.ones(2, dtype=torch.float64, device=device),
+        )
+    with pytest.raises(ValueError, match="auxiliary_scale=False"):
+        off.build_source_cache(
+            mesh,
+            operator,
+            drive,
+            auxiliary_scale=torch.tensor(0.1, dtype=torch.float64, device=device),
+        )
+    # A knob-on decoder rejects a cache built without the contract.
+    with pytest.raises(ValueError, match="no declared auxiliary scale"):
+        on(
+            torch.tensor([[0.2, 0.1]], dtype=torch.float64, device=device),
+            off.build_source_cache(mesh, operator, drive),
+        )
+
+
+def test_auxiliary_scale_rejects_nonpositive_lambda(device):
+    """A non-positive or non-finite declared scale is a caller error."""
+    model = _aux_scale_model(device, seed=353)
+    queries = torch.tensor([[0.2, 0.1], [0.1, -0.3]], dtype=torch.float64).to(device)
+    generator = torch.Generator().manual_seed(354)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    for bad in (0.0, -0.05, math.nan, math.inf):
+        domain = _viscous_disk_domain(16, queries, values, bad)
+        with pytest.raises(ValueError, match="finite and positive"):
+            model.encode(domain)
+    # Decoder level: same contract on the raw tensor.
+    decoder = _aux_decoder(device, seed=355, auxiliary_scale=True)
+    mesh, operator, drive = _aux_decoder_states(device, seed=356)
+    with pytest.raises(ValueError, match="finite and positive"):
+        decoder.build_source_cache(
+            mesh,
+            operator,
+            drive,
+            auxiliary_scale=torch.tensor(0.0, dtype=torch.float64, device=device),
+        )
+
+
+def test_auxiliary_invariants_at_unit_lambda_equal_base_invariants(device):
+    """At lambda = 1 the auxiliary block IS the base block, bitwise.
+
+    Direct :class:`PairInvariantFeatures` inspection (the model-level arms
+    are deliberately NOT compared against a duplicated-width base model:
+    different parameter draws make equality meaningless).  Division by one
+    is exact in IEEE arithmetic, so the duplicated block must match
+    bitwise; a non-unit lambda must divide each invariant by its declared
+    power of lambda (a/lambda^2, b/lambda, v.r/lambda) exactly.
+    """
+    generator = torch.Generator().manual_seed(357)
+    queries = torch.randn(5, 2, generator=generator, dtype=torch.float64).to(device)
+    centroids = torch.randn(7, 2, generator=generator, dtype=torch.float64).to(device)
+    normals = torch.randn(7, 2, generator=generator, dtype=torch.float64)
+    normals = (normals / normals.norm(dim=-1, keepdim=True)).to(device)
+    vectors = torch.randn(7, 3, 2, generator=generator, dtype=torch.float64).to(device)
+
+    plain = PairInvariantFeatures.compute(queries, centroids, normals, vectors)
+    assert plain.auxiliary_squared_distance is None
+    assert plain.stacked().shape == (5, 7, 5)
+
+    unit = PairInvariantFeatures.compute(
+        queries,
+        centroids,
+        normals,
+        vectors,
+        auxiliary_scale=torch.tensor(1.0, dtype=torch.float64, device=device),
+    )
+    # Base block bitwise untouched by the auxiliary computation.
+    torch.testing.assert_close(
+        unit.squared_distance, plain.squared_distance, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        unit.normal_alignment, plain.normal_alignment, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        unit.vector_alignments, plain.vector_alignments, rtol=0.0, atol=0.0
+    )
+    # Auxiliary block equals the base block at lambda = 1, bitwise.
+    torch.testing.assert_close(
+        unit.auxiliary_squared_distance, unit.squared_distance, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        unit.auxiliary_normal_alignment, unit.normal_alignment, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        unit.auxiliary_vector_alignments, unit.vector_alignments, rtol=0.0, atol=0.0
+    )
+    stacked = unit.stacked()
+    assert stacked.shape == (5, 7, 10)
+    torch.testing.assert_close(stacked[..., 5:], stacked[..., :5], rtol=0.0, atol=0.0)
+
+    # Declared powers of lambda: a/lambda^2, b/lambda, v.r/lambda, exactly.
+    lam = torch.tensor(0.5, dtype=torch.float64, device=device)
+    scaled = PairInvariantFeatures.compute(
+        queries, centroids, normals, vectors, auxiliary_scale=lam
+    )
+    torch.testing.assert_close(
+        scaled.auxiliary_squared_distance,
+        plain.squared_distance / 0.25,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        scaled.auxiliary_normal_alignment,
+        plain.normal_alignment / 0.5,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        scaled.auxiliary_vector_alignments,
+        plain.vector_alignments / 0.5,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_auxiliary_scale_responds_to_lambda_and_feeds_only_the_mlp(device):
+    """Same weights, two lambdas: different messages -- through the MLP only.
+
+    Contracts: (i) the source cache is lambda independent everywhere except
+    the declared scale itself (the coefficient map and value projections
+    never read lambda); (ii) with live MLP members, two lambdas give
+    different messages; (iii) with the MLP's final read-out zeroed, the two
+    lambdas give bitwise IDENTICAL messages -- the exact singular and
+    polynomial members carry no lambda path whatsoever; (iv) gradients flow
+    through the lambda-scaled path (including to lambda itself) and stay
+    finite; (v) bitwise query-subset independence survives with the knob on.
+    """
+    decoder = _aux_decoder(
+        device, seed=359, auxiliary_scale=True, include_polynomial_members=True
+    )
+    mesh, operator, drive = _aux_decoder_states(device, seed=360)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.7, -0.4], [1.5, 0.6], [-0.8, 0.3]], dtype=torch.float64
+    ).to(device)
+    lam_small = torch.tensor(5.0e-2, dtype=torch.float64, device=device)
+    lam_large = torch.tensor(0.5, dtype=torch.float64, device=device)
+
+    cache_small = decoder.build_source_cache(
+        mesh, operator, drive, auxiliary_scale=lam_small
+    )
+    cache_large = decoder.build_source_cache(
+        mesh, operator, drive, auxiliary_scale=lam_large
+    )
+    # (i) Everything cached upstream of the pair evaluation is lambda free.
+    for name in ("coefficients", "value_scalars", "value_vectors", "weights"):
+        torch.testing.assert_close(
+            getattr(cache_small, name),
+            getattr(cache_large, name),
+            rtol=0.0,
+            atol=0.0,
+        )
+    torch.testing.assert_close(
+        cache_small.auxiliary_scale, lam_small, rtol=0.0, atol=0.0
+    )
+
+    with torch.no_grad():
+        message_small = decoder(queries, cache_small)
+        message_large = decoder(queries, cache_large)
+    # (ii) The declared scale is live.
+    assert not torch.allclose(message_small.scalars, message_large.scalars)
+
+    # (iv) Finite gradients through the lambda-scaled path, lambda included.
+    lam = torch.tensor(0.1, dtype=torch.float64, device=device, requires_grad=True)
+    cache = decoder.build_source_cache(mesh, operator, drive, auxiliary_scale=lam)
+    message = decoder(queries, cache)
+    loss = message.scalars.square().sum() + message.vectors.square().sum()
+    loss.backward()
+    assert lam.grad is not None
+    assert torch.isfinite(lam.grad).all()
+    assert float(lam.grad.abs()) > 0.0
+    for name, parameter in decoder.named_parameters():
+        if parameter.numel() == 0:
+            continue
+        assert parameter.grad is not None, f"missing gradient for {name}"
+        assert torch.isfinite(parameter.grad).all(), f"non-finite gradient for {name}"
+
+    # (v) Bitwise query-subset independence with the knob on.
+    subset = torch.tensor([3, 1], device=device)
+    with torch.no_grad():
+        message_subset = decoder(queries[subset], cache_small)
+    torch.testing.assert_close(
+        message_subset.scalars, message_small.scalars[subset], rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        message_subset.vectors, message_small.vectors[subset], rtol=0.0, atol=0.0
+    )
+
+    # (iii) Kill the MLP read-out: lambda must become bitwise inert, because
+    # the auxiliary invariants feed nothing else.
+    with torch.no_grad():
+        decoder.member_mlp[-1].weight.zero_()
+        silent_small = decoder(queries, cache_small)
+        silent_large = decoder(queries, cache_large)
+    torch.testing.assert_close(
+        silent_large.scalars, silent_small.scalars, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        silent_large.vectors, silent_small.vectors, rtol=0.0, atol=0.0
+    )
+
+
+def test_auxiliary_scale_arm_constructs_trains_and_stays_row_stable(device):
+    """The model-level aux-scale arm: constructs, trains, stays row stable.
+
+    The MLP input width doubles (the only parameter-shape change), the
+    member count is unchanged (the knob adds inputs, not members), every
+    nonzero-width parameter receives a finite gradient through the
+    lambda-scaled path, and bitwise query-subset independence survives.
+    """
+    model = _aux_scale_model(device, seed=361, query_chunk_size=1)
+    decoder = model.kernel_decoder
+    assert decoder.auxiliary_scale is True
+    assert decoder.n_members == 1 + 3 + decoder.mlp_members
+    # Linear decoder pair features: 2 + operator_vector_dim (= 3), doubled.
+    assert decoder.member_mlp[0].weight.shape[-1] == 2 * (2 + 3)
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(362)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _viscous_disk_domain(16, queries, values, 5.0e-2)
+
+    potential = model(domain).point_data["potential"]
+    assert potential.shape == (4,)
+    assert torch.isfinite(potential).all()
+    potential.square().sum().backward()
+    for name, parameter in model.named_parameters():
+        if parameter.numel() == 0:
+            continue
+        assert parameter.grad is not None, f"missing gradient for {name}"
+        assert torch.isfinite(parameter.grad).all(), f"non-finite gradient for {name}"
+
+    subset = torch.tensor([2, 0], device=device)
+    with torch.no_grad():
+        encoded = model.encode(domain)
+        assert encoded.kernel_cache.auxiliary_scale is not None
+        message_full = model.kernel_decoder(queries, encoded.kernel_cache)
+        message_subset = model.kernel_decoder(queries[subset], encoded.kernel_cache)
+        full = model.decode(encoded).point_data["potential"]
+        partial = model.decode(encoded, Mesh(points=queries[subset]))
+    torch.testing.assert_close(
+        message_subset.scalars, message_full.scalars[subset], rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        partial.point_data["potential"], full[subset], rtol=0.0, atol=0.0
+    )
+
+    # Same weights, two declared lambdas: the model output responds.
+    other = _viscous_disk_domain(16, queries, values, 2.0e-1)
+    with torch.no_grad():
+        assert not torch.allclose(
+            model(other).point_data["potential"],
+            model(domain).point_data["potential"],
+        )
+
+
+def test_auxiliary_scale_similarity_contract(device):
+    """Rotate, translate, and scale the geometry at fixed lambda: same output.
+
+    The similarity contract of the auxiliary invariants: r is normalized by
+    the (intrinsic) reference length before the lambda rescale and lambda is
+    a dimensionless declared input, so a similarity map of the geometry with
+    the SAME declared lambda must reproduce the prediction to the same tight
+    tolerance as the existing model-level similarity tests.
+    """
+    model = _aux_scale_model(device, seed=363)
+    generator = torch.Generator().manual_seed(364)
+    values = torch.randn(24, generator=generator, dtype=torch.float64).to(device)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.6, 0.2]], dtype=torch.float64
+    ).to(device)
+
+    def build_domain(
+        *, angle: float = 0.0, scale: float = 1.0, translation=(0.0, 0.0)
+    ) -> DomainMesh:
+        boundary = _circle_boundary(24, device)
+        rotation = torch.tensor(
+            [
+                [math.cos(angle), -math.sin(angle)],
+                [math.sin(angle), math.cos(angle)],
+            ],
+            dtype=torch.float64,
+            device=device,
+        )
+        offset = torch.tensor(translation, dtype=torch.float64, device=device)
+        points = scale * boundary.points @ rotation.T + offset
+        transformed_queries = scale * queries @ rotation.T + offset
+        boundary = Mesh(points=points, cells=boundary.cells).with_data(
+            cell_data={"boundary_value": values}
+        )
+        return DomainMesh(
+            interior=Mesh(points=transformed_queries),
+            boundaries={"disk": boundary},
+            global_data={
+                "viscous_scale": torch.tensor(
+                    7.0e-2, dtype=torch.float64, device=device
+                )
+            },
+        )
+
+    with torch.no_grad():
+        original = model(build_domain()).point_data["potential"]
+        transformed = model(
+            build_domain(angle=0.37, scale=3.7, translation=(8.2, -4.3))
+        ).point_data["potential"]
+    torch.testing.assert_close(transformed, original, rtol=2.0e-10, atol=2.0e-11)
 
 
 def _ring_fourier_high_order_ratio(
@@ -1900,3 +2436,306 @@ def test_random_weight_kernel_decoder_produces_high_angular_orders(device, seed)
     assert moment_ratio <= 2.0e-11
     assert kernel_ratio >= 1.0e-6
     assert kernel_ratio > 1.0e3 * moment_ratio
+
+
+# ---------------------------------------------------------------------------
+# Gradient checkpointing over query chunks (the training-memory knob).
+# ---------------------------------------------------------------------------
+
+
+def test_checkpoint_query_chunks_knob_default_is_bitwise_noop(device):
+    """Explicitly passing the default knob must not change anything, and the
+    knob adds no parameters (checkpointing changes what autograd retains,
+    never the operator or its parameterization)."""
+    reference = _disk_model("kernel", device, seed=311)
+    explicit = _disk_model(
+        "kernel", device, seed=311, kernel_checkpoint_query_chunks=False
+    )
+    checkpointed = _disk_model(
+        "kernel", device, seed=311, kernel_checkpoint_query_chunks=True
+    )
+    assert reference.kernel_decoder.checkpoint_query_chunks is False
+    assert explicit.kernel_decoder.checkpoint_query_chunks is False
+    assert checkpointed.kernel_decoder.checkpoint_query_chunks is True
+
+    reference_state = reference.state_dict()
+    for other in (explicit, checkpointed):
+        other_state = other.state_dict()
+        assert list(reference_state) == list(other_state)
+        for name, expected in reference_state.items():
+            torch.testing.assert_close(other_state[name], expected, rtol=0.0, atol=0.0)
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(312)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+    with torch.no_grad():
+        expected = reference(domain).point_data["potential"]
+        for other in (explicit, checkpointed):
+            actual = other(domain).point_data["potential"]
+            torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+
+
+@pytest.mark.parametrize(
+    "field_mode", ["linear", "zero_preserving_nonlinear", "quadratic"]
+)
+def test_checkpointed_training_step_is_bitwise_identical_2d(device, field_mode):
+    """Checkpointing must change nothing observable about a training step.
+
+    The decoder is RNG-free and every chunk op is shape-deterministic, so the
+    backward-pass recomputation reproduces the retained activations exactly:
+    forward outputs AND every parameter gradient must match the retained-graph
+    run bitwise, across multiple decode chunks and all three field modes.
+    """
+    kwargs = dict(field_mode=field_mode)
+    reference = _disk_model("kernel", device, seed=317, **kwargs)
+    checkpointed = _disk_model(
+        "kernel", device, seed=317, kernel_checkpoint_query_chunks=True, **kwargs
+    )
+    reference_state = reference.state_dict()
+    checkpointed_state = checkpointed.state_dict()
+    assert list(reference_state) == list(checkpointed_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(
+            checkpointed_state[name], expected, rtol=0.0, atol=0.0
+        )
+    # Force several decode chunks so the chunk loop, not just one call, is
+    # exercised under the checkpoint wrapper.
+    reference.kernel_decoder.query_chunk_size = 2
+    checkpointed.kernel_decoder.query_chunk_size = 2
+    reference.train()
+    checkpointed.train()
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2], [0.05, 0.35]],
+        dtype=torch.float64,
+    ).to(device)
+    generator = torch.Generator().manual_seed(318)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+
+    outputs = {}
+    for label, model in (("reference", reference), ("checkpointed", checkpointed)):
+        potential = model(domain).point_data["potential"]
+        potential.square().sum().backward()
+        outputs[label] = potential
+    torch.testing.assert_close(
+        outputs["checkpointed"], outputs["reference"], rtol=0.0, atol=0.0
+    )
+
+    named_reference = dict(reference.named_parameters())
+    named_checkpointed = dict(checkpointed.named_parameters())
+    assert list(named_reference) == list(named_checkpointed)
+    checked = 0
+    for name, parameter in named_reference.items():
+        other = named_checkpointed[name]
+        if parameter.grad is None:
+            assert other.grad is None, name
+            continue
+        assert other.grad is not None, name
+        torch.testing.assert_close(
+            other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
+        )
+        checked += 1
+    assert checked > 0
+
+
+def test_checkpointed_training_step_is_bitwise_identical_pseudo(device):
+    """The pseudo (0o) sector rides through the checkpoint argument packing:
+    with pseudoscalar drive and output fields declared, a checkpointed
+    training step still matches the retained graph bitwise."""
+    kwargs = dict(
+        field_mode="zero_preserving_nonlinear",
+        output_field_ranks={"potential": 0, "swirl": "0o"},
+        boundary_field_ranks={
+            "disk": {"drive": {"boundary_value": 0, "sheet_strength": "0o"}}
+        },
+        drive_pseudo_dim=2,
+    )
+    reference = _disk_model("kernel", device, seed=331, **kwargs)
+    checkpointed = _disk_model(
+        "kernel", device, seed=331, kernel_checkpoint_query_chunks=True, **kwargs
+    )
+    reference.kernel_decoder.query_chunk_size = 2
+    checkpointed.kernel_decoder.query_chunk_size = 2
+    reference.train()
+    checkpointed.train()
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2], [0.05, 0.35]],
+        dtype=torch.float64,
+    ).to(device)
+    generator = torch.Generator().manual_seed(332)
+    scalar_values = torch.randn(16, generator=generator, dtype=torch.float64)
+    pseudo_values = torch.randn(16, generator=generator, dtype=torch.float64)
+    boundary = _circle_boundary(16, device, dtype=torch.float64)
+    domain = DomainMesh(
+        interior=Mesh(points=queries),
+        boundaries={
+            "disk": boundary.with_data(
+                cell_data={
+                    "boundary_value": scalar_values.to(device),
+                    "sheet_strength": pseudo_values.to(device),
+                }
+            )
+        },
+    )
+
+    outputs = {}
+    for label, model in (("reference", reference), ("checkpointed", checkpointed)):
+        predicted = model(domain)
+        loss = (
+            predicted.point_data["potential"].square().sum()
+            + predicted.point_data["swirl"].square().sum()
+        )
+        loss.backward()
+        outputs[label] = (
+            predicted.point_data["potential"],
+            predicted.point_data["swirl"],
+        )
+    for expected, actual in zip(outputs["reference"], outputs["checkpointed"]):
+        torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+    for (name, parameter), (_, other) in zip(
+        reference.named_parameters(), checkpointed.named_parameters(), strict=True
+    ):
+        if parameter.grad is None:
+            assert other.grad is None, name
+            continue
+        torch.testing.assert_close(
+            other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
+        )
+
+
+def test_checkpointed_training_step_is_bitwise_identical_aux_scale(device):
+    """The declared auxiliary scale rides through the checkpoint packing.
+
+    Mirrors ``test_checkpointed_training_step_is_bitwise_identical_pseudo``
+    for the new optional cache field: the lambda tensor is passed to
+    :func:`torch.utils.checkpoint.checkpoint` as an explicit argument like
+    ``value_pseudos``, so with the aux-scale contract active a checkpointed
+    training step still matches the retained graph bitwise -- outputs and
+    every parameter gradient.
+    """
+    reference = _aux_scale_model(device, seed=367)
+    checkpointed = _aux_scale_model(
+        device, seed=367, kernel_checkpoint_query_chunks=True
+    )
+    reference_state = reference.state_dict()
+    checkpointed_state = checkpointed.state_dict()
+    assert list(reference_state) == list(checkpointed_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(
+            checkpointed_state[name], expected, rtol=0.0, atol=0.0
+        )
+    # Force several decode chunks so the chunk loop, not just one call, is
+    # exercised under the checkpoint wrapper.
+    reference.kernel_decoder.query_chunk_size = 2
+    checkpointed.kernel_decoder.query_chunk_size = 2
+    reference.train()
+    checkpointed.train()
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2], [0.05, 0.35]],
+        dtype=torch.float64,
+    ).to(device)
+    generator = torch.Generator().manual_seed(368)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _viscous_disk_domain(16, queries, values, 5.0e-2)
+
+    outputs = {}
+    for label, model in (("reference", reference), ("checkpointed", checkpointed)):
+        potential = model(domain).point_data["potential"]
+        potential.square().sum().backward()
+        outputs[label] = potential
+    torch.testing.assert_close(
+        outputs["checkpointed"], outputs["reference"], rtol=0.0, atol=0.0
+    )
+    for (name, parameter), (_, other) in zip(
+        reference.named_parameters(), checkpointed.named_parameters(), strict=True
+    ):
+        if parameter.grad is None:
+            assert other.grad is None, name
+            continue
+        torch.testing.assert_close(
+            other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
+        )
+
+
+def test_checkpointed_training_step_is_bitwise_identical_3d(device):
+    """The 3D singular-pair arm under checkpointing mirrors the 2D contract."""
+
+    def build(checkpoint: bool) -> MeshTransformer:
+        torch.manual_seed(337)
+        model = (
+            MeshTransformer(
+                n_spatial_dims=3,
+                output_field_ranks={"potential": 0},
+                boundary_field_ranks={"dirichlet": {"drive": {"boundary_value": 0}}},
+                field_mode="linear",
+                query_decoder="kernel",
+                kernel_include_polynomial_members=False,
+                kernel_mlp_members=0,
+                kernel_include_single_layer_member=True,
+                kernel_checkpoint_query_chunks=checkpoint,
+                operator_scalar_dim=7,
+                operator_vector_dim=3,
+                drive_scalar_dim=9,
+                drive_vector_dim=3,
+                operator_layers=1,
+                drive_layers=1,
+                heads=2,
+                scalar_rank=4,
+                vector_rank=2,
+            )
+            .to(device=device, dtype=torch.float64)
+            .train()
+        )
+        for module in model.modules():
+            if hasattr(module, "accumulation_dtype"):
+                module.accumulation_dtype = torch.float64
+        model.kernel_decoder.query_chunk_size = 2
+        return model
+
+    reference = build(checkpoint=False)
+    checkpointed = build(checkpoint=True)
+
+    boundary = _tetrahedron_mesh(device)
+    generator = torch.Generator().manual_seed(338)
+    values = torch.randn(4, generator=generator, dtype=torch.float64).to(device)
+    queries = torch.tensor(
+        [
+            [0.18, 0.21, 0.17],
+            [0.42, 0.11, 0.23],
+            [0.25, 0.22, 0.51],
+            [0.1, 0.55, 0.2],
+            [0.3, 0.3, 0.3],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    domain = DomainMesh(
+        interior=Mesh(points=queries),
+        boundaries={
+            "dirichlet": boundary.with_data(cell_data={"boundary_value": values})
+        },
+    )
+
+    outputs = {}
+    for label, model in (("reference", reference), ("checkpointed", checkpointed)):
+        potential = model(domain).point_data["potential"]
+        potential.square().sum().backward()
+        outputs[label] = potential
+    torch.testing.assert_close(
+        outputs["checkpointed"], outputs["reference"], rtol=0.0, atol=0.0
+    )
+    for (name, parameter), (_, other) in zip(
+        reference.named_parameters(), checkpointed.named_parameters(), strict=True
+    ):
+        if parameter.grad is None:
+            assert other.grad is None, name
+            continue
+        torch.testing.assert_close(
+            other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
+        )

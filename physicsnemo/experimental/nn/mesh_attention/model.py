@@ -519,6 +519,60 @@ class MeshTransformer(Module):
         projection is load-bearing, not vacuous.
     query_chunk_size : int, default=65536
         Maximum number of independent query points decoded together.
+    kernel_checkpoint_query_chunks : bool, default=False
+        With ``query_decoder="kernel"``, recompute each decode chunk's dense
+        pair activations in the backward pass instead of retaining them
+        (:func:`torch.utils.checkpoint.checkpoint`, non-reentrant).  Query
+        chunking alone bounds only the *forward* peak: during training,
+        autograd retains every chunk's :math:`O(\text{chunk}\times N_s)`
+        decode intermediates, so training memory grows as the full dense
+        :math:`O(N_qN_s)` -- the measured product-scope wall
+        (:math:`\approx742` GiB extrapolated at :math:`10^5` boundary cells
+        :math:`\times\ 10^6` queries; see the scale study).  With the knob
+        on, retained decode activations drop to one chunk plus the
+        :math:`O(N_q)` outputs, at the cost of one extra decode forward
+        inside backward.  The decoder is RNG-free and its chunk evaluation
+        is shape-deterministic, so the recomputation -- and therefore every
+        gradient -- is bitwise identical to the retained-graph result.
+        Default ``False`` preserves the historical autograd graph exactly
+        (the knob adds no parameters and does not change the forward
+        output in either state).  Ignored by the moment decoder, which has
+        no dense pair term.
+    kernel_auxiliary_scale_key : str or None, default=None
+        With ``query_decoder="kernel"``, the name of a DECLARED rank-0
+        global operator field (dotted paths address nested leaves, as with
+        ``reference_length_key``) whose per-case value is the dimensionless
+        ratio :math:`\lambda=\delta/L_{\mathrm{ref}}` of a declared
+        auxiliary length scale to the model's scale gauge.  The kernel
+        decoder then appends a second copy of its pair invariants rescaled
+        to the :math:`\delta` gauge (:math:`a/\lambda^2`,
+        :math:`b/\lambda`, :math:`v\cdot r/\lambda`), feeding ONLY the
+        learned smooth members -- the exact singular members are untouched
+        -- so the knob requires ``kernel_mlp_members > 0`` (no carrier
+        otherwise; rejected at construction).  MOTIVATION (AirFRANS, steady
+        RANS at :math:`\mathrm{Re}\sim4\times10^6`): the measured velocity
+        error concentrates at the wall -- 49% of the MSE inside
+        :math:`d/c<10^{-4}` -- because the boundary layer lives at
+        :math:`\delta/c\sim\mathrm{Re}^{-1/2}\approx5\times10^{-4}`, a
+        scale the kernels previously saw only through per-source scalar
+        conditioning while all pair-radial structure was chord-scale.  The
+        knob is the per-problem CONTRACT that fixes this: declare
+        :math:`\lambda` (e.g. :math:`\mathrm{Re}^{-1/2}`) as a
+        dimensionless global input, and the boundary-layer scale appears
+        at order one in the smooth members' radial argument.  PHYSICS
+        LICENSE: use exactly when the problem class carries a known second
+        physical scale (a boundary layer, a screening length); the value
+        is a physical declaration like ``reference_length_key``, read RAW
+        from ``global_data`` at encode time (before the operator lift) and
+        required to be finite and positive -- it is never a learned
+        feature, although the same declared field also conditions the
+        encoder like any other operator scalar.  Similarity covariance is
+        preserved by construction (:math:`r` is already
+        :math:`L_{\mathrm{ref}}`-normalized and :math:`\lambda` is
+        dimensionless), and parity typing is unchanged (scalar division
+        alters no transformation law).  Default ``None`` adds no
+        parameters and is bitwise identical to the pre-extension model
+        (state dict and outputs).
     attention_chunk_size : int or None, default=65536
         Maximum entities passed through a typed attention projection at once.
         Chunking changes temporary memory, not the moment operator. ``None``
@@ -571,6 +625,8 @@ class MeshTransformer(Module):
         kernel_include_polynomial_members: bool = True,
         kernel_include_single_layer_member: bool = False,
         kernel_monopole_free_single_layer: bool = False,
+        kernel_checkpoint_query_chunks: bool = False,
+        kernel_auxiliary_scale_key: str | None = None,
         bounded_output_gate_invariants: bool = False,
         bounded_query_geometry: bool = False,
         decaying_direct_drive: bool = False,
@@ -599,6 +655,13 @@ class MeshTransformer(Module):
             not isinstance(reference_length_key, str) or not reference_length_key
         ):
             raise TypeError("reference_length_key must be a non-empty string or None")
+        if kernel_auxiliary_scale_key is not None and (
+            not isinstance(kernel_auxiliary_scale_key, str)
+            or not kernel_auxiliary_scale_key
+        ):
+            raise TypeError(
+                "kernel_auxiliary_scale_key must be a non-empty string or None"
+            )
         if field_mode not in ("linear", "zero_preserving_nonlinear", "quadratic"):
             raise ValueError(
                 "field_mode must be 'linear', 'zero_preserving_nonlinear', "
@@ -619,6 +682,13 @@ class MeshTransformer(Module):
                 "are the sole carriers of the true radial physics while the "
                 "query-side direct drive is a bounded local term; the moment "
                 "decoder has no such direct/member split"
+            )
+        if kernel_auxiliary_scale_key is not None and query_decoder != "kernel":
+            raise ValueError(
+                "kernel_auxiliary_scale_key requires query_decoder='kernel': "
+                "the declared auxiliary scale enters only the kernel "
+                "decoder's pair invariants, and the moment decoder has no "
+                "pair-radial argument for it to rescale"
             )
         for name, value, minimum in (
             ("operator_scalar_dim", operator_scalar_dim, 1),
@@ -808,6 +878,34 @@ class MeshTransformer(Module):
                     "nondimensionalization and must not also be a learned field"
                 )
 
+        if kernel_auxiliary_scale_key is not None:
+            # Unlike reference_length_key, the auxiliary scale MUST be a
+            # declared operator field: the same per-case value both
+            # conditions the encoder (a legitimate operator scalar) and is
+            # read raw as the decoder's pair-invariant rescale.
+            operator_ranks = flatten_rank_spec(global_field_ranks.get("operator", {}))
+            if kernel_auxiliary_scale_key not in operator_ranks:
+                if kernel_auxiliary_scale_key in global_drive_names:
+                    raise ValueError(
+                        f"kernel_auxiliary_scale_key "
+                        f"{kernel_auxiliary_scale_key!r} is declared as a "
+                        "global DRIVE field; the auxiliary scale describes "
+                        "the problem, not the drive, and must be declared "
+                        "under the 'operator' role of global_field_ranks"
+                    )
+                raise ValueError(
+                    f"kernel_auxiliary_scale_key {kernel_auxiliary_scale_key!r} "
+                    "must name a declared rank-0 global operator field in "
+                    "global_field_ranks['operator']"
+                )
+            if operator_ranks[kernel_auxiliary_scale_key] != 0:
+                raise ValueError(
+                    f"kernel_auxiliary_scale_key {kernel_auxiliary_scale_key!r} "
+                    "must be a rank-0 (dimensionless scalar) global operator "
+                    "field; got rank "
+                    f"{operator_ranks[kernel_auxiliary_scale_key]!r}"
+                )
+
         # Freeze caller-owned mutable schemas before constructing layouts or
         # checkpoint metadata. Public configuration must not drift away from
         # the modules if a caller later edits their original dictionaries.
@@ -824,6 +922,7 @@ class MeshTransformer(Module):
         self.boundary_field_ranks = boundary_field_ranks
         self.global_field_ranks = global_field_ranks
         self.reference_length_key = reference_length_key
+        self.kernel_auxiliary_scale_key = kernel_auxiliary_scale_key
         self.field_mode = field_mode
         self.query_decoder = query_decoder
         self.bounded_query_geometry = bool(bounded_query_geometry)
@@ -1033,6 +1132,8 @@ class MeshTransformer(Module):
                 include_polynomial_members=kernel_include_polynomial_members,
                 include_single_layer_member=kernel_include_single_layer_member,
                 monopole_free_single_layer=kernel_monopole_free_single_layer,
+                auxiliary_scale=kernel_auxiliary_scale_key is not None,
+                checkpoint_query_chunks=kernel_checkpoint_query_chunks,
                 mlp_members=kernel_mlp_members,
                 drive_pseudo_dim=drive_pseudo_dim,
             )
@@ -1309,6 +1410,40 @@ class MeshTransformer(Module):
             raise ValueError("Reference length must be finite and positive")
         return length
 
+    def _kernel_auxiliary_scale(
+        self,
+        global_data: TensorDict,
+        reference: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Raw declared auxiliary-scale ratio :math:`\lambda` for the decoder.
+
+        Only called with ``kernel_auxiliary_scale_key`` set.  The value is
+        read from the RAW global operator input at encode time, before the
+        operator lift: like ``reference_length_key``, it is a physical
+        declaration (the dimensionless ratio
+        :math:`\lambda=\delta/L_{\mathrm{ref}}`, e.g.
+        :math:`\mathrm{Re}^{-1/2}`), not a learned feature, and a
+        non-positive or non-finite value is a caller error rather than data.
+        """
+        path = tuple(self.kernel_auxiliary_scale_key.split("."))
+        value = _td_get(global_data, path)
+        if value.numel() != 1:
+            raise ValueError(
+                f"Auxiliary scale {self.kernel_auxiliary_scale_key!r} must be scalar"
+            )
+        if value.device != reference.device or value.dtype != reference.dtype:
+            raise ValueError("Auxiliary scale must share mesh device and dtype")
+        value = value.reshape(())
+        if not torch.compiler.is_compiling() and (
+            not torch.isfinite(value).item() or value.item() <= 0.0
+        ):
+            raise ValueError(
+                f"Auxiliary scale {self.kernel_auxiliary_scale_key!r} must "
+                "be finite and positive: it declares the physical "
+                "length-scale ratio delta / L_ref"
+            )
+        return value
+
     def _source_operator_input(
         self,
         domain: DomainMesh,
@@ -1508,8 +1643,15 @@ class MeshTransformer(Module):
         kernel_cache: KernelDecoderCache | None = None
         if self.query_decoder == "kernel":
             query_moments: tuple[AttentionMoments, ...] = ()
+            auxiliary_scale = (
+                None
+                if self.kernel_auxiliary_scale_key is None
+                else self._kernel_auxiliary_scale(
+                    domain.global_data, source_mesh.points
+                )
+            )
             kernel_cache = self.kernel_decoder.build_source_cache(
-                source_mesh, operator, drive
+                source_mesh, operator, drive, auxiliary_scale=auxiliary_scale
             )
         else:
             query_moments = tuple(

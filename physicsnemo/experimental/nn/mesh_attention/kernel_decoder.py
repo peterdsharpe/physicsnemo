@@ -116,6 +116,30 @@ Member dictionary :math:`\varphi`
   members and ``include_polynomial_members=False`` removes the polynomial
   members; with both off the dictionary is the exact singular member(s)
   alone (one, or two with ``include_single_layer_member=True``).
+- **Auxiliary-scale invariants for the smooth members**
+  (``auxiliary_scale=True``).  Some problems carry a second physical length
+  scale the reference-length gauge cannot see.  Motivating measurement
+  (AirFRANS, steady RANS at :math:`\mathrm{Re}\sim4\times10^6`): the
+  velocity error concentrates at the wall -- 49% of the MSE inside
+  :math:`d/c<10^{-4}` -- because the boundary layer lives at
+  :math:`\delta/c\sim\mathrm{Re}^{-1/2}\approx5\times10^{-4}`, a scale the
+  kernels previously saw only through per-source scalar conditioning while
+  every pair-radial feature was chord-scale.  The fix is a per-problem
+  CONTRACT, not a learned feature: the caller declares a
+  similarity-covariant auxiliary length scale
+  :math:`\delta=\lambda\,L_{\mathrm{ref}}` through the dimensionless
+  per-case global input :math:`\lambda` (e.g. :math:`\mathrm{Re}^{-1/2}`),
+  and the pair MLP additionally receives the same normalized-frame
+  invariants rescaled to the :math:`\delta` gauge --
+  :math:`a/\lambda^2`, :math:`b/\lambda`, and :math:`v_c\cdot r/\lambda`
+  -- appended after the base block.  ONLY the learned smooth members read
+  the auxiliary block; the exact singular members and the polynomial
+  members are untouched (hence ``mlp_members>0`` is required: without MLP
+  members the declared scale has no carrier).  Because :math:`r` is
+  already :math:`L_{\mathrm{ref}}`-normalized and :math:`\lambda` is a
+  declared dimensionless input, the auxiliary invariants are similarity
+  invariant exactly like the base ones, and scalar division changes no
+  transformation law (no new typed content, no parity change).
 
 The coefficients :math:`C_{mh}` are a linear map of each source token's
 operator-state invariants (scalars plus vector Gram invariants), so the
@@ -228,11 +252,35 @@ class PairInvariantFeatures:
     No absolute position, orientation, or Cartesian component appears:
     rotating or reflecting all geometry and vectors together leaves every
     entry unchanged, and translations cancel in :math:`r`.
+
+    With a declared auxiliary length scale (``auxiliary_scale`` passed to
+    :meth:`compute`, the dimensionless per-case ratio
+    :math:`\lambda=\delta/L_{\mathrm{ref}}`), the same invariants of the
+    SAME displacement are additionally stored rescaled to the
+    :math:`\delta` gauge,
+
+    .. math::
+
+       a/\lambda^2,\qquad b/\lambda,\qquad v_c\cdot r/\lambda ,
+
+    so radial structure at the declared auxiliary scale (e.g. a boundary
+    layer at :math:`\delta=\mathrm{Re}^{-1/2}L_{\mathrm{ref}}`) appears at
+    order one to the smooth-member MLP.  Because :math:`r` is already
+    normalized by the reference length and :math:`\lambda` is a declared
+    dimensionless input, the auxiliary block is similarity invariant
+    exactly like the base block, and scalar division preserves every
+    transformation law (no new typed content).  At :math:`\lambda=1` the
+    auxiliary block equals the base block bitwise.
     """
 
     squared_distance: torch.Tensor  # (Q, S)
     normal_alignment: torch.Tensor  # (Q, S)
     vector_alignments: torch.Tensor  # (Q, S, C)
+    # Auxiliary-scale invariant block; ``None`` unless a declared auxiliary
+    # scale was supplied to ``compute``.
+    auxiliary_squared_distance: torch.Tensor | None = None  # (Q, S)
+    auxiliary_normal_alignment: torch.Tensor | None = None  # (Q, S)
+    auxiliary_vector_alignments: torch.Tensor | None = None  # (Q, S, C)
 
     @classmethod
     def compute(
@@ -241,6 +289,7 @@ class PairInvariantFeatures:
         source_centroids: torch.Tensor,
         source_normals: torch.Tensor,
         source_vectors: torch.Tensor,
+        auxiliary_scale: torch.Tensor | None = None,
     ) -> "PairInvariantFeatures":
         """Build the per-pair invariants for one query chunk."""
         if query_points.ndim != 2 or source_centroids.ndim != 2:
@@ -254,32 +303,59 @@ class PairInvariantFeatures:
             or source_vectors.shape[0] != (source_centroids.shape[0])
         ):
             raise ValueError("source_vectors must have shape (S, C, D)")
+        if auxiliary_scale is not None and auxiliary_scale.ndim != 0:
+            raise ValueError("auxiliary_scale must be a 0-dimensional tensor")
         displacement = query_points[:, None, :] - source_centroids[None, :, :]
+        squared_distance = displacement.square().sum(dim=-1)
+        normal_alignment = torch.einsum("qsd,sd->qs", displacement, source_normals)
+        # Broadcast multiply-plus-sum rather than
+        # ``einsum("qsd,scd->qsc", ...)``: that einsum lowers to a
+        # batched GEMM whose per-row reduction can change with the
+        # query-chunk shape (measured 1-ulp drift on CUDA), breaking the
+        # decoder's bitwise query-set-independence contract.  The
+        # ``qsd,sd->qs`` contractions lower to stable mul-plus-sum
+        # reductions and may remain einsums.
+        vector_alignments = (
+            displacement[:, :, None, :] * source_vectors[None, :, :, :]
+        ).sum(dim=-1)
+        auxiliary_kwargs = {}
+        if auxiliary_scale is not None:
+            # Elementwise division by a scalar keeps every query row's
+            # arithmetic independent of the batch shape, so the bitwise
+            # query-set-independence contract is untouched.
+            auxiliary_kwargs = dict(
+                auxiliary_squared_distance=squared_distance / auxiliary_scale.square(),
+                auxiliary_normal_alignment=normal_alignment / auxiliary_scale,
+                auxiliary_vector_alignments=vector_alignments / auxiliary_scale,
+            )
         return cls(
-            squared_distance=displacement.square().sum(dim=-1),
-            normal_alignment=torch.einsum("qsd,sd->qs", displacement, source_normals),
-            # Broadcast multiply-plus-sum rather than
-            # ``einsum("qsd,scd->qsc", ...)``: that einsum lowers to a
-            # batched GEMM whose per-row reduction can change with the
-            # query-chunk shape (measured 1-ulp drift on CUDA), breaking the
-            # decoder's bitwise query-set-independence contract.  The
-            # ``qsd,sd->qs`` contractions lower to stable mul-plus-sum
-            # reductions and may remain einsums.
-            vector_alignments=(
-                displacement[:, :, None, :] * source_vectors[None, :, :, :]
-            ).sum(dim=-1),
+            squared_distance=squared_distance,
+            normal_alignment=normal_alignment,
+            vector_alignments=vector_alignments,
+            **auxiliary_kwargs,
         )
 
     def stacked(self) -> torch.Tensor:
-        """Return all invariants stacked as ``(Q, S, 2 + C)`` features."""
-        return torch.cat(
-            (
-                self.squared_distance.unsqueeze(-1),
-                self.normal_alignment.unsqueeze(-1),
-                self.vector_alignments,
-            ),
-            dim=-1,
-        )
+        """Return all invariants stacked as ``(Q, S, F)`` features.
+
+        ``F`` is ``2 + C`` without an auxiliary scale and ``2 * (2 + C)``
+        with one: the auxiliary block is appended AFTER the base block in
+        the same ``(a, b, alignments)`` order.
+        """
+        parts = [
+            self.squared_distance.unsqueeze(-1),
+            self.normal_alignment.unsqueeze(-1),
+            self.vector_alignments,
+        ]
+        if self.auxiliary_squared_distance is not None:
+            parts.extend(
+                (
+                    self.auxiliary_squared_distance.unsqueeze(-1),
+                    self.auxiliary_normal_alignment.unsqueeze(-1),
+                    self.auxiliary_vector_alignments,
+                )
+            )
+        return torch.cat(parts, dim=-1)
 
 
 def _segment_double_layer_member(
@@ -583,6 +659,12 @@ class KernelDecoderCache:
     # Pseudoscalar (0o) value features; ``None`` only for caches built before
     # the pseudo sector existed (equivalent to zero width).
     value_pseudos: torch.Tensor | None = None
+    # Declared auxiliary length-scale ratio lambda = delta / L_ref (a
+    # dimensionless 0-dim tensor, a physical declaration read from the raw
+    # global operator input, never a learned feature); ``None`` for caches
+    # built without the auxiliary-scale contract, which keeps caches from
+    # older decoders valid exactly like ``value_pseudos`` does.
+    auxiliary_scale: torch.Tensor | None = None
 
 
 class KernelBasisCrossDecoder(nn.Module):
@@ -635,6 +717,28 @@ class KernelBasisCrossDecoder(nn.Module):
         handles of multiply connected domains) -- hence default ``False``
         (bitwise identical to the undeflated dictionary; the knob adds no
         parameters).  Requires ``include_single_layer_member=True``.
+    auxiliary_scale : bool
+        Accept a declared per-problem auxiliary length scale
+        :math:`\delta=\lambda\,L_{\mathrm{ref}}` (the dimensionless ratio
+        :math:`\lambda` rides in :attr:`KernelDecoderCache.auxiliary_scale`)
+        and append a second copy of every pair invariant rescaled to the
+        :math:`\delta` gauge -- :math:`a/\lambda^2`, :math:`b/\lambda`,
+        :math:`v_c\cdot r/\lambda` -- AFTER the base block of the
+        smooth-member MLP input (whose width doubles accordingly).  The
+        auxiliary block feeds ONLY the learned smooth members: the exact
+        singular members, the polynomial members, and the coefficient map
+        never read it, so the knob requires ``mlp_members > 0`` (rejected
+        otherwise -- there would be no carrier).  PHYSICS LICENSE: declared
+        per problem when a second physical scale exists that the gauge
+        cannot see, e.g. a turbulent boundary layer at
+        :math:`\delta/c\sim\mathrm{Re}^{-1/2}` (AirFRANS measured 49% of
+        velocity MSE inside :math:`d/c<10^{-4}`, unreachable by chord-scale
+        radial features; see the module docstring).  :math:`\lambda` is a
+        physical declaration like a reference length, never a learned
+        feature; similarity covariance is preserved because :math:`r` is
+        already :math:`L_{\mathrm{ref}}`-normalized and :math:`\lambda` is
+        dimensionless.  Default ``False`` adds no parameters and is bitwise
+        identical to the pre-extension decoder (state dict and outputs).
     mlp_members : int
         Number of learned smooth dictionary members produced by the pair MLP.
     mlp_hidden_dim : int
@@ -642,6 +746,22 @@ class KernelBasisCrossDecoder(nn.Module):
     query_chunk_size : int
         Queries evaluated per dense chunk.  Memory only: every query row is
         computed independently, so chunking never changes the operator.
+    checkpoint_query_chunks : bool
+        Recompute each query chunk's dense pair activations in the backward
+        pass (:func:`torch.utils.checkpoint.checkpoint`,
+        ``use_reentrant=False``) instead of retaining them.  Without this,
+        chunking bounds only the *forward* peak: autograd retains every
+        chunk's :math:`O(\text{chunk}\times N_s)` intermediates, so training
+        memory grows as :math:`O(N_qN_s)` — the measured product-scope wall
+        (:math:`\approx742` GiB at :math:`10^5` sources
+        :math:`\times\ 10^6` queries).  With it, retained decode activations
+        drop to the chunk being recomputed plus the :math:`O(N_q)` outputs,
+        at the price of one extra decode forward inside backward.  The
+        recomputation is exact: the decoder is RNG-free and every chunk op
+        is deterministic for fixed input shapes, so recomputed activations
+        — and therefore gradients — are bitwise identical to the retained
+        ones.  Default ``False`` preserves the historical autograd graph
+        exactly.
     accumulation_dtype : torch.dtype or None
         Precision floor for the dense contraction, mirroring
         :class:`.attention.MeshAttention`.
@@ -665,9 +785,11 @@ class KernelBasisCrossDecoder(nn.Module):
         include_polynomial_members: bool = True,
         include_single_layer_member: bool = False,
         monopole_free_single_layer: bool = False,
+        auxiliary_scale: bool = False,
         mlp_members: int = 8,
         mlp_hidden_dim: int = 48,
         query_chunk_size: int = 2048,
+        checkpoint_query_chunks: bool = False,
         accumulation_dtype: torch.dtype | None = torch.float32,
         drive_pseudo_dim: int = 0,
     ) -> None:
@@ -684,12 +806,24 @@ class KernelBasisCrossDecoder(nn.Module):
             raise ValueError("include_single_layer_member must be a bool")
         if not isinstance(monopole_free_single_layer, bool):
             raise ValueError("monopole_free_single_layer must be a bool")
+        if not isinstance(auxiliary_scale, bool):
+            raise ValueError("auxiliary_scale must be a bool")
+        if not isinstance(checkpoint_query_chunks, bool):
+            raise ValueError("checkpoint_query_chunks must be a bool")
         if monopole_free_single_layer and not include_single_layer_member:
             raise ValueError(
                 "monopole_free_single_layer deflates the exact single-layer "
                 "member and therefore requires "
                 "include_single_layer_member=True; without that member there "
                 "is no monopole to control"
+            )
+        if auxiliary_scale and mlp_members == 0:
+            raise ValueError(
+                "auxiliary_scale=True requires mlp_members > 0: the auxiliary "
+                "r/delta-rescaled invariants feed only the learned "
+                "smooth-member MLP (the exact singular and polynomial members "
+                "never read them), so without MLP members the declared scale "
+                "has no carrier"
             )
         # The two vector channel counts may be zero independently: a
         # vector-less operator state simply contributes no pair alignments or
@@ -730,6 +864,7 @@ class KernelBasisCrossDecoder(nn.Module):
         self.include_polynomial_members = include_polynomial_members
         self.include_single_layer_member = include_single_layer_member
         self.monopole_free_single_layer = monopole_free_single_layer
+        self.auxiliary_scale = auxiliary_scale
         self.mlp_members = mlp_members
         # Members: exact double layer, exact single layer (optional),
         # polynomial {1, b, a} (optional), learned MLP.
@@ -755,9 +890,15 @@ class KernelBasisCrossDecoder(nn.Module):
             max(drive_pseudo_dim // heads, 1) if drive_pseudo_dim else 0
         )
         self.query_chunk_size = query_chunk_size
+        self.checkpoint_query_chunks = checkpoint_query_chunks
         self.accumulation_dtype = accumulation_dtype
 
         pair_features = 2 + self._pair_vector_channels()
+        if auxiliary_scale:
+            # The duplicated invariant block at the declared delta scale
+            # doubles the smooth-member MLP's input width; nothing else in
+            # the decoder reads the auxiliary invariants.
+            pair_features *= 2
         final = _RowStableLinear(mlp_hidden_dim, mlp_members, bias=False)
         # Small final-layer initialization: the learned smooth members start
         # near zero while the exact and polynomial members carry the initial
@@ -863,8 +1004,45 @@ class KernelBasisCrossDecoder(nn.Module):
         source_mesh: Mesh,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
+        *,
+        auxiliary_scale: torch.Tensor | None = None,
     ) -> KernelDecoderCache:
-        """Cache every query-independent source quantity once per encode."""
+        """Cache every query-independent source quantity once per encode.
+
+        ``auxiliary_scale`` is the declared dimensionless per-case ratio
+        :math:`\\lambda=\\delta/L_{\\mathrm{ref}}` (a positive finite 0-dim
+        tensor), required exactly when the decoder was constructed with
+        ``auxiliary_scale=True`` and rejected otherwise.
+        """
+        if self.auxiliary_scale:
+            if auxiliary_scale is None:
+                raise ValueError(
+                    "this decoder was constructed with auxiliary_scale=True "
+                    "and requires the declared per-case scale tensor "
+                    "(auxiliary_scale=...) when building its source cache"
+                )
+            if (
+                not isinstance(auxiliary_scale, torch.Tensor)
+                or auxiliary_scale.ndim != 0
+            ):
+                raise ValueError(
+                    "auxiliary_scale must be a 0-dimensional tensor holding "
+                    "the dimensionless ratio lambda = delta / L_ref"
+                )
+            if not torch.compiler.is_compiling() and (
+                not torch.isfinite(auxiliary_scale).item()
+                or auxiliary_scale.item() <= 0.0
+            ):
+                raise ValueError(
+                    "auxiliary_scale must be finite and positive: it declares "
+                    "a physical length-scale ratio delta / L_ref"
+                )
+        elif auxiliary_scale is not None:
+            raise ValueError(
+                "auxiliary_scale was supplied but this decoder was "
+                "constructed with auxiliary_scale=False and would silently "
+                "ignore the declared scale"
+            )
         if source_mesh.n_spatial_dims != self.n_spatial_dims:
             raise ValueError("source mesh has the wrong spatial dimension")
         if source_mesh.n_cells != operator_state.n_entities:
@@ -896,6 +1074,7 @@ class KernelBasisCrossDecoder(nn.Module):
                 n, self.heads, self.vector_value_dim, self.n_spatial_dims
             ),
             value_pseudos=values.pseudos.reshape(n, self.heads, self.pseudo_value_dim),
+            auxiliary_scale=auxiliary_scale,
         )
 
     def _accumulation_type(self, *tensors: torch.Tensor) -> torch.dtype:
@@ -922,6 +1101,13 @@ class KernelBasisCrossDecoder(nn.Module):
                 cache.centroids,
                 cache.normals,
                 cache.pair_vectors,
+                # The declared auxiliary scale reaches only the pair
+                # invariants' auxiliary block (and through it only the
+                # smooth-member MLP below); the exact singular members and
+                # polynomial members never read it.
+                auxiliary_scale=(
+                    cache.auxiliary_scale if self.auxiliary_scale else None
+                ),
             )
             singular = exact_double_layer_member(
                 query_points, cache.panel_vertices, cache.normals
@@ -1046,6 +1232,76 @@ class KernelBasisCrossDecoder(nn.Module):
             )
         )
 
+    def _checkpointed_chunk(
+        self,
+        query_points: torch.Tensor,
+        cache: KernelDecoderCache,
+    ) -> ScalarVectorState:
+        # Autograd connects only through tensors passed as explicit
+        # checkpoint arguments, so the cache is unpacked here and rebuilt
+        # inside; parameters used within ``_evaluate_chunk`` receive
+        # gradients through the non-reentrant path.  ``preserve_rng_state``
+        # is off because the decoder is RNG-free (no dropout anywhere), so
+        # the recomputation is deterministic without the state round-trip.
+        # The optional cache fields (pseudo values, declared auxiliary
+        # scale) ride through the same explicit argument packing so their
+        # gradients survive checkpointing.
+        has_pseudos = cache.value_pseudos is not None
+        has_auxiliary = cache.auxiliary_scale is not None
+
+        def run(
+            points: torch.Tensor,
+            panel_vertices: torch.Tensor,
+            centroids: torch.Tensor,
+            normals: torch.Tensor,
+            weights: torch.Tensor,
+            pair_vectors: torch.Tensor,
+            coefficients: torch.Tensor,
+            value_scalars: torch.Tensor,
+            value_vectors: torch.Tensor,
+            *optional: torch.Tensor,
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            extras = list(optional)
+            message = self._evaluate_chunk(
+                points,
+                KernelDecoderCache(
+                    panel_vertices=panel_vertices,
+                    centroids=centroids,
+                    normals=normals,
+                    weights=weights,
+                    pair_vectors=pair_vectors,
+                    coefficients=coefficients,
+                    value_scalars=value_scalars,
+                    value_vectors=value_vectors,
+                    value_pseudos=extras.pop(0) if has_pseudos else None,
+                    auxiliary_scale=extras.pop(0) if has_auxiliary else None,
+                ),
+            )
+            return message.scalars, message.vectors, message.pseudos
+
+        tensors = (
+            query_points,
+            cache.panel_vertices,
+            cache.centroids,
+            cache.normals,
+            cache.weights,
+            cache.pair_vectors,
+            cache.coefficients,
+            cache.value_scalars,
+            cache.value_vectors,
+        )
+        if has_pseudos:
+            tensors = tensors + (cache.value_pseudos,)
+        if has_auxiliary:
+            tensors = tensors + (cache.auxiliary_scale,)
+        scalars, vectors, out_pseudos = torch.utils.checkpoint.checkpoint(
+            run,
+            *tensors,
+            use_reentrant=False,
+            preserve_rng_state=False,
+        )
+        return ScalarVectorState(scalars, vectors, out_pseudos)
+
     def forward(
         self,
         query_points: torch.Tensor,
@@ -1084,6 +1340,12 @@ class KernelBasisCrossDecoder(nn.Module):
                 "features; it was built by a decoder without this decoder's "
                 "pseudo sector"
             )
+        if self.auxiliary_scale and cache.auxiliary_scale is None:
+            raise ValueError(
+                "KernelDecoderCache carries no declared auxiliary scale; it "
+                "was built by a decoder without this decoder's "
+                "auxiliary-scale contract"
+            )
         n_queries = query_points.shape[0]
         if n_queries == 0:
             return ScalarVectorState.zeros(
@@ -1095,10 +1357,15 @@ class KernelBasisCrossDecoder(nn.Module):
                 device=query_points.device,
                 dtype=query_points.dtype,
             )
+        # Checkpointing is a training-memory control only: under no_grad or
+        # inference the plain chunk evaluation already peaks at one chunk.
+        evaluate = (
+            self._checkpointed_chunk
+            if self.checkpoint_query_chunks and torch.is_grad_enabled()
+            else self._evaluate_chunk
+        )
         outputs = [
-            self._evaluate_chunk(
-                query_points[start : start + self.query_chunk_size], cache
-            )
+            evaluate(query_points[start : start + self.query_chunk_size], cache)
             for start in range(0, n_queries, self.query_chunk_size)
         ]
         if len(outputs) == 1:
