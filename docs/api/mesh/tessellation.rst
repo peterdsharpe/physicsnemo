@@ -59,6 +59,35 @@ broadcast to the output identically in both paths using the returned
 A :class:`~physicsnemo.mesh.mesh.Mesh` can also be constructed in one step with
 :meth:`~physicsnemo.mesh.mesh.Mesh.from_polygons`.
 
+Quality mesh generation
+-----------------------
+
+Beyond decomposing existing cells, the package also *generates* planar quality
+meshes: :func:`delaunay_mesh` triangulates a polygonal domain given as closed
+loops (one outer boundary plus optional hole loops) using constrained Delaunay
+triangulation (Bowyer--Watson insertion with constrained-edge recovery)
+followed by Ruppert's Delaunay refinement, so every output triangle satisfies a
+minimum-angle bound and, optionally, a maximum-area bound. It is deterministic
+(identical inputs give bitwise-identical outputs) and implemented from the
+published algorithms -- see the module docstring of
+``physicsnemo.mesh.tessellation.delaunay`` for citations and the robustness
+model. :func:`polygon_interior_point` is the companion utility returning a
+point strictly inside a simple polygon.
+
+.. code:: python
+
+    import math
+    import torch
+    from physicsnemo.mesh.tessellation import delaunay_mesh
+
+    square = torch.tensor([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
+    h = 0.1  # target interior edge length
+    points, triangles, vertex_markers, boundary_segments = delaunay_mesh(
+        [square],  # outer loop first; any further loops are holes
+        max_area=math.sqrt(3.0) / 4.0 * h * h,
+        min_angle_degrees=30.0,
+    )
+
 API Reference
 -------------
 
