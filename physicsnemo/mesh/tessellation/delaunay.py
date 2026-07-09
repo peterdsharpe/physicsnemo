@@ -16,12 +16,12 @@
 
 r"""Planar quality mesh generation: constrained Delaunay + Ruppert refinement.
 
-The public entry point :func:`delaunay_mesh` meshes a polygonal domain given as
+The public entry point :func:`delaunay_mesh_2d` meshes a polygonal domain given as
 closed loops (one outer boundary plus optional hole loops) into a quality
 triangle mesh: a conforming constrained Delaunay triangulation refined until no
 triangle is smaller than a minimum-angle bound or larger than a maximum-area
-bound. :func:`polygon_interior_point` is the companion utility that returns a
-point strictly inside a simple polygon (used internally to seed hole removal).
+bound, and optionally smoothed. :func:`polygon_interior_point` is a companion
+utility that returns a point strictly inside a simple polygon.
 
 This is a from-scratch implementation of the published algorithms:
 
@@ -42,6 +42,20 @@ This is a from-scratch implementation of the published algorithms:
   their midpoints, and skinny or oversized triangles are fixed by inserting
   their circumcenters -- deferring to subsegment splits whenever a circumcenter
   would encroach upon one.
+- Exterior and hole removal is the even-odd parity flood fill over the dual
+  graph used by CGAL's ``mark_domain_in_triangulation``: the recovered
+  constrained segments tile the closed input loops exactly, so the parity of
+  the number of constrained edges crossed on any path from the unbounded
+  exterior classifies every triangle, with no interior seed points and no
+  geometric predicates.
+- Optional smoothing is the optimal-Delaunay-triangulation vertex update of
+  L. Chen and J.-c. Xu, "Optimal Delaunay triangulations", *Journal of
+  Computational Mathematics* 22(2), 2004 (popularized as "ODT smoothing" by
+  L. Chen, "Mesh smoothing schemes based on optimal Delaunay triangulations",
+  *13th International Meshing Roundtable*, 2004): each interior vertex moves
+  to the area-weighted average of its incident triangles' circumcenters,
+  gated so the local minimum angle never decreases, followed by a Lawson
+  re-legalization pass -- so the refinement quality bounds survive smoothing.
 
 Robustness model (documented rather than hidden): all geometry is computed in
 float64 on coordinates normalized once into the unit box, so the ``orient2d``
@@ -75,8 +89,6 @@ import numpy as np
 import torch
 from jaxtyping import Float, Int
 
-from physicsnemo.mesh.neighbors._adjacency import Adjacency
-
 #: Half-extent of the bounding super-triangle in normalized (unit-box)
 #: coordinates. Large enough that the super-vertices essentially never fall
 #: inside the circumcircle of a well-shaped interior triangle (so the interior
@@ -101,11 +113,12 @@ _MAX_LEGALIZE_PASSES: int = 64
 _INCIRCLE_REL_EPS: float = 1e-13
 
 
-def delaunay_mesh(
+def delaunay_mesh_2d(
     loops: Sequence[Float[torch.Tensor, "n_i 2"] | np.ndarray],
     *,
     max_area: float | None = None,
     min_angle_degrees: float = 30.0,
+    smooth_iterations: int = 0,
 ) -> tuple[
     Float[torch.Tensor, "n_points 2"],
     Int[torch.Tensor, "n_triangles 3"],
@@ -116,9 +129,11 @@ def delaunay_mesh(
 
     Builds the constrained Delaunay triangulation of the input loops
     (Bowyer-Watson insertion + Sloan segment recovery), removes the exterior
-    and the holes by flood fill across non-constrained edges, then applies
-    Ruppert's Delaunay refinement until every triangle has minimum angle at
-    least ``min_angle_degrees`` and (if given) area at most ``max_area``.
+    and the holes by even-odd parity flood fill across the recovered
+    constrained segments, then applies Ruppert's Delaunay refinement until
+    every triangle has minimum angle at least ``min_angle_degrees`` and (if
+    given) area at most ``max_area``, optionally followed by
+    ``smooth_iterations`` passes of quality-gated ODT smoothing.
 
     Parameters
     ----------
@@ -138,6 +153,20 @@ def delaunay_mesh(
         Minimum-angle quality bound in degrees, in :math:`[0, 33]`. ``0``
         disables the angle criterion. Values above 33 are rejected because
         Ruppert refinement is no longer guaranteed to terminate there.
+    smooth_iterations : int, default 0
+        Number of ODT smoothing passes applied after refinement (``0``
+        disables smoothing). Each pass moves every interior (Steiner) vertex
+        to the area-weighted average of its incident triangles' circumcenters
+        -- the optimal-Delaunay-triangulation update of Chen and Xu -- accepts
+        the move only if the smallest angle among those triangles does not
+        decrease and no triangle grows beyond ``max_area``, and then restores
+        Delaunayhood by Lawson legalization. Boundary vertices never move, so
+        the first return value's leading rows stay bit-identical to the
+        input. The quality bounds above are preserved exactly: a final
+        refinement pass re-splits the rare over-bound triangle a legalization
+        flip can produce, so smoothing may add a few Steiner vertices. The
+        *typical* angle improves markedly (interiors approach the hexagonal
+        ideal); 2 to 5 passes capture most of the benefit.
 
     Returns
     -------
@@ -164,8 +193,10 @@ def delaunay_mesh(
     ValueError
         If ``loops`` is empty, a loop has fewer than 3 vertices or a
         non-``(N, 2)`` shape, coordinates are non-finite, vertices are
-        duplicated, all points are coincident, ``max_area`` is non-positive,
-        ``min_angle_degrees`` is outside :math:`[0, 33]`, or input segments
+        duplicated, all points are coincident, a hole loop is not strictly
+        inside the outer boundary loop, a hole loop lies inside another hole,
+        ``max_area`` is non-positive, ``min_angle_degrees`` is outside
+        :math:`[0, 33]`, ``smooth_iterations`` is negative, or input segments
         cross each other.
     RuntimeError
         If refinement exceeds its insertion budget or an internal geometric
@@ -181,9 +212,9 @@ def delaunay_mesh(
     Examples
     --------
     >>> import torch
-    >>> from physicsnemo.mesh.tessellation import delaunay_mesh
+    >>> from physicsnemo.mesh.tessellation.delaunay import delaunay_mesh_2d
     >>> square = torch.tensor([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]])
-    >>> points, triangles, markers, segments = delaunay_mesh(
+    >>> points, triangles, markers, segments = delaunay_mesh_2d(
     ...     [square], max_area=0.1, min_angle_degrees=30.0
     ... )
     >>> bool((markers[:4] == 1).all())  # input vertices are boundary-marked
@@ -211,6 +242,8 @@ def delaunay_mesh(
             f"min_angle_degrees must lie in [0, 33], got {min_angle_degrees}. "
             f"Ruppert refinement is not guaranteed to terminate above 33 degrees."
         )
+    if smooth_iterations < 0:
+        raise ValueError(f"smooth_iterations must be >= 0, got {smooth_iterations}")
 
     all_points = np.concatenate(loop_arrays, axis=0)
     seen: dict[tuple[float, float], int] = {}
@@ -221,6 +254,47 @@ def delaunay_mesh(
                 f"(vertex {index} coincides with vertex {seen[(x, y)]})"
             )
         seen[(x, y)] = index
+
+    # Containment validation (after the duplicate check, so exactly-shared
+    # vertices get the clearer error): loops must not cross -- recovery
+    # checks that exactly -- so one misplaced vertex condemns its whole loop.
+    for index, hole in enumerate(loop_arrays[1:], start=1):
+        if not _points_in_polygon(hole, loop_arrays[0]).all():
+            raise ValueError(
+                f"loop {index} is not inside the outer boundary loop (loop 0); "
+                f"every loop after the first must bound a hole in the domain"
+            )
+        for other_index, other in enumerate(loop_arrays[1:], start=1):
+            if other_index != index and _points_in_polygon(hole[:1], other).any():
+                raise ValueError(
+                    f"hole loop {index} lies inside hole loop {other_index}; "
+                    f"hole loops must be mutually disjoint"
+                )
+
+    if min_angle_degrees > 0.0:
+        # Ruppert's termination guarantee assumes adjacent input segments
+        # meet at >= ~60 degrees; sharper corners make refinement chase
+        # itself into the corner, emitting thousands of sub-float32-area
+        # triangles near the apex with no error (found in review by
+        # melo-gonzo). Validate rather than assume.
+        for li, arr in enumerate(loop_arrays):
+            prev = np.roll(arr, 1, axis=0) - arr
+            nxt = np.roll(arr, -1, axis=0) - arr
+            cosang = (prev * nxt).sum(axis=1) / (
+                np.linalg.norm(prev, axis=1) * np.linalg.norm(nxt, axis=1)
+            )
+            ang = np.degrees(np.arccos(np.clip(cosang, -1.0, 1.0)))
+            k = int(ang.argmin())
+            if ang[k] < 60.0 - 1e-9:
+                raise ValueError(
+                    f"loop {li} has adjacent segments meeting at "
+                    f"{ang[k]:.1f} degrees (vertex {k} at "
+                    f"{arr[k].tolist()}); the min-angle refinement "
+                    f"guarantee requires input corners of at least ~60 "
+                    f"degrees. Pass min_angle_degrees=0.0 for an "
+                    f"unrefined constrained triangulation, or blunt the "
+                    f"corner geometrically."
+                )
 
     # Normalize into the unit box: every predicate then runs on ~unit-scale
     # float64 operands regardless of the physical coordinate range.
@@ -244,23 +318,27 @@ def delaunay_mesh(
         tri.recover_segment(3 + a, 3 + b)  # +3 skips the super-vertices
     tri.legalize_all()
 
-    hole_seeds = []
-    for loop in loop_arrays[1:]:
-        seed = polygon_interior_point(loop).numpy()
-        hole_seeds.append((seed - lower) / scale)
-    tri.remove_exterior_and_holes(hole_seeds)
+    tri.remove_exterior_and_holes()
 
-    if max_area is not None or min_angle_degrees > 0.0:
-        max_area_normalized = None if max_area is None else max_area / (scale * scale)
-        sin_min = math.sin(math.radians(min_angle_degrees))
-        b_squared = (
-            None if min_angle_degrees <= 0.0 else 1.0 / (4.0 * sin_min * sin_min)
-        )
-        budget = all_points.shape[0] + 100_000
-        if max_area_normalized is not None:
-            # The unit box bounds the domain area; x16 covers boundary grading.
-            budget += int(16.0 / max_area_normalized)
+    max_area_normalized = None if max_area is None else max_area / (scale * scale)
+    sin_min = math.sin(math.radians(min_angle_degrees))
+    b_squared = None if min_angle_degrees <= 0.0 else 1.0 / (4.0 * sin_min * sin_min)
+    budget = all_points.shape[0] + 100_000
+    if max_area_normalized is not None:
+        # The unit box bounds the domain area; x16 covers boundary grading.
+        budget += int(16.0 / max_area_normalized)
+    refine_requested = max_area is not None or min_angle_degrees > 0.0
+
+    if refine_requested:
         tri.refine(max_area_normalized, b_squared, budget)
+
+    if smooth_iterations > 0:
+        tri.smooth(smooth_iterations, max_area_normalized)
+        if refine_requested:
+            # Legalization flips during smoothing can, rarely, merge two
+            # near-bound triangles into one over-bound triangle; a final
+            # refinement pass restores both bounds exactly (usually a no-op).
+            tri.refine(max_area_normalized, b_squared, budget)
 
     points, triangles, markers, boundary_segments = tri.extract(
         n_input=all_points.shape[0], original=all_points, lower=lower, scale=scale
@@ -278,12 +356,19 @@ def polygon_interior_point(
 ) -> Float[torch.Tensor, " 2"]:
     """Return a point strictly inside a simple closed polygon.
 
-    Ear-clips the polygon with the existing tessellation machinery
-    (:func:`physicsnemo.mesh.tessellation.triangulate`, correct for non-convex
-    rings) and returns the centroid of the largest resulting triangle -- ear
-    triangles lie inside the polygon, so their centroids do too, and the
-    largest one keeps the point robustly away from the boundary even for
-    polygons with near-degenerate (collinear) vertices.
+    Returns the centroid of the polygon's largest *ear*: a convex vertex
+    whose neighbor-to-neighbor triangle strictly contains no other polygon
+    vertex, which the two-ears theorem guarantees to exist for every simple
+    polygon. Ear triangles lie inside the polygon, so their centroids do too,
+    and taking the largest keeps the point robustly away from the boundary
+    even for polygons with near-degenerate (collinear) vertices. As a final
+    guard against exactly-degenerate inputs, the centroid is verified by an
+    even-odd ray-crossing test before being returned, falling through to the
+    next-largest ear on failure.
+
+    The scan is vectorized NumPy: O(n) memory and O(n^2) worst-case time,
+    near-linear in practice because candidate ears are tested largest-first.
+    Deterministic: identical inputs return bitwise-identical outputs.
 
     Parameters
     ----------
@@ -301,32 +386,66 @@ def polygon_interior_point(
     ------
     ValueError
         If the loop has fewer than 3 vertices, a non-``(N, 2)`` shape,
-        non-finite coordinates, duplicate consecutive vertices, or zero area
-        (fully degenerate).
+        non-finite coordinates, duplicate consecutive vertices, zero area
+        (fully degenerate), or no verifiable ear (the boundary
+        self-intersects).
     """
     (loop_array,) = _validate_loops([loop])
-    points = torch.from_numpy(loop_array)
-    n = loop_array.shape[0]
-
-    from physicsnemo.mesh.tessellation.triangulate import triangulate
-
-    cells, _ = triangulate(
-        points,
-        Adjacency(
-            offsets=torch.tensor([0, n], dtype=torch.int64),
-            indices=torch.arange(n, dtype=torch.int64),
-        ),
+    ring = loop_array
+    doubled_area = float(
+        np.sum(
+            ring[:, 0] * (np.roll(ring[:, 1], -1) - np.roll(ring[:, 1], 1)),
+        )
     )
-    corners = points[cells]  # (n - 2, 3, 2)
-    edge1 = corners[:, 1] - corners[:, 0]
-    edge2 = corners[:, 2] - corners[:, 0]
-    areas = (edge1[:, 0] * edge2[:, 1] - edge1[:, 1] * edge2[:, 0]).abs()
-    best = int(torch.argmax(areas))
-    if float(areas[best]) <= 0.0:
+    if doubled_area < 0.0:
+        ring = ring[::-1]  # counterclockwise from here on
+    n = ring.shape[0]
+
+    # Classify on unit-box-normalized coordinates so the strict sign tests
+    # below run at uniform float64 precision at any physical scale. Distinct
+    # vertices (validated above) guarantee a positive extent.
+    lower = ring.min(axis=0)
+    normalized = (ring - lower) / float((ring.max(axis=0) - lower).max())
+    previous = np.roll(normalized, 1, axis=0)
+    following = np.roll(normalized, -1, axis=0)
+    # Doubled signed ear area at each vertex; > 0 marks a convex corner.
+    ear_area = (normalized[:, 0] - previous[:, 0]) * (
+        following[:, 1] - normalized[:, 1]
+    ) - (normalized[:, 1] - previous[:, 1]) * (following[:, 0] - normalized[:, 0])
+    candidates = np.nonzero(ear_area > 0.0)[0]
+    if candidates.size == 0:
         raise ValueError(
             "polygon is degenerate (zero area); cannot find an interior point"
         )
-    return corners[best].mean(dim=0)
+    order = candidates[np.argsort(-ear_area[candidates], kind="stable")]
+
+    # A candidate is an ear iff no other vertex lies strictly inside its
+    # triangle (vertices exactly on the triangle boundary do not block; the
+    # even-odd verification below covers those exactly-degenerate touches).
+    # Chunked so the (candidates x vertices) sign matrices stay ~memory-flat.
+    chunk_size = max(1, 2_000_000 // n)
+    for start in range(0, order.size, chunk_size):
+        chunk = order[start : start + chunk_size]
+        a = previous[chunk][:, None]
+        b = normalized[chunk][:, None]
+        c = following[chunk][:, None]
+        p = normalized[None]
+        s_ab = (b[..., 0] - a[..., 0]) * (p[..., 1] - a[..., 1]) - (
+            b[..., 1] - a[..., 1]
+        ) * (p[..., 0] - a[..., 0])
+        s_bc = (c[..., 0] - b[..., 0]) * (p[..., 1] - b[..., 1]) - (
+            c[..., 1] - b[..., 1]
+        ) * (p[..., 0] - b[..., 0])
+        s_ca = (a[..., 0] - c[..., 0]) * (p[..., 1] - c[..., 1]) - (
+            a[..., 1] - c[..., 1]
+        ) * (p[..., 0] - c[..., 0])
+        blocked = ((s_ab > 0.0) & (s_bc > 0.0) & (s_ca > 0.0)).any(axis=1)
+        for index in chunk[~blocked]:
+            i = int(index)
+            centroid = (ring[i - 1] + ring[i] + ring[(i + 1) % n]) / 3.0
+            if _points_in_polygon(centroid[None], ring)[0]:
+                return torch.from_numpy(centroid)
+    raise ValueError("no verifiable ear found; the polygon boundary self-intersects")
 
 
 def _validate_loops(
@@ -356,6 +475,31 @@ def _validate_loops(
     return arrays
 
 
+def _points_in_polygon(
+    points: Float[np.ndarray, "n_query 2"],
+    loop: Float[np.ndarray, "n_loop 2"],
+) -> np.ndarray:
+    """Vectorized even-odd (ray-crossing) point-in-polygon test.
+
+    Casts a ray toward +x from each query point and counts crossings of the
+    implicitly-closed polygon's edges, with the half-open vertical rule (an
+    edge counts only when exactly one endpoint's y is <= the query's) so a
+    ray through a vertex is never double-counted. Points exactly on the
+    boundary classify arbitrarily, which both callers tolerate: containment
+    validation treats a boundary-touching loop as misconfigured either way,
+    and ear verification queries strictly-interior centroids.
+    """
+    x = points[:, 0:1]
+    y = points[:, 1:2]
+    ax = loop[None, :, 0]
+    ay = loop[None, :, 1]
+    bx = np.roll(loop[:, 0], -1)[None]
+    by = np.roll(loop[:, 1], -1)[None]
+    straddles = (ay <= y) != (by <= y)
+    crosses = x < ax + (y - ay) * (bx - ax) / (by - ay + (ay == by))
+    return (straddles & crosses).sum(axis=1) % 2 == 1
+
+
 # ---------------------------------------------------------------------------
 # Geometric predicates (float64 determinants on normalized coordinates)
 # ---------------------------------------------------------------------------
@@ -371,36 +515,6 @@ def _orient2d(ax: float, ay: float, bx: float, by: float, cx: float, cy: float):
     non-star-shapedness explicitly instead of trusting the sign.
     """
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-
-
-def _incircle(
-    ax: float,
-    ay: float,
-    bx: float,
-    by: float,
-    cx: float,
-    cy: float,
-    dx: float,
-    dy: float,
-):
-    """Incircle determinant: > 0 iff d is strictly inside the circumcircle of
-    the counterclockwise triangle (a, b, c).
-
-    Same robustness contract as :func:`_orient2d`: strict-sign callers treat
-    near-cocircular configurations (|det| at roundoff scale) as "on the
-    circle", i.e. not inside, which keeps insertion cavities conservative.
-    """
-    adx = ax - dx
-    ady = ay - dy
-    bdx = bx - dx
-    bdy = by - dy
-    cdx = cx - dx
-    cdy = cy - dy
-    return (
-        (adx * adx + ady * ady) * (bdx * cdy - cdx * bdy)
-        + (bdx * bdx + bdy * bdy) * (cdx * ady - adx * cdy)
-        + (cdx * cdx + cdy * cdy) * (adx * bdy - bdx * ady)
-    )
 
 
 def _incircle_with_magnitude(
@@ -872,6 +986,7 @@ class _Triangulation:
         ay = py[a]
         bx = px[b]
         by = py[b]
+        best: tuple[float, int, int] | None = None
         for t, i in self._triangles_around(a):
             base = 3 * t
             u = tv[base + (1, 2, 0)[i]]
@@ -882,11 +997,33 @@ class _Triangulation:
                 return ("vertex", u)
             if ov == 0.0 and (px[v] - ax) * (bx - ax) + (py[v] - ay) * (by - ay) > 0.0:
                 return ("vertex", v)
-            if ou > 0.0 > ov:
-                return ("edge", t, i)
-        raise RuntimeError(
-            "segment recovery could not find a starting wedge; input geometry "
-            "is too degenerate for float64 predicates"
+            straddles = (ou >= 0.0 >= ov or ou <= 0.0 <= ov) and (
+                ou != 0.0 or ov != 0.0
+            )
+            if straddles:
+                # The sign pattern of (ou, ov) alone cannot distinguish the
+                # wedge containing the forward ray from the one containing
+                # the backward ray (found in review by melo-gonzo: the
+                # original strict test selected backward wedges, and the
+                # subsequent pipe walk exited the hull, silently dropping
+                # coverage). Require a PROPER segment-segment intersection
+                # of (a, b) with the opposite edge (u, v), and take the
+                # crossing closest to a: the segment may properly cross a
+                # non-convex link polygon several times, and the walk must
+                # start at the first crossing.
+                oa = (px[v] - px[u]) * (ay - py[u]) - (py[v] - py[u]) * (ax - px[u])
+                ob = (px[v] - px[u]) * (by - py[u]) - (py[v] - py[u]) * (bx - px[u])
+                if oa * ob < 0.0:
+                    t_param = oa / (oa - ob)
+                    if best is None or t_param < best[0]:
+                        best = (t_param, t, i)
+        if best is not None:
+            return ("edge", best[1], best[2])
+        raise ValueError(
+            "segment recovery found no crossing toward the segment "
+            "endpoint; input segments most likely cross each other (loops "
+            "must be disjoint simple polylines), or the geometry is "
+            "degenerate beyond float64 predicates"
         )
 
     def _collect_pipe(self, a: int, b: int):
@@ -918,6 +1055,13 @@ class _Triangulation:
             v = tv[base + (2, 0, 1)[i]]  # right of (a, b)
             pipe.append((u, v))
             n = tn[base + i]
+            if n < 0:
+                # Python's negative indexing would otherwise read garbage
+                # adjacency off the list tails and corrupt the walk.
+                raise RuntimeError(
+                    "segment pipe walk exited the triangulation; input "
+                    "geometry is too degenerate for float64 predicates"
+                )
             nb = 3 * n
             k = 0 if tn[nb] == t else (1 if tn[nb + 1] == t else 2)
             w = tv[nb + k]
@@ -1048,45 +1192,47 @@ class _Triangulation:
 
     # -- exterior and hole removal ---------------------------------------------
 
-    def remove_exterior_and_holes(self, hole_seeds: Sequence[np.ndarray]) -> None:
-        """Delete triangles outside the outer loop and inside each hole.
+    def remove_exterior_and_holes(self) -> None:
+        """Delete triangles outside the outer loop and inside the holes.
 
-        Flood fill across non-constrained edges, seeded from every triangle
-        touching a super-vertex (the exterior) and from the triangle
-        containing each hole's interior seed point. Constrained edges -- the
-        recovered input segments -- are exactly the flood barriers, so the
-        surviving region is the domain interior.
+        Even-odd parity flood fill over the dual graph (the classification
+        CGAL ships as ``mark_domain_in_triangulation``): triangles touching a
+        super-vertex are the unbounded exterior at parity 0, and crossing a
+        constrained edge flips parity. The recovered constrained segments
+        tile the closed input loops exactly, so the parity of a triangle is
+        path-independent, and -- with hole containment already validated --
+        odd parity is precisely the domain interior. Purely topological: no
+        seed points and no geometric predicates, so nearly-touching loops
+        cannot misclassify.
         """
         tv, tn, tc = self.tv, self.tn, self.tc
-        queue: deque[int] = deque()
-        visited: dict[int, bool] = {}
         living = self._living()
+        parity: dict[int, int] = {}
+        queue: deque[int] = deque()
         for t in living:
             base = 3 * t
             if tv[base] < 3 or tv[base + 1] < 3 or tv[base + 2] < 3:
-                if t not in visited:
-                    visited[t] = True
-                    queue.append(t)
-        for seed in hole_seeds:
-            t = self._locate(float(seed[0]), float(seed[1]), living[0])
-            if t not in visited:
-                visited[t] = True
+                parity[t] = 0
                 queue.append(t)
         while queue:
             t = queue.popleft()
+            p = parity[t]
             base = 3 * t
             for j in (0, 1, 2):
                 n = tn[base + j]
-                if n >= 0 and n not in visited and not tc[base + j]:
-                    visited[n] = True
+                if n >= 0 and n not in parity:
+                    parity[n] = p ^ (1 if tc[base + j] else 0)
                     queue.append(n)
-        for t in visited:
-            self._kill(t)
-        survivors = self._living()
+        survivors = []
+        for t in living:
+            if parity.get(t, 0) & 1:
+                survivors.append(t)
+            else:
+                self._kill(t)
         if not survivors:
             raise ValueError(
                 "no triangles remain after exterior/hole removal; the outer "
-                "loop is degenerate or a hole seed escaped its loop"
+                "loop is degenerate"
             )
         vt = self.vt
         for t in survivors:
@@ -1099,7 +1245,8 @@ class _Triangulation:
                         " the outer loop is not a closed simple polygon"
                     )
                 vt[v] = t
-                if tn[base + j] in visited:
+                n = tn[base + j]
+                if n >= 0 and not parity.get(n, 0) & 1:
                     tn[base + j] = -1
 
     # -- Ruppert refinement -------------------------------------------------------
@@ -1338,6 +1485,125 @@ class _Triangulation:
             for tn_ in new_triangles:
                 nb = 3 * tn_
                 tri_queue.append((tn_, tv[nb], tv[nb + 1], tv[nb + 2]))
+
+    # -- ODT smoothing --------------------------------------------------------------
+
+    def _star_min_quality(self, star: list[tuple[int, int]], x: float, y: float):
+        """Minimum squared-sine over all angles of v's star with v at (x, y).
+
+        For a counterclockwise triangle with doubled area :math:`2A` and
+        squared edge lengths :math:`l_1^2, l_2^2, l_3^2`, the squared sine of
+        the angle between edges 1 and 2 is :math:`(2A)^2 / (l_1^2 l_2^2)`, so
+        the smallest angle's squared sine is :math:`(2A)^2` over the largest
+        pairwise product. A non-positive orientation scores ``-inf``.
+        ``sin^2`` cannot tell an angle from its supplement, but a near-180
+        corner forces a near-0 corner in the same triangle, so the minimum
+        still detects every degeneracy. Angles at all three corners count --
+        the star's outer-ring angles at fixed vertices matter just as much
+        as the angles at v.
+        """
+        tv, px, py = self.tv, self.px, self.py
+        worst = math.inf
+        for t, i in star:
+            base = 3 * t
+            u = tv[base + (1, 2, 0)[i]]
+            w = tv[base + (2, 0, 1)[i]]
+            ux = px[u]
+            uy = py[u]
+            wx = px[w]
+            wy = py[w]
+            doubled = (ux - x) * (wy - y) - (uy - y) * (wx - x)
+            if doubled <= 0.0:
+                return -math.inf
+            l_vu = (ux - x) * (ux - x) + (uy - y) * (uy - y)
+            l_uw = (wx - ux) * (wx - ux) + (wy - uy) * (wy - uy)
+            l_wv = (x - wx) * (x - wx) + (y - wy) * (y - wy)
+            d = l_vu * l_uw
+            if l_vu * l_wv > d:
+                d = l_vu * l_wv
+            if l_uw * l_wv > d:
+                d = l_uw * l_wv
+            quality = doubled * doubled / d
+            if quality < worst:
+                worst = quality
+        return worst
+
+    def _star_max_doubled_area(self, star: list[tuple[int, int]], x: float, y: float):
+        """Largest doubled triangle area over v's star with v at (x, y)."""
+        tv, px, py = self.tv, self.px, self.py
+        largest = 0.0
+        for t, i in star:
+            base = 3 * t
+            u = tv[base + (1, 2, 0)[i]]
+            w = tv[base + (2, 0, 1)[i]]
+            doubled = (px[u] - x) * (py[w] - y) - (py[u] - y) * (px[w] - x)
+            if doubled > largest:
+                largest = doubled
+        return largest
+
+    def smooth(self, iterations: int, max_area: float | None) -> None:
+        """Quality-gated ODT smoothing (Chen and Xu 2004; module docstring).
+
+        Each pass sweeps the interior (marker-0) vertices in index order,
+        Gauss-Seidel style: the proposed position is the area-weighted
+        average of the incident triangles' circumcenters -- the optimal-
+        Delaunay-triangulation update -- and the move is accepted only when
+        the smallest angle among those triangles does not decrease and (when
+        ``max_area`` is given) no incident triangle grows beyond it, so
+        triangles never invert and the refinement's bounds survive. A Lawson
+        legalization pass then restores Delaunayhood (Delaunay flips never
+        reduce a quad's smallest angle either) before the next sweep. Stops
+        early once a sweep accepts no move. Deterministic: index-order
+        sweeps, no randomness.
+        """
+        px, py, marker = self.px, self.py, self.marker
+        tv = self.tv
+        for _ in range(iterations):
+            moved = 0
+            for v in range(3, len(px)):
+                if marker[v] != 0:
+                    continue
+                star = self._triangles_around(v)
+                weight_sum = 0.0
+                weighted_x = 0.0
+                weighted_y = 0.0
+                for t, _i in star:
+                    base = 3 * t
+                    a = tv[base]
+                    b = tv[base + 1]
+                    c = tv[base + 2]
+                    doubled = (px[b] - px[a]) * (py[c] - py[a]) - (py[b] - py[a]) * (
+                        px[c] - px[a]
+                    )
+                    center_x, center_y = self._circumcenter(t)
+                    weight_sum += doubled
+                    weighted_x += doubled * center_x
+                    weighted_y += doubled * center_y
+                if weight_sum <= 0.0:
+                    continue
+                new_x = weighted_x / weight_sum
+                new_y = weighted_y / weight_sum
+                if new_x == px[v] and new_y == py[v]:
+                    continue
+                if self._star_min_quality(star, new_x, new_y) < (
+                    self._star_min_quality(star, px[v], py[v])
+                ):
+                    continue
+                if max_area is not None:
+                    # Keep every incident triangle within the area bound; a
+                    # star already over the bound (possible transiently after
+                    # a legalization flip) may still shrink toward it.
+                    new_max = self._star_max_doubled_area(star, new_x, new_y)
+                    if new_max > 2.0 * max_area and new_max > (
+                        self._star_max_doubled_area(star, px[v], py[v])
+                    ):
+                        continue
+                px[v] = new_x
+                py[v] = new_y
+                moved += 1
+            if moved == 0:
+                return
+            self.legalize_all()
 
     # -- output -------------------------------------------------------------------
 
