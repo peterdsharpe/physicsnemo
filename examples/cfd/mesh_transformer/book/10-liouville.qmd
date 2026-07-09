@@ -1,0 +1,549 @@
+# The Liouville suite {#sec-ds-liouville}
+
+The first nonlinear rung — and the suite that carries two of the
+program's sharpest lessons in one equation. A linear model cannot beat
+its best linear approximation of a nonlinear solution operator (the
+superposition wall, measured at 0.77); and a structural contract can be
+*exactly enforced and exactly wrong* (zero-preservation pins the wrong
+value on this family, measured in the stream-factorization study). Both
+lessons are visible in a single closed-form picture below.
+
+## The problem
+
+Deformed disks (the conformal-star geometry of @sec-ds-laplace2d) carry
+Dirichlet data for the Liouville equation
+
+$$
+\Delta u + 2\,e^{u} = 0 \ \text{in } \Omega,
+\qquad u = g \ \text{on } \partial\Omega ,
+$$
+
+whose exact solutions are the spherical-metric potentials
+$u = \log\!\big(4|f'|^2/(1+|f|^2)^2\big)$ for holomorphic $f$ — so the
+suite keeps **exact labels while abandoning linearity** (the constant
+$2$ was verified by autograd to $10^{-11}$; the check is a unit test).
+Solutions are strictly *superharmonic*: $\Delta u = -2e^u < 0$
+everywhere, so interior values strictly exceed the harmonic extension
+of the boundary trace — no linear-in-the-data map can be exact.
+Declared contracts: similarity equivariance always;
+`field_mode="zero_preserving_nonlinear"` — and this suite is precisely
+where the *limits* of zero-preservation were measured.
+
+### The centerpiece: zero data, nonzero solution
+
+Take $f(w) = w$ on the unit disk. The exact solution
+$u = \log\!\big(4/(1+|w|^2)^2\big)$ has **identically zero boundary
+data** and $u(0) = \log 4 \approx 1.386$ at the center.
+
+```{python}
+#| label: fig-ds4-zerodata
+#| fig-cap: >
+#|   The teaching sample: exact Liouville solution with identically zero
+#|   Dirichlet data (black ring: g = 0) and log 4 at the center. Every
+#|   zero-preserving model — linear or nonlinear, any capacity — outputs
+#|   exactly zero on this problem and scores relative error exactly 1:
+#|   the contract "zero data, zero solution" is exact structure for the
+#|   linear problem class and exactly WRONG here (the homogeneous Liouville
+#|   problem has a nonzero solution). This is the measured zero-point
+#|   caveat of the stream-factorization study, drawn.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+
+INK, INK2 = "#0b0b0b", "#52514e"
+SEQUENTIAL = LinearSegmentedColormap.from_list(
+    "book_seq", ["#f0efec", "#e34948"])
+
+theta = np.linspace(0, 2 * np.pi, 240)
+r = np.linspace(0, 1.0, 90)
+R, T = np.meshgrid(r, theta)
+X, Y = R * np.cos(T), R * np.sin(T)
+U = np.log(4.0 / (1.0 + R**2) ** 2)
+
+fig, (ax, ax2) = plt.subplots(
+    1, 2, figsize=(9.2, 4.2), gridspec_kw={"width_ratios": [1.15, 1]})
+cs = ax.contourf(X, Y, U, levels=np.linspace(0, np.log(4), 21),
+                 cmap=SEQUENTIAL)
+ax.plot(np.cos(theta), np.sin(theta), color=INK, lw=3.2)
+ax.annotate("boundary data $g \\equiv 0$", xy=(np.cos(0.8), np.sin(0.8)),
+            xytext=(1.12, 1.12), fontsize=10, color=INK,
+            arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+ax.annotate(r"$u(0) = \log 4$", xy=(0, 0), xytext=(-1.55, -1.2),
+            fontsize=10, color=INK,
+            arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+fig.colorbar(cs, ax=ax, shrink=0.8, label="exact solution $u$")
+ax.set_aspect("equal"); ax.set_axis_off()
+
+radial = np.linspace(0, 1, 200)
+ax2.plot(radial, np.log(4.0 / (1.0 + radial**2) ** 2), color="#e34948",
+         lw=2.4)
+ax2.axhline(0.0, color="#2a78d6", lw=2.4)
+ax2.text(0.03, np.log(4) - 0.06, "exact solution $u(r)$",
+         color="#e34948", fontsize=10, va="top")
+ax2.text(0.03, 0.05, "every zero-preserving model\n(and the harmonic "
+         "extension of $g$)", color="#2a78d6", fontsize=10, va="bottom")
+ax2.set_xlabel("radius $r$")
+ax2.set_ylabel("$u$")
+ax2.grid(True, color="#e1e0d9", lw=0.8)
+for spine in ("top", "right"):
+    ax2.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+The general samples of the suite (below) put nonzero data on deformed
+boundaries — there the zero-point error is graded rather than total,
+the superposition wall dominates, and the two field modes measurably
+separate.
+
+## Why this rung
+
+Everything below this rung is linear, so nothing below it can falsify
+linearity-as-an-assumption. This suite does, cleanly: the best
+drive-linear model cannot beat the norm of the solution operator's
+nonlinear part — measured as a floor of 0.77 that no capacity fixes —
+while the zero-preserving *nonlinear* mode broke through it (0.46).
+And the suite is the program's standing reminder that contracts are
+per-problem *declarations*, not universal truths: the zero-preservation
+that is exact structure on every linear suite pins the wrong value
+here, exactly.
+
+## The gallery
+
+```{python}
+#| label: fig-ds4-gallery
+#| fig-cap: >
+#|   Training-family samples: exact Liouville solutions on conformal-star
+#|   domains (boundary ring colored by its Dirichlet data, same conventions
+#|   as the 2D Laplace gallery). The uniform warm shift of the interior
+#|   relative to the boundary trace is the superharmonicity — every
+#|   sample's interior sits ABOVE the harmonic extension of its trace,
+#|   which is precisely what a linear model cannot represent.
+from matplotlib.collections import LineCollection
+
+from conformal_laplace import conformal_map, map_to_physical
+from liouville import build_liouville_sample, liouville_solution, points_to_complex
+
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def liouville_panel(ax, seed, *, geometry_modes=(2, 3),
+                    deformation_range=(0.05, 0.35), title=None):
+    s = build_liouville_sample(
+        seed, geometry_modes=geometry_modes,
+        deformation_range=deformation_range,
+        n_boundary=96, n_query=16, dtype=torch.float64)
+    radii = torch.linspace(0.0, 0.995, 60, dtype=torch.float64)[None, :]
+    angles = torch.linspace(0.0, 2 * np.pi, 200,
+                            dtype=torch.float64)[:, None]
+    disk = (radii * torch.exp(1j * angles)).to(torch.complex128)
+    physical = conformal_map(s.geometry, disk)
+    w = physical  # identity similarity: physical frame == map output
+    field = liouville_solution(s.field, w).numpy()
+    pts2 = torch.view_as_real(physical).numpy()
+    b = s.domain.boundaries["dirichlet"]
+    tr = b.cell_data["boundary_value"].numpy()
+    vmid = float(tr.mean())
+    amp = max(np.abs(field - vmid).max(), np.abs(tr - vmid).max())
+    ax.contourf(pts2[..., 0], pts2[..., 1], field,
+                levels=np.linspace(vmid - amp, vmid + amp, 25),
+                cmap=DIVERGING)
+    segs = b.points[b.cells].numpy()
+    ax.add_collection(LineCollection(
+        segs, colors=DIVERGING(Normalize(vmid - amp, vmid + amp)(tr)),
+        linewidths=2.0, capstyle="round"))
+    bp = b.points.numpy()
+    lo, hi = bp.min(axis=0), bp.max(axis=0)
+    mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.06
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if title is not None:
+        ax.set_title(title, fontsize=8.5, color=INK)
+
+
+fig, axes = plt.subplots(2, 4, figsize=(9.4, 5.0))
+for ax, seed in zip(axes.ravel(), (2, 5, 9, 13, 21, 27, 34, 40)):
+    liouville_panel(ax, seed, title=f"seed {seed}")
+fig.tight_layout()
+plt.show()
+```
+
+### The OOD axes
+
+The geometry dials are shared with @sec-ds-laplace2d (there is no
+independent drive dial: the boundary data *is* the exact solution's
+trace, so geometry and field move together).
+
+```{python}
+#| label: fig-ds4-splits
+#| fig-cap: >
+#|   Geometry OOD on matched seeds: training family (top), unseen Laurent
+#|   modes {5, 7} (middle), stronger deformation (bottom).
+rows = [
+    ("training family", dict()),
+    ("unseen geometry modes", dict(geometry_modes=(5, 7))),
+    ("stronger deformation", dict(deformation_range=(0.35, 0.55))),
+]
+fig, axes = plt.subplots(3, 3, figsize=(7.6, 7.6))
+for r_i, (label, dials) in enumerate(rows):
+    for c, seed in enumerate((4, 11, 23)):
+        liouville_panel(axes[r_i, c], seed,
+                        title=label if c == 1 else None, **dials)
+fig.tight_layout()
+plt.show()
+```
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds4-bench
+#| output: asis
+import json
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it8 = bie["iteration_8_liouville_nonlinear_wall"]
+rep = it8["replication_p2b"]["summary_1500_steps_3_seeds"]
+arms17 = it8["arms_seed17"]
+it13 = bie["iteration_13_singonly_universality"][
+    "liouville_nl_singonly_1500steps"]["runs"]
+
+lines = ["| arm | ID relative $L^2$ (3 seeds) | reading |",
+         "|---|--:|---|"]
+floor_row = arms17.get("boundary_mean")
+if floor_row is not None:
+    lines.append(
+        f"| boundary-mean floor | {floor_row['in_distribution']:.3f} "
+        "(seed 17) | the no-model reference |")
+lines += [
+    f"| linear mode | {rep['means']['linear']:.3f} | **the superposition "
+    "wall**: capacity-independent floor of a drive-linear map |",
+    f"| nonlinear mode | {rep['means']['nl']:.3f} | the wall broken by the "
+    "declared contract, not capacity |",
+    f"| nonlinear, no-MLP-members | {rep['means']['nl_nomlp']:.3f} | "
+    "polynomial members carry the nonlinear read-in |",
+]
+sing_vals = ", ".join(f"{r['in_distribution']:.2f}" for r in it13)
+lines.append(
+    f"| nonlinear, singular-only dictionary | per-seed: {sing_vals} | "
+    "UNSTABLE — the exact-members-only dictionary that wins every linear "
+    "suite detonates on a nonlinear one (seed 18: 36.5); nonlinear "
+    "problems need smooth members |")
+lines.append(
+    ": Liouville arms (archive: `learned_bie_2026-07-02.json`, iterations "
+    "8 and 13). {#tbl-ds4-bench-table}")
+print("\n".join(lines))
+```
+
+Two structural facts. The linear arm's 0.77 is a **wall, not a
+skill issue** — it matches the norm of the solution operator's
+nonlinear part, and no width or depth moves it (@sec-liouville). And
+the singular-only instability (seed 18 detonating to 36.5) is the
+earliest measurement of a pattern later confirmed decisively on
+Navier–Stokes: **exact members alone suffice for linear problems;
+nonlinear problems need learned smooth members.**
+
+## Variations
+
+::: {.callout-note title="In flight"}
+Resolution-transfer and unseen-geometry showcase cells land with the
+E2/E3 artifacts. The drive-*amplitude* variation — how far off-range a
+nonlinear read-in can be trusted — is the nonlinear-fragility story
+told at @sec-nonlinear-fragility (implicit degree ~21, detonation, and
+the declared-degree repair); this suite's chapter defers to it rather
+than duplicating.
+:::
+
+## The full evidence
+
+Moved from the benchmarks chapter: the wall's measurement and its break.
+
+### The Liouville suite: a nonlinear wall, and its break {#sec-liouville}
+
+A drive-linear model cannot beat its best linear approximation of a
+nonlinear solution operator — the Liouville suite measures that wall,
+and its break. The suite (`liouville.py`) is the benchmark's first
+**nonlinear** member of the admitted problem class:
+
+$$
+\Delta u + 2\,e^{u} = 0 \ \text{ in } \Omega,
+\qquad u = g \ \text{ on } \partial\Omega ,
+$$
+
+homogeneous — no interior source, the same equation everywhere, so it sits
+squarely inside the program's scope — but nonlinear. Exact labels come from
+the same conformal machinery as the 2D Laplace suite: for any holomorphic
+$f$ with $f' \neq 0$ on $\Omega$, the constant-curvature metric potential
+$u = \log\bigl(4\,|f'|^2/(1+|f|^2)^2\bigr)$ solves the equation exactly
+(the constant-$2$ convention is autograd-verified against candidate
+constants as a unit test). The geometry generator, the
+`in_distribution` / `unseen_geometry_modes` / `stronger_deformation`
+splits, and the `DomainMesh` layout are reused unchanged, so every prior
+model class runs unmodified. As everywhere in this book, the *label
+generator* knows the equation; no model is told anything about it.
+
+```{python}
+#| label: fig-liouville-fields
+#| fig-cap: >
+#|   What makes the suite nonlinear, rendered live from the generator.
+#|   Left and center: two exact Liouville solutions on the same
+#|   deformed-disk domain (interior field translucent, boundary trace
+#|   emphasized on top; shared color scale) -- each satisfies the PDE to
+#|   machine zero. Right: the PDE residual of their sum, which the
+#|   equation gives in closed form as
+#|   $2(e^{u_1+u_2} - e^{u_1} - e^{u_2})$ -- visibly nonzero, so the sum
+#|   of two solutions is not a solution: the map from $u$ to $2e^u$
+#|   breaks additivity, which is exactly what the drive-linearity wall
+#|   measures. For the Laplace suites this panel would be identically
+#|   zero. Note the residual's separate color scale: the failure
+#|   concentrates where the summed field peaks.
+import math
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.tri import Triangulation
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from conformal_laplace import conformal_map
+from liouville import (
+    build_liouville_sample,
+    liouville_solution,
+    sample_liouville_field,
+)
+
+INK, INK2 = "#0b0b0b", "#52514e"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def disk_triangulation(n_rings=28, n_theta=96):
+    radii = np.linspace(0.0, 1.0, n_rings + 1)[1:]
+    theta = np.linspace(0.0, 2.0 * np.pi, n_theta, endpoint=False)
+    points = [np.zeros((1, 2))]
+    for r in radii:
+        points.append(np.stack([r * np.cos(theta), r * np.sin(theta)], axis=1))
+    points = np.concatenate(points)
+    triangles = [[0, 1 + j, 1 + (j + 1) % n_theta] for j in range(n_theta)]
+    for i in range(n_rings - 1):
+        a, b = 1 + i * n_theta, 1 + (i + 1) * n_theta
+        for j in range(n_theta):
+            k = (j + 1) % n_theta
+            triangles += [[a + j, b + j, b + k], [a + j, b + k, a + k]]
+    return points, np.array(triangles)
+
+
+sample = build_liouville_sample(5)
+geometry, field_1 = sample.geometry, sample.field
+radius_bound = float(1.0 + geometry.coefficients.abs().sum().item())
+
+pre_points, triangles = disk_triangulation()
+z_grid = torch.complex(torch.tensor(pre_points[:, 0]), torch.tensor(pre_points[:, 1]))
+physical = conformal_map(geometry, z_grid)
+angles = torch.linspace(0.0, 2.0 * math.pi, 257, dtype=torch.float64)
+ring = conformal_map(geometry, torch.polar(torch.ones_like(angles), angles))
+ring_xy = torch.stack((ring.real, ring.imag), dim=-1).numpy()
+ring_mid = 0.5 * (ring[:-1] + ring[1:])
+
+u1 = liouville_solution(field_1, physical).numpy()
+# Second field on the SAME domain, certified via the first geometry's
+# radius bound; mirror the generator's amplitude gate on the render grid.
+field_2 = None
+for candidate_seed in range(1000, 1200):
+    candidate = sample_liouville_field(
+        candidate_seed, domain_radius_bound=radius_bound)
+    u2 = liouville_solution(candidate, physical).numpy()
+    if np.abs(u2).max() <= 4.0 and u2.max() - u2.min() >= 2.0:
+        field_2 = candidate
+        break
+if field_2 is None:
+    raise RuntimeError("no admissible second Liouville field found")
+residual = 2.0 * (np.exp(u1 + u2) - np.exp(u1) - np.exp(u2))
+
+u_amp = max(np.abs(u1).max(), np.abs(u2).max())
+u_norm = Normalize(-u_amp, u_amp)
+r_amp = np.abs(residual).max()
+r_norm = Normalize(-r_amp, r_amp)
+
+fig = plt.figure(figsize=(9.2, 3.6))
+grid = fig.add_gridspec(1, 3, left=0.02, right=0.84, top=0.88, bottom=0.10,
+                        wspace=0.08)
+panels = [
+    (u1, u_norm, r"$u_1$ (exact solution)", r"residual $\equiv 0$ (exact)"),
+    (u2, u_norm, r"$u_2$ (exact, same domain)", r"residual $\equiv 0$ (exact)"),
+    (residual, r_norm, r"$\Delta(u_1{+}u_2) + 2e^{u_1+u_2}$",
+     r"residual $\neq 0$: not a solution"),
+]
+for col, (values, norm, title, note) in enumerate(panels):
+    ax = fig.add_subplot(grid[0, col])
+    tri = Triangulation(physical.real.numpy(), physical.imag.numpy(), triangles)
+    cs = ax.tricontourf(tri, values, levels=np.linspace(norm.vmin, norm.vmax, 27),
+                        cmap=DIVERGING, alpha=0.82)
+    cs.set_edgecolor("face")
+    if col < 2:
+        trace = liouville_solution(field_1 if col == 0 else field_2, ring_mid)
+        segments = np.stack([ring_xy[:-1], ring_xy[1:]], axis=1)
+        ax.add_collection(LineCollection(
+            segments, colors=DIVERGING(norm(trace.numpy())), linewidths=3.2,
+            zorder=4, capstyle="round"))
+    else:
+        ax.plot(ring_xy[:, 0], ring_xy[:, 1], color=INK, lw=2.4, zorder=4)
+    ax.text(0.5, -0.04, note, transform=ax.transAxes, ha="center", va="top",
+            fontsize=8.5, color=INK2 if col < 2 else INK)
+    lo, hi = ring_xy.min(axis=0), ring_xy.max(axis=0)
+    mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.10
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title(title, fontsize=10, color=INK)
+cax_u = fig.add_axes([0.865, 0.18, 0.016, 0.55])
+cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=DIVERGING, norm=u_norm), cax=cax_u)
+cbar.set_label(r"$u$  [-]", fontsize=8)
+cbar.ax.tick_params(labelsize=7)
+cax_r = fig.add_axes([0.945, 0.18, 0.016, 0.55])
+cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=DIVERGING, norm=r_norm), cax=cax_r)
+cbar.set_label("residual  [-]", fontsize=8)
+cbar.ax.tick_params(labelsize=7)
+plt.show()
+```
+
+#### The wall is a superposition argument
+
+A model whose boundary-to-interior map is exactly linear in the drive
+satisfies superposition at fixed geometry — that is the point of the linear
+contract (@sec-mesh-attention). The Liouville solution operator does not:
+$u \mapsto 2e^u$ breaks additivity, so **a drive-linear model cannot
+represent the solution operator of a nonlinear PDE beyond its best linear
+approximation** over the sampled drive distribution. The failure is
+representational, not architectural, and it is *shared*: every drive-linear
+model in the program — regardless of family, capacity, or parameter count —
+ties at $\approx 0.79$ relative $L^2$ in-distribution on this suite, the
+**drive-linearity wall** (the parameter-free boundary-mean floor is
+$1.06$). Only giving up drive linearity can cross it.
+
+The one model class in the stack that is *not* drive-linear is the
+kernel-basis query decoder in `zero_preserving_nonlinear` field mode
+(@sec-kernel-decoder): its kernel coefficients may read drive invariants
+through structurally multiplicative, zero-preserving updates. Nothing about
+that mechanism is Liouville-specific — it reads drive invariants
+generically, with no knowledge of which nonlinearity (if any) generated the
+data.
+
+#### Wall-break results
+
+Three arms of the kernel-decoder `MeshTransformer`, 1,500 steps, three
+seeds (17/18/19), under the identical fixed-compute protocol as every
+Liouville baseline (checked-in artifact,
+`learned_bie_2026-07-02.json`, key `iteration_8_liouville_nonlinear_wall`):
+
+| arm (kernel-decoder `MeshTransformer`) | params | seed 17 | seed 18 | seed 19 | mean | PDE residual (mean) |
+|---|--:|--:|--:|--:|--:|--:|
+| linear control (`linear` mode) | 110,561 | 0.7701 | 0.7486 | 0.7883 | 0.769 | 2.18 |
+| nonlinear, 8 MLP members | 183,089 | 0.3990 | 0.4305 | 0.5639 | 0.464 | 3.55 |
+| nonlinear, dictionary-only | 173,009 | 0.3963 | 0.5619 | 0.4688 | 0.476 | 3.55 |
+
+: Liouville in-distribution relative $L^2$, three arms $\times$ three
+seeds, 1,500 steps each — the fixed-compute protocol shared with all
+baselines. PDE residual: $\|\Delta u + 2e^u\|/\|e^u\|$, 3-seed mean of the
+archived per-run values (exact solution 0; any harmonic prediction exactly
+2.0; @sec-fidelity-columns). {#tbl-liouville-arms}
+
+```{python}
+#| fig-cap: >
+#|   The Liouville drive-linearity wall and its break (checked-in
+#|   learned_bie_2026-07-02.json, replication_p2b, 1,500 steps). Dots are
+#|   seeds 17/18/19, left to right within each arm; the horizontal bar is
+#|   the 3-seed mean. The linear control lands on the ~0.79 superposition
+#|   wall; both nonlinear arms sit well below it, with the worst nonlinear
+#|   seed (0.564) still better than the best linear seed (0.749).
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+summary = results["iteration_8_liouville_nonlinear_wall"]["replication_p2b"][
+    "summary_1500_steps_3_seeds"]
+
+arms = [
+    ("linear control", summary["linear_ID"], "#eda100"),
+    ("nonlinear,\n8 MLP members", summary["nl_ID"], "#2a78d6"),
+    ("nonlinear,\ndictionary-only", summary["nl_nomlp_ID"], "#4a3aa7"),
+]
+offsets = [-0.11, 0.0, 0.11]
+
+fig, ax = plt.subplots(figsize=(6.4, 3.8))
+ax.axhline(1.06, color="#898781", lw=1.2, ls=":")
+ax.text(2.45, 1.068, "boundary-mean floor (1.06, parameter-free)",
+        ha="right", va="bottom", fontsize=8, color="#52514e")
+ax.axhline(0.79, color="#0b0b0b", lw=1.2, ls="--")
+ax.text(2.45, 0.798, "drive-linearity wall ($\\approx$0.79)",
+        ha="right", va="bottom", fontsize=8, color="#0b0b0b")
+for i, (label, values, color) in enumerate(arms):
+    mean = sum(values) / len(values)
+    ax.plot([i - 0.2, i + 0.2], [mean, mean], color=color, lw=2.4, zorder=2)
+    ax.plot([i + o for o in offsets], values, "o", ms=8, color=color,
+            mec="white", mew=1.5, zorder=3)
+ax.set_xticks(range(3), [a[0] for a in arms])
+ax.set_xlim(-0.6, 2.6)
+ax.set_ylim(0.0, 1.18)
+ax.set_ylabel("Liouville ID relative $L^2$")
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+What this establishes:
+
+1. **The wall is broken.** The nonlinear arms reach ID means of 0.464 and
+   0.476 against the linear control's 0.769 (1.6$\times$ better), with no
+   seed overlap: the *worst* nonlinear seed (0.564) beats the *best*
+   linear seed (0.749). OOD splits improve similarly (unseen geometry
+   modes 0.77 $\to$ 0.59, stronger deformation 0.72 $\to$ 0.46).
+2. **The linear arm is a clean control.** The same architecture, minus
+   permission to read drive invariants, lands at 0.769 — on the predicted
+   wall — so the gap is attributable to drive nonlinearity alone.
+3. **The field is fit; the strong form is not.** The PDE-residual column
+   of @tbl-liouville-arms is the loudest fidelity story in the book: the
+   nine archived 1,500-step runs read 1.4–5.2, against a calibration where
+   the exact solution scores 0 and any harmonic prediction scores exactly
+   2.0 — and the *nonlinear* arms sit at a mean of 3.55, farther from the
+   operator than the linear control's 2.18, even as their $L^2$ error
+   halves. The wall is broken in the $L^2$ sense, not the
+   operator-fidelity sense: the drive-nonlinear correction bends the field
+   toward the data, not toward $\Delta u = -2e^u$.
+
+Protocol note: long constant-LR runs (5,000 steps) oscillate late in
+training, and small-validation-versus-larger-evaluation gaps on unstable
+models can be large; all headline numbers use the 1,500-step fixed-compute
+protocol shared by every baseline, and the remaining protocol gap is the
+missing LR decay (a hygiene note in @sec-future).
+
+*History: @sec-nb-iter8 — including the single-seed traps, the dictionary
+tie, and a correction to this section's original caveat.*

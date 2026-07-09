@@ -1,0 +1,582 @@
+# The 2D Laplace suite {#sec-ds-laplace2d}
+
+Heat a wavy metal plate from its edge and ask for the temperature
+everywhere inside: that is this suite. It is the foundation of the
+program's difficulty ladder — linear, scalar, exactly solvable — and
+the place where every architectural claim must survive first contact,
+because exact labels make every failure unambiguous.
+
+## The problem
+
+A star-shaped domain $\Omega$ with a smooth, randomly generated
+boundary carries prescribed values $g$ (Dirichlet data) on its edge;
+the model must produce the interior field at arbitrary query points.
+The figure below shows one complete sample exactly as the model
+receives it: boundary cells colored by their data, outward normals,
+and bare query points — nothing else.
+
+```{python}
+#| label: fig-ds1-bc-diagram
+#| fig-cap: >
+#|   One training sample, as posed. The boundary polyline (colored by its
+#|   Dirichlet value g) is the entire input: each cell carries its position,
+#|   size, outward normal (gray arrows), BC type, and value. The interior
+#|   query points (dots) carry nothing — they are bare coordinates at which
+#|   the field is requested.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from conformal_laplace import (
+    build_domain_sample,
+    conformal_map,
+    evaluate_potential,
+    map_to_physical,
+    sample_drive,
+    sample_geometry,
+)
+
+INK, INK2 = "#0b0b0b", "#52514e"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def make_sample(seed, *, geo_modes=(2, 3), deform=(0.05, 0.35),
+                drive_modes=tuple(range(1, 9)), n_boundary=128, n_query=8):
+    geometry = sample_geometry(seed, modes=geo_modes,
+                               deformation_range=deform)
+    drive = sample_drive(seed + 1000, modes=drive_modes)
+    return build_domain_sample(geometry, drive, n_boundary=n_boundary,
+                               n_query=n_query, query_seed=seed)
+
+
+sample = make_sample(11, n_boundary=96, n_query=140)
+boundary = sample.domain.boundaries["dirichlet"]
+pts = boundary.points.numpy()
+cells = boundary.cells.numpy()
+trace = boundary.cell_data["boundary_value"].numpy()
+queries = sample.domain.interior.points.numpy()
+
+fig, ax = plt.subplots(figsize=(5.6, 5.2))
+amp = np.abs(trace - trace.mean()).max()
+norm = Normalize(trace.mean() - amp, trace.mean() + amp)
+segs = pts[cells]
+ax.add_collection(LineCollection(segs, colors=DIVERGING(norm(trace)),
+                                 linewidths=3.4, capstyle="round", zorder=3))
+centroids = segs.mean(axis=1)
+normals = boundary.cell_normals.numpy()
+stride = 4
+ax.quiver(centroids[::stride, 0], centroids[::stride, 1],
+          normals[::stride, 0], normals[::stride, 1],
+          color="#898781", width=0.004, scale=18, zorder=2)
+ax.plot(queries[:, 0], queries[:, 1], ".", color=INK, ms=3.5, zorder=1)
+ax.annotate("Dirichlet boundary:\n$u = g$ (color)",
+            xy=tuple(centroids[10]), xytext=(0.02, 0.97),
+            textcoords="axes fraction", fontsize=10, color=INK, va="top",
+            arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+ax.annotate("query points:\ncoordinates only", xy=tuple(queries[30]),
+            xytext=(0.70, 0.04), textcoords="axes fraction", fontsize=10,
+            color=INK, arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+sm = plt.cm.ScalarMappable(cmap=DIVERGING, norm=norm)
+fig.colorbar(sm, ax=ax, shrink=0.75, label="boundary data $g$")
+ax.set_aspect("equal")
+ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+for spine in ax.spines.values():
+    spine.set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+In symbols: the governing problem is
+
+$$
+\Delta u = 0 \ \text{in } \Omega,
+\qquad u = g \ \text{on } \partial\Omega ,
+$$
+
+and every label is **exact**: domains are conformal images of the unit
+disk under random Laurent-mode maps, drives are harmonic compositions
+in the disk frame, so the interior solution is available in closed form
+at any point — no solver in the loop, no numerical error to hide behind
+(@sec-part-eval). The declared contracts: **similarity equivariance**
+(always, via the intrinsic gauge) and **drive-linearity** — Laplace is
+linear, so `field_mode="linear"` makes superposition structural, exact
+to floating point for any weights.
+
+## Why this rung
+
+Every claim in this book starts here for three reasons. *Exactness*:
+contract violations and accuracy failures are unambiguous at the
+$10^{-14}$ level. *Analytic oracles*: the true solution operator is
+available, so "how far from perfect" is measured, not estimated. And
+*control*: geometry, drive frequency, and discretization vary
+independently, which is what makes the one-question-per-split
+evaluation of @sec-part-eval possible at all.
+
+Its **hard-geometry extension** — the multi-body and deep-cavity
+families below — keeps the same exact physics while making the
+*geometry* the hard part: fields that pairwise invariants alone
+provably cannot resolve, which is where boundary self-attention earns
+its keep (@sec-mixed-bc, @sec-encoder-stress).
+
+## The gallery
+
+Twelve training-family samples, drawn exactly as the training
+distribution draws them. Each panel is the exact interior field; the
+boundary ring is the input data.
+
+```{python}
+#| label: fig-ds1-gallery
+#| fig-cap: >
+#|   Training-family samples: exact interior fields u on conformal-star
+#|   domains, boundary colored by its Dirichlet data. Colors normalize per
+#|   sample about the boundary mean, so the geometry distribution and the
+#|   field structure read together.
+
+
+def conformal_panel(ax, seed, *, geo_modes=(2, 3), deform=(0.05, 0.35),
+                    drive_modes=tuple(range(1, 9)), title=None,
+                    n_ring=200, n_rad=60):
+    s = make_sample(seed, geo_modes=geo_modes, deform=deform,
+                    drive_modes=drive_modes)
+    radii = torch.linspace(0.0, 0.995, n_rad, dtype=torch.float64)[None, :]
+    angles = torch.linspace(0.0, 2 * np.pi, n_ring,
+                            dtype=torch.float64)[:, None]
+    disk = (radii * torch.exp(1j * angles)).to(torch.complex128)
+    physical = map_to_physical(s.geometry, disk, s.similarity).numpy()
+    field = evaluate_potential(s.drive, disk).numpy()
+    b = s.domain.boundaries["dirichlet"]
+    tr = b.cell_data["boundary_value"].numpy()
+    vmid = float(tr.mean())
+    amp = max(np.abs(field - vmid).max(), np.abs(tr - vmid).max())
+    ax.contourf(physical[..., 0], physical[..., 1], field,
+                levels=np.linspace(vmid - amp, vmid + amp, 25),
+                cmap=DIVERGING)
+    segs2 = b.points[b.cells].numpy()
+    ax.add_collection(LineCollection(
+        segs2, colors=DIVERGING(Normalize(vmid - amp, vmid + amp)(tr)),
+        linewidths=2.0, capstyle="round"))
+    bp = b.points.numpy()
+    lo, hi = bp.min(axis=0), bp.max(axis=0)
+    mid2, half2 = (lo + hi) / 2, (hi - lo).max() / 2 * 1.06
+    ax.set_xlim(mid2[0] - half2, mid2[0] + half2)
+    ax.set_ylim(mid2[1] - half2, mid2[1] + half2)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if title is not None:
+        ax.set_title(title, fontsize=8.5, color=INK)
+
+
+fig, axes = plt.subplots(3, 4, figsize=(9.4, 7.2))
+for ax, seed in zip(axes.ravel(),
+                    (3, 7, 11, 17, 23, 29, 31, 37, 41, 47, 53, 59)):
+    conformal_panel(ax, seed, title=f"seed {seed}")
+fig.tight_layout()
+plt.show()
+```
+
+### The three OOD axes, illustrated
+
+Evaluation never mixes questions: each split moves **one** axis away
+from training (@sec-part-eval). The rows below make the axes visible on
+matched seeds by moving the generator dials directly — geometry modes
+the training family never uses, stronger deformation of familiar modes,
+and drive frequencies beyond the training band.
+
+```{python}
+#| label: fig-ds1-splits
+#| fig-cap: >
+#|   The OOD axes, one per row, on matched seeds. Row 1: the training
+#|   family (Laurent modes {2,3}, deformation 0.05-0.35, drive modes 1-8).
+#|   Row 2: unseen geometry modes {5,7}. Row 3: stronger deformation
+#|   (0.35-0.55) of the training modes. Row 4: unseen drive frequencies
+#|   (modes 9-14) on training-family geometry. The frozen evaluation banks
+#|   implement these axes with their exact protocols (@sec-part-eval);
+#|   these panels vary the same dials illustratively.
+rows = [
+    ("training family", dict()),
+    ("unseen geometry modes", dict(geo_modes=(5, 7))),
+    ("stronger deformation", dict(deform=(0.35, 0.55))),
+    ("unseen drive frequencies", dict(drive_modes=tuple(range(9, 15)))),
+]
+fig, axes = plt.subplots(4, 3, figsize=(7.6, 10.0))
+for row, (label, dials) in enumerate(rows):
+    for col, seed in enumerate((5, 13, 19)):
+        conformal_panel(axes[row, col], seed,
+                        title=label if col == 1 else None, **dials)
+fig.tight_layout()
+plt.show()
+```
+
+### The hard-geometry families
+
+The same exact physics on geometry built to defeat pairwise reasoning:
+multiple bodies whose separating gaps carry the field structure, and
+deep cavities whose openings hide it.
+
+```{python}
+#| label: fig-ds1-stress
+#| fig-cap: >
+#|   Hard-geometry samples: multi-body (left pair, narrow-gap dial shown)
+#|   and deep-cavity (right pair, deep-slot dial shown). Exact fields on
+#|   masked grids; excluded bodies read as solid gray; x marks are the
+#|   charges generating the exact solutions — label machinery, never model
+#|   input.
+import matplotlib.patheffects as mpe
+
+from encoder_stress import (
+    SPLITS,
+    _in_domain,
+    build_deep_cavity_sample,
+    build_multi_body_sample,
+    harmonic_potential,
+)
+
+
+def stress_panel(ax, s, n_grid=150):
+    b = s.domain.boundaries["dirichlet"]
+    p = b.points.numpy()
+    lo, hi = p.min(axis=0), p.max(axis=0)
+    mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.05
+    xs = np.linspace(mid[0] - half, mid[0] + half, n_grid)
+    ys = np.linspace(mid[1] - half, mid[1] + half, n_grid)
+    X, Y = np.meshgrid(xs, ys)
+    grid_points = torch.tensor(np.stack([X.ravel(), Y.ravel()], axis=1))
+    inside = torch.cat([
+        _in_domain(s.boundary_loops, grid_points[i:i + 8192])
+        for i in range(0, grid_points.shape[0], 8192)
+    ]).numpy()
+    values = harmonic_potential(
+        grid_points, s.charge_positions, s.charge_strengths).numpy()
+    field = np.ma.array(values.reshape(n_grid, n_grid),
+                        mask=~inside.reshape(n_grid, n_grid))
+    tr = b.cell_data["boundary_value"].numpy()
+    vmid = float(tr.mean())
+    amp = max(float(np.abs(field - vmid).max()),
+              float(np.abs(tr - vmid).max()))
+    norm2 = Normalize(vmid - amp, vmid + amp)
+    ax.contourf(X, Y, field, levels=np.linspace(vmid - amp, vmid + amp, 25),
+                cmap=DIVERGING, alpha=0.85)
+    for hole in s.boundary_loops[1:]:
+        ax.fill(hole[:, 0].numpy(), hole[:, 1].numpy(),
+                facecolor="#eae8e1", edgecolor="none", zorder=2)
+    segs3 = b.points[b.cells].numpy()
+    line = LineCollection(segs3, colors=DIVERGING(norm2(tr)),
+                          linewidths=2.0, zorder=4, capstyle="round")
+    line.set_path_effects(
+        [mpe.Stroke(linewidth=2.7, foreground=INK), mpe.Normal()])
+    ax.add_collection(line)
+    charges = s.charge_positions.numpy()
+    keep = (np.abs(charges[:, 0] - mid[0]) < 0.95 * half) & (
+        np.abs(charges[:, 1] - mid[1]) < 0.95 * half)
+    ax.plot(charges[keep, 0], charges[keep, 1], "x", color=INK, ms=4,
+            mew=1.2, zorder=5)
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+fig, axes = plt.subplots(1, 4, figsize=(9.4, 2.8))
+panels = [
+    (build_multi_body_sample(3, **SPLITS["multi_body"]["in_distribution"]),
+     "multi-body: in-distribution"),
+    (build_multi_body_sample(7, **SPLITS["multi_body"]["narrow_gap"]),
+     "multi-body: narrow gap"),
+    (build_deep_cavity_sample(3, **SPLITS["deep_cavity"]["in_distribution"]),
+     "deep cavity: in-distribution"),
+    (build_deep_cavity_sample(9, **SPLITS["deep_cavity"]["deep_slot"]),
+     "deep cavity: deep slot"),
+]
+for ax, (s, label) in zip(axes, panels):
+    stress_panel(ax, s)
+    ax.set_title(label, fontsize=8.5)
+fig.tight_layout()
+plt.show()
+```
+
+## Benchmarks
+
+The headline rows, from the checked-in archives (protocols in
+@sec-part-eval). The division of labor is deliberate: this table
+carries the suite's headline; the *cross-suite* component matrices —
+dictionary ablations, heads-versus-rank, encoder depth — live in
+@sec-part-accuracy because they are evidence about the architecture,
+not about this dataset; and the suite-specific full record
+(the encoder-stress families) sits later in this chapter
+(@sec-encoder-stress):
+
+```{python}
+#| label: tbl-ds1-bench
+#| output: asis
+import json
+
+ref = json.load(open(Path("..") / "results" / "reference_2026-07-01.json"))
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+acc = ref["accuracy"]
+k7 = bie["iteration_7_kernel_decoder_fix"]["reference_bank_3seed_3000steps"]
+prune = bie["iteration_4_pruning"]["confirmation_3seed_reference_bank"]
+
+rows = [
+    ("boundary-mean floor (0 params)",
+     acc["boundary_mean"]["relative_l2"]["interpolation"]["mean"],
+     acc["boundary_mean"]["relative_l2"]["unseen_geometry_modes"]["mean"]),
+    ("MeshTransformer, moment decoder",
+     acc["mesh_transformer"]["relative_l2"]["interpolation"]["mean"],
+     acc["mesh_transformer"]["relative_l2"]["unseen_geometry_modes"]["mean"]),
+    ("MeshTransformer, kernel decoder (dictionary-only)",
+     sum(k7["kernel_dictionary_only"]["id"])
+     / len(k7["kernel_dictionary_only"]["id"]),
+     None),
+    ("free-form pair kernel (control)",
+     acc["invariant_pair_kernel"]["relative_l2"]["interpolation"]["mean"],
+     acc["invariant_pair_kernel"]["relative_l2"][
+         "unseen_geometry_modes"]["mean"]),
+    ("3-parameter BIE (oracle-in-family)",
+     prune["interpolation"]["mean"], None),
+]
+lines = ["| model | ID relative $L^2$ | unseen-modes |", "|---|--:|--:|"]
+for name, idv, oodv in rows:
+    ood = f"{oodv:.3f}" if oodv is not None else "—"
+    lines.append(f"| {name} | {idv:.4f} | {ood} |")
+lines.append(
+    ": Headline 2D-Laplace rows (64-case frozen reference bank; archive: "
+    "`reference_2026-07-01.json`, `learned_bie_2026-07-02.json`). "
+    "{#tbl-ds1-bench-table}")
+print("\n".join(lines))
+```
+
+The suite's structural findings — the kernel decoder repairing the
+proved moment-decoder ceiling, the dictionary closing at two exact
+members, the hard-geometry families demanding the single-layer member —
+are told in @sec-benchmarks and @sec-learned-bie; this chapter's role
+is the dataset itself.
+
+## Variations
+
+::: {.callout-note title="In flight"}
+The unseen-geometry showcase (dials pushed past training, fused stars,
+topology changes — predicted vs exact fields with the honest
+"reasonable or garbage?" framing) and the per-suite resolution-transfer
+gallery run as cluster experiments E2/E3 of the dataset-chapters
+thread; their cells land here when the artifacts do.
+:::
+
+## The full evidence: encoder-stress families
+
+Moved from the benchmarks chapter: the multi-body and deep-cavity studies.
+
+### The encoder-stress suites: geometry that pair invariants cannot see {#sec-encoder-stress}
+
+These suites (`encoder_stress.py`; their place in the agenda is
+@sec-future) exist to test a claim no earlier benchmark could
+touch. Every prior 2D suite lives on a (deformed) disk,
+where two boundary points close in $\mathbb R^2$ are also close along the
+boundary — so a kernel of *pairwise Euclidean invariants* never has to
+see around geometry, and the attention encoder's claim to existence
+(global boundary-to-boundary information flow before the query decode)
+goes untested. Two families close the gap, both with
+exterior-point-charge exact labels
+($u = \sum_j q_j \log\|x - c_j\|$, charges strictly outside the domain
+closure) and unit-RMS boundary traces:
+
+- **Multi-body**: the interior of a circle minus two disjoint disks —
+  multiply connected, three Dirichlet boundaries merged into a single
+  boundary mesh (identity conveyed geometrically). Some in-disk charges
+  are deliberately biased toward the gap-facing surface of their disk,
+  so in the narrow-gap regime the trace on the near face of one body is
+  dominated by a charge hidden inside the *other* — genuine inter-body
+  coupling. The difficulty dial is the surface gap over the sum of disk
+  radii; splits: in-distribution, narrow-gap, single-body, and
+  unseen-charge-count.
+- **Deep cavity**: a simply connected domain whose boundary is a disk
+  with a deep, narrow, smoothly filleted slot (a "C-shape"), charges
+  nestled *inside the slot* — outside the domain but deep in the cavity
+  — so two interior points on opposite cavity walls are Euclidean-close
+  while the field between them is mediated by the whole cavity
+  geometry. The dial is slot depth over width; splits: in-distribution,
+  deep-slot, and a convex control.
+
+```{python}
+#| label: fig-stress-multibody
+#| fig-cap: >
+#|   The multi-body family, one exact case per split, rendered live from
+#|   the generator: interior field translucent inside the boundary,
+#|   boundary trace emphasized on top (colors per sample, diverging
+#|   about the boundary mean). Crosses are the generator's logarithmic
+#|   point charges -- exterior to the domain (inside the excluded bodies
+#|   or beyond the outer circle), private label-generation state no
+#|   model ever sees; exterior charges beyond the crop are not shown. In
+#|   the narrow-gap case the hot spot on the near face of each body is
+#|   produced by a charge hidden inside the other body -- the inter-body
+#|   coupling that pair invariants cannot see.
+import math
+import sys
+from pathlib import Path
+
+import matplotlib.patheffects as mpe
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from encoder_stress import (
+    SPLITS,
+    _in_domain,
+    build_deep_cavity_sample,
+    build_multi_body_sample,
+    harmonic_potential,
+)
+
+INK, INK2 = "#0b0b0b", "#52514e"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def stress_panel(ax, sample, n_grid=170):
+    """Exact interior field on a masked grid, using the generator's own
+    domain-membership predicate (winding numbers), chunked for memory."""
+    boundary = sample.domain.boundaries["dirichlet"]
+    pts = boundary.points.numpy()
+    lo, hi = pts.min(axis=0), pts.max(axis=0)
+    mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.05
+    xs = np.linspace(mid[0] - half, mid[0] + half, n_grid)
+    ys = np.linspace(mid[1] - half, mid[1] + half, n_grid)
+    X, Y = np.meshgrid(xs, ys)
+    grid_points = torch.tensor(np.stack([X.ravel(), Y.ravel()], axis=1))
+    inside = torch.cat([
+        _in_domain(sample.boundary_loops, grid_points[i : i + 8192])
+        for i in range(0, grid_points.shape[0], 8192)
+    ]).numpy()
+    values = harmonic_potential(
+        grid_points, sample.charge_positions, sample.charge_strengths).numpy()
+    field = np.ma.array(values.reshape(n_grid, n_grid),
+                        mask=~inside.reshape(n_grid, n_grid))
+
+    trace = boundary.cell_data["boundary_value"].numpy()
+    vmid = float(trace.mean())
+    amp = max(float(np.abs(field - vmid).max()), float(np.abs(trace - vmid).max()))
+    norm = Normalize(vmid - amp, vmid + amp)
+
+    cs = ax.contourf(X, Y, field, levels=np.linspace(vmid - amp, vmid + amp, 27),
+                     cmap=DIVERGING, alpha=0.82)
+    cs.set_edgecolor("face")
+    for hole in sample.boundary_loops[1:]:  # excluded bodies read as solid
+        ax.fill(hole[:, 0].numpy(), hole[:, 1].numpy(),
+                facecolor="#eae8e1", edgecolor="none", zorder=2)
+    segments = boundary.points[boundary.cells].numpy()
+    boundary_line = LineCollection(
+        segments, colors=DIVERGING(norm(trace)), linewidths=2.2,
+        zorder=4, capstyle="round")
+    boundary_line.set_path_effects(
+        [mpe.Stroke(linewidth=3.0, foreground=INK), mpe.Normal()])
+    ax.add_collection(boundary_line)
+    charges = sample.charge_positions.numpy()
+    keep = (np.abs(charges[:, 0] - mid[0]) < 0.93 * half) & (
+        np.abs(charges[:, 1] - mid[1]) < 0.93 * half)
+    ax.plot(charges[keep, 0], charges[keep, 1], "x", color=INK, ms=5,
+            mew=1.4, zorder=5)
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+
+def stress_colorbar(fig, position):
+    cax = fig.add_axes(position)
+    sm = plt.cm.ScalarMappable(cmap=DIVERGING, norm=Normalize(-1, 1))
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_ticks([-1, 0, 1])
+    cbar.set_ticklabels(["min", "boundary\nmean", "max"], fontsize=8)
+    cbar.set_label("potential $u$ (per sample)", fontsize=9)
+
+
+cases = [
+    ("in_distribution", 3, "in-distribution"),
+    ("narrow_gap", 7, "narrow gap"),
+    ("single_body", 11, "single body"),
+    ("unseen_charge_count", 5, "unseen charge count"),
+]
+fig = plt.figure(figsize=(9.2, 2.9))
+grid = fig.add_gridspec(1, 4, left=0.02, right=0.86, top=0.90, bottom=0.04,
+                        wspace=0.06)
+for col, (split, seed, label) in enumerate(cases):
+    sample = build_multi_body_sample(seed, **SPLITS["multi_body"][split])
+    ax = fig.add_subplot(grid[0, col])
+    stress_panel(ax, sample)
+    ax.set_title(label, fontsize=9.5, color=INK)
+    if not math.isnan(sample.geometry.gap_ratio):
+        ax.text(0.5, -0.03, f"gap ratio {sample.geometry.gap_ratio:.2f}",
+                transform=ax.transAxes, ha="center", va="top", fontsize=8,
+                color=INK2)
+stress_colorbar(fig, [0.89, 0.20, 0.018, 0.60])
+plt.show()
+```
+
+```{python}
+#| label: fig-stress-cavity
+#| fig-cap: >
+#|   The deep-cavity family, same rendering conventions as the
+#|   multi-body gallery. Charges (crosses) nestled inside the slot are
+#|   outside the domain but deep in the cavity, so opposite slot walls
+#|   are Euclidean-close while the exact field between them -- the plume
+#|   filling the slot -- is mediated by the whole cavity geometry. The
+#|   difficulty dial is slot depth over width; the convex control
+#|   (right) is the same generator at zero slot depth.
+# Reuses stress_panel/stress_colorbar from the multi-body cell above
+# (same kernel session).
+cases = [
+    ("in_distribution", 3, "in-distribution"),
+    ("deep_slot", 7, "deep slot"),
+    ("convex_control", 11, "convex control"),
+]
+fig = plt.figure(figsize=(7.2, 2.9))
+grid = fig.add_gridspec(1, 3, left=0.02, right=0.84, top=0.90, bottom=0.04,
+                        wspace=0.06)
+for col, (split, seed, label) in enumerate(cases):
+    sample = build_deep_cavity_sample(seed, **SPLITS["deep_cavity"][split])
+    ax = fig.add_subplot(grid[0, col])
+    stress_panel(ax, sample, n_grid=200)
+    ax.set_title(label, fontsize=9.5, color=INK)
+    g = sample.geometry
+    if g.slot_depth > 0:
+        ax.text(0.5, -0.03,
+                f"depth/width {g.slot_depth / (2 * g.slot_half_width):.1f}",
+                transform=ax.transAxes, ha="center", va="top", fontsize=8,
+                color=INK2)
+stress_colorbar(fig, [0.875, 0.20, 0.022, 0.60])
+plt.show()
+```
+
+Every generated sample is **certified at build time**: cell-orientation
+winding numbers place all queries inside and all charges outside, charge
+standoff from the discretized boundary is checked numerically, the
+cavity curve passes an exact all-pairs segment-intersection test, and
+the multi-body boundaries are verified disjoint. The **free-form pair
+kernel is the load-bearing control**: it is exactly the model class that
+sees only pair invariants, so any split where it fails and an
+encoder-bearing model succeeds is direct evidence for global boundary
+coupling. One honest caveat from the suite's validation: the families
+are a *separation dial*, not a binary proof — the construction makes
+pair invariants blind to the coupling, but how much that blindness
+costs is an empirical question the control answers, not a theorem.

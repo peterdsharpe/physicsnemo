@@ -1,0 +1,801 @@
+# The potential-flow suite {#sec-ds-potential-flow}
+
+Ideal flow around a body: the suite where the drive becomes a
+**vector** (a freestream direction), the domain becomes **unbounded**,
+and the physics becomes **handed** — circulation flips sign in a
+mirror. Three firsts on one rung, and the birthplace of the program's
+parity type system.
+
+## The problem
+
+Smooth exterior bodies (conformal images of the unit circle) sit in a
+uniform stream with prescribed circulation. The exact flow is classical
+potential theory:
+
+$$
+\Delta \psi = 0 \ \text{outside the body},
+\qquad \psi = 0 \ \text{on the body},
+\qquad \nabla\psi \to U_\infty^\perp \ \text{at infinity},
+$$
+
+with circulation $\Gamma$ fixing the multivalued part. The model
+receives the body boundary (geometry only), the freestream direction as
+a **global rank-1 drive**, and $\Gamma$ as a global drive scalar — the
+first benchmark where the vector-drive pathway is structurally
+necessary. Targets are exact (conformal-map closed forms): the
+disturbance streamfunction $\psi_d$ (a **pseudoscalar** — mirror-odd)
+in the primary family, and the disturbance velocity (a polar vector) in
+the companion family. Contracts: similarity equivariance,
+drive-linearity ($\psi$ is linear in $(U_\infty, \Gamma)$ jointly), and
+— after the wall this suite measured — the **0o parity sector**.
+
+## The gallery
+
+Streamlines are the honest visualization here: contours of the total
+streamfunction, which is exactly zero on the body.
+
+```{python}
+#| label: fig-ds5-gallery
+#| fig-cap: >
+#|   Training-family samples: exact streamlines (contours of the total
+#|   streamfunction) around conformal bodies. Left to right within each
+#|   row: circulation 0, 1.5 (the training-band edge), and 3.0 (beyond
+#|   the band, shown for visibility) at fixed geometry — the stagnation
+#|   points migrate around the body and the up-down symmetry breaks: the
+#|   handed content the parity sector exists to carry. Freestream arrow
+#|   at top left of each panel.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from potential_flow import (
+    body_to_physical,
+    build_potential_flow_sample,
+    complex_to_points,
+    total_streamfunction,
+)
+
+INK, INK2 = "#0b0b0b", "#52514e"
+
+
+def streamline_panel(ax, sample, *, circulation=None, n_ring=240, n_rad=80,
+                     r_max=3.0, title=None):
+    circ = sample.circulation if circulation is None else circulation
+    radii = torch.linspace(1.0005, r_max, n_rad,
+                           dtype=torch.float64)[None, :]
+    angles = torch.linspace(0.0, 2 * np.pi, n_ring,
+                            dtype=torch.float64)[:, None]
+    z = (radii * torch.exp(1j * angles)).to(torch.complex128)
+    psi = total_streamfunction(
+        sample.body, sample.canonical_freestream, circ, z).numpy()
+    phys = complex_to_points(body_to_physical(sample.body, z)).numpy()
+    X, Y = phys[..., 0], phys[..., 1]
+    span = np.abs(psi).max()
+    ax.contour(X, Y, psi, levels=np.linspace(-span, span, 33),
+               colors="#2a78d6", linewidths=0.8,
+               negative_linestyles="solid")
+    loop = sample.boundary_loop.numpy()
+    ax.fill(loop[:, 0], loop[:, 1], facecolor="#eae8e1",
+            edgecolor=INK, linewidth=1.6, zorder=3)
+    u = sample.freestream.numpy()
+    ax.annotate("", xy=(0.10 + 0.10 * u[0], 0.90 + 0.10 * u[1]),
+                xytext=(0.10, 0.90), xycoords="axes fraction",
+                textcoords="axes fraction",
+                arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if title is not None:
+        ax.set_title(title, fontsize=8.5, color=INK)
+
+
+fig, axes = plt.subplots(2, 3, figsize=(9.4, 6.2))
+for row, seed in enumerate((6, 15)):
+    sample = build_potential_flow_sample(seed, dtype=torch.float64)
+    for col, circ in enumerate((0.0, 1.5, 3.0)):
+        streamline_panel(axes[row, col], sample, circulation=circ,
+                         title=rf"seed {seed}, $\Gamma^* = {circ:g}$")
+fig.tight_layout()
+plt.show()
+```
+
+### The centerpiece: circulation is handed
+
+Reflect the whole problem in a mirror — geometry, freestream,
+everything — and the exact solution is the mirror image *with its sign
+flipped*: the streamfunction is a pseudoscalar, and circulation is its
+odd part made visible.
+
+```{python}
+#| label: fig-ds5-parity
+#| fig-cap: >
+#|   The parity wall, drawn. Left: a circulatory flow (filled
+#|   streamfunction). Right: the mirrored problem — reflected geometry,
+#|   reflected freestream, circulation NEGATED — whose exact solution is
+#|   the reflected field with opposite sign (red and blue swap). Every
+#|   input the untyped MeshTransformer sees (dot-product invariants of
+#|   geometry and drive) is IDENTICAL for these two problems, so it must
+#|   predict the same field for both: the best it can do is the even part,
+#|   and the measured 0.647 circulation-OOD floor is the norm of the odd
+#|   part it cannot represent. The 0o typed sector represents it, and cut
+#|   the floor to 0.037 (table below).
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+sample = build_potential_flow_sample(6, dtype=torch.float64)
+radii = torch.linspace(1.0005, 2.6, 80, dtype=torch.float64)[None, :]
+angles = torch.linspace(0.0, 2 * np.pi, 240, dtype=torch.float64)[:, None]
+z = (radii * torch.exp(1j * angles)).to(torch.complex128)
+psi = total_streamfunction(
+    sample.body, sample.canonical_freestream, 1.4, z).numpy()
+phys = complex_to_points(body_to_physical(sample.body, z)).numpy()
+X, Y = phys[..., 0], phys[..., 1]
+span = np.abs(psi).max()
+loop = sample.boundary_loop.numpy()
+
+fig, (axa, axb) = plt.subplots(1, 2, figsize=(9.2, 4.4))
+for ax, (Xp, Yp, P, label) in zip(
+        (axa, axb),
+        ((X, Y, psi, "flow with circulation $+\\Gamma$"),
+         (X, -Y, -psi, "mirrored problem: exact answer is $-\\Gamma$"))):
+    ax.contourf(Xp, Yp, P, levels=np.linspace(-span, span, 27),
+                cmap=DIVERGING)
+    ax.contour(Xp, Yp, P, levels=np.linspace(-span, span, 27),
+               colors="#00000022", linewidths=0.5)
+    yy = loop[:, 1] if Yp is Y else -loop[:, 1]
+    ax.fill(loop[:, 0], yy, facecolor="#eae8e1", edgecolor=INK,
+            linewidth=1.6, zorder=3)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title(label, fontsize=10, color=INK)
+fig.tight_layout()
+plt.show()
+```
+
+This is the figure to keep in mind two rungs up the ladder: the same
+0o sector, carrying the same lift-and-circulation physics, is what
+beat the plain arms on every seed of the AirFRANS RANS campaign (H2,
+@sec-airfrans) — the wall measured here is where that result was
+earned.
+
+## Why this rung
+
+Vector drive, exterior domain, and parity each falsify something no
+earlier suite can touch: the vector-drive pathway (scalar-only arms
+reject the schema outright), far-field behavior (the decay-structure
+ladder of @sec-farfield-ladder runs on this suite), and the type
+system itself — the streamfunction target is *provably* outside the
+span of dot-product-invariant scalar outputs, so an untyped model's
+failure here is a theorem, not an experiment. The measured 0.647 floor
+and its 17× break by the 0o sector turned that theorem into the
+program's third measured wall (@sec-fluid-suites).
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds5-bench
+#| output: asis
+import json
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+m5 = bie["iteration_23_pseudoscalar_extension"]["means_5seed"]
+
+splits = ["ID", "circOOD", "geo", "wilder", "farfield"]
+names = {
+    "untyped_controls_n5": "MeshTransformer, untyped (5 seeds)",
+    "singpair_pseudo": "MeshTransformer + 0o sector, singpair (5 seeds)",
+    "kernel_pseudo": "MeshTransformer + 0o sector, full dictionary (5 seeds)",
+}
+lines = ["| arm | ID | circulation OOD | geometry OOD | wilder | far-field |",
+         "|---|--:|--:|--:|--:|--:|"]
+for key in ("untyped_controls_n5", "singpair_pseudo", "kernel_pseudo"):
+    vals = " | ".join(f"{m5[key][s]:.3f}" for s in splits)
+    lines.append(f"| {names[key]} | {vals} |")
+lines.append(
+    ": Streamfunction-family relative $L^2$ (archive: "
+    "`learned_bie_2026-07-02.json`, iteration 23, 5 seeds). The untyped "
+    "row's circulation-OOD value IS the parity floor. "
+    "{#tbl-ds5-bench-table}")
+print("\n".join(lines))
+```
+
+The trace-informed controls — deliberately given the scalarized
+disturbance trace the transformer arms never receive — and the
+representable velocity-target reformulation are the suite's
+fair-comparison apparatus (@sec-fluid-suites); the far-field column's
+own ladder (0.67 above) closed at 0.090 via the decay-structure
+contracts of @sec-farfield-ladder.
+
+## Variations
+
+::: {.callout-note title="In flight"}
+Resolution-transfer and unseen-geometry showcase cells land with the
+E2/E3 artifacts; the far-field radial-band decomposition — this
+suite's distinctive variation axis — is told with the ladder at
+@sec-farfield-ladder.
+:::
+
+## The far-field ladder
+
+Strong inference on exterior decay, start to finish.
+
+### The far-field ladder: strong inference, start to finish {#sec-farfield-ladder}
+
+The far-field split — every potential-flow arm degrading on queries
+beyond the training annulus — resisted two architectural generations
+(@sec-fluid-suites) before falling to a four-rung falsification ladder.
+The arc is this program's method in miniature: rival mechanisms with
+pre-registered discriminators, a fix that refuted its own diagnosis
+instructively, a construction that excluded the leading mechanism
+outright, and licensed exact structure to finish. Archive keys
+`iteration_27_farfield_strong_inference` through
+`iteration_30_decay_structure` (with `five_seed_close`); session
+artifacts `farfield_inference*.json` in `results/`.
+
+**Rung 1 — strong inference (three rivals, pre-registered
+discriminators).** **M1, annulus coverage: partial.** Widening the
+training annulus $[1.05, 4] \to [1.05, 8]$ cuts far-field 0.694 $\to$
+0.179 (74%) — but the model stays 6.2$\times$ above ID *inside* the new
+annulus: strong mitigation, not the cause. **M2, member decay:
+excluded.** The member basis is exactly analytic on $[4, 12]$
+(double-layer exponent $-1.9$; single-layer $+1/\ln r$), while the
+prediction *super*-decays (exponent $-24$ against the exact $-2$) — the
+wrong direction for member tails; a basis that cannot out-decay $r^{-2}$
+cannot host this pathology. **M3, coefficient extrapolation: supported,
+with a smoking gun.** The output-projection sigmoid gate collapses at
+the training edge — 0.52 at $r = 1.1$, 0.010 at $r = 4$,
+$2.3\times10^{-17}$ at $r = 12$ — and, out of sample, the collapse onset
+**moves with the training annulus** on the annulus-8 checkpoint: the
+pathology tracks the training boundary, not the dictionary. One process
+note, disclosed: M2's verdict as first coded implemented only the
+magnitude half of its pre-registered rule; the *directional* qualifier
+(written in the docstring before measurement) is what flips it to
+excluded — and the annulus-8 edge-tracking corroborates M3
+independently.
+
+**Rung 2 — the gate fix, refuted instructively.** Bounding the gate
+inputs worked exactly as designed (smooth nonzero gate, no saturation
+regime) — and far-field got **4.3$\times$ worse** (0.694 $\to$ 2.98).
+The collapse was **load-bearing**: it had been suppressing polynomially
+growing query-side direct-drive branches (a lifted-drive branch grows
+0.026 at $r = 1.1$ to 1.45 at $r = 12$; drive norms grow like
+$r$–$r^2$). The corrected root cause is the *pair* of unbounded radial
+dependences — a saturating gate **and** growing linear branches — not
+either alone. Silver lining, kept: bounded gates improve in-annulus
+accuracy (ID 0.0215 vs 0.0269, circulation-OOD 0.018 vs 0.033).
+
+**Rung 3 — bound at the source.** Compactify the *injected query
+position* ($x \to x/\sqrt{1+|x|^2}$, equivariant), so every learned
+coefficient sees bounded invariants — with the kernel members verified
+**bitwise-pinned to raw positions**, keeping the physics path exact.
+This excludes M3 *by construction* (coefficient traces flat to
+$r = 12$; far/near ratio 1.03), and far-field lands at 0.452. The
+residual is thereby isolated as purely **representational**: bounded is
+not decaying — the direct part converges to a direction-dependent
+constant (exponent $\approx 0$) where the exact field decays $r^{-2}$,
+and the single-layer $\log r$ tail is fit only by near-cancellation
+in-annulus.
+
+**Rung 4 — decay structure, licensed and exact.** Two structures the
+physics licenses for zero-net-flux exteriors, zero parameters added:
+an exact $r^{-2}$ **direct-drive envelope** ($1/(1+|x|^2)$ — the
+leading order of a 2D exterior zero-flux velocity field is the doublet,
+and the direct drive may not outlive it), and **monopole-free
+single-layer deflation** — a measure-weighted rank-one deflation of the
+single-layer member column giving exact zero net charge per member, so
+the $\log r$ tail is dead *for any coefficients*. A corollary worth its
+sentence: the 2D log gauge cancels under the deflation, so the deflated
+member is exactly similarity invariant.
+
+```{python}
+#| fig-cap: >
+#|   The far-field ladder (checked-in learned_bie_2026-07-02.json,
+#|   iterations 27-30; log scale). Per-rung far-field relative L2, with
+#|   the iteration-28 regression shown as the honest spike: the gate fix
+#|   worked as designed and made things 4.3x worse, correcting the
+#|   diagnosis. Rung 4 shows the five-seed close (small dots = seeds
+#|   17-21; large dot = mean 0.090), crossing the pre-registered
+#|   fully-fixed bar at the mean with two seeds above it.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it28 = results["iteration_28_bounded_gate"]["measured"]
+it29 = results["iteration_29_source_bounded_query"]["measured"]
+close = results["iteration_30_decay_structure"]["five_seed_close"]
+
+rungs = [
+    ("baseline\n(rung 1: diagnosed)", it28["baseline_farfield"], "#eda100",
+     "gate collapse found"),
+    ("bounded gate\n(rung 2: refuted)", it28["farfield"], "#e34948",
+     "collapse was load-bearing"),
+    ("source-bounded\n(rung 3: M3 excluded)", it29["farfield"], "#2a78d6",
+     "residual is representational"),
+    ("+ decay structure\n(rung 4: closed)", close["means"]["farfield"],
+     "#1baf7a", "licensed exact physics"),
+]
+seeds4 = [run["farfield_queries"] for run in close["runs"]]
+
+fig, ax = plt.subplots(figsize=(6.6, 4.2))
+ax.axhline(0.10, color="#0b0b0b", lw=1.2, ls="--")
+ax.text(-0.42, 0.104, "pre-registered fully-fixed bar (0.10)", fontsize=8,
+        color="#0b0b0b", va="bottom")
+ax.plot(range(4), [r[1] for r in rungs], "-", color="#c3c2b7", lw=1.4,
+        zorder=1)
+for i, (label, value, color, verdict) in enumerate(rungs):
+    ax.plot(i, value, "o", ms=10, color=color, mec="white", mew=1.4,
+            zorder=3)
+    ax.annotate(f"{value:.3g}\n{verdict}", (i, value),
+                textcoords="offset points",
+                xytext=(0, 12 if i != 2 else -34), ha="center", fontsize=8,
+                color="#52514e")
+ax.plot([3 + 0.07 * (j - 2) for j in range(5)], seeds4, "o", ms=5,
+        color="#1baf7a", mec="white", mew=1.0, alpha=0.75, zorder=2)
+ax.set_yscale("log")
+ax.set_xticks(range(4), [r[0] for r in rungs])
+ax.set_xlim(-0.5, 3.5)
+ax.set_ylim(0.02, 8.0)
+ax.set_ylabel("far-field relative $L^2$ (log)")
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+**The five-seed close.** Far-field mean **0.090 ± 0.048** — the
+pre-registered fully-fixed bar ($< 0.10$) crossed at the mean, with the
+per-seed spread stated honestly: 0.036–0.147, two seeds above 0.10.
+That is **7.7$\times$ at an unchanged training annulus**, beating the
+coverage lever (0.179 from doubling the annulus), and every other split
+lands at family-best levels:
+
+| decay-structure config (5 seeds) | ID | circulation-OOD | unseen geometry | wilder shapes | far-field |
+|---|--:|--:|--:|--:|--:|
+| per-seed far-field | | | | | 0.036 / 0.061 / 0.074 / 0.133 / 0.147 |
+| **means** | **0.0174** | **0.0168** | **0.0303** | 0.116 | **0.090 ± 0.048** |
+
+: The ladder's endpoint: the four physics-licensed knobs (bounded gate,
+bounded query source, $r^{-2}$ envelope, monopole-free single layer)
+compose into a strictly dominant configuration. {#tbl-farfield-close}
+
+The takeaway is the program's motto in action: the learned coefficients
+were made **bounded** — trust nothing learned beyond its data — and all
+far-field radial physics was moved into **exact, licensed structure**.
+One leak remains fitted rather than exact — the $r^{-1}$ member tails
+cancel to $r^{-2}$ only through learned zero-circulation cancellation —
+and it is the recorded residual (@sec-future).
+
+*History: @sec-nb-iter27 through @sec-nb-iter30.*
+
+## The full evidence: the pseudoscalar arc
+
+Moved from the benchmarks chapter: the fluid suites, the wall, the representable reformulations, and the 0o extension.
+
+### The fluid suites, and the pseudoscalar wall {#sec-fluid-suites}
+
+::: {.callout-note title="How to read the no-response rows"}
+The raw-drive `MeshTransformer` rows below are **no-response rows, by
+proof rather than by accident**: the benchmark target is a 2D
+pseudoscalar, which the architecture's default type system cannot
+represent (@sec-typed-channels). The arc completes within this section:
+the reformulated arms (@tbl-potential-flow-resolved) resolve the wall —
+the trace arms post the program's best exterior-domain numbers (ID
+0.013) — and the pre-registered pseudoscalar ($0o$) channel extension
+then lifts the one remaining refusal, confirmed at five seeds
+(@tbl-pseudo-extension).
+:::
+
+The program's first fluid benchmarks (`potential_flow.py`; checked-in
+key `iteration_21_fluid_families_pseudoscalar_wall`). Two families:
+
+- **Exterior potential flow**: flow past 2D bodies from *certified
+  exterior conformal maps* (the 2D suite's certification discipline,
+  mapped to the exterior). The drive is physical and global: a freestream
+  velocity $U$ entering as a rank-1 global *vector* — the first benchmark
+  to exercise the vector-drive path — plus a circulation $\Gamma$
+  (itself a pseudoscalar; the family is restricted to
+  orientation-preserving similarities accordingly). The target is the
+  **disturbance streamfunction** $\psi_d$, constructed single-valued
+  under circulation. Splits: in-distribution, unseen geometry modes,
+  wilder shapes, circulation-OOD, and far-field queries.
+- **Boundary layer**: a manufactured two-scale family (thin near-wall
+  structure over a smooth outer field), scored overall and in near-wall /
+  far-field buckets. Splits: in-distribution, thinner-layer, and unseen
+  amplitude frequencies.
+
+```{python}
+#| label: fig-wilder-shapes
+#| fig-cap: >
+#|   The exterior-body geometry dial, sampled live from the generator.
+#|   Columns pin the certified injectivity bound kappa (the 2D suite's
+#|   certificate mapped to the exterior), so every shape -- including
+#|   the wildest -- is provably non-self-intersecting; fill darkness
+#|   redundantly encodes kappa. Top row: the training modes {1,2,3},
+#|   which the wilder_shapes split evaluates at kappa in [0.45, 0.70].
+#|   Bottom row: unseen modes {4,5,6}, whose split stays at training
+#|   deformation (kappa <= 0.35); that row's high-kappa cells lie
+#|   outside every declared split and only display the dial's reach.
+#|   Not shown: the random rotation, scale, and translation placement
+#|   each sampled case carries (reflections are excluded -- the family
+#|   is restricted to orientation-preserving similarities).
+import math
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from conformal_laplace import identity_similarity
+from potential_flow import ExteriorBody, body_to_physical, sample_exterior_body
+
+INK, INK2, RED = "#0b0b0b", "#52514e", "#e34948"
+SEQ = LinearSegmentedColormap.from_list(
+    "book_seq",
+    ["#f0efec", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#1c5cab", "#0d366b"])
+
+kappas = [0.10, 0.25, 0.45, 0.60, 0.70]
+rows = [
+    ((1, 2, 3), "modes $\\{1,2,3\\}$\n(training)"),
+    ((4, 5, 6), "modes $\\{4,5,6\\}$\n(unseen-modes split)"),
+]
+angles = torch.linspace(0.0, 2.0 * math.pi, 512, dtype=torch.float64)
+circle = torch.polar(torch.ones_like(angles), angles)
+seq_norm = Normalize(0.0, 0.9)
+
+fig = plt.figure(figsize=(9.2, 4.4))
+grid = fig.add_gridspec(2, 5, left=0.12, right=0.98, top=0.82, bottom=0.02,
+                        wspace=0.05, hspace=0.05)
+for row, (modes, row_label) in enumerate(rows):
+    for col, kappa in enumerate(kappas):
+        seed = 40 * row + 3 * col + 5
+        sampled = sample_exterior_body(
+            seed, seed + 1, modes=modes, deformation_range=(kappa, kappa))
+        # Strip the random similarity placement: show the canonical shape.
+        body = ExteriorBody(modes=sampled.modes, coefficients=sampled.coefficients,
+                            similarity=identity_similarity())
+        outline = body_to_physical(body, circle)
+        ax = fig.add_subplot(grid[row, col])
+        ax.fill(outline.real.numpy(), outline.imag.numpy(),
+                facecolor=SEQ(seq_norm(kappa)), edgecolor=INK, lw=1.2)
+        ax.set_xlim(-2.05, 2.05)
+        ax.set_ylim(-2.05, 2.05)
+        ax.set_aspect("equal")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        if row == 0:
+            ax.set_title(rf"$\kappa = {kappa:.2f}$", fontsize=9.5, color=INK)
+        if col == 0:
+            ax.text(-0.22, 0.5, row_label, transform=ax.transAxes, rotation=90,
+                    ha="center", va="center", fontsize=10, color=INK)
+
+
+def bracket(col_lo, col_hi, label, color):
+    x0 = fig.axes[col_lo].get_position().x0 + 0.01
+    x1 = fig.axes[col_hi].get_position().x1 - 0.01
+    fig.add_artist(plt.Line2D([x0, x1], [0.90, 0.90], color=color, lw=1.6,
+                              transform=fig.transFigure))
+    fig.text((x0 + x1) / 2, 0.915, label, ha="center", va="bottom",
+             fontsize=9, color=color)
+
+
+bracket(0, 1, "training range $\\kappa\\in[0.05,0.35]$", INK2)
+bracket(2, 4, "wilder_shapes tier $\\kappa\\in[0.45,0.70]$", RED)
+plt.show()
+```
+
+```{python}
+#| label: fig-circulation-parity
+#| fig-cap: >
+#|   One exterior-flow case (kappa = 0.28, canonical placement, unit
+#|   freestream along +x), exact generator fields only: speed heatmap,
+#|   streamlines as level sets of the exact total streamfunction (equal
+#|   level spacing in both panels, so line density is comparable), and
+#|   sparse velocity arrows. Adding circulation (Gamma* = 3, the
+#|   circulation-OOD magnitude) shifts the stagnation points and breaks
+#|   the top-bottom mirror symmetry: reflect the lower panel across the
+#|   freestream axis and you obtain the flow at Gamma* = -3, not the
+#|   same flow. That handedness is the pseudoscalar content of the
+#|   streamfunction target -- what a dot-product-only type system
+#|   provably cannot produce from unhanded inputs (the wall measured
+#|   below). Not shown: any model output.
+# Reuses the sys.path setup and palette from the gallery cell above.
+from matplotlib.tri import Triangulation
+
+from potential_flow import disturbance_velocity, total_streamfunction
+
+sampled = sample_exterior_body(9, 10, modes=(1, 2, 3),
+                               deformation_range=(0.28, 0.28))
+body = ExteriorBody(modes=sampled.modes, coefficients=sampled.coefficients,
+                    similarity=identity_similarity())
+canonical_freestream = torch.tensor(1.0 + 0.0j, dtype=torch.complex128)
+
+n_rings, n_theta = 56, 192
+radii = np.exp(np.linspace(np.log(1.0005), np.log(4.6), n_rings))
+theta = np.linspace(0.0, 2.0 * np.pi, n_theta, endpoint=False)
+pre_points = np.concatenate(
+    [np.stack([r * np.cos(theta), r * np.sin(theta)], axis=1) for r in radii])
+triangles = []
+for i in range(n_rings - 1):
+    a, b = i * n_theta, (i + 1) * n_theta
+    for j in range(n_theta):
+        k = (j + 1) % n_theta
+        triangles += [[a + j, b + j, b + k], [a + j, b + k, a + k]]
+triangles = np.array(triangles)
+
+z = torch.complex(torch.tensor(pre_points[:, 0]), torch.tensor(pre_points[:, 1]))
+physical = body_to_physical(body, z)
+px, py = physical.real.numpy(), physical.imag.numpy()
+angles = torch.linspace(0.0, 2.0 * math.pi, 513, dtype=torch.float64)
+outline = body_to_physical(body, torch.polar(torch.ones_like(angles), angles))
+
+circulations = [0.0, 3.0]
+fields = []
+for gamma in circulations:
+    velocity = disturbance_velocity(body, canonical_freestream, gamma, z).numpy()
+    velocity[:, 0] += 1.0  # add the unit freestream (nondimensional)
+    speed = np.linalg.norm(velocity, axis=1)
+    psi = total_streamfunction(body, canonical_freestream, gamma, z).numpy()
+    fields.append((velocity, speed, psi))
+vmax = max(np.quantile(f[1], 0.995) for f in fields)
+# Equal psi spacing across panels keeps streamline density comparable.
+step = (fields[0][2].max() - fields[0][2].min()) / 30.0
+
+fig, axes = plt.subplots(2, 1, figsize=(6.6, 7.8), sharex=True)
+for ax, gamma, (velocity, speed, psi) in zip(axes, circulations, fields):
+    tri = Triangulation(px, py, triangles)
+    cs = ax.tricontourf(tri, np.clip(speed, 0, vmax),
+                        levels=np.linspace(0.0, vmax, 21), cmap=SEQ,
+                        extend="max")
+    cs.set_edgecolor("face")
+    levels = np.arange(math.floor(psi.min() / step) * step, psi.max() + step,
+                       step)
+    ax.tricontour(tri, psi, levels=levels, colors=INK, linewidths=0.7,
+                  alpha=0.45, linestyles="solid")
+    pick = np.zeros(len(pre_points), dtype=bool)
+    for ring_index in [6, 14, 24, 36, 50]:
+        base = ring_index * n_theta
+        pick[base : base + n_theta : 16] = True
+    ax.quiver(px[pick], py[pick], velocity[pick, 0], velocity[pick, 1],
+              color=INK2, width=0.004, scale=28, zorder=4,
+              edgecolor="white", linewidth=0.4)
+    ax.fill(outline.real.numpy(), outline.imag.numpy(), facecolor="white",
+            edgecolor=INK, lw=2.2, zorder=5)
+    ax.text(0.02, 0.97, rf"$\Gamma^* = {gamma:g}$", transform=ax.transAxes,
+            ha="left", va="top", fontsize=11, color=INK)
+    ax.set_xlim(-3.1, 3.1)
+    ax.set_ylim(-2.3, 2.3)
+    ax.set_aspect("equal")
+    ax.set_ylabel("y / L  [-]")
+    ax.grid(False)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+axes[1].set_xlabel("x / L  [-]")
+cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=SEQ, norm=Normalize(0, vmax)),
+                    ax=axes, fraction=0.04, pad=0.03)
+cbar.set_label(r"$|\mathbf{u}| / |U|$  [-]", fontsize=9)
+plt.show()
+```
+
+The control semantics matter here more than anywhere else in the book:
+the pair-kernel controls are **trace-informed** — they receive the exact
+disturbance trace as per-cell `boundary_value` data — while the
+`MeshTransformer` arms receive only the raw drive $\{U, \Gamma\}$. The
+controls are deliberately privileged; the point of the suite is to ask
+whether the architecture can *reconstruct* what the controls are handed.
+
+| potential flow (3-seed means) | ID | unseen geometry | wilder shapes | circulation-OOD | far-field |
+|---|--:|--:|--:|--:|--:|
+| MeshTransformer (raw drive) — *no response* | 0.988 | 0.963 | 0.964 | 0.683 | 0.940 |
+| pair kernel (trace-informed control) | 0.178 | 0.245 | 0.251 | 0.763 | 1.11 |
+
+: Exterior potential flow, 3,000 steps, seeds 17/18/19.
+{#tbl-potential-flow}
+
+| boundary layer (3-seed means) | ID | thinner layer | unseen amp. freq. |
+|---|--:|--:|--:|
+| MeshTransformer (raw drive) — *no response* | 0.937 | 1.000 | 0.906 |
+| pair kernel (trace-informed control) | 0.732 | 0.780 | 0.388 |
+
+: Boundary layer, 3,000 steps, seeds 17/18/19 (per-bucket values in the
+archive). {#tbl-boundary-layer}
+
+**The wall.** The `MeshTransformer` sits at no-response on every seed
+(potential flow ID 0.98–1.00; boundary layer 0.91–1.04) while the
+trace-informed control fits (0.178). A gradient diagnostic rules out a
+dead input path: $\partial(\text{output})/\partial U = 6359 \ne 0$ —
+the drive flows; the *output* cannot bend. The root cause is a one-line
+group-theory proof: the disturbance streamfunction is a **2D
+pseudoscalar** — its uniform-flow part is the wedge
+$U \wedge x = U_x y - U_y x$, which flips sign in a mirror — and every
+quantity the type system can build from dot products of polar vectors is
+a **true scalar**, equal to its mirror image (@sec-typed-channels). No
+dot-only model can output a nonzero pseudoscalar from unhanded inputs,
+at any capacity or training budget. The architecture was *enforcing its
+own contract*; the benchmark target violates it. The controls escape
+because the handedness arrives **baked into their per-cell trace data**.
+
+#### The resolution: representable reformulations
+
+Two reformulations, same protocol (3,000 steps, seeds 17/18/19;
+checked-in key `iteration_22_representable_reformulations`). **Trace
+arms** give the `MeshTransformer` the same certified boundary trace the
+controls receive (the handedness arrives in the data, as it does for the
+controls). Arm names used from here on: `singonly` = the one-member
+(double-layer) dictionary, `singpair` = the two-exact-member dictionary
+of @sec-single-layer. **Velocity arms** change the target to the flow *velocity* —
+a polar vector, representable as-is — with exact $dW/dz$ push-forward
+targets; these are the program's first rank-1-output runs, and the core
+vector-output path was verified complete, no patch needed.
+
+| potential flow (3-seed means) | ID | unseen geometry | wilder shapes | circulation-OOD | far-field | PDE residual |
+|---|--:|--:|--:|--:|--:|--:|
+| **MT singpair, trace-driven ($\psi_d$)** | **0.013** | **0.012** | **0.045** | **0.020** | 0.458 | — |
+| MT full dictionary, trace-driven ($\psi_d$) | 0.015 | 0.016 | 0.056 | 0.030 | 0.732 | — |
+| MT velocity output, singpair | 0.136 | 0.188 | 0.259 | *0.646* | 0.786 | — |
+| MT velocity output, singular-only | 0.142 | 0.192 | 0.259 | *0.647* | 0.844 | — |
+| MT velocity output, full dictionary | 0.146 | 0.198 | 0.269 | *0.649* | 0.880 | — |
+| pair kernel (trace-informed control, @tbl-potential-flow) | 0.178 | 0.245 | 0.251 | 0.763 | 1.11 | — |
+
+: The reformulated arms. Bold: the program's best exterior-domain
+numbers to date. Italic: the circulation-OOD column of the velocity
+arms, pinned by the second type finding. PDE residual (streamfunction and
+velocity targets are both harmonic, so the residual is licensed on every
+row) em-dashed: archived runs predate fidelity-first reporting
+(@sec-fidelity-columns). {#tbl-potential-flow-resolved}
+
+What this establishes:
+
+- **The pseudoscalar wall was pure target-type mismatch — resolved
+  completely by the trace arms.** Given identical data to the control,
+  the `MeshTransformer` reaches ID 0.013 / geometry-OOD 0.012 / wilder
+  shapes 0.045 / circulation-OOD 0.020 — **14$\times$ better than the
+  pair-kernel control** — the program's best exterior-domain numbers to
+  date. The architecture handles the exterior problem, circulation
+  included, excellently in representable variables; nothing about the
+  encode–solve was ever the problem.
+- **The velocity reformulation breaks the wall and exposes a second,
+  sharper type finding.** Velocity arms fit (ID 0.13–0.15, geometry-OOD
+  0.19) — but circulation-OOD is **pinned at 0.646–0.649 across every
+  arm and every seed**, a spread far too tight to be optimization noise.
+  The reason is again exact: the vortex component of velocity is
+  $\Gamma\, x^{\perp} / (2\pi |x|^2)$, and with $\Gamma$ typed as a
+  *true* scalar that product is an **axial vector** — unrepresentable —
+  so the residual decomposes exactly into representable potential flow
+  (learned) plus refused vortex flow. The pre-registered Armijo
+  criterion — an acceptance bar set in advance: buy the added complexity
+  only if the cheaper fix measurably fails (@sec-future) — is thereby
+  **met**, precisely on the circulation component — and the extension
+  it licensed carries the prediction, registered in advance, that
+  circulation-OOD joins ID. The next subsection is that prediction's
+  test (@sec-nb-iter22).
+- **One new stress axis is open**: far-field queries degrade for every
+  arm (0.43–0.88; the control reads 1.69 under this protocol) — radius
+  extrapolation beyond the training annulus is not yet solved by any
+  model class here.
+
+#### The pseudoscalar extension: the arc closes {#sec-pseudo-extension}
+
+The program's first type-system extension (checked-in key
+`iteration_23_pseudoscalar_extension`): **2D pseudoscalar ($0o$)
+channels**, with the closed product set the physics dictates — wedge
+$v \wedge w \to 0o$; rotation $p \cdot v^{\perp} \to$ polar vector
+(exactly the refused $\Gamma\,x^{\perp}$ product); $p \cdot q \to 0e$;
+$s \cdot p \to 0o$ — and circulation declared `"0o"` in the field
+schema. The default path is bitwise-preserved (zero parameters at pseudo
+width 0), and the extension ships with 553 tests including reflection
+equivariance of every product. Evidence at **five seeds** (17–21), the
+program's evidentiary bar from here on; the untyped control pool is
+five-seed too, including fresh seeds 20/21 run alongside:
+
+| potential-flow velocity (5-seed means) | params | ID | unseen geometry | wilder shapes | circulation-OOD | far-field | PDE residual |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| **MT singpair + $0o$ channels** | 132,641 | **0.028** | **0.041** | **0.131** | **0.037** | 0.673 | — |
+| MT full dictionary + $0o$ channels | 138,665 | 0.029 | 0.048 | 0.136 | 0.049 | 0.764 | — |
+| untyped velocity arms (pooled controls) | — | 0.141 | 0.191 | 0.264 | *0.647* | 0.83 | — |
+
+: The pseudoscalar extension at five seeds against the pooled untyped
+velocity controls. PDE residual em-dashed: archived runs predate
+fidelity-first reporting (@sec-fidelity-columns).
+{#tbl-pseudo-extension}
+
+```{python}
+#| fig-cap: >
+#|   The circulation-OOD split, per run (checked-in
+#|   learned_bie_2026-07-02.json, iterations 22-23; log scale). Every
+#|   untyped velocity arm -- nine iteration-22 runs plus four fresh
+#|   iteration-23 controls at seeds 20/21 -- sits on the type-refusal
+#|   floor at 0.645-0.651: the norm of the unrepresentable vortex
+#|   component. The 0o-channel arms (ten runs, five seeds, two
+#|   dictionaries) drop through it by 17x, joining the in-distribution
+#|   error.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it22 = results["iteration_22_representable_reformulations"]["runs"]
+it23 = results["iteration_23_pseudoscalar_extension"]["runs_3000steps"]
+
+untyped = [run["circulation_ood"]
+           for arm in ("potential_flow_velocity_mesh_transformer_kernel",
+                       "potential_flow_velocity_mesh_transformer_kernel_singonly",
+                       "potential_flow_velocity_mesh_transformer_kernel_singpair")
+           for run in it22[arm]]
+untyped += [run["circulation_ood"]
+            for arm in ("mesh_transformer_kernel",
+                        "mesh_transformer_kernel_singpair")
+            for run in it23[arm]]
+pseudo = [run["circulation_ood"]
+          for arm in ("mesh_transformer_kernel_pseudo",
+                      "mesh_transformer_kernel_singpair_pseudo")
+          for run in it23[arm]]
+
+fig, ax = plt.subplots(figsize=(6.0, 3.8))
+ax.axhline(0.647, color="#0b0b0b", lw=1.2, ls="--")
+ax.text(1.44, 0.68, "type-refusal floor (0.647)", ha="right",
+        va="bottom", fontsize=8, color="#0b0b0b")
+for i, (label, values, color) in enumerate([
+    ("untyped velocity arms\n(13 runs)", untyped, "#e34948"),
+    ("with $0o$ channels\n(10 runs, 5 seeds)", pseudo, "#1baf7a"),
+]):
+    xs = [i + (j - (len(values) - 1) / 2) * 0.028 for j in range(len(values))]
+    ax.plot(xs, values, "o", ms=7, color=color, mec="white", mew=1.2,
+            zorder=3)
+ax.set_yscale("log")
+ax.set_xticks([0, 1], ["untyped velocity arms\n(13 runs)",
+                       "with $0o$ channels\n(10 runs, 5 seeds)"])
+ax.set_xlim(-0.5, 1.5)
+ax.set_ylim(0.015, 1.0)
+ax.set_ylabel("circulation-OOD relative $L^2$ (log)")
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+What this establishes:
+
+- **The pre-registered prediction is confirmed — and exceeded — at five
+  seeds.** Circulation-OOD drops 0.647 $\to$ 0.037 (17$\times$), joining
+  ID at 0.028, while the untyped controls — including the fresh seeds —
+  stay pinned at 0.646–0.648. Beyond the prediction, the **entire
+  velocity field improves** $\sim$5$\times$ (ID 0.141 $\to$ 0.028,
+  geometry-OOD 0.191 $\to$ 0.041, wilder shapes 0.264 $\to$ 0.131). The
+  physical reading: 2D potential-flow velocity is intrinsically
+  *parity-mixed* — the doublet's angular structure carries both
+  $U \cdot \hat x$ and $U \wedge \hat x$ content — so wedge invariants
+  pay everywhere, not just in the vortex term.
+- **Parsimony holds under the extension**: singpair — the two exact
+  members — remains the best dictionary in the pseudo setting.
+- **Scope, honestly**: $0o$ is 2D-only and **opt-in** (the 3D analogue is
+  the axial vector, out of scope), and the default reference
+  configuration is unchanged (@sec-reference-config). Far-field stays at
+  $\sim$0.7 — confirmed as a non-type open axis (@sec-future).
+
+*History: @sec-nb-iter21 (the wall), @sec-nb-iter22 (the resolution),
+@sec-nb-iter23 (the extension).*

@@ -1,0 +1,460 @@
+# The rotational-Euler suite {#sec-ds-euler-rotational}
+
+Steady ideal flow with genuinely nonzero vorticity — neither potential
+flow nor viscous flow, and exactly the step between them. Labels stay
+exact (Bessel-series solutions with momentum balance certified to
+$10^{-15}$), the pressure is drive-quadratic like the Bernoulli
+pressure of @sec-ds-euler-bernoulli (the wall's third instance), and a
+new physical dial appears: the vorticity coupling, whose approach to a
+resonance grades the difficulty continuously.
+
+## The problem
+
+Disks (the randomized geometry of @sec-ds-screened) carry boundary data
+for a steady rotational Euler flow: streamfunction solutions of
+
+$$
+\Delta \psi = -\tilde c^{\,2} \psi
+\quad\text{(linear vorticity law } \omega = \tilde c^{\,2}\psi\text{)},
+$$
+
+with velocity $u = \nabla^\perp \psi$ (degree 1 in the drive) and the
+Euler pressure recovered from momentum balance (exactly degree 2). The
+dimensionless coupling $\tilde c$ enters as a global operator scalar —
+and it has a hard ceiling: at the first Dirichlet eigenvalue
+$j_{0,1} \approx 2.405$ the interior is no longer determined by
+boundary data (the homogeneous problem acquires a nonzero solution),
+so the family lives strictly below it and the near-eigenvalue split
+probes the approach. Momentum balance of every label is certified to
+$2\times10^{-15}$ — exactness with vorticity is this suite's whole
+reason to exist.
+
+## Why this rung
+
+Two escalations over @sec-ds-euler-bernoulli. *Rotation*: the velocity
+is no longer curl-free, so representations tuned to potential structure
+get their first honest test against vortical fields — without a solver
+in the loop. *Amplification*: as $\tilde c \to j_{0,1}$ the interior
+response to unit boundary data grows without bound — the suite's
+targets span 150–6,000× amplification in the near-eigenvalue band,
+stress-testing accuracy where the operator itself becomes
+ill-conditioned.
+
+```{python}
+#| label: fig-ds7-amplification
+#| fig-cap: >
+#|   The resonance dial: interior response amplitude (max |target| over
+#|   fixed-seed samples, unit-RMS boundary data) as the coupling approaches
+#|   the first Dirichlet eigenvalue (dotted line). The evaluation splits
+#|   are marked: training band [0.5, 1.8], unseen coupling (1.9, 2.2],
+#|   near-eigenvalue [2.25, 2.38]. The wall-adjacent band's 150-6,000x
+#|   amplification is what the fragility study measured accuracy against.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from euler_rotational import build_euler_rotational_sample
+
+INK, INK2 = "#0b0b0b", "#52514e"
+
+couplings = np.linspace(0.5, 2.39, 28)
+amplitudes = []
+for c in couplings:
+    s = build_euler_rotational_sample(
+        11, coupling_range=(float(c), float(c)), modes=(0, 1, 2, 3),
+        n_query=400, dtype=torch.float64)
+    amplitudes.append(max(
+        float(s.targets["velocity"].abs().max()),
+        float(s.targets["pressure"].abs().max())))
+
+fig, ax = plt.subplots(figsize=(7.4, 3.8))
+ax.semilogy(couplings, amplitudes, "o-", color="#2a78d6", ms=4, lw=1.4)
+ax.axvline(2.405, color="#e34948", ls=":", lw=1.6)
+ax.text(2.36, 60, "$j_{0,1}$: interior no longer\ndetermined by boundary data",
+        ha="right", fontsize=9, color="#e34948")
+for lo, hi, label, y in ((0.5, 1.8, "training band", 4.4),
+                         (1.9, 2.2, "unseen\ncoupling", 4.0),
+                         (2.25, 2.38, "near\neigenvalue", 12.0)):
+    ax.axvspan(lo, hi, color="#898781", alpha=0.12)
+    ax.text((lo + hi) / 2, y, label, ha="center", fontsize=8, color=INK2)
+ax.set_xlabel(r"vorticity coupling $\tilde c$")
+ax.set_ylabel("max |target| (log)")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+The drive-degree structure — velocity degree 1, pressure exactly
+degree 2, and the resulting linear-mode wall at exactly 1.000 — is the
+same theorem as in the Bernoulli suite; the ladder diagram at
+@sec-ds-euler-bernoulli (see `fig-ds6-degree-ladder`) carries both
+chapters.
+
+## The gallery
+
+```{python}
+#| label: fig-ds7-gallery
+#| fig-cap: >
+#|   One geometry and drive across the coupling dial (pinned-coupling
+#|   sampling, as in the screened suite's kappa panel): velocity magnitude
+#|   (top) and Euler pressure (bottom) at coupling 0.6, 1.8, and 2.35. The
+#|   fields reorganize — interior cells appear as the vorticity law
+#|   couples psi back into itself — and the near-eigenvalue column's
+#|   amplitude dwarfs the training band's (per-panel normalization; the
+#|   amplification curve above carries the magnitudes).
+import matplotlib.tri as mtri
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.collections import LineCollection
+
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+SEQUENTIAL = LinearSegmentedColormap.from_list(
+    "book_seq", ["#f0efec", "#2a78d6"])
+
+
+def er_panels(ax_v, ax_p, seed, coupling, label):
+    s = build_euler_rotational_sample(
+        seed, coupling_range=(coupling, coupling), modes=(0, 1, 2, 3),
+        n_boundary=96, n_query=5200, dtype=torch.float64)
+    q = s.domain.interior.points.numpy()
+    speed = np.linalg.norm(s.targets["velocity"].numpy(), axis=1)
+    p = s.targets["pressure"].numpy()
+    tri = mtri.Triangulation(q[:, 0], q[:, 1])
+    ax_v.tricontourf(tri, speed, levels=np.linspace(0, speed.max(), 25),
+                     cmap=SEQUENTIAL)
+    span = np.abs(p - p.mean()).max()
+    ax_p.tricontourf(tri, p, levels=np.linspace(p.mean() - span,
+                                                p.mean() + span, 25),
+                     cmap=DIVERGING)
+    for ax, name in ((ax_v, "$|u|$"), (ax_p, "$p$")):
+        b = s.domain.boundaries["dirichlet"]
+        segs = b.points[b.cells].numpy()
+        ax.add_collection(LineCollection(segs, colors=INK, linewidths=1.2))
+        bp = b.points.numpy()
+        lo, hi = bp.min(axis=0), bp.max(axis=0)
+        mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.06
+        ax.set_xlim(mid[0] - half, mid[0] + half)
+        ax.set_ylim(mid[1] - half, mid[1] + half)
+        ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+        ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_title(rf"{name}, $\tilde c = {coupling:g}$ ({label})",
+                     fontsize=8.5, color=INK)
+
+
+fig, axes = plt.subplots(2, 3, figsize=(9.4, 6.2))
+for col, (c, label) in enumerate(((0.6, "training"), (1.8, "band edge"),
+                                  (2.35, "near eigenvalue"))):
+    er_panels(axes[0, col], axes[1, col], 9, c, label)
+fig.tight_layout()
+plt.show()
+```
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds7-bench
+#| output: asis
+import json
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+agg = bie["iteration_33_euler_rotational"]["aggregates_mean_sd"]
+q2 = bie["iteration_35_declared_degree"]["runs_3000steps_3seed"][
+    "euler_rotational/mt_singpair_q2"]
+
+cols = [("in_distribution/velocity", "velocity ID"),
+        ("in_distribution/pressure", "pressure ID"),
+        ("near_eigenvalue/pressure", "pressure, near eigenvalue")]
+names = {"floor": "boundary-mean floor",
+         "mt_singpair_linear": "linear mode",
+         "mt_singpair_nl": "nonlinear mode",
+         "mt_singpair_nl_pseudo": "nonlinear + 0o"}
+lines = ["| arm | " + " | ".join(c[1] for c in cols) + " |",
+         "|---|" + "--:|" * len(cols)]
+for arm in ("floor", "mt_singpair_linear", "mt_singpair_nl",
+            "mt_singpair_nl_pseudo"):
+    vals = " | ".join(f"{agg[arm][k]['mean']:.3f}" for k, _ in cols)
+    lines.append(f"| {names[arm]} | {vals} |")
+
+
+def q2_mean(key):
+    return sum(r[key] for r in q2) / len(q2)
+
+
+lines.append(
+    f"| declared degree 2 | {q2_mean('in_distribution/velocity'):.3f} | "
+    f"{q2_mean('in_distribution/pressure'):.3f} | "
+    f"{q2_mean('near_eigenvalue/pressure'):.3f} |")
+lines.append(
+    ": Rotational-Euler arms, 3 seeds (archive: "
+    "`learned_bie_2026-07-02.json`, iterations 33 and 35). The linear "
+    "arm's pressure column is the wall's third instance (exactly 1). "
+    "{#tbl-ds7-bench-table}")
+print("\n".join(lines))
+```
+
+The declared-degree arm was *built* on this suite: the nonlinear
+read-in's implicit drive degree (~21) detonated by $10^6$–$10^{13}$
+under amplitude extrapolation here, and the `quadratic` mode — the
+linear machinery plus one bilinear composition, exactly degree ≤ 2 for
+any weights — repaired it with a structurally certified degree
+(fit residual $2\times10^{-15}$; @sec-nonlinear-fragility). Momentum
+certification, the amplification bands, and the declared-degree
+acceptance verdicts make this the suite where "declare what you know"
+is priced most precisely.
+
+## Variations
+
+::: {.callout-note title="In flight"}
+Resolution transfer joins with E3. The coupling-extrapolation and
+amplification-band responses are this suite's variations of record and
+are in the table above and @sec-nonlinear-fragility; the standing open
+item — pressure accuracy *under* amplification (0.686 near
+eigenvalues) — is tracked in the agenda (@sec-future).
+:::
+
+## The full evidence
+
+Moved from the benchmarks chapter.
+
+### Rotational Euler: exact vorticity, and the wall's third instance {#sec-euler-rotational}
+
+The first genuinely **rotational** steady Euler family (checked-in key
+`iteration_33_euler_rotational`; driver `problems/euler_rotational.py`).
+Every previous fluid suite is irrotational — zero vorticity, harmonic
+velocity. Here the vorticity is nonzero *everywhere* and the momentum
+balance is genuinely nonlinear, yet the labels stay closed-form: 2D
+steady Euler admits solutions with vorticity constant along streamlines,
+$\omega = F(\psi)$, and for the **linear** choice $F(\psi) = c^2\psi$
+the streamfunction solves the Helmholtz equation
+$\Delta\psi + c^2\psi = 0$ — exact Bessel $J_m$ series on disks, the
+oscillatory sibling of the screened testbed's $I_m/K_m$ machinery
+(@sec-parametric). The velocity is
+$u = (\partial_y\psi, -\partial_x\psi)$ — $\psi$ pseudoscalar, $u$
+polar, exactly the typing of the fluid-suite arc (@sec-fluid-suites,
+@sec-pseudo-extension) — and the pressure follows from the *rotational*
+Bernoulli relation: for $\omega = F(\psi)$, the head
+$H = p + |u|^2/2$ satisfies $dH/d\psi = -F(\psi)$, so
+$p = -c^2\psi^2/2 - |u|^2/2$ in the $H_0 = 0$ gauge — exactly
+**drive-quadratic**, like the Bernoulli pressure of
+@sec-euler-bernoulli, but now on a rotational flow.
+
+The family's headline credential is that this derivation is **certified,
+not asserted**: float64 autograd through the closed-form fields puts the
+steady-Euler momentum residual
+$\|(u\cdot\nabla)u + \nabla p\|/\|(u\cdot\nabla)u\|$ at
+$2.2$–$7.9\times10^{-16}$ at random interior points on every split
+(threshold $10^{-10}$, `tests/test_euler_rotational.py`), with
+incompressibility at $\sim\!10^{-16}$ and the streamfunction Helmholtz
+residual below $5\times10^{-15}$ — rotational Euler with **no CFD solver
+anywhere in the label chain**.
+
+```{python}
+#| label: fig-euler-rotational
+#| fig-cap: >
+#|   The rotational family, rendered live from the generator. Left: one
+#|   in-distribution streamfunction with the velocity field on top -- the
+#|   interior recirculates, and the vorticity (proportional to psi) is
+#|   nonzero everywhere: this is not potential flow. Center: the same
+#|   case's exact pressure from the rotational Bernoulli relation --
+#|   drive-quadratic and non-positive in the H0 = 0 gauge. Right: a
+#|   near-eigenvalue-tier case (coupling approaching the first disk
+#|   Dirichlet eigenvalue j01 = 2.4048): the m = 0 response dominates and
+#|   the interior amplitude grows like 1/J0(c~) relative to the boundary
+#|   trace -- the physical reason the parameter band is capped, and the
+#|   evaluation tier that breaks the nonlinear arms below. Panels are in
+#|   disk-normalized coordinates with per-panel color scales.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from euler_rotational import (
+    SPLITS as ER_SPLITS,
+)
+from euler_rotational import (
+    build_euler_rotational_sample,
+    pressure,
+    streamfunction,
+    velocity,
+)
+
+INK = "#0b0b0b"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def disk_grid(flow, n=141):
+    xs = np.linspace(-1.0, 1.0, n)
+    X, Y = np.meshgrid(xs, xs)
+    inside = X**2 + Y**2 <= 1.0
+    pts = torch.tensor(
+        np.stack([X[inside], Y[inside]], axis=1), dtype=torch.float64
+    ) * flow.radius + flow.center[None, :]
+    return X, Y, inside, pts
+
+
+fig, axes = plt.subplots(1, 3, figsize=(9.6, 3.5))
+sample = build_euler_rotational_sample(
+    31, dtype=torch.float64, **ER_SPLITS["in_distribution"])
+flow = sample.flow
+X, Y, inside, pts = disk_grid(flow)
+psi = np.full(X.shape, np.nan)
+psi[inside] = streamfunction(flow, pts).numpy()
+prs = np.full(X.shape, np.nan)
+prs[inside] = pressure(flow, pts).numpy()
+
+amp = np.nanmax(np.abs(psi))
+axes[0].contourf(X, Y, psi, levels=21, cmap=DIVERGING,
+                 norm=Normalize(-amp, amp))
+quiver_mask = np.zeros_like(inside)
+quiver_mask[::10, ::10] = True
+quiver_mask &= inside & (X**2 + Y**2 < 0.92)
+qpts = torch.tensor(
+    np.stack([X[quiver_mask], Y[quiver_mask]], axis=1), dtype=torch.float64
+) * flow.radius + flow.center[None, :]
+uv = velocity(flow, qpts).numpy()
+axes[0].quiver(X[quiver_mask], Y[quiver_mask], uv[:, 0], uv[:, 1],
+               color=INK, width=0.004)
+axes[0].set_title(
+    "streamfunction + velocity\n(vorticity $= c^2\\psi$: nonzero everywhere)",
+    fontsize=8)
+
+pamp = np.nanmax(np.abs(prs))
+axes[1].contourf(X, Y, prs, levels=21, cmap=DIVERGING,
+                 norm=Normalize(-pamp, pamp))
+axes[1].set_title(
+    "pressure $= -c^2\\psi^2/2 - |u|^2/2$\n"
+    "(drive-quadratic, non-positive in the $H_0{=}0$ gauge)",
+    fontsize=8)
+
+sample_ne = build_euler_rotational_sample(
+    7, dtype=torch.float64, **ER_SPLITS["near_eigenvalue"])
+flow_ne = sample_ne.flow
+Xn, Yn, inn, ptsn = disk_grid(flow_ne)
+psin = np.full(Xn.shape, np.nan)
+psin[inn] = streamfunction(flow_ne, ptsn).numpy()
+ampn = np.nanmax(np.abs(psin))
+axes[2].contourf(Xn, Yn, psin, levels=21, cmap=DIVERGING,
+                 norm=Normalize(-ampn, ampn))
+axes[2].set_title(
+    f"near-eigenvalue tier ($\\tilde c$ = {flow_ne.coupling:.2f}):\n"
+    f"interior amplitude {ampn:.0f}$\\times$ the boundary trace",
+    fontsize=8)
+for ax in axes:
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.add_patch(plt.Circle((0, 0), 1.0, fill=False, color=INK, lw=1.4))
+fig.tight_layout()
+plt.show()
+```
+
+**The learning problem, posed honestly.** Steady Euler boundary-value
+problems are subtle in general (through-flow needs inflow vorticity
+data; neither existence nor uniqueness is generic), and this family
+claims nothing about them. It poses the *learning* problem
+$\{\text{boundary velocity}, \tilde c\} \to \{u, p\}$ **on a family of
+certified exact solutions**: the model sees the boundary velocity as a
+rank-1 drive on cells, the dimensionless vorticity coupling
+$\tilde c = cR$ as a **global operator scalar** (the family's parameter
+axis, exactly like the screened $\tilde\kappa$), and nothing else.
+Geometry starts at randomized disks (radius, center, panel rotation as
+in the screened testbed) because the Bessel series is exact there; the
+star generalization — Helmholtz solutions on deformed domains need a
+numerically-assembled basis or a solver — is noted as future work rather
+than smuggled in. Every split keeps $\tilde c$ strictly below the first
+disk Dirichlet eigenvalue $j_{0,1} = 2.404826$, where the interior
+Helmholtz solution ceases to be determined by boundary data (a
+nontrivial eigenfunction has zero trace) and the mode normalization
+divides by $J_m(\tilde c) \to 0$. Splits: in-distribution
+($\tilde c \in [0.5, 1.8]$, drive modes 0–3), unseen coupling
+($[1.9, 2.2]$ — parameter OOD inside the safe band), unseen modes
+(4–6), and a near-eigenvalue tier ($[2.25, 2.38]$), retained because its
+labels stay certified (the series is exact; only the interior/boundary
+amplitude grows — the $m = 0$ profile is amplified by $1/J_0(\tilde c)$,
+up to $\approx 77\times$ at the band edge).
+
+The suite carries the **pre-registered wall's third instance** (after
+Liouville's superposition wall, @sec-liouville, and the Euler–Bernoulli
+pressure wall, @sec-euler-bernoulli): the boundary velocity is the only
+drive, the velocity target is exactly drive-*linear*, the pressure is
+exactly drive-*quadratic*, and the drive distribution is
+negation-symmetric — so a `field_mode="linear"` arm's pressure error is
+pinned at 1.000 by parity, a theorem to confirm, not a failure to train.
+All transformer arms carry the flipped one-head reference configuration
+(@sec-one-head-cross-suite) and the two-member singpair dictionary; the
+$0o$ arm adds `drive_pseudo_dim=8` — not to break a wall (none exists
+for a polar-in/polar-out map) but because the problem's natural latent,
+the streamfunction, is exactly a wedge-sourced pseudoscalar.
+
+| arm (3 seeds, 3,000 steps) | velocity ID | pressure ID | velocity $\tilde c$-OOD | pressure $\tilde c$-OOD | velocity unseen modes | pressure unseen modes | momentum consistency (ID) |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| boundary mean (floor, 1 seed) | 0.911 | 1.000 | 0.980 | 1.000 | 1.000 | 1.000 | **0 (exact)** |
+| linear (wall control) | **0.026 ± 0.000** | **1.000 ± 0.000** | **0.127 ± 0.034** | 1.000 ± 0.000 | **0.086 ± 0.076** | 1.000 ± 0.000 | 0.98 |
+| nonlinear | 0.061 ± 0.017 | 0.181 ± 0.006 | 0.736 ± 0.923 | 0.449 ± 0.323 | 160 ± 178 | 89 ± 75 | 0.41 |
+| nonlinear + $0o$ channels | 0.063 ± 0.009 | **0.103 ± 0.005** | 0.143 ± 0.051 | **0.265 ± 0.077** | 3.5 ± 5.5 | 8.6 ± 11.6 | **0.23** |
+
+: Rotational Euler at three seeds (16 cases/split). The linear arm's
+pressure column is pinned at 1.000 on every split and seed — the third
+structural wall, held bitwise (worst deviation $7\times10^{-4}$). The
+last column is the cross-field steady-Euler momentum residual of the
+model's own outputs, normalized by the exact advection norm — this
+suite's fidelity columns (@sec-fidelity-columns) are populated from its
+first archived run. The near-eigenvalue tier is reported in the text:
+its numbers do not fit a table. {#tbl-euler-rotational}
+
+What this establishes:
+
+- **The third structural wall held exactly.** Twelve of twelve
+  linear-arm pressure cells read 1.000; nonlinear mode breaks the wall
+  (0.181), and the $0o$ arm nearly halves that again (0.103) — on this
+  family the parity channels improve the *pressure*, whose natural
+  latent $\psi^2$ is a pseudoscalar squared, even though no wall exists
+  for either output. The momentum-consistency column reads the same
+  wall from the physics side: the linear arm's two heads describe two
+  different flows (0.98 — its pressure is a forced no-response), while
+  the $0o$ arm's outputs are the most mutually consistent (0.23).
+- **The honest half-miss of the pre-registration:** the linear arm's
+  velocity does *not* merely match the nonlinear arms — it beats them
+  2.3$\times$ in-distribution (0.026 vs 0.061) and degrades gracefully
+  on every OOD axis (worst split 0.26). Exact drive-linearity remains
+  the best velocity model wherever it is licensed; nonlinear mode
+  buys the pressure at a measurable velocity cost.
+- **A new stress axis, isolated sharply: nonlinear-mode
+  operator-parameter extrapolation.** On the near-eigenvalue tier the
+  linear arm reads velocity 0.20 ± 0.05 — while the nonlinear arms
+  explode to relative errors of $10^{6}$–$10^{13}$ (nonlinear) and
+  $10^{6}$–$10^{10}$ ($0o$), on cases whose exact fields the linear arm
+  handles at 0.2. The same signature appears milder on the other OOD
+  axes (the nonlinear arm's seed-29 unseen-modes 352, $\tilde c$-OOD
+  1.80; the $0o$ arm blows up on one seed of one split). This sharpens
+  the iteration-25 circulation-OOD anomaly from a training transient
+  into a structural liability: the zero-preserving nonlinear read-in
+  extrapolates catastrophically along the *operator* axis, precisely
+  where the exactly-linear arm is graceful. The discriminator is clean
+  because the velocity map is genuinely linear — the physics is
+  representable in both modes, so the blowup prices the mode, not the
+  problem.
+- **Multi-field composition replicates on a second family.** Targets
+  {velocity rank-1, pressure rank-0} ran through the core unchanged, on
+  the one-head reference configuration, with the equal-weight per-field
+  loss keeping the pressure measurable — the @sec-euler-bernoulli
+  conventions transfer without modification to a rotational,
+  parameter-conditioned problem.
+
+*History: @sec-nb-iter33.*

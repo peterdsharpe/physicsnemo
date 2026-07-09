@@ -1,0 +1,401 @@
+# The screened-Laplace suite {#sec-ds-screened}
+
+Put the heated plate of @sec-ds-laplace2d into a cooling bath: the
+interior no longer feels the far side of the boundary, only a rim whose
+thickness is set by a physical constant. That one constant — the
+screening parameter — makes this the program's first *parametric* PDE
+family, and the suite that decides where a global equation parameter
+should enter a learned operator.
+
+## The problem
+
+Disks of random radius and center carry Dirichlet data built from exact
+Bessel-mode series for the screened (modified-Helmholtz) equation
+
+$$
+\Delta u - \kappa^2 u = 0 \ \text{in } \Omega,
+\qquad u = g \ \text{on } \partial\Omega ,
+$$
+
+with the **dimensionless screening** $\tilde\kappa = \kappa R$ supplied
+as a global operator scalar — the only way a dimensional parameter is
+ever allowed in (@sec-pde-theory). Labels are exact (modified-Bessel
+series). Contracts: similarity equivariance, and **drive-linearity** —
+the equation is linear, so superposition is structural. One honest
+numerical knob, recorded in the archive: the $K_0/K_1$ kernels of the
+specialist baselines have no elementary panel antiderivative, so those
+baselines use fixed 16-node Gauss quadrature.
+
+The screening constant is the whole story of this suite, so the first
+figure shows nothing else: one sample — same disk, same boundary data —
+at four values of $\tilde\kappa$.
+
+```{python}
+#| label: fig-ds2-decay
+#| fig-cap: >
+#|   One geometry, one drive, four screening constants. At small
+#|   kappa-tilde the field fills the disk like a harmonic function; as
+#|   kappa-tilde grows the interior decouples and the response collapses
+#|   into a boundary rim of thickness ~ R/kappa-tilde. The training band
+#|   samples kappa-tilde in [0.5, 2]; the evaluation splits push both
+#|   directions.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
+import numpy as np
+import torch
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from screened_laplace import SPLITS, build_screened_sample
+
+INK, INK2 = "#0b0b0b", "#52514e"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def screened_panel(ax, seed, *, split=None, kappa=None, title=None,
+                   n_query=4200):
+    # Pinning kappa_range=(k, k) consumes the same generator draw, so the
+    # SAME seed gives identical geometry and drive across panels; only the
+    # screening constant differs.
+    spec = dict(SPLITS[split]) if split else dict(
+        kappa_range=(kappa, kappa), modes=(0, 1, 2, 3))
+    s = build_screened_sample(
+        seed, **spec, n_boundary=96, n_query=n_query, dtype=torch.float64)
+    b = s.domain.boundaries["dirichlet"]
+    tr = b.cell_data["boundary_value"].numpy()
+    # Append boundary midpoints with their exact Dirichlet values to the
+    # triangulation: closes the convex-hull gap at the rim with exact data
+    # (the trace IS the field's boundary limit), so the thin high-kappa
+    # boundary layers render faithfully.
+    bmid = b.points[b.cells].numpy().mean(axis=1)
+    q = np.concatenate([s.domain.interior.points.numpy(), bmid], axis=0)
+    u = np.concatenate([s.target.numpy(), tr], axis=0)
+    vmid = float(tr.mean())
+    amp = max(np.abs(u - vmid).max(), np.abs(tr - vmid).max())
+    tri = mtri.Triangulation(q[:, 0], q[:, 1])
+    ax.tricontourf(tri, u, levels=np.linspace(vmid - amp, vmid + amp, 25),
+                   cmap=DIVERGING)
+    segs = b.points[b.cells].numpy()
+    ax.add_collection(LineCollection(
+        segs, colors=DIVERGING(Normalize(vmid - amp, vmid + amp)(tr)),
+        linewidths=2.2, capstyle="round"))
+    bp = b.points.numpy()
+    lo, hi = bp.min(axis=0), bp.max(axis=0)
+    mid, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.07
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if title is not None:
+        ax.set_title(title, fontsize=9, color=INK)
+    return s
+
+
+fig, axes = plt.subplots(1, 4, figsize=(9.4, 2.7))
+for ax, kappa in zip(axes, (0.5, 2.0, 6.0, 15.0)):
+    screened_panel(ax, 21, kappa=kappa, title=rf"$\tilde\kappa = {kappa:g}$")
+fig.tight_layout()
+plt.show()
+```
+
+## Why this rung
+
+A learned operator that merely interpolates its training set fails the
+moment a *physical constant* leaves the band it saw — and this suite
+makes that failure measurable in isolation, because everything else
+(geometry family, drive spectrum) stays fixed while $\tilde\kappa$
+moves. It also settled a design question with consequences everywhere:
+should the parameter enter through a PDE-conforming **kernel basis** or
+through **learned conditioning** of a fixed basis (@sec-parametric)?
+The benchmark table below carries the answer's sharpest exhibit.
+
+## The gallery
+
+```{python}
+#| label: fig-ds2-gallery
+#| fig-cap: >
+#|   Training-family samples (kappa-tilde in [0.5, 2], drive modes 0-3):
+#|   random disk radii and centers, exact Bessel-series interior fields,
+#|   boundary rings colored by their Dirichlet data. Colors normalize per
+#|   sample about the boundary mean.
+fig, axes = plt.subplots(2, 4, figsize=(9.4, 5.0))
+for ax, seed in zip(axes.ravel(), (2, 5, 9, 14, 22, 27, 33, 38)):
+    s = screened_panel(ax, seed, split="in_distribution")
+    ax.set_title(rf"seed {seed}: $\tilde\kappa = {s.kappa_tilde:.2f}$",
+                 fontsize=8, color=INK2)
+fig.tight_layout()
+plt.show()
+```
+
+### The four splits
+
+One question per split (@sec-part-eval): the parameter leaves the band
+in both directions, and the drive spectrum moves at fixed parameter.
+
+```{python}
+#| label: fig-ds2-splits
+#| fig-cap: >
+#|   The evaluation splits on matched seeds. Row 1: the training band.
+#|   Row 2: high screening (kappa-tilde in [3, 5] — thinner rims than any
+#|   training sample). Row 3: low screening ([0.05, 0.3] — the near-Laplace
+#|   limit, where the specialist's Yukawa basis detonates; see the table).
+#|   Row 4: unseen drive modes {4, 5, 6} at training-band screening.
+rows = [
+    ("training band", "in_distribution"),
+    ("high screening", "ood_high_screening"),
+    ("low screening", "ood_low_screening"),
+    ("unseen drive modes", "unseen_modes"),
+]
+fig, axes = plt.subplots(4, 3, figsize=(7.6, 10.0))
+for r, (label, split) in enumerate(rows):
+    for c, seed in enumerate((4, 12, 25)):
+        screened_panel(axes[r, c], seed, split=split,
+                       title=label if c == 1 else None)
+fig.tight_layout()
+plt.show()
+```
+
+## Benchmarks
+
+The floor is computed live (the boundary-mean predictor over a fresh
+32-sample ID bank — cheap and exact); every learned row comes from the
+checked-in archive.
+
+```{python}
+#| label: tbl-ds2-bench
+#| output: asis
+import json
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it3 = bie["iteration_3_parametric_conditioning"]["results_seed17_2000steps"]
+it13 = bie["iteration_13_singonly_universality"][
+    "screened_singonly_2000steps"]["runs"]
+
+floor_vals = []
+for seed in range(400, 432):
+    s = build_screened_sample(
+        seed, **SPLITS["in_distribution"], n_boundary=96, n_query=256,
+        dtype=torch.float64)
+    mean = float(
+        s.domain.boundaries["dirichlet"].cell_data["boundary_value"].mean())
+    u = s.target.numpy()
+    floor_vals.append(np.sqrt(((u - mean) ** 2).sum() / (u**2).sum()))
+floor_id = float(np.mean(floor_vals))
+
+
+def sing_mean(key):
+    return sum(r[key] for r in it13) / len(it13)
+
+
+rows = [
+    ("boundary-mean floor (live, 32 samples)", floor_id, None, None, None),
+    ("MeshTransformer singonly (3 seeds)",
+     sing_mean("in_distribution"), sing_mean("ood_high_screening"),
+     sing_mean("ood_low_screening"), sing_mean("unseen_modes")),
+    ("Yukawa-basis specialist, 10p (oracle-in-family)",
+     it3["yukawa_10p"]["id"], it3["yukawa_10p"]["ood_high"],
+     it3["yukawa_10p"]["ood_low"], it3["yukawa_10p"]["unseen_modes"]),
+    ("conditioned harmonic basis",
+     it3["conditioned_harmonic"]["id"],
+     it3["conditioned_harmonic"]["ood_high"],
+     it3["conditioned_harmonic"]["ood_low"],
+     it3["conditioned_harmonic"]["unseen_modes"]),
+]
+lines = [
+    "| model | ID | $\\tilde\\kappa$ high | $\\tilde\\kappa$ low "
+    "| unseen modes |",
+    "|---|--:|--:|--:|--:|",
+]
+for name, *vals in rows:
+    cells = [f"{v:.3f}" if v is not None else "—" for v in vals]
+    lines.append(f"| {name} | " + " | ".join(cells) + " |")
+lines.append(
+    ": Screened-Laplace relative $L^2$ by split (archive: "
+    "`learned_bie_2026-07-02.json`, iterations 3 and 13; floor computed "
+    "live). {#tbl-ds2-bench-table}")
+print("\n".join(lines))
+```
+
+The table's sharpest exhibit is the specialist's **low-screening
+detonation**: the Yukawa-basis oracle that dominates in-distribution
+(0.0033) reads **8.68** — 2,600× worse — when $\tilde\kappa$ drops
+below its training band, because the $K_0(\tilde\kappa r)$
+parameterization degenerates as $\tilde\kappa \to 0$, while the
+*conditioned* fixed-basis models degrade gracefully. That asymmetry —
+bases extrapolate physics until their parameterization degenerates;
+conditioning never detonates — is the design rule of @sec-parametric,
+and the reason the production architecture conditions kernels on
+$\tilde\kappa$ rather than baking parameters into the dictionary.
+
+## Variations
+
+The parametric-extrapolation response IS this suite's variation study,
+and it is already in the table above (both $\tilde\kappa$ directions).
+
+::: {.callout-note title="In flight"}
+The resolution-transfer gallery (E3 of the dataset-chapters thread)
+lands here when its cluster artifacts do; note the archived caveat that
+the specialist baselines' zeroed self-panel breaks *their* exact
+resolution transfer — the MeshTransformer's exact members carry no such
+knob.
+:::
+
+## The full-architecture evidence
+
+Moved from the benchmarks chapter: the screened suite through the full MeshTransformer.
+
+### The screened suite through the full architecture {#sec-screened}
+
+The parametric study answered the basis-versus-conditioning question with
+specialist pair-kernel BIEs on the screened Laplace (modified Helmholtz)
+family $\Delta u - \kappa^2 u = 0$ (@sec-parametric). The same benchmark
+also runs through the *full generalist architecture*: the kernel-decoder
+`MeshTransformer`, with the dimensionless parameter
+$\tilde\kappa = \kappa R$ entering **only** as an operator-side global
+scalar (`screening`) — it conditions the operator encoder, and through it
+the kernel-decoder coefficients. The field mode stays `linear`: the PDE is
+drive-linear, so the superposition contract is kept. Two arms — 8 MLP
+members (110,593 parameters) versus dictionary-only (105,121) — three
+seeds (17/18/19), 2,000 steps, the same protocol as the @sec-parametric
+specialists they are compared against (checked-in key
+`iteration_9_screened_meshtransformer`; the best current arm,
+singular-only, is in @sec-singonly-universality). The framing rule matters
+most here: the specialists *know the PDE* — their kernel bases are exact
+Yukawa fundamental solutions — while the `MeshTransformer` is handed the
+number $\tilde\kappa$ but not its meaning.
+
+| arm | seed | ID | low-$\tilde\kappa$ | high-$\tilde\kappa$ | unseen modes | PDE residual |
+|---|--:|--:|--:|--:|--:|--:|
+| 8 MLP members | 17 | 0.0140 | 0.0553 | 0.1523 | 0.2386 | 0.492 |
+| 8 MLP members | 18 | 0.0129 | 0.0303 | 0.1473 | 0.1963 | 0.579 |
+| 8 MLP members | 19 | 0.0162 | 0.0473 | 0.2508 | 0.1178 | 0.616 |
+| 8 MLP members | *mean* | *0.0144* | *0.0443* | *0.1835* | *0.1842* | *0.562* |
+| dictionary-only | 17 | 0.0141 | 0.0544 | 0.2281 | 0.0143 | 0.682 |
+| dictionary-only | 18 | 0.0106 | 0.0256 | 0.1624 | 0.0230 | 0.513 |
+| dictionary-only | 19 | 0.0114 | 0.0441 | 0.1636 | 0.0203 | 0.510 |
+| dictionary-only | *mean* | *0.0120* | *0.0414* | *0.1847* | *0.0192* | *0.568* |
+
+: Kernel-decoder `MeshTransformer` on screened Laplace: relative $L^2$ by
+split, two arms $\times$ three seeds, 2,000 steps. PDE residual:
+$\|(\Delta - \kappa^2)u\|L^2/\|u\|$ from the archived per-run reports
+(exact solution 0; @sec-fidelity-columns). {#tbl-screened-arms}
+
+The specialist comparators of @sec-parametric, same benchmark, same step
+budget (seed 17):
+
+| specialist (iteration 3) | ID | low-$\tilde\kappa$ | high-$\tilde\kappa$ | unseen modes | PDE residual |
+|---|--:|--:|--:|--:|--:|
+| Yukawa basis (10 p) | 0.0033 | 8.68 | 0.0158 | 0.008 | 0.0 |
+| conditioned Yukawa | 0.0005 | 28.0 | 0.0474 | 0.006 | 0.0 |
+| conditioned harmonic | 0.0613 | 0.0035 | 0.3101 | 0.0459 | 1.65 |
+| conditioned union | 0.0020 | 25.0 | 0.0663 | 0.0073 | 0.14 |
+
+: The specialist pair-kernel BIEs of @sec-parametric on the same splits
+(seed 17, 2,000 steps, checked-in artifact). The PDE-residual column is the
+basis-versus-conditioning finding in one glance: an exact Yukawa basis
+scores *exactly* 0 whatever its coefficients, the wrong (harmonic) basis
+cannot get below 1.65 however well conditioned, and the union basis lands
+between. {#tbl-screened-specialists}
+
+```{python}
+#| fig-cap: >
+#|   Screened Laplace through the full architecture (checked-in
+#|   learned_bie_2026-07-02.json, iteration 9; log scale). Filled dots are
+#|   the two MeshTransformer arms, seeds 17/18/19 left to right; open
+#|   markers are the iteration-3 seed-17 specialist references. The
+#|   exact-Yukawa-basis specialist wins high kappa-tilde but diverges
+#|   catastrophically at low kappa-tilde (K0 log-divergence); the
+#|   MeshTransformer degrades gracefully there. On unseen modes the two
+#|   arms split by 10x -- the dictionary-selection effect.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it9 = results["iteration_9_screened_meshtransformer"]
+keys = [
+    ("in_distribution", "ID"),
+    ("ood_low_screening", "low-$\\tilde\\kappa$ OOD"),
+    ("ood_high_screening", "high-$\\tilde\\kappa$ OOD"),
+    ("unseen_modes", "unseen modes"),
+]
+comparator_keys = ["ID", "lowK", "highK", "modes"]
+yukawa = it9["iteration_3_comparators_seed17"]["yukawa_basis_10p"]
+harmonic = it9["iteration_3_comparators_seed17"]["conditioned_harmonic"]
+
+fig, ax = plt.subplots(figsize=(6.6, 4.0))
+offsets = [-0.24, -0.17, -0.10]
+for arm, color, label, sign in [
+    ("mlp8", "#2a78d6", "MeshTransformer, 8 MLP members", -1),
+    ("nomlp", "#4a3aa7", "MeshTransformer, dictionary-only", 1),
+]:
+    for i, (key, _) in enumerate(keys):
+        values = [run[key] for run in it9["runs"][arm]]
+        xs = [i - sign * o for o in offsets]
+        ax.plot(xs, values, "o", ms=8, color=color, mec="white", mew=1.3,
+                zorder=3, label=label if i == 0 else None)
+ax.plot(range(4), [yukawa[k] for k in comparator_keys], "s", ms=8,
+        mfc="none", mec="#0b0b0b", mew=1.5, zorder=2,
+        label="Yukawa-basis specialist (10 p, seed 17)")
+ax.plot(range(4), [harmonic[k] for k in comparator_keys], "D", ms=7,
+        mfc="none", mec="#898781", mew=1.5, zorder=2,
+        label="conditioned-harmonic specialist (seed 17)")
+ax.annotate("$K_0$ log-divergence", (1, yukawa["lowK"]),
+            textcoords="offset points", xytext=(-10, -3), ha="right",
+            fontsize=8, color="#52514e")
+ax.set_yscale("log")
+ax.set_xticks(range(4), [label for _, label in keys])
+ax.set_xlim(-0.6, 3.6)
+ax.set_ylim(2e-4, 8e1)
+ax.set_ylabel("relative $L^2$ (log scale)")
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+ax.legend(fontsize=8, loc="upper right", frameon=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+What this establishes — the specialist–generalist trade, measured
+honestly. In distribution, the generalist beats the harmonic-basis
+specialist by $\sim$5$\times$ (mean ID 0.012 versus 0.061) *without
+knowing the PDE*, and stays within $\sim$4$\times$ of the
+exact-Yukawa-basis specialists (0.003–0.0005) that *do* know it.
+Parameter-OOD splits the ledger in two, and the asymmetry is the finding:
+
+- **High $\tilde\kappa$: the exact basis wins decisively** (0.016 versus
+  0.18) — the expected price of not knowing the equation; conditioning
+  does not extrapolate the parameter, only analytic structure does.
+- **Low $\tilde\kappa$: the Yukawa-basis specialists diverge
+  catastrophically** (8.7–28, as $K_0$ diverges logarithmically for
+  $\tilde\kappa \to 0$) **while the `MeshTransformer` degrades gracefully
+  to 0.03–0.05** — its harmonic-biased singular dictionary already
+  *contains* the $\tilde\kappa \to 0$ limit.
+
+That asymmetry is the **graceful-degradation argument** for
+harmonic-biased dictionaries in the unknown-PDE product setting: a
+specialist basis fails catastrophically outside its asymptotic regime; a
+dictionary containing the benign limit buys bounded degradation where the
+exact basis cannot go. The PDE-residual columns keep the trade honest in
+both directions: the generalist's 0.49–0.68 sits squarely between the
+exact-basis specialists' exact 0 and the wrong-basis conditioner's 1.65 —
+its excellent ID numbers are earned by fitting the field, not by
+satisfying the screened operator, and the column now says so in the same
+table as the $L^2$ scores. The suite
+also delivered the strongest dictionary-selection replication of the
+linear-PDE pattern: MLP members leave ID and both $\tilde\kappa$-OOD
+splits unchanged but destroy unseen-modes generalization 10$\times$
+(0.184 vs 0.019, 3/3 seeds; @sec-dictionary-selection).
+
+*History: @sec-nb-iter9.*

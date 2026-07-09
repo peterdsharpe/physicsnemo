@@ -1,0 +1,1027 @@
+# The Navier–Stokes star-cavity suite {#sec-ds-navier-stokes}
+
+The rung where exactness ends and solver discipline begins. Every suite
+before this one carries closed-form labels; here the labels come from a
+verified finite-element solver, arrive with **measured error bars**,
+and grade continuously in difficulty through the Reynolds number — the
+bridge between the exact-label ladder and the industrial chapters that
+follow.
+
+## The problem
+
+Star-shaped cavities (the conformal geometry family) hold viscous fluid
+driven by a **tangential wall-velocity band** — a generalized
+lid-driven cavity whose "lid" is a smooth arc-length window of moving
+wall, randomized in position, width, and profile. The flow solves
+steady incompressible Navier–Stokes,
+
+$$
+(u \cdot \nabla)\,u = -\nabla p + \tfrac{1}{\mathrm{Re}}\,\Delta u,
+\qquad \nabla \cdot u = 0,
+\qquad u = g \ \text{on } \partial\Omega ,
+$$
+
+with $\mathrm{Re}$ a global operator scalar. Labels come from a
+Taylor–Hood P2–P1 solver with analytic-Jacobian Newton (MMS-verified at
+orders 2.9/1.9), and **every case ships its own certification**:
+Newton residual ($\sim 10^{-15}$), momentum balance
+($\sim 10^{-14}$), normalized divergence, and — on a deterministic
+subset — a finer-mesh re-solve bounding the label-noise floor.
+
+```{python}
+#| label: fig-ds8-bc-diagram
+#| fig-cap: >
+#|   One training sample, as posed: the cavity wall colored by its
+#|   tangential drive speed (the moving-wall band; the rest is no-slip),
+#|   query points inside (with the deliberate near-wall band visible), and
+#|   the case's own certification stamped beside it — every label carries
+#|   its measured error bars.
+import json
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.collections import LineCollection
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+
+INK, INK2 = "#0b0b0b", "#52514e"
+SEQUENTIAL = LinearSegmentedColormap.from_list(
+    "book_seq", ["#f0efec", "#e34948"])
+CATALOG = Path("..") / "datasets" / "ns_cavity_star" / "v1"
+
+case = np.load(CATALOG / "case_00000.npz")
+params = json.loads(str(case["__params__"]))
+pts = case["boundary_points"]
+cells = case["boundary_cells"]
+speed = np.linalg.norm(case["boundary_velocity"], axis=1)
+queries = case["query_points"]
+
+fig, ax = plt.subplots(figsize=(6.2, 5.6))
+norm = Normalize(0, speed.max())
+segs = pts[cells]
+ax.add_collection(LineCollection(segs, colors=SEQUENTIAL(norm(speed)),
+                                 linewidths=3.6, capstyle="round", zorder=3))
+ax.plot(queries[:, 0], queries[:, 1], ".", color=INK, ms=3.5)
+driven = speed > 0.05 * speed.max()
+band_mid = segs[driven].mean(axis=(0, 1))
+ax.annotate("moving-wall band\n(tangential drive)", xy=tuple(band_mid),
+            xytext=(0.02, 0.97), textcoords="axes fraction", fontsize=10,
+            color=INK, va="top",
+            arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+ver = params["verification"]
+ax.text(0.98, 0.02,
+        "this case's certification:\n"
+        f"Newton residual {ver['relative_residual']:.1e}\n"
+        f"momentum balance {ver['momentum_balance_error']:.1e}\n"
+        f"velocity noise floor {ver['label_noise_floor_velocity']:.1e}\n"
+        f"pressure noise floor {ver['label_noise_floor_pressure']:.1e}",
+        transform=ax.transAxes, ha="right", va="bottom", fontsize=8.5,
+        color=INK2,
+        bbox=dict(facecolor="#f4f3ef", edgecolor="#e1e0d9"))
+sm = plt.cm.ScalarMappable(cmap=SEQUENTIAL, norm=norm)
+fig.colorbar(sm, ax=ax, shrink=0.7, label="wall speed $|g|$")
+ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+ax.grid(False)
+for spine in ax.spines.values():
+    spine.set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+## Why this rung
+
+Three things no exact-label suite can provide. **Solver honesty**: the
+program's evaluation discipline (fidelity columns, noise-floor-aware
+claims) had to survive contact with labels that are themselves
+approximate — and the measured floors (velocity $\lesssim 10^{-4}$,
+pressure $\lesssim 10^{-3}$ catalog-wide) say precisely how much
+headroom remains before a model is fitting solver error. **A continuous
+difficulty dial**: Reynolds number grades the physics from
+Stokes-like to convection-dominated inside one family. **The bridge**:
+this is the same physics class as AirFRANS and DrivAerML
+(@sec-airfrans, @sec-drivaerml), posed with the exact-label ladder's
+split discipline.
+
+## The gallery
+
+The smooth solutions first — three distinct samples (rows: geometry and
+drive pinned per row) marched across the Reynolds range (columns), so
+each row shows one flow family stiffening from Stokes-like symmetry to
+convection-dominated asymmetry while everything else stays fixed.
+
+```{python}
+#| label: fig-ds8-gallery
+#| fig-cap: >
+#|   The dense solution fields: velocity magnitude of the Taylor–Hood
+#|   solution, three samples (rows; geometry and drive pinned within each
+#|   row — the same case construction as the v1 catalog, re-solved at four
+#|   Reynolds numbers) across Re = 10, 50, 150, 300 (columns). The wall
+#|   ring is colored by its tangential drive speed. Color is
+#|   square-root-scaled in speed (shared scale across every panel): the
+#|   thin wall jet at speed ~1 would otherwise hide the cavity-scale
+#|   recirculation at speed ~0.1 that fills most of the area. Reading
+#|   across a row: the driven arc's wall jet penetrates further and the
+#|   recirculation pattern loses its Stokes-flow symmetry as Re grows.
+#|   Artifact: `book/data/ns_gallery_fields_2026-07-07.npz`
+#|   (studies/ns_gallery_fields.py, h = 0.02, ~21k vertices per solve).
+import matplotlib.tri as mtri
+
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+GALLERY = np.load(Path("data") / "ns_gallery_fields_2026-07-07.npz")
+seeds = GALLERY["geometry_seeds"]
+res = GALLERY["reynolds_values"]
+
+
+from matplotlib.colors import PowerNorm
+
+
+def smooth_panel(ax, k, show_re=None):
+    tri = mtri.Triangulation(
+        GALLERY[f"case{k}_points"][:, 0], GALLERY[f"case{k}_points"][:, 1],
+        triangles=GALLERY[f"case{k}_triangles"])
+    speed = np.linalg.norm(GALLERY[f"case{k}_velocity"], axis=1)
+    # sqrt scaling: the wall jet (speed ~ 1, a thin band) would otherwise
+    # push the cavity-scale recirculation (speed ~ 0.05-0.2, most of the
+    # area) into invisibility on a white-anchored map. The scale is shared
+    # by every panel, so cross-panel comparison stays honest; the caption
+    # states the scaling.
+    ax.tripcolor(tri, speed, shading="gouraud", cmap=SEQUENTIAL,
+                 norm=PowerNorm(0.5, vmin=0.0, vmax=1.0), rasterized=True)
+    loop = GALLERY[f"case{k}_loop"]
+    wall = GALLERY[f"case{k}_wall_speed"]
+    closed = np.vstack([loop, loop[:1]])
+    segs = np.stack([closed[:-1], closed[1:]], axis=1)
+    # Neutral thin outline everywhere; drive-colored overlay where driven.
+    # A closed loop of N points yields exactly N segments, so wall (one
+    # value per dense boundary point) indexes segs directly.
+    ax.add_collection(LineCollection(
+        segs, colors="#9a988f", linewidths=0.9, capstyle="round", zorder=3))
+    driven = wall > 0.02
+    if driven.any():
+        ax.add_collection(LineCollection(
+            segs[driven],
+            colors=SEQUENTIAL(PowerNorm(0.5, vmin=0, vmax=1)(wall[driven])),
+            linewidths=2.6, capstyle="round", zorder=4))
+    lo_b, hi_b = loop.min(axis=0), loop.max(axis=0)
+    mid, half = (lo_b + hi_b) / 2, (hi_b - lo_b).max() / 2 * 1.06
+    ax.set_xlim(mid[0] - half, mid[0] + half)
+    ax.set_ylim(mid[1] - half, mid[1] + half)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if show_re is not None:
+        ax.set_title(rf"$\mathrm{{Re}} = {show_re:.0f}$",
+                     fontsize=9, color=INK)
+
+
+fig, axes = plt.subplots(len(seeds), len(res), figsize=(9.4, 7.4))
+for row in range(len(seeds)):
+    for col in range(len(res)):
+        smooth_panel(axes[row, col], row * len(res) + col,
+                     show_re=res[col] if row == 0 else None)
+    axes[row, 0].set_ylabel(f"sample {row + 1}", fontsize=9, color=INK2)
+    axes[row, 0].yaxis.set_visible(True)
+fig.tight_layout()
+plt.show()
+```
+
+What the model actually receives is far sparser: 160 query points per
+case (128 interior plus a deliberate near-wall band) against 64
+boundary panels. The pair below shows the same case both ways — the
+smooth truth and the as-posed sampling — which is the honest way to
+present a point-cloud dataset: the cloud is the *supervision*, not the
+solution.
+
+```{python}
+#| label: fig-ds8-asposed
+#| fig-cap: >
+#|   The same case (sample 1, Re = 10) as the smooth Taylor–Hood solution
+#|   (left) and as the dataset actually poses it (right): 160 query points
+#|   colored by the same velocity-magnitude scale, wall ring colored by
+#|   drive speed. Every accuracy number in this chapter is computed
+#|   against point sets like the right panel; every field the model must
+#|   implicitly represent looks like the left.
+fig, axes = plt.subplots(1, 2, figsize=(8.2, 4.0))
+smooth_panel(axes[0], 0)
+axes[0].set_title("the solution (h = 0.02 solve)", fontsize=9, color=INK)
+ax = axes[1]
+pts = GALLERY["asposed_points"]
+ax.scatter(pts[:, 0], pts[:, 1], c=GALLERY["asposed_speed"],
+           cmap=SEQUENTIAL, s=26, vmin=0.0, vmax=1.0, edgecolors="none")
+loop = GALLERY["case0_loop"]
+closed = np.vstack([loop, loop[:1]])
+segs = np.stack([closed[:-1], closed[1:]], axis=1)
+ax.add_collection(LineCollection(
+    segs, colors=SEQUENTIAL(Normalize(0, 1)(GALLERY["case0_wall_speed"])),
+    linewidths=2.0, capstyle="round", zorder=3))
+lo_b, hi_b = loop.min(axis=0), loop.max(axis=0)
+mid, half = (lo_b + hi_b) / 2, (hi_b - lo_b).max() / 2 * 1.06
+ax.set_xlim(mid[0] - half, mid[0] + half)
+ax.set_ylim(mid[1] - half, mid[1] + half)
+ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+ax.grid(False)
+for spine in ax.spines.values():
+    spine.set_visible(False)
+ax.set_title("as posed: 160 query points", fontsize=9, color=INK)
+fig.tight_layout()
+plt.show()
+```
+
+### Measured label quality across the family
+
+```{python}
+#| label: fig-ds8-noise
+#| fig-cap: >
+#|   The label-noise floor, measured per case (finer-mesh re-solves on the
+#|   deterministic subset): relative label error vs Reynolds for velocity
+#|   and pressure. This is the honesty line of the suite — model errors
+#|   below these floors would be fitting solver noise, and every claim in
+#|   the benchmark tables lives well above them.
+manifest = json.load(open(CATALOG / "manifest.json"))
+res, vfl, pfl = [], [], []
+for idx in range(0, 1400, 1):
+    path = CATALOG / f"case_{idx:05d}.npz"
+    if not path.exists():
+        continue
+    p = json.loads(str(np.load(path)["__params__"]))
+    v = p["verification"]
+    if v.get("label_noise_floor_velocity", 0) > 0:
+        res.append(p["reynolds"])
+        vfl.append(v["label_noise_floor_velocity"])
+        pfl.append(v["label_noise_floor_pressure"])
+
+fig, ax = plt.subplots(figsize=(7.4, 3.6))
+ax.loglog(res, vfl, "o", color="#2a78d6", ms=4, label="velocity floor")
+ax.loglog(res, pfl, "s", color="#e34948", ms=4, label="pressure floor")
+ax.set_xlabel("Reynolds number")
+ax.set_ylabel("label-noise floor (relative)")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+ax.legend(frameon=False, fontsize=9)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds8-bench
+#| output: asis
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+r36 = bie["iteration_36_navier_stokes"]["results_3seed"]
+
+splits = [("eval_id", "ID"), ("eval_unseen_Re", "unseen Re"),
+          ("eval_unseen_geometry", "unseen geometry"),
+          ("eval_unseen_drive_profile", "unseen drive")]
+names = {"boundary_mean": "boundary-mean floor",
+         "mt_singpair_linear": "linear mode",
+         "mt_singpair_nl_pseudo": "nonlinear + 0o",
+         "mt_singpair_q2_pseudo": "declared degree 2 + 0o",
+         "transolver_intree_matched": "Transolver (in-tree, matched)"}
+lines = ["| arm | " + " | ".join(s[1] for s in splits) + " |",
+         "|---|" + "--:|" * len(splits)]
+for arm in ("boundary_mean", "mt_singpair_linear", "mt_singpair_nl_pseudo",
+            "mt_singpair_q2_pseudo", "transolver_intree_matched"):
+    vals = " | ".join(f"{r36[arm][k]['combined']:.3f}" for k, _ in splits)
+    lines.append(f"| {names[arm]} | {vals} |")
+lines.append(
+    ": Combined (velocity+pressure) relative $L^2$, 3 seeds (archive: "
+    "`learned_bie_2026-07-02.json`, iteration 36). "
+    "{#tbl-ds8-bench-table}")
+print("\n".join(lines))
+```
+
+### The Reynolds-graded gap, and the confound that resolved it
+
+```{python}
+#| label: fig-ds8-regap
+#| fig-cap: >
+#|   The velocity GAP to the nonlinear reference arm vs Reynolds (joined
+#|   v1 + low-Re catalogs, binned; positive = worse than the nonlinear
+#|   arm). The plain linear arm's gap grows with Re — but the low-Re band
+#|   exposed that most of its Stokes-band gap is PARITY, not
+#|   nonlinearity: adding the 0o sector to the linear arm closes the gap
+#|   below Re ~ 10 entirely (slightly negative: it edges out the
+#|   reference there), while the high-Re growth remains — that part is
+#|   the nonlinear read-in's. Two mechanisms, separated by a measured
+#|   confound check (iterations 37-38).
+gap38 = bie["iteration_38_linear_pseudo_confound"]["joined_gap_vs_re"]
+fig, ax = plt.subplots(figsize=(7.4, 3.9))
+styles = {"mt_singpair_linear": ("linear", "#e34948", "o"),
+          "mt_singpair_linear_pseudo": ("linear + 0o", "#8352c9", "s"),
+          "mt_singpair_nl": ("nonlinear", "#2a78d6", "^"),
+          "mt_singpair_nl_pseudo": ("nonlinear + 0o", "#1baf7a", "v")}
+for arm, (label, color, marker) in styles.items():
+    if arm in gap38:
+        ax.semilogx(gap38[arm]["bin_centers"], gap38[arm]["velocity_gap"],
+                    marker + "-", color=color, ms=4.5, lw=1.3, label=label)
+ax.set_xlabel("Reynolds number (bin center)")
+ax.axhline(0.0, color=INK2, lw=1.0, ls=":")
+ax.set_ylabel("velocity gap to nonlinear arm "
+              "($\\Delta$ relative $L^2$)")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+ax.legend(frameon=False, fontsize=9)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+## Variations
+
+::: {.callout-note title="The wide-Reynolds sweep — generation in flight"}
+The suite's headline variation — accuracy versus Reynolds across
+$\mathrm{Re} \in [1, 5000]$, four log-banded v2 catalogs generated
+under v1's exact verification protocol, with the noise floor drawn
+beside the model error — is experiment E1 of the dataset-chapters
+thread (pre-registered at the notebook's dataset-chapters entry). Its
+cells land here when the catalogs and per-band training arms complete;
+a heavily gate-rejected top band would itself be reported as a
+measured steady-solver limit.
+:::
+
+## The full evidence {#sec-part-ns}
+
+Moved from the benchmarks chapter: the suite's founding record — label credential, arms, pre-registered verdicts, and the low-Re band.
+
+The evaluation discipline survives contact with a **real solver**:
+Navier–Stokes labels from a certified FEM solve, with measured
+label-noise floors reported per case, and the contract story carries
+over — the pressure wall becomes a *function of Reynolds number*, graded
+exactly as the physics grades the nonlinearity. This part is the
+program's current frontier.
+
+### Navier–Stokes: the first solver-labeled viscous suite {#sec-ns-cavity}
+
+**The evaluation discipline survives contact with a real solver, and
+the contract story becomes Reynolds-graded.** Every ground truth so far
+was either closed-form (harmonic constructions, Bessel series, exact
+Euler flows) or, in the FEM catalog, a *linear* solve; this suite's
+labels come from a numerical solver on a genuinely **nonlinear** PDE —
+steady incompressible Navier–Stokes at moderate Reynolds number,
+
+$$
+-\nu\,\Delta u + (u\cdot\nabla)u + \nabla p = 0,
+\qquad \nabla\cdot u = 0,
+$$
+
+with Dirichlet velocity boundary conditions on the bank's certified
+star domains. That changes the *epistemic status of every declared
+structure*: on the exact Euler suites, drive-linearity of the velocity
+and drive-degree-2 of the pressure were facts of the physics that the
+architecture could declare as contracts. For Navier–Stokes the solution
+map is analytic in the drive with **all** polynomial orders present —
+the Stokes component is drive-linear, each convection correction raises
+the degree — so the declared-degree arm becomes an approximation
+hypothesis, the linear arm's wall becomes a *function of Reynolds
+number* rather than an all-or-nothing barrier, and the labels
+themselves carry a noise floor that must be measured and reported.
+Suite artifacts: `results/ns_solver_verification_2026-07-05.json`
+(solver credential), `results/ns_cavity_star_2026-07-05.json` (dataset
+and arms), archive key `iteration_36_navier_stokes`.
+
+**The family** (`ns_cavity_star`, generated by
+`datasets/generate_datasets.py`, solved by
+`datasets/fem_navier_stokes.py`). Star-deformed disks from the bank's
+geometry family carry a smooth, band-limited **tangential** boundary
+velocity localized on a boundary arc — a driven lid bent around a
+smooth cavity. Tangential-only is the load-bearing choice: the drive
+has zero normal flux *pointwise*, so the incompressibility
+compatibility condition $\oint u\cdot n\,ds = 0$ holds exactly at the
+continuous level by construction, and the small discrete defect of the
+interpolated trace (reported per case, typically $10^{-6}$) is absorbed
+by the mean-pressure gauge multiplier rather than poisoning the solve.
+The profile is a $C^\infty$ bump on a random arc (25–50% of the
+perimeter) times a band-limited Fourier modulation, normalized to unit
+peak speed — so with unit reference length, $\mathrm{Re} = 1/\nu$
+exactly, and the global operator scalar fed to every arm is the PDE
+coefficient $\tilde\nu = 1/\mathrm{Re}$ (the screened-suite
+convention). Splits: `train`/`eval_id` at $\mathrm{Re} \in [10, 200]$
+(log-uniform), `eval_unseen_Re` at $(200, 300]$, `eval_unseen_geometry`
+at the bank's 0.45–0.65 deformation range, and
+`eval_unseen_drive_profile` with modulation modes 3–5 against the
+training 0–2. Targets are the velocity (rank 1) and pressure (rank 0)
+at 128 interior queries (wall distance $\ge 0.12$) plus a 32-query
+**near-wall bucket** (distance 0.02–0.08) — the boundary-layer
+diagnostic, stored with per-query wall distances.
+
+```{python}
+#| label: fig-ns-hero
+#| fig-cap: >
+#|   One production case of ns_cavity_star (geometry seed 3, Re = 200,
+#|   production mesh). Left: the tangential drive profile on the
+#|   boundary, in normalized arc length -- a smooth bump-windowed
+#|   band-limited lid, zero on most of the boundary, unit peak speed.
+#|   Middle: velocity magnitude of the Taylor-Hood solution (P2, shown
+#|   on the mesh); the driven arc throws a wall jet that rolls into a
+#|   cavity-scale recirculation. Right: pressure (P1, zero-mean gauge)
+#|   with the stagnation-pressure structure at the arc's ends. This is
+#|   the field the models must reconstruct from 64 boundary panels, the
+#|   drive, and one scalar.
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import matplotlib.tri as mtri
+import numpy as np
+
+hero = np.load(Path("data") / "ns_hero_case_2026-07-05.npz")
+loop = hero["loop"]
+n_vertices = hero["vertex_pressure"].shape[0]
+tri = mtri.Triangulation(
+    hero["node_points"][:n_vertices, 0], hero["node_points"][:n_vertices, 1],
+    triangles=hero["triangles"],
+)
+speed = np.linalg.norm(hero["node_velocity"], axis=1)[:n_vertices]
+
+fig, axes = plt.subplots(1, 3, figsize=(10.2, 3.5),
+                         gridspec_kw={"width_ratios": [1.0, 1.15, 1.15]})
+ax = axes[0]
+ax.plot(hero["arc_fraction"], hero["drive_profile"], color="#0b0b0b", lw=1.4)
+ax.axhline(0.0, color="#e1e0d9", lw=1.0, zorder=0)
+ax.set_xlabel("normalized arc length $s/L$ [-]")
+ax.set_ylabel("tangential drive $g(s)$ [-]")
+ax.set_title(f"drive profile (Re = {float(hero['reynolds']):.0f})",
+             fontsize=9)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+
+ax = axes[1]
+im = ax.tripcolor(tri, speed, shading="gouraud", cmap="viridis",
+                  rasterized=True)
+ax.plot(np.append(loop[:, 0], loop[0, 0]), np.append(loop[:, 1], loop[0, 1]),
+        color="#0b0b0b", lw=0.8)
+ax.set_aspect("equal"); ax.set_axis_off()
+ax.set_title("velocity magnitude $|u|$ [-]", fontsize=9)
+fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02)
+
+ax = axes[2]
+im = ax.tripcolor(tri, hero["vertex_pressure"],
+                  shading="gouraud", cmap="RdBu_r", rasterized=True)
+ax.plot(np.append(loop[:, 0], loop[0, 0]), np.append(loop[:, 1], loop[0, 1]),
+        color="#0b0b0b", lw=0.8)
+ax.set_aspect("equal"); ax.set_axis_off()
+ax.set_title("pressure $p$ (zero-mean gauge) [-]", fontsize=9)
+fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02)
+fig.tight_layout()
+plt.show()
+```
+
+#### The label credential {#sec-ns-verification}
+
+A solver-labeled suite is only as good as its labels, and model errors
+around $10^{-2}$ demand labels an order better. The solver is a
+Taylor–Hood P2–P1 finite-element discretization (inf-sup stable;
+velocity $O(h^3)$, pressure $O(h^2)$) with exact-Jacobian Newton, a
+Stokes initial guess, backtracking, and a warm-started viscosity
+continuation ladder; the pressure gauge is $\int_\Omega p = 0$ via a
+scalar Lagrange multiplier; linear solves are direct (MKL PARDISO). Its
+credential has four independent legs, all in the verification artifact:
+
+```{python}
+#| label: tbl-ns-verification
+#| output: asis
+import json
+from pathlib import Path
+
+results_dir = Path("..") / "results"
+ver = json.load(open(results_dir / "ns_solver_verification_2026-07-05.json"))
+suite = json.load(open(results_dir / "ns_cavity_star_2026-07-05.json"))
+
+conv = ver["mms_square_convergence"]
+star = ver["mms_star_resolutions"]["rows"]
+star_by_h = {row["target_h"]: row for row in star}
+manifest_ver = suite["dataset"]["verification"]
+
+floor_v = max(
+    entry.get("label_noise_floor_velocity_max", 0.0)
+    for name, entry in manifest_ver.items() if isinstance(entry, dict)
+)
+floor_p = max(
+    entry.get("label_noise_floor_pressure_max", 0.0)
+    for name, entry in manifest_ver.items() if isinstance(entry, dict)
+)
+mom_max = max(
+    entry.get("momentum_balance_error_max", 0.0)
+    for name, entry in manifest_ver.items() if isinstance(entry, dict)
+)
+flux_max = max(
+    entry.get("boundary_flux_max_abs", 0.0)
+    for name, entry in manifest_ver.items() if isinstance(entry, dict)
+)
+rej = sum(
+    entry.get("rejected_attempts_total", 0)
+    for name, entry in manifest_ver.items() if isinstance(entry, dict)
+)
+n_cases = suite["dataset"]["n_cases"]
+
+rows = [
+    ("MMS convergence order (unit square)",
+     "velocity ~3, pressure ~2",
+     f"{conv['velocity_order']:.2f} / {conv['pressure_order']:.2f}"),
+    ("MMS velocity rel-L2, star, production $h{=}0.0105$",
+     "$\\le 10^{-6}$",
+     f"{star_by_h[0.0105]['velocity_rel_l2']:.1e} "
+     f"({star_by_h[0.0105]['seconds']:.0f} s/solve)"),
+    ("MMS velocity rel-L2, star, first-pass $h{=}0.02$",
+     "context (see text)",
+     f"{star_by_h[0.02]['velocity_rel_l2']:.1e} "
+     f"({star_by_h[0.02]['seconds']:.0f} s/solve)"),
+    ("label noise floor, velocity (vs $h/1.5$, worst split)",
+     "$\\le 10^{-3}$", f"{floor_v:.1e}"),
+    ("label noise floor, pressure (vs $h/1.5$, worst split)",
+     "$\\le 10^{-3}$", f"{floor_p:.1e}"),
+    ("momentum-balance assembly identity (worst case)",
+     "roundoff", f"{mom_max:.1e}"),
+    ("discrete boundary flux $|\\oint u_h\\cdot n|$ (worst case)",
+     "small, reported", f"{flux_max:.1e}"),
+    ("rejected-and-resampled Newton attempts across the catalog",
+     "reported", f"{rej} (over {n_cases} cases)"),
+]
+print("| check | bar | measured |")
+print("|---|---|---|")
+for name, bar, measured in rows:
+    print(f"| {name} | {bar} | {measured} |")
+print()
+print(": The suite's label credential: manufactured-solutions accuracy "
+"and order, the finer-mesh label-noise floor, and the discrete balance "
+"certificates, all from checked-in artifacts. {#tbl-ns-verification}")
+```
+
+One resolution decision is worth stating plainly, because it was
+*revised by a measurement*. The first-pass plan ran production at
+$h = 0.02$ — velocity labels two orders under the $10^{-3}$ floor
+target, the $10^{-6}$ MMS bar demonstrated separately at $h = 0.01$ —
+on the estimate that the $O(h^2)$ pressure floor would land near
+$8\times10^{-4}$. The generated catalog measured it at
+$2.6$–$3.2\times10^{-3}$ across splits: **the pressure is the binding
+field, and the first-pass resolution broke the target.** Generation
+had come in far under budget (19.6 minutes for 1,400 cases on 26
+workers), so the catalog was regenerated at $h = 0.0105$ (2.7 hours on
+20 workers; the finer meshes cost the PARDISO factorizations ~8×) —
+where the measured finer-mesh pressure floor comes back under
+$10^{-3}$ on four of five splits (worst $8.7\times10^{-4}$ on train;
+the unseen-drive split's worst sampled case reads $1.26\times10^{-3}$,
+26% over target, reported as-is), the velocity floor sits at
+$\le 5.8\times10^{-5}$ everywhere, *and* the MMS velocity bar of
+$10^{-6}$ is met at production resolution outright
+(@tbl-ns-verification), dissolving the two-resolution compromise. The
+Newton robustness grid behind the declared Reynolds band — train
+$[10, 200]$, unseen-Re $(200, 300]$ — converges in 4–8 iterations
+with occasional backtracking on train-band *and* 0.65-deformation
+stars up through Re 400.
+
+#### Arms, and what the nonlinearity does to them {#sec-ns-arms}
+
+The comparison reuses the iteration-32/35 configuration exactly (one
+head, ranks 48/16, singpair dictionary; 15 epochs over the fixed
+catalog, 3 seeds, iteration-17 protocol): the declared-degree flagship
+`mt_singpair_q2_pseudo`, the unbounded nonlinear control
+`mt_singpair_nl_pseudo`, the pre-registered wall control
+`mt_singpair_linear`, the parameter-free `boundary_mean` floor, and the
+in-tree Transolver at matched capacity on the same token contract
+(coordinates, normals, measures, the rank-1 drive, and $\tilde\nu$ as a
+constant channel).
+
+```{python}
+#| label: tbl-ns-arms
+#| output: asis
+import json
+from pathlib import Path
+
+suite = json.load(open(Path("..") / "results" /
+                       "ns_cavity_star_2026-07-05.json"))
+arms = suite["arms"]
+order = ["mt_singpair_q2_pseudo", "mt_singpair_nl_pseudo",
+         "mt_singpair_linear", "transolver_intree_matched",
+         "boundary_mean"]
+labels = {
+    "mt_singpair_q2_pseudo": "MT q2 + pseudo (declared degree 2)",
+    "mt_singpair_nl_pseudo": "MT nonlinear + pseudo",
+    "mt_singpair_linear": "MT linear (wall control)",
+    "transolver_intree_matched": "Transolver (in-tree, matched)",
+    "boundary_mean": "boundary mean (floor)",
+}
+splits = ["eval_id", "eval_unseen_Re", "eval_unseen_geometry",
+          "eval_unseen_drive_profile"]
+headers = ["arm", "params"] + [s.replace("eval_", "").replace("_", "-")
+                               for s in splits] + ["momentum res. (ID)"]
+print("| " + " | ".join(headers) + " |")
+print("|" + "---|" * len(headers))
+for arm in order:
+    row = [labels[arm], f"{arms[arm]['parameters']:,}"]
+    for split in splits:
+        cell = arms[arm]["splits"][split]["combined"]
+        row.append(f"{cell['mean']:.3f} ± {cell['sd']:.3f}")
+    row.append("—")
+    print("| " + " | ".join(row) + " |")
+print()
+n_train = suite["dataset"]["split_sizes"]["train"]
+print(": Combined (concatenated velocity+pressure) relative $L^2$, "
+"mean ± sd over 3 seeds, per evaluation split -- 15 epochs on the "
+f"fixed {n_train}-case train split. Per-field and near-wall/interior "
+"bucket numbers live in the artifact and @fig-ns-wall. These archived "
+"iteration-36 runs predate the driver's strong-form fidelity block "
+"(added iteration 37, @sec-ns-lowre), so the momentum-residual column "
+"is an em-dash by the @sec-fidelity-columns convention; it populates "
+"from the low-Re slice runs onward (@tbl-ns-lowre). {#tbl-ns-arms}")
+```
+
+```{python}
+#| label: fig-ns-wall
+#| fig-cap: >
+#|   The pre-registered Re-dependent wall, measured. Per-case relative
+#|   L2 pooled over eval_id + eval_unseen_Re (3 seeds), binned by case
+#|   Reynolds number (log bins), for velocity (left) and pressure
+#|   (right). The PRESSURE gap between the linear arm and the nonlinear
+#|   arms grows 4.2x across the band -- the predicted graded wall. The
+#|   VELOCITY gap is flat (~0.19 at every Re): the pre-registered
+#|   near-Stokes prediction for the low-Re end did not hold (see text).
+#|   How to read this: the gap, not the absolute level, is the wall;
+#|   all arms share dataset, protocol, and seeds.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+suite = json.load(open(Path("..") / "results" /
+                       "ns_cavity_star_2026-07-05.json"))
+wall = suite["re_wall"]["per_arm"]
+style = {
+    "mt_singpair_linear": ("#e34948", "o-", "linear arm"),
+    "mt_singpair_nl_pseudo": ("#1a6feb", "^-", "nonlinear + pseudo"),
+    "mt_singpair_q2_pseudo": ("#1baf7a", "s-", "q2 + pseudo"),
+    "transolver_intree_matched": ("#52514e", "d-", "Transolver"),
+}
+fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.8), sharex=True)
+for ax, field in zip(axes, ("velocity", "pressure")):
+    for arm, (color, marker, label) in style.items():
+        entry = wall[arm]
+        ax.loglog(entry["bin_centers"], entry[field], marker, ms=4,
+                  lw=1.3, color=color, label=label)
+    floor = wall["boundary_mean"]
+    ax.loglog(floor["bin_centers"], floor[field], ":", lw=1.2,
+              color="#0b0b0b", label="boundary-mean floor")
+    ax.set_xlabel("case Reynolds number [-]")
+    ax.set_ylabel(f"{field} relative $L^2$ [-]")
+    ax.set_title(field, fontsize=9)
+    ax.grid(color="#e1e0d9", lw=0.8, which="both")
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+axes[0].legend(fontsize=7.5, frameon=False, loc="upper left")
+fig.tight_layout()
+plt.show()
+```
+
+#### Pre-registered versus measured {#sec-ns-verdicts}
+
+```{python}
+#| label: tbl-ns-ledger
+#| output: asis
+import json
+from pathlib import Path
+
+suite = json.load(open(Path("..") / "results" /
+                       "ns_cavity_star_2026-07-05.json"))
+v = suite["verdicts"]
+p1 = v["P1_linear_wall_grows_with_Re"]
+p2 = v["P2_declared_degree_approximation"]
+p3 = v["P3_boundary_mean_pressure_floor"]
+
+vel_ratio = p1["velocity_gap_ratio_top_over_bottom"]
+prs_ratio = p1["pressure_gap_ratio_top_over_bottom"]
+p1_pass = (max(vel_ratio, prs_ratio) >= 3.0)
+p1_verdict = "**supported**" if p1_pass else "**not supported**"
+p2_verdict = ("degree-2 truncation suffices at these Re"
+              if p2["within_2x_seed_sd"]
+              else "higher orders matter (q2 trails nl beyond 2x seed sd)")
+p3_verdict = "**exact**" if p3["exactly_one"] else "**violated**"
+
+rows = [
+    ("P1: linear wall grows with Re "
+     "(gap ratio top/bottom Re bin $\\ge 3$, either field)",
+     f"velocity {vel_ratio:.1f}x "
+     f"(gap {p1['velocity_gap_bottom_bin']:.3f} to "
+     f"{p1['velocity_gap_top_bin']:.3f}); "
+     f"pressure {prs_ratio:.1f}x "
+     f"(gap {p1['pressure_gap_bottom_bin']:.3f} to "
+     f"{p1['pressure_gap_top_bin']:.3f})",
+     p1_verdict),
+    ("P2: declared degree 2 as approximation "
+     "(q2 within 2x seed sd of nl on eval_id)",
+     f"q2 {p2['q2_eval_id_combined']['mean']:.3f} ± "
+     f"{p2['q2_eval_id_combined']['sd']:.3f} vs "
+     f"nl {p2['nl_eval_id_combined']['mean']:.3f} ± "
+     f"{p2['nl_eval_id_combined']['sd']:.3f}",
+     p2_verdict),
+    ("P3: boundary-mean pressure floor exactly 1.0",
+     f"{p3['boundary_mean_pressure_eval_id']['mean']:.6f}",
+     p3_verdict),
+]
+print("| pre-registered rule | measured | verdict |")
+print("|---|---|---|")
+for rule, measured, verdict in rows:
+    print(f"| {rule} | {measured} | {verdict} |")
+print()
+print(": The iteration's pre-registered ledger (rules logged in the lab "
+"notebook and the driver docstrings before the first training run; "
+"numbers from the checked-in artifact). {#tbl-ns-ledger}")
+```
+
+**The anomaly, stated plainly.** P1's deciding measurement split: the
+pressure leg passed decisively (gap ratio 4.2$\times$, bar 3$\times$),
+but the *velocity* leg's low-Re prediction was refuted — the linear
+arm's velocity gap to the nonlinear arms is flat at $\approx 0.19$
+from Re 10 to Re 300 instead of vanishing toward the Stokes limit.
+Two readings, not yet discriminated: (a) Re 10 is simply not Stokes —
+at unit drive speed the convective term is already order-one, so the
+map's shape-nonlinearity in the drive is present across the whole
+sampled band and only the *pressure* (whose convective part is
+quadratic-dominant) shows the graded approach; (b) part of the
+velocity gap is not the nonlinearity wall at all but a
+representation/optimization deficit of the linear read-in on this
+feature-rich solver-labeled family. Discriminating (a) from (b) needs
+a genuinely Stokes-regime band (Re $\le 1$), which the solver
+handles trivially — logged as the follow-up experiment rather than
+argued away, and completed as iteration 37 (@sec-ns-lowre). The Transolver baseline's landing point (0.95 combined,
+against the floor's 1.19 and the transformer arms' 0.23–0.44) is its
+first measurement on a solver-labeled nonlinear suite at the shared
+15-epoch protocol; no ordering was pre-registered, and the honest
+caveat is that this budget may simply undertrain it — the number is
+reported, not weaponized.
+
+**What this iteration establishes, honestly.** The suite exists with a
+measured label credential — that is the load-bearing deliverable. The
+labels are two orders (velocity) and one order (pressure) below typical
+model errors; the pressure floor is the binding one and is stated in
+the manifest rather than assumed. The Re-dependent wall gives the
+program its first *graded* structural measurement: where the parity
+and superposition walls were binary, this one has a height profile
+that tracks a physical dimensionless number, and the linear arm's gap
+to the nonlinear arms is now a function you can plot rather than a
+single 1.0.
+
+**What it does not establish.** At the time of this iteration no
+operator-fidelity block (strong-form momentum residual of the model's
+own outputs) was emitted by the N-S driver — on the exact-label suites
+that block came from autograd against closed-form scales, and porting
+it to solver-labeled data was logged as deliberate future work.
+Iteration 37 closed that gap (@sec-ns-lowre); the archived runs in
+@tbl-ns-arms predate it and keep their em-dash. The suite is
+2D, steady, and moderate-Re by construction; nothing here speaks to
+turbulence models, and the eval_unseen_Re band (200, 300] stays inside
+the solver's verified Newton envelope (grid-verified through Re 400) —
+extrapolation beyond the *solver's* comfort zone would make label
+quality the confound. Near-wall queries sit at distance 0.02–0.08 with
+production meshes graded to $h_b \approx 0.006$ at the boundary; a
+higher-Re suite would need boundary-layer-resolving meshes and a fresh
+noise-floor measurement.
+
+#### The completed P1 measurable: the Re $\le$ 1 band {#sec-ns-lowre}
+
+The low-Reynolds band settles what the production catalog could not:
+the linear read-in class is *not* what costs velocity accuracy in the
+near-Stokes regime — a missing parity sector was. The production gap
+curve had sat flat at $\approx 0.19$ across Re 10–300, but that band
+never reached the Stokes regime the prediction was *about* — at unit
+drive speed, Re 10 already has an order-one convective term. Iteration 37
+closes this with a **supplementary catalog slice**,
+`ns_cavity_star/v1-lowre`: 180 cases with train/eval_id at
+$\mathrm{Re}$ log-uniform $[0.5, 5]$ and the unseen-Re band directly
+above at $(5, 10]$, generated by the same incremental generator with
+the Reynolds band as the *only* moved axis (`--reynolds-range`;
+geometry, drive family, $h = 0.0105$, and the full verification
+discipline are the production family's, with the measured label-noise
+floors in the slice manifest). The linear and nonlinear arms retrain
+on the slice at the identical 15-epoch/3-seed protocol, and their
+per-case velocity gap joins the archived iteration-36 curve into one
+measurement spanning Re 0.5–300. Iteration 38 then closed the one
+confound iteration 37 logged inside its own verdict — its linear arm
+differed from nl_pseudo in parity machinery and capacity as well as
+read-in class — by adding the fair control
+`mt_singpair_linear_pseudo` (linear read-in *plus* the nonlinear arm's
+`drive_pseudo_dim=8` sector) on both catalogs and recomputing the
+whole curve with three arms. Artifacts:
+`results/ns_lowre_band_2026-07-05.json`, archive key
+`iteration_37_lowre_band`;
+`results/ns_linear_pseudo_confound_2026-07-05.json`, archive key
+`iteration_38_linear_pseudo_confound`.
+
+```{python}
+#| label: fig-ns-lowre-gap
+#| fig-cap: >
+#|   The completed three-arm gap curve (iterations 37 + 38): each arm's
+#|   gap to the nonlinear reference (arm minus nl_pseudo per-case mean
+#|   per log-Re bin, eval_id + eval_unseen_Re pooled over 3 seeds)
+#|   across Re 0.5-300, velocity left, pressure right. Filled circles:
+#|   the v1-lowre slice (108-case train split); open squares: the
+#|   production v1 catalog (840-case train split); each side is
+#|   internally controlled, so the GAP crosses the seam (dashed) even
+#|   though absolute errors do not. The plain linear arm (red)
+#|   reproduces iteration 37: velocity gap flat at ~0.13-0.23
+#|   everywhere, including the genuinely drive-linear band. The
+#|   iteration-38 fair control (blue, the same linear read-in PLUS the
+#|   nl arm's drive_pseudo_dim=8 sector) collapses the velocity gap to
+#|   zero-or-negative across the entire near-Stokes band and leaves a
+#|   graded remainder growing to ~0.10-0.12 by Re 100-213: the
+#|   pre-registered REVISION outcome -- iteration 37's flat gap was the
+#|   missing parity sector, not the linear read-in class. Both arms'
+#|   pressure gaps collapse at low Re and grow to ~0.5: the pressure
+#|   wall is physics, and no pseudo sector rescues a drive-linear
+#|   read-in from a drive-nonlinear target.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+confound = json.load(open(Path("..") / "results" /
+                          "ns_linear_pseudo_confound_2026-07-05.json"))
+joined = confound["re_gap_curves"]["joined"]
+seam = 10.0
+arms = (
+    ("mt_singpair_linear", "#e34948", "linear (no pseudo, 106k)"),
+    ("mt_singpair_linear_pseudo", "#1a6feb", "linear + pseudo (131k)"),
+)
+fig, axes = plt.subplots(1, 2, figsize=(9.6, 3.8), sharex=True,
+                         sharey=True)
+for ax, field in zip(axes, ("velocity", "pressure")):
+    low_edge = min(joined[arms[0][0]]["bin_centers"]) / 1.4
+    ax.axvspan(low_edge, 1.0, color="#eceaf4", zorder=0)
+    ax.axhline(0.0, color="#e1e0d9", lw=1.0, zorder=1)
+    ax.axvline(seam, color="#a7a6a1", lw=1.0, ls="--", zorder=1)
+    for arm, color, label in arms:
+        entry = joined[arm]
+        centers = np.array(entry["bin_centers"])
+        values = np.array(entry[f"{field}_gap"])
+        catalog = np.array(entry["catalog"])
+        ax.plot(centers, values, "-", lw=1.3, color=color, label=label,
+                zorder=2)
+        for cat, marker, face in (("v1-lowre", "o", color),
+                                  ("v1", "s", "white")):
+            mask = catalog == cat
+            ax.plot(centers[mask], values[mask], marker, ms=5, lw=0,
+                    color=color, markerfacecolor=face,
+                    markeredgecolor=color, zorder=3)
+    ax.set_xscale("log")
+    ax.set_ylim(-0.12, 0.6)
+    ax.set_xlabel("case Reynolds number [-]")
+    ax.set_title(f"{field} gap to nl_pseudo", fontsize=9)
+    ax.grid(color="#e1e0d9", lw=0.8, which="both", axis="x")
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+axes[0].set_ylabel("arm $-$ nl_pseudo relative $L^2$ gap [-]")
+axes[0].text(0.72, -0.108, "near-Stokes\n(drive-linear)",
+             fontsize=7.5, color="#52514e", ha="center", va="bottom")
+axes[0].text(90.0, -0.108, "convection-dominated",
+             fontsize=7.5, color="#52514e", ha="center", va="bottom")
+axes[0].annotate("catalog join", (seam, 0.34),
+                 xytext=(3, 0), textcoords="offset points",
+                 fontsize=7, color="#52514e", rotation=90, va="bottom")
+axes[0].legend(fontsize=8, frameon=False, loc="upper left")
+fig.tight_layout()
+plt.show()
+```
+
+**Pre-registered versus measured, completed.** The rule (logged before
+the first v1-lowre training run, @sec-nb-iter37): if the velocity map
+is near-Stokes-linear at Re $\le 1$, the linear arm's velocity gap
+approaches zero at the bottom joined bin (bar: $\le 0.05$ and
+$\le 0.25\times$ the top bin) and grows monotonically; falsifier:
+bottom-bin gap $\ge 0.1$ (the representation-deficit reading of the
+iteration-36 anomaly). Measured: bottom-bin velocity gap **0.184**
+against a top-bin 0.204 (ratio 1.10) — **the falsifier fired**. The
+velocity leg of P1 is now refuted on a band where the physics cannot
+be blamed: at Re $\le 1$ the map is near-Stokes — and the same
+figure's pressure gap sitting at zero *proves the linear arm can match
+the nonlinear arm on this band when the map is near-linear* — yet the
+velocity gap stays at the same $\approx 0.18$ as at Re 300.
+Reading (b) of the iteration-36 anomaly survived at that point — but
+iteration 37's own verdict flagged the entanglement honestly: its
+linear arm lacked the nonlinear arm's pseudo sector and carried
+2.2$\times$ fewer parameters, so "linear read-in deficit" was
+confounded with "parity/capacity deficit". The
+**pressure** leg completes cleanly: its gap is zero within seed noise
+across the whole near-Stokes band ($-0.006$, $+0.020$, $-0.042$ at
+Re $< 5$ — the linear arm even wins two bins) and climbs to
+0.47–0.54 at the top — the graded, physics-tracking wall the
+pre-registration predicted, now measured from genuinely-Stokes to
+convection-dominated.
+
+**The confound check (iteration 38) — the revision fired.** The fair
+control, `mt_singpair_linear_pseudo`: the identical linear field mode
+(exact fixed-geometry drive superposition, structurally certified
+odd-in-the-drive in-tree) *plus* `drive_pseudo_dim=8` — as matched to
+nl_pseudo as the mode allows. Parameters: linear 106,408; linear +
+pseudo **131,248**; nl_pseudo 233,108 — the pseudo sector adds 24,840
+parameters, and the remaining difference to nl_pseudo *is* the
+nonlinear read-in stack, i.e. exactly the treatment variable. Trained
+on **both** catalogs (v1-lowre and v1) at the identical
+15-epoch/3-seed protocol; pre-registered before the first run, both
+outcomes stated in advance: bottom joined-bin velocity gap
+$\le 0.05$ REVISES iteration 37 (the deficit was parity/capacity);
+$\ge 0.1$ means the read-in-class reading stands, unconfounded.
+Measured: bottom-bin velocity gap $\mathbf{-0.024}$ (the linear+pseudo
+arm *beats* nl_pseudo on the Stokes band; the plain linear arm's
+0.184 reproduces bin-for-bin in the same rerun) — **the revision
+fired. Iteration 37's velocity reading is revised: the linear read-in
+class is fine where the physics is linear; the flat gap was the
+missing pseudo/parity sector, not the read-in.** And with the
+confound removed, the velocity gap acquires the graded shape the
+original P1 predicted all along: $\approx 0$ (to $-0.05$) across
+Re 0.5–7, rising to 0.10–0.12 at Re 100–213 (@fig-ns-lowre-gap, left).
+The pressure column sharpens the same story from the other side: the
+pseudo sector does *nothing* for the pressure gap (0.016 at the
+bottom bin, 0.45–0.54 at the top — bin-for-bin the plain linear
+arm's curve), and on the production catalog nl_pseudo still wins
+pressure decisively (0.356 vs 0.684 eval_id) — a drive-nonlinear
+target stays out of reach of any drive-linear read-in, pseudo sector
+or not. That asymmetry, now unconfounded, is the section's finding:
+the graded Re-tracking wall is real for *both* fields — velocity's
+was just an order of magnitude smaller than the parity artifact that
+sat on top of it. One caveat stays on the record: linear+pseudo
+matches nl_pseudo's sector structure, not its full width (131k vs
+233k); a width-matched linear control was not run, so "capacity" and
+"parity machinery" are separated from the read-in class but not from
+each other.
+
+```{python}
+#| label: tbl-ns-lowre
+#| output: asis
+import json
+from pathlib import Path
+
+confound = json.load(open(Path("..") / "results" /
+                          "ns_linear_pseudo_confound_2026-07-05.json"))
+arms = confound["arms_lowre"]
+order = ["mt_singpair_nl_pseudo", "mt_singpair_linear_pseudo",
+         "mt_singpair_linear"]
+labels = {
+    "mt_singpair_nl_pseudo": "MT nonlinear + pseudo",
+    "mt_singpair_linear_pseudo": "MT linear + pseudo (iter-38 control)",
+    "mt_singpair_linear": "MT linear (wall control)",
+}
+splits = ["eval_id", "eval_unseen_Re", "eval_unseen_geometry",
+          "eval_unseen_drive_profile"]
+headers = (["arm", "params"] + [s.replace("eval_", "").replace("_", "-")
+                                for s in splits]
+           + ["momentum res. (ID)", "divergence res. (ID)"])
+print("| " + " | ".join(headers) + " |")
+print("|" + "---|" * len(headers))
+for arm in order:
+    row = [labels[arm], f"{arms[arm]['parameters']:,}"]
+    for split in splits:
+        cell = arms[arm]["splits"][split]["combined"]
+        row.append(f"{cell['mean']:.3f} ± {cell['sd']:.3f}")
+    for key in ("momentum_residual", "divergence_residual"):
+        cell = arms[arm]["fidelity"][key]["eval_id"]
+        row.append(f"{cell['mean']:.2f} ± {cell['sd']:.2f}")
+    print("| " + " | ".join(row) + " |")
+print()
+n_train = confound["dataset"]["lowre_split_sizes"]["train"]
+print(": The v1-lowre slice arms (combined relative $L^2$, mean ± sd "
+f"over 3 seeds, {n_train}-case train split; iteration-37 arms plus "
+"the iteration-38 confound control) with the suite's first populated "
+"fidelity columns: the strong-form momentum residual "
+"$\\|\\tilde\\nu\\Delta u - (u\\cdot\\nabla)u - \\nabla p\\| / "
+"\\|(u\\cdot\\nabla)u\\|$ of the model's own prediction and the "
+"matching divergence norm (float64 autograd, 32 interior queries, "
+"2 cases/split; $\\tilde\\nu$ from the case -- the model never sees "
+"the PDE, the metric does). {#tbl-ns-lowre}")
+```
+
+The fidelity block itself is the iteration's second deliverable — the
+N-S port of the @sec-fidelity-columns convention to solver-labeled
+data, where no closed-form scale exists: the residual is normalized by
+the prediction's *own* advection norm, and the instrument is certified
+in-tree before use — the exact Kovasznay solution scores $\sim 0$
+*only* when the metric uses the case's $\tilde\nu$ (pinning the
+"$\tilde\nu$ from the case" plumbing), and a rigid rotation with its
+pressure dropped scores exactly 1
+(`test_fidelity_residuals_certify_the_instrument`). As on every suite
+since the column became first-class, the strong-form numbers are
+diagnostics of *how* the arms fit, not who wins: they complement the
+$L^2$ columns and cannot be gamed by a constant field, which zeroes
+the interior strong form while failing the boundary conditions — the
+note in the driver states this explicitly. Read the low-Re magnitudes
+with the normalization in mind: near Stokes the true advection is
+small while $\tilde\nu$ is order one, so the advection-normalized
+residual amplifies second-derivative model error by
+$\sim \tilde\nu/\|(u\cdot\nabla)u\|$ — the O(10) values in
+@tbl-ns-lowre say the predictions' derivatives do not satisfy the
+operator (consistent with every suite since @sec-fidelity-columns:
+$L^2$-fit fields, unsatisfied operators). The three-arm ordering
+tracks the velocity story exactly: the plain linear arm's momentum
+residual (47.7) and divergence norm (2.70) sit 2–3$\times$ above the
+other two, while the iteration-38 linear+pseudo control lands beside
+nl_pseudo (momentum 22.2 vs 16.1) and *beats* it on divergence (0.85
+vs 1.07) — the fidelity instrument independently confirms that the
+pseudo sector, not the nonlinear read-in, is what the plain linear
+arm's velocity was missing.
+
+*History: @sec-nb-iter36, @sec-nb-iter37, @sec-nb-iter38.*

@@ -1,0 +1,704 @@
+# The 3D Laplace suite {#sec-ds-laplace3d}
+
+The same boundary-value problem as @sec-ds-laplace2d, lifted to three
+dimensions — and, in its hardest tier, to a different *topology*. The
+dimension jump re-prices everything (quadrature, equivariance, cost);
+the topology jump exposes the one place a double-layer-only kernel
+dictionary is provably incomplete.
+
+## The problem
+
+Closed triangulated surfaces — spheres, star-deformed spheres, and
+two-surface shells — carry Dirichlet data; the model predicts the
+interior potential of
+
+$$
+\Delta u = 0 \ \text{in } \Omega,
+\qquad u = g \ \text{on } \partial\Omega .
+$$
+
+Labels are exact: solutions are superpositions of point charges placed
+*outside* the domain (and, for shells, inside the cavity), so the
+interior field is a closed form and the boundary data is its exact
+trace. Contracts: similarity equivariance and drive-linearity, exactly
+as in 2D — the physics is unchanged; the geometry carries all the new
+difficulty.
+
+## The gallery
+
+What the model sees: the boundary surface and its data, nothing else.
+Two samples per tier, small multiples (the house preference over one
+crowded render).
+
+```{python}
+#| label: fig-ds3-surfaces
+#| fig-cap: >
+#|   The three geometry tiers, two samples each, surfaces colored by their
+#|   Dirichlet data (per-cell values; each panel normalizes about its
+#|   boundary mean). Sphere and star tiers are single closed surfaces; the
+#|   shell tier adds an inner boundary — the domain is the region BETWEEN
+#|   the surfaces. In the shell panels the camera-facing upper quarter of
+#|   the outer surface is cut away (an engineering cutaway; darker rim
+#|   edges mark the cut) to reveal the inner sphere. The underlying outer
+#|   mesh is a complete closed surface — the cut exists only in this
+#|   rendering.
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from matplotlib.colors import LinearSegmentedColormap, Normalize
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from laplace3d import build_laplace3d_sample
+
+INK, INK2 = "#0b0b0b", "#52514e"
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+
+
+def surface_panel(ax, sample, *, cutaway=False):
+    all_traces = np.concatenate([
+        sample.domain.boundaries[name].cell_data["boundary_value"].numpy()
+        for name in sample.domain.boundaries.keys()])
+    vmid = float(all_traces.mean())
+    amp = float(np.abs(all_traces - vmid).max())
+    norm = Normalize(vmid - amp, vmid + amp)
+    outer_pts = sample.domain.boundaries["outer"].points.numpy()
+    center = outer_pts.mean(axis=0)
+    # Cutaway: remove only the outer surface's camera-facing UPPER QUARTER
+    # (view_init(elev=22, azim=-58)), rendered opaque with the cut edges
+    # accented -- a classic engineering cutaway that reads as intentional.
+    # (The earlier version removed the whole upper hemisphere at alpha
+    # 0.45, which read as a rendering artifact; the meshes themselves are
+    # complete closed surfaces -- verified 81/81 points above/below
+    # center. Translucent Poly3DCollections also z-sort unreliably, so
+    # everything here stays opaque, inner surface drawn first.)
+    azim_rad = np.deg2rad(-58)
+    cam_xy = np.array([np.cos(azim_rad), np.sin(azim_rad), 0.0])
+    light = np.array([0.35, -0.55, 0.75])
+    light = light / np.linalg.norm(light)
+    # All faces of all boundaries go into ONE Poly3DCollection:
+    # matplotlib depth-sorts faces only within a collection, so separate
+    # inner/outer collections cannot interleave and the outer's back
+    # faces paint over the inner sphere.
+    all_polys, all_faces, all_edges = [], [], []
+    for name in sample.domain.boundaries.keys():
+        mesh = sample.domain.boundaries[name]
+        pts = mesh.points.numpy()
+        cells = mesh.cells.numpy()
+        tr = mesh.cell_data["boundary_value"].numpy()
+        edge = "#00000022"
+        if cutaway and name == "outer":
+            rel = pts[cells].mean(axis=1) - center
+            window = (rel @ cam_xy > 0.0) & (rel[:, 2] > 0.0)
+            cells, tr = cells[~window], tr[~window]
+            edge = "#00000066"
+        if cutaway and name == "inner":
+            edge = "#000000aa"
+        polys = pts[cells]
+        # Manual Lambert shading: Poly3DCollection has no lighting, and
+        # unshaded near-white cells vanish against the page (the earlier
+        # renders' "missing surface" impression). Brightness modulates
+        # with the face normal against a fixed key light; hue stays the
+        # trace value.
+        normals = np.cross(polys[:, 1] - polys[:, 0], polys[:, 2] - polys[:, 0])
+        normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-30
+        outward = polys.mean(axis=1) - pts.mean(axis=0)
+        flip = np.sign((normals * outward).sum(axis=1))[:, None]
+        normals = normals * np.where(flip == 0.0, 1.0, flip)
+        shade = 0.62 + 0.38 * np.clip(normals @ light, 0.0, 1.0)
+        face_rgba = DIVERGING(norm(tr))
+        face_rgba[:, :3] *= shade[:, None]
+        all_polys.append(polys)
+        all_faces.append(face_rgba)
+        all_edges.extend([edge] * polys.shape[0])
+    collection = Poly3DCollection(
+        np.concatenate(all_polys, axis=0),
+        facecolors=np.concatenate(all_faces, axis=0), alpha=1.0,
+        edgecolors=all_edges, linewidths=0.25)
+    ax.add_collection3d(collection)
+    half = np.abs(outer_pts - center).max() * 1.02
+    ax.set_xlim(center[0] - half, center[0] + half)
+    ax.set_ylim(center[1] - half, center[1] + half)
+    ax.set_zlim(center[2] - half, center[2] + half)
+    ax.set_box_aspect((1, 1, 1))
+    ax.view_init(elev=22, azim=-58)
+    ax.set_axis_off()
+
+
+fig = plt.figure(figsize=(9.4, 6.4))
+specs = [("sphere", 3), ("sphere", 11), ("star", 3), ("star", 11),
+         ("shell", 3), ("shell", 11)]
+for i, (tier, seed) in enumerate(specs):
+    ax = fig.add_subplot(2, 3, [1, 4, 2, 5, 3, 6][i], projection="3d")
+    sample = build_laplace3d_sample(
+        seed, tier=tier, subdivisions=2, n_query=64, dtype=torch.float64)
+    surface_panel(ax, sample, cutaway=(tier == "shell"))
+    ax.set_title(f"{tier}, seed {seed}", fontsize=9, color=INK)
+fig.tight_layout()
+plt.show()
+```
+
+Interior fields, shown as sections: the labels are closed-form
+(exterior-charge potentials), so the equatorial section is **evaluated
+exactly on the plane** — a regular grid through each sample's center,
+masked to the domain by the exact solid-angle winding test (the same
+Gauss identity the kernel dictionary is built on: the unit-density
+double layer reads $-1$ inside a closed surface and $0$ outside).
+
+```{python}
+#| label: fig-ds3-sections
+#| fig-cap: >
+#|   Equatorial sections of the exact interior field, evaluated directly on
+#|   the z-plane through each sample's center (no slab projection, no
+#|   scatter interpolation — the closed-form solution on a 220x220 grid,
+#|   masked to the domain by the exact winding-number test). The gray
+#|   region in the shell panel is the excluded cavity: the field exists
+#|   only between the two surfaces.
+from laplace3d import solid_angle_influence
+
+
+def inside_surface(points3d, mesh):
+    """Exact membership: |winding| > 1/2 via the solid-angle Gauss identity."""
+    vertices = mesh.points[mesh.cells].to(torch.float64)
+    winding = solid_angle_influence(points3d.to(torch.float64), vertices)
+    return winding.sum(dim=1).abs() > 0.5
+
+
+def section_panel(ax, tier, seed, title, resolution=220):
+    sample = build_laplace3d_sample(
+        seed, tier=tier, subdivisions=2, n_query=64, dtype=torch.float64)
+    outer = sample.domain.boundaries["outer"]
+    center = outer.points.mean(dim=0)
+    scale = float((outer.points - center).abs().max()) * 1.02
+    axis_1d = torch.linspace(-scale, scale, resolution, dtype=torch.float64)
+    gx, gy = torch.meshgrid(axis_1d, axis_1d, indexing="xy")
+    plane = torch.stack(
+        (gx.reshape(-1) + center[0],
+         gy.reshape(-1) + center[1],
+         torch.full((resolution * resolution,), float(center[2]),
+                    dtype=torch.float64)),
+        dim=1)
+    mask = inside_surface(plane, outer)
+    if "inner" in sample.domain.boundaries:
+        mask &= ~inside_surface(plane, sample.domain.boundaries["inner"])
+    from laplace3d import _potential_and_gradient
+    values, _ = _potential_and_gradient(
+        plane, sample.charges.to(torch.float64),
+        sample.charge_positions.to(torch.float64))
+    field = values.reshape(resolution, resolution).numpy()
+    domain_mask = mask.reshape(resolution, resolution).numpy()
+    field = np.where(domain_mask, field, np.nan)
+    vmid = float(np.nanmean(field))
+    amp = float(np.nanmax(np.abs(field - vmid)))
+    ax.set_facecolor("#eae8e1")
+    ax.contourf(gx.numpy() + float(center[0]), gy.numpy() + float(center[1]),
+                field, levels=np.linspace(vmid - amp, vmid + amp, 25),
+                cmap=DIVERGING)
+    ax.contour(gx.numpy() + float(center[0]), gy.numpy() + float(center[1]),
+               field, levels=np.linspace(vmid - amp, vmid + amp, 13),
+               colors="k", linewidths=0.25, alpha=0.5)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title(title, fontsize=9, color=INK)
+
+
+fig, axes = plt.subplots(1, 3, figsize=(9.4, 3.2))
+for ax, tier in zip(axes, ("sphere", "star", "shell")):
+    section_panel(ax, tier, 7, tier)
+fig.tight_layout()
+plt.show()
+```
+
+## Why this rung — and why the shell exists
+
+The sphere and star tiers price the dimension jump under controlled
+conditions. The **shell tier** exists for a sharper reason: it changes
+what a kernel dictionary must be able to *represent*.
+
+```{python}
+#| label: fig-ds3-topology
+#| fig-cap: >
+#|   Why the single-layer member exists. Cross-section schematic of a shell
+#|   sample: charges in the cavity (x) drive net flux THROUGH the annular
+#|   domain (arrows) — the boundary integral of the normal derivative over
+#|   either surface is nonzero. A double-layer potential always integrates
+#|   to zero net flux through a closed surface, so no double-layer-only
+#|   dictionary can carry this winding (monopole) component: u ~ a + b/r
+#|   needs the single layer. The measured consequence is in the table below.
+import matplotlib.patches as mpatches
+
+fig, ax = plt.subplots(figsize=(6.0, 5.4))
+outer = mpatches.Circle((0, 0), 1.0, facecolor="#f4f3ef",
+                        edgecolor=INK, linewidth=2.2)
+inner = mpatches.Circle((0, 0), 0.42, facecolor="white",
+                        edgecolor=INK, linewidth=2.2)
+ax.add_patch(outer)
+ax.add_patch(inner)
+ax.plot([0.05, -0.12], [0.02, -0.10], "x", color="#e34948", ms=11, mew=2.6)
+for angle in np.linspace(0, 2 * np.pi, 12, endpoint=False):
+    d = np.array([np.cos(angle), np.sin(angle)])
+    ax.annotate("", xy=tuple(d * 0.97), xytext=tuple(d * 0.47),
+                arrowprops=dict(arrowstyle="-|>", color="#2a78d6", lw=1.7))
+ax.text(0.0, -0.16, "cavity charges", ha="center", fontsize=9.5, color=INK)
+ax.text(0.0, 1.14, r"net flux through the domain: "
+        r"$\oint_{\Gamma}\partial_n u\, \mathrm{d}S \neq 0$",
+        ha="center", fontsize=11, color=INK)
+ax.text(0.0, -1.22,
+        "double layer: zero net flux, always  →  the winding component\n"
+        r"$u \sim a + b/r$ is carried by the single-layer member alone",
+        ha="center", fontsize=10, color=INK2)
+ax.set_xlim(-1.45, 1.45); ax.set_ylim(-1.45, 1.35)
+ax.set_aspect("equal"); ax.set_axis_off()
+plt.show()
+```
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds3-bench
+#| output: asis
+import json
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+agg = bie["iteration_12_dictionary_ablation_3d"]["aggregates_6seed"]
+singpair = bie["iteration_16_single_layer_member"]["runs_3d_singpair"]
+transolver = bie["iteration_15_transolver_comparison"][
+    "screened_and_3d_extension"]["runs"]["laplace3d_transolver_intree_matched"]
+
+tiers = ["sphere", "star", "star_unseen_modes", "shell_topology"]
+
+
+def mean_over(runs, key):
+    return sum(r[key] for r in runs) / len(runs)
+
+
+rows = [
+    ("MeshTransformer singonly (6 seeds)",
+     [agg["singonly"][t]["mean"] for t in tiers]),
+    ("MeshTransformer no-poly control (6 seeds)",
+     [agg["nopoly"][t]["mean"] for t in tiers]),
+    ("MeshTransformer singpair (3 seeds)",
+     [mean_over(singpair, t) for t in tiers]),
+    ("Transolver, in-tree matched (3 seeds)",
+     [mean_over(transolver, t) for t in tiers]),
+]
+lines = ["| model | sphere | star | star unseen modes | shell |",
+         "|---|--:|--:|--:|--:|"]
+for name, vals in rows:
+    lines.append(f"| {name} | " + " | ".join(f"{v:.4f}" for v in vals) + " |")
+lines.append(
+    ": 3D relative $L^2$ by tier (archive: `learned_bie_2026-07-02.json`, "
+    "iterations 12, 15, 16). {#tbl-ds3-bench-table}")
+print("\n".join(lines))
+```
+
+Two readings. Across the smooth tiers the MeshTransformer sits 30–60×
+below the matched Transolver. On the **shell**, the dictionary story
+completes: the singonly arm (double layer only) reads ~0.37 — pinned
+near the size of the winding component it *cannot represent* — while
+adding the single-layer member (singpair) cuts the shell error and
+every arm's smooth-tier accuracy survives. The shell is also where the
+Transolver gap narrows to ~1.4×: representation limits bind everyone
+(@sec-part-baseline).
+
+## Variations
+
+Zero-shot resolution transfer at 3D scale, from the scale study's
+archived measurement — trained at subdivision 2, evaluated across a
+16× range of boundary resolution with no retraining:
+
+```{python}
+#| label: tbl-ds3-transfer
+#| output: asis
+scale = bie["iteration_20_scale_ladder"]["a100"][
+    "resolution_transfer_zero_shot"]
+lines = ["| tier | subdiv 2 (trained) | subdiv 3 | subdiv 4 |",
+         "|---|--:|--:|--:|"]
+for tier in ("sphere", "star"):
+    vals = [scale[f"{tier}_subdiv{s}"] for s in (2, 3, 4)]
+    lines.append(f"| {tier} | " + " | ".join(f"{v:.4f}" for v in vals) + " |")
+lines.append(
+    ": Zero-shot resolution transfer (archive: "
+    "`learned_bie_2026-07-02.json`, iteration 20). "
+    "{#tbl-ds3-transfer-table}")
+print("\n".join(lines))
+```
+
+Mild degradation, no collapse, under a 16× discretization change —
+the exact-quadrature transfer claim at scale. The unseen-geometry
+showcase for this suite (tier dials beyond training) joins via the
+dataset-chapters thread's E2 artifacts.
+
+## The scale ladder
+
+Measured cost curves and the training-memory wall — named on this suite's geometry, then measured closed.
+
+### The scale ladder: measured cost curves, and the wall named {#sec-scale}
+
+The cost law is the designed one, inference already fits a single A100
+at the product scope, and the wall is training memory — named, with two
+characterized fixes. The study was sequenced after simplification on
+purpose (@sec-future), and it runs against the
+simplified model: `scale_study.py` measures the 3D `singpair` arm at
+`operator_layers=1` (81,961 parameters — the depth @sec-mixed-bc showed
+sufficient) on an A100 80GB. Two instruments: a **cost grid** of
+320–20,480 boundary triangles $\times$ $10^3$–$10^5$ queries,
+OOM-guarded, with encode and decode timed separately; and
+**resolution-transfer** training at subdivisions 2 with zero-shot
+evaluation at subdivisions 2/3/4. Checked-in key
+`iteration_20_scale_ladder`.
+
+**The cost law is the designed one.**
+
+| quantity (power-law fit over the grid) | fitted law | $R^2$ |
+|---|---|--:|
+| decode time | $\propto Q^{0.97}\,S^{0.96}$ | 0.999 |
+| forward time | $\propto Q^{0.89}\,S^{0.87}$ | 0.988 |
+| encode time | flat over the range ($S^{0.11}$; launch-dominated) | 0.62 |
+| forward peak memory | $\propto S^{0.95}\,Q^{0.16}$ | 0.988 |
+| training peak memory | $\propto S^{0.95}\,Q^{0.44}$ | 0.997 |
+
+: A100 cost-grid fits (12 grid points per timing fit; $Q$ = queries,
+$S$ = boundary cells). {#tbl-scale-fits}
+
+The decode fits $O(Q^{0.97} S^{0.96})$ at $R^2 = 0.999$ — the
+documented dense $O(N_qN_s)$, measured rather than assumed. The encoder
+shows **no growth with boundary size over the measured range**: the
+separable-moment encoder is $O(N_s)$ per layer, the measurements are
+kernel-launch-overhead dominated, and the fitted $S^{0.11}$ is a floor
+artifact — the encoder is explicitly *not* the wall.
+
+**The wall, stated honestly.** Extrapolated to the product scope
+($10^5$ boundary cells $\times$ $10^6$ queries — an extrapolation
+roughly an order of magnitude beyond the measured grid, not a
+measurement), **training memory breaks first**: one forward+backward
+$\approx$ **742 GiB**, 9$\times$ an 80-GiB A100, because autograd
+retains the dense $O(N_qN_s)$ pair activations of the kernel decode.
+The two named fixes have different characters: **gradient checkpointing
+over query chunks** — exact and cheap, recomputing the pair features in
+the backward pass — or a **hierarchical decode backend** (FMM-style) —
+approximate but classical, with the dense implementation retained as
+the oracle. Inference is already inside a single A100 with query
+chunking: $\approx$85 GB (79.4 GiB) peak, at roughly **9–16 minutes per
+forward** at product scope (fitted forward 541 s; fitted dense decode
+956 s). One fit is suppressed in the archive, with reasons recorded:
+the forward+backward *time* extrapolation fell below forward-only (the
+surviving small grid points are overhead-dominated on this device), so
+the ideal $O(N_qN_s)$ projection from the largest measured point
+($\approx$1,355 s) stands in for it.
+
+**Resolution transfer at scale.** The exact-quadrature transfer claim,
+now at 3D scale: trained at subdivisions 2, evaluated zero-shot across a
+16$\times$ range of boundary resolution —
+
+| tier | subdiv 2 (trained) | subdiv 3 | subdiv 4 |
+|---|--:|--:|--:|
+| sphere | 0.0101 | 0.0155 | 0.0175 |
+| star | 0.0136 | 0.0196 | 0.0312 |
+
+: Zero-shot resolution transfer, relative $L^2$ (fully trained model).
+{#tbl-scale-transfer}
+
+— the claim holds with mild degradation: no retraining, no collapse,
+under a 16$\times$ change in discretization.
+
+One profiling find, engineering hygiene rather than research:
+`PairInvariantFeatures` currently computes unconditionally in the dense
+hot loop even when the dictionary has no smooth members to consume it —
+roughly ten dead floats per pair on the flagship singular-only and
+singpair arms. A straightforward speed fix (@sec-future).
+
+### The wall, broken {#sec-scale-ckpt}
+
+The training-memory wall named above is now **measured closed**. The
+exact fix — `kernel_checkpoint_query_chunks`, backward-pass
+recomputation of each decode chunk's dense pair activations
+(@sec-decoder-role; bitwise identical outputs and gradients, by test) —
+was run against the retained-graph default in a paired measurement:
+same GB200, same seed, same per-point samples, identical protocol.
+
+```{python}
+#| label: tbl-scale-ckpt
+#| output: asis
+import json
+from pathlib import Path
+
+paired = json.load(
+    open(Path("..") / "results" / "scale_checkpoint_paired_2026-07-05.json")
+)
+GB = 1024.0**3
+
+
+def grid_rows(report):
+    rows = {}
+    for g in report["cost"]["grid"]:
+        rows[(g["n_boundary_cells"], g["n_query"])] = g
+    return rows
+
+
+dense = grid_rows(paired["dense"])
+ckpt = grid_rows(paired["checkpointed"])
+lines = [
+    "| boundary cells $\\times$ queries | dense train peak | checkpointed "
+    "train peak | step-time ratio |",
+    "|---|--:|--:|--:|",
+]
+for key in sorted(ckpt):
+    d, c = dense.get(key, {}), ckpt[key]
+    if d.get("train_peak_bytes"):
+        dtxt = f"{d['train_peak_bytes'] / GB:.1f} GiB"
+    else:
+        dtxt = "**OOM** (189 GB)"
+    ctxt = f"{c['train_peak_bytes'] / GB:.1f} GiB"
+    dfb = (d.get("forward_backward_ms") or {}).get("median_ms")
+    cfb = (c.get("forward_backward_ms") or {}).get("median_ms")
+    ratio = f"{cfb / dfb:.1f}$\\times$" if (dfb and cfb) else "—"
+    lines.append(
+        f"| {key[0]:,} $\\times$ {key[1]:,} | {dtxt} | {ctxt} | {ratio} |"
+    )
+lines.append(
+    ": Paired training-memory measurement, GB200, seed 17, identical "
+    "samples per point (archive: `scale_checkpoint_paired_2026-07-05."
+    "json`). {#tbl-scale-ckpt-paired}"
+)
+print("\n".join(lines))
+```
+
+Three facts carry the section's conclusion. The checkpointed peak is
+essentially **query-count-independent at fixed boundary size** — the
+designed behavior, since only one chunk's activations plus the outputs
+are ever retained. The near-product corner (81,920 boundary cells
+$\times$ $10^6$ queries), where the dense graph OOMs a 189 GB device
+and extrapolates to the terabyte scale, **trains in 71.4 GiB — inside
+a single 80 GiB-class accelerator**. And the price is a consistent
+$\approx$1.9$\times$ step time (the recomputed decode forward inside
+backward), with the operator, outputs, and gradients bitwise unchanged.
+Agenda item 2 of @sec-future is thereby closed; the hierarchical decode
+backend remains as the (approximate) speed lever, not a memory
+necessity.
+
+*History: @sec-nb-iter20, @sec-nb-industrial-pivot.*
+
+## The full evidence
+
+Moved from the benchmarks chapter: the 3D suite definition and results.
+
+### The 3D suite {#sec-3d-suite}
+
+The 3D suite extends the methodology across dimension
+(`laplace3d.py`; built as a direct test of the `Mesh` module's dimensional
+genericity — subdivided-icosahedron triangle meshes with `cell_areas`,
+`cell_normals`, `cell_centroids` from the same code paths as 2D).
+
+![The 3D geometry tiers, colored by exact Dirichlet data from exterior point
+charges. T1: randomized spheres (radius, center, orientation). T2:
+star-shaped $Y_{lm}$ radial deformations — new curvature, same topology. T3:
+spherical shells — multiply connected, two boundaries that may carry
+different BC types; the cutaway (camera-facing half of the outer boundary
+removed) shows the interior boundary. Rendered from the generator's surface
+and manufactured-solution components; the star row bypasses the
+interior-query sampler, which currently hangs (see the engineering review,
+@sec-future).](figures/gallery_3d.png){#fig-gallery3d}
+
+**Tiers** vary shape *and* connectivity:
+
+- **T1 sphere** — random radius $\in [0.7, 1.5]$, center, and mesh
+  orientation; the calibration tier.
+- **T2 star** — $r(\hat u) = R\,(1 + \sum \varepsilon\, Y_{lm}(\hat u))$ over
+  low-degree real spherical harmonics, with held-out degree-4 modes for
+  geometry-OOD; homeomorphic to the sphere but with varied curvature.
+- **T3 shell** — an outer boundary plus an inward-oriented inner boundary;
+  multiply connected, with cavity charges so the solution has genuinely
+  multiply-connected structure. The pure double-layer ansatz is
+  rank-deficient here, which is precisely why this tier is *declared
+  unsolved* for the first 3D model generation rather than quietly excluded.
+
+**BC regimes**, always well-posed (@sec-pde-theory): all-Dirichlet; mixed
+(exactly one boundary keeps Dirichlet, the other carries the dimensionless
+flux $L\,\partial_n u$); Robin with per-boundary $\beta \in [0.2, 2]$.
+All-Neumann is excluded by construction.
+
+**The first 3D model** carries the 2D lessons across dimension: the pruned
+flagship's analogue — a $c_1$ double-layer coefficient with the **exact
+triangle quadrature** given in closed form by the van Oosterom–Strackee
+signed solid angle (`solid_angle_influence`,
+$\int_{T} n\cdot(y-x)/(4\pi|y-x|^3)\,dS = -\Omega/4\pi$), a shared-$\alpha$
+$p{=}8$ Richardson solve in the orientation gauge that keeps zero-kernel
+initialization convergent, and 2 parameters total — benchmarked on
+all-Dirichlet T1/T2 in the next section, with T3 the declared open tier for
+a mixed-trace/Green-representation learned solve (parked with the
+specialist line; @sec-future).
+
+### 3D results {#sec-3d-results}
+
+All numbers in this section are seed-17 session artifacts (`/tmp/h5_3d*`),
+evaluated on frozen 12-case banks per split.
+
+Two rows anchor the table. The **oracle** is parameter-free: the exact
+solid-angle influence with a dense solve of the second-kind system — the
+best any double-layer representation can do at this panel resolution. The
+**learned model** is `SolidAngleBIE`: *two* parameters (one kernel
+coefficient multiplying the exact solid-angle influence, one shared
+Richardson relaxation, eight solve steps), with **no reference frame at
+all** — solid angles are dimensionless and similarity-invariant by
+construction, so the 2D nondimensionalization machinery disappears entirely.
+
+| split | learned 2-param (10k steps) | dense-solve oracle |
+|---|--:|--:|
+| sphere (T1) | 0.0041 | 0.0041 |
+| star (T2) | 0.0023 | 0.0024 |
+| star, unseen deformation modes | 0.0024 | 0.0021 |
+| shell (T3, topology) | 0.2764 | 1.1348 |
+
+: 3D all-Dirichlet relative $L^2$; the learned model matches the oracle to
+within $3\times10^{-4}$ on every simply connected split. No PDE-residual
+column is needed here: both rows propagate the exact solid-angle kernel, so
+their strong-form residual is float-noise zero *by construction* on every
+split (the driver's fidelity block, @sec-fidelity-columns, measures
+$\sim$$10^{-14}$). {#tbl-3d}
+
+Three observations:
+
+1. **Learning converges to the oracle.** The learned kernel coefficient
+   reaches $-1.0029$ against the gauge-consistent value $-1$ (0.3%), and
+   validation is flat from step 9,000: accuracy on T1/T2 is now
+   quadrature-limited, not learning-limited. The 2D story — recover the
+   analytic kernel from interior data alone — repeats in 3D with even fewer
+   parameters, and with the same slow co-adaptation transit seen on 2D
+   Neumann (1,500 steps reach only 0.50; 10,000 are needed).
+2. **The shell tier fails for a classical reason, in both rows.** A pure
+   double-layer representation is incomplete on multiply connected domains;
+   the *oracle itself* scores 1.13. This is a representation fact, not a
+   learning failure, and it is exactly the gap a mixed-trace/Green-representation
+   solve would close (parked with the specialist line; @sec-future).
+3. **Truncated solves regularize.** The learned model *beats* the oracle on
+   shells (0.28 vs 1.13): eight Richardson steps cannot fully invert the
+   deficient system, and that truncation acts as implicit (Landweber-style)
+   spectral regularization, while the dense solve inverts the pathology
+   faithfully. The tier remains open — but the mechanism is worth keeping in
+   mind wherever a learned unrolled solve meets an ill-posed representation.
+
+The 3D build also stress-tested the `Mesh` module's dimensional genericity,
+which held: codimension-one triangle areas, outward normals, and centroids
+in 3D worked unchanged, and interior solid-angle row sums came out exactly
+$-1$. One generator bug (an over-loose analytic bound that hung the star
+tier's rejection sampler) was caught by *figure inspection* during the
+gallery work and fixed with empirical per-surface radial bounds.
+
+#### The full architecture in 3D {#sec-3d-meshtransformer}
+
+The kernel-decoder `MeshTransformer` trains on the 3D suite with **zero
+core changes** and a **bitwise-identical parameter count** to 2D (channel
+counts are dimension-independent). The only new code is example-level glue
+(`laplace3d_study.py`): the shell tier's outer and inner boundaries are
+merged into a single `dirichlet` boundary, so boundary identity is conveyed
+to the model only geometrically, through positions and normals. Six seeds
+(17–22), 3,000 steps (checked-in key
+`iteration_10_laplace3d_meshtransformer`); oracle references for this
+protocol's banks: sphere 0.003, star 0.002, shell 0.753 — the same
+double-layer deficiency @tbl-3d measured on its own session banks.
+
+| arm | seed | T1 sphere | T2 star | star, unseen modes | T3 shell |
+|---|--:|--:|--:|--:|--:|
+| 8 MLP members | 17 | 0.0127 | 0.0131 | 0.0359 | 0.3204 |
+| 8 MLP members | 18 | 0.0184 | 0.0197 | 0.1445 | 0.8158 |
+| 8 MLP members | 19 | 0.0196 | 0.0159 | 0.0821 | 0.2798 |
+| 8 MLP members | 20 | 0.0178 | 0.0258 | 0.1243 | 0.5220 |
+| 8 MLP members | 21 | 0.0185 | 0.0202 | 0.0344 | 0.3074 |
+| 8 MLP members | 22 | 0.0171 | 0.0153 | 0.1012 | 0.4400 |
+| 8 MLP members | *mean* | *0.0174* | *0.0183* | *0.0871* | *0.4476* |
+| dictionary-only | 17 | 0.0121 | 0.0142 | 0.0469 | 0.2901 |
+| dictionary-only | 18 | 0.0250 | 0.0439 | 0.2556 | 0.4134 |
+| dictionary-only | 19 | 0.0131 | 0.0237 | 0.1166 | 1.1687 |
+| dictionary-only | 20 | 0.0298 | 0.0431 | 0.1053 | 0.5024 |
+| dictionary-only | 21 | 0.0248 | 0.0216 | 0.0796 | 0.8042 |
+| dictionary-only | 22 | 0.0141 | 0.0158 | 0.1071 | 0.3744 |
+| dictionary-only | *mean* | *0.0198* | *0.0271* | *0.1185* | *0.5922* |
+
+: Kernel-decoder `MeshTransformer` in 3D, the polynomial-bearing arms
+(iteration 10). These dictionary compositions are superseded by the
+ablation results of @sec-dictionary-3d, which improve every split
+$\sim$2$\times$; the table is retained as the six-seed genericity record.
+{#tbl-3d-meshtransformer}
+
+```{python}
+#| fig-cap: >
+#|   The kernel-decoder MeshTransformer in 3D (checked-in
+#|   learned_bie_2026-07-02.json, iteration 10; log scale). Filled dots
+#|   are seeds 17-22, left to right within each arm; open squares are
+#|   this protocol's exact-quadrature double-layer oracle references
+#|   (sphere 0.003, star 0.002, shell 0.753; no oracle is defined for the
+#|   unseen-modes split). On the shell tier both arms' medians beat the
+#|   oracle -- the pure double layer is representationally deficient on
+#|   multiply connected domains. These polynomial-bearing arms carry high
+#|   shell-tier seed spread; the pruned dictionaries of the ablation
+#|   section remove it.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+results = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+it10 = results["iteration_10_laplace3d_meshtransformer"]
+splits = [
+    ("sphere", "T1 sphere"),
+    ("star", "T2 star"),
+    ("star_unseen_modes", "star, unseen\nmodes"),
+    ("shell_topology", "T3 shell\n(topology)"),
+]
+# Oracle references recorded in the artifact's setup field (iteration-10
+# protocol banks; the session banks of @tbl-3d read differently).
+oracle = {"sphere": 0.003, "star": 0.002, "shell_topology": 0.753}
+
+fig, ax = plt.subplots(figsize=(6.6, 4.0))
+offsets = np.linspace(-0.30, -0.08, 6)
+for arm, color, label, sign in [
+    ("mlp8", "#2a78d6", "8 MLP members", -1),
+    ("nomlp", "#4a3aa7", "dictionary-only", 1),
+]:
+    for i, (key, _) in enumerate(splits):
+        values = [run[key] for run in it10["runs"][arm]]
+        xs = [i - sign * o for o in offsets]
+        ax.plot(xs, values, "o", ms=7, color=color, mec="white", mew=1.2,
+                zorder=3, label=label if i == 0 else None)
+oracle_x = [i for i, (k, _) in enumerate(splits) if k in oracle]
+oracle_y = [oracle[k] for k, _ in splits if k in oracle]
+ax.plot(oracle_x, oracle_y, "s", ms=8, mfc="none", mec="#0b0b0b", mew=1.5,
+        zorder=2, label="double-layer oracle (this protocol)")
+ax.set_yscale("log")
+ax.set_xticks(range(4), [label for _, label in splits])
+ax.set_xlim(-0.6, 3.6)
+ax.set_ylim(1e-3, 3.0)
+ax.set_ylabel("relative $L^2$ (log scale)")
+ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+ax.grid(axis="x", visible=False)
+ax.legend(fontsize=8, loc="upper left", frameon=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+What this establishes: **dimensional genericity holds end-to-end** —
+pointing the 2D architecture at 3D data yields sphere/star ID within
+$\sim$6$\times$ of the exact-quadrature oracle, with the only
+dimension-aware piece being the dictionary's own dimension dispatch
+(subtended angle $\to$ solid angle, @sec-kernel-decoder); and
+**attention-conditioned coefficients partially overcome the double
+layer's representational deficiency** on the declared-unsolved shell tier
+(arm medians 0.38–0.46 against the oracle's 0.753 — the encoder can
+modulate the kernel per source token where the fixed-coefficient oracle
+cannot). The best 3D dictionary composition, and the collapse of the
+shell tier's seed variance, are in @sec-dictionary-3d.
+
+*History: @sec-nb-iter10 — including a reading of this table ("MLP
+members help in 3D") that iteration 12 overturned as an artifact.*

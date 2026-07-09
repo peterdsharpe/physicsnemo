@@ -1,0 +1,287 @@
+# The Euler–Bernoulli suite {#sec-ds-euler-bernoulli}
+
+The program's first **multi-field** suite: the exterior flows of
+@sec-ds-potential-flow now carry two coupled targets — the velocity,
+which is *linear* in the drive, and the Bernoulli pressure, which is
+*exactly quadratic* in it. Two fields, two drive degrees, one sample:
+the cleanest possible instrument for measuring what happens when a
+declared degree matches — or misses — each target.
+
+## The problem
+
+Same certified exterior-flow family as @sec-ds-potential-flow (bodies,
+freestream direction, circulation; exact conformal-map labels), with
+the model predicting both fields at shared queries:
+
+$$
+u = U_\infty + u_d
+\quad\text{(polar vector, degree 1 in the drive)},
+\qquad
+p^\* = \tfrac{1}{2}\big(|U_\infty|^2 - |u|^2\big)
+\quad\text{(scalar, exactly degree 2).}
+$$
+
+Labels are exact; the pressure follows from the velocity by Bernoulli's
+theorem, so the two targets are *consistent* physics, not independent
+regressions. Contracts: similarity equivariance; the parity sector
+(circulation is handed here exactly as in the parent suite); and the
+**drive-degree declaration** — this suite is where `field_mode`'s three
+choices (linear, nonlinear, quadratic) were priced against targets of
+known degree.
+
+## Why this rung: the drive-degree ladder
+
+One diagram carries both this chapter and @sec-ds-euler-rotational
+(which shares the wall with different physics):
+
+```{python}
+#| label: fig-ds6-degree-ladder
+#| fig-cap: >
+#|   The parity-of-degree wall, schematically. A drive-linear model spans
+#|   targets of drive-degree at most 1 (velocity lives there). The
+#|   Bernoulli pressure is exactly degree 2 — and with the suite's
+#|   sign-symmetric drive distribution, every degree-2 target is
+#|   ORTHOGONAL to the degree-1 span, so the best any linear-mode model
+#|   can do on pressure is predict zero: relative error exactly 1.000,
+#|   independent of capacity. The measured columns below the schematic are
+#|   the wall and its two breaks (nonlinear mode; declared degree 2),
+#|   from the archive.
+import json
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+INK, INK2 = "#0b0b0b", "#52514e"
+
+bie = json.load(open(Path("..") / "results" / "learned_bie_2026-07-02.json"))
+m = bie["iteration_25_euler_bernoulli_multifield"]["means_key_splits"]
+
+fig, (ax, ax2) = plt.subplots(
+    2, 1, figsize=(7.6, 5.6), gridspec_kw={"height_ratios": [1, 1.3]})
+
+# Top: the degree line.
+ax.axhline(0, color=INK2, lw=1.0)
+for d in (0, 1, 2, 3):
+    ax.plot([d], [0], "o", color=INK, ms=5)
+    ax.text(d, -0.22, f"degree {d}", ha="center", fontsize=9, color=INK2)
+ax.axvspan(-0.3, 1.3, color="#2a78d6", alpha=0.15)
+ax.text(0.5, 0.42, "span of a drive-linear model", ha="center",
+        fontsize=10, color="#2a78d6")
+ax.plot([1], [0.18], "v", color="#2a78d6", ms=9)
+ax.text(1, 0.55, "velocity\n(degree 1)", ha="center", fontsize=9,
+        color=INK)
+ax.plot([2], [0.18], "v", color="#e34948", ms=9)
+ax.text(2, 0.55, "Bernoulli pressure\n(exactly degree 2)", ha="center",
+        fontsize=9, color="#e34948")
+ax.annotate("orthogonal to the span:\nbest linear answer = 0,\n"
+            "relative error = 1 exactly",
+            xy=(2, 0.1), xytext=(2.85, 0.35), fontsize=9, color=INK,
+            arrowprops=dict(arrowstyle="-", color=INK2, lw=0.9))
+ax.set_xlim(-0.5, 3.9)
+ax.set_ylim(-0.5, 1.0)
+ax.set_axis_off()
+
+# Bottom: the measured wall and its breaks.
+arms = [("linear mode", m["linear"]["prs_ID"], "#e34948"),
+        ("nonlinear mode", m["nl"]["prs_ID"], "#52514e"),
+        ("nonlinear + 0o", m["nl_pseudo"]["prs_ID"], "#1baf7a")]
+xs = np.arange(len(arms))
+for x, (label, v, color) in zip(xs, arms):
+    ax2.plot([x], [v], "o", ms=11, color=color, mec="white", mew=1.2,
+             zorder=3)
+    ax2.annotate(f"{v:.3g}", (x, v), textcoords="offset points",
+                 xytext=(12, 0), fontsize=10, color=INK, va="center")
+ax2.axhline(1.0, color="#e34948", lw=1.0, ls=":", alpha=0.7)
+ax2.text(2.35, 1.0, "the wall (exactly 1)", fontsize=8.5,
+         color="#e34948", va="bottom", ha="right")
+ax2.set_yscale("log")
+ax2.set_xticks(xs, [a[0] for a in arms], fontsize=10)
+ax2.set_ylabel("pressure ID relative $L^2$ (log)")
+ax2.set_xlim(-0.5, 2.6)
+ax2.grid(axis="y", color="#e1e0d9", lw=0.8)
+for spine in ("top", "right"):
+    ax2.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+The wall is a theorem made measurable: linear-mode pressure reads
+**exactly 1.000** at every seed (the archive's sharpest number), while
+the same arm's velocity is fine (0.134) — one sample, two fields, and
+the declaration decides which field is reachable.
+
+## The gallery
+
+```{python}
+#| label: fig-ds6-gallery
+#| fig-cap: >
+#|   Multi-field samples: total-velocity magnitude (top row) and exact
+#|   Bernoulli pressure (bottom row) for the same three flows — a
+#|   circulation sweep at fixed geometry. Velocity stagnation points read
+#|   as pressure maxima (Bernoulli's theorem drawn); the suction peak
+#|   strengthens on the fast side as circulation grows.
+import torch
+from matplotlib.colors import LinearSegmentedColormap
+
+for _entry in (Path("..").resolve(), Path("..").resolve() / "problems"):
+    if str(_entry) not in sys.path:
+        sys.path.insert(0, str(_entry))
+from potential_flow import (
+    body_to_physical,
+    build_potential_flow_sample,
+    complex_to_points,
+    disturbance_complex_velocity,
+    exterior_map_derivative,
+)
+
+DIVERGING = LinearSegmentedColormap.from_list(
+    "book_diverging", ["#2a78d6", "#f0efec", "#e34948"])
+SEQUENTIAL = LinearSegmentedColormap.from_list(
+    "book_seq", ["#f0efec", "#2a78d6"])
+
+
+def flow_fields(sample, circ, n_ring=240, n_rad=80, r_max=2.8):
+    radii = torch.linspace(1.002, r_max, n_rad, dtype=torch.float64)[None, :]
+    angles = torch.linspace(0.0, 2 * np.pi, n_ring,
+                            dtype=torch.float64)[:, None]
+    z = (radii * torch.exp(1j * angles)).to(torch.complex128)
+    w_d = disturbance_complex_velocity(
+        sample.body, sample.canonical_freestream, circ, z)
+    u_total = complex_to_points(w_d).numpy()
+    u_inf = sample.freestream.numpy()
+    u_total = u_total + u_inf[None, None, :]
+    speed = np.linalg.norm(u_total, axis=-1)
+    pressure = 0.5 * (1.0 - speed**2)
+    phys = complex_to_points(body_to_physical(sample.body, z)).numpy()
+    return phys[..., 0], phys[..., 1], speed, pressure
+
+
+sample = build_potential_flow_sample(15, dtype=torch.float64)
+loop = sample.boundary_loop.numpy()
+circs = (0.0, 1.0, 2.0)
+fig, axes = plt.subplots(2, 3, figsize=(9.4, 6.0))
+for col, circ in enumerate(circs):
+    X, Y, speed, pressure = flow_fields(sample, circ)
+    ax = axes[0, col]
+    ax.contourf(X, Y, speed, levels=np.linspace(0, speed.max(), 25),
+                cmap=SEQUENTIAL)
+    ax.set_title(rf"$|u|$, $\Gamma^* = {circ:g}$", fontsize=9, color=INK)
+    ax = axes[1, col]
+    span = np.abs(pressure).max()
+    ax.contourf(X, Y, pressure, levels=np.linspace(-span, span, 25),
+                cmap=DIVERGING)
+    ax.set_title(rf"$p^*$, $\Gamma^* = {circ:g}$", fontsize=9, color=INK)
+for ax in axes.ravel():
+    ax.fill(loop[:, 0], loop[:, 1], facecolor="#eae8e1", edgecolor=INK,
+            linewidth=1.4, zorder=3)
+    ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
+    ax.grid(False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Geometry and drive distributions (and their OOD dials) are inherited
+from @sec-ds-potential-flow — the gallery there shows the family's
+shape variety; this suite adds fields, not geometry.
+
+## Benchmarks
+
+```{python}
+#| label: tbl-ds6-bench
+#| output: asis
+splits = [("vel_ID", "velocity ID"), ("prs_ID", "pressure ID"),
+          ("circ_v", "velocity, circulation OOD"),
+          ("circ_p", "pressure, circulation OOD")]
+names = {"linear": "linear mode", "nl": "nonlinear mode",
+         "nl_pseudo": "nonlinear + 0o sector"}
+lines = ["| arm | " + " | ".join(s[1] for s in splits) + " |",
+         "|---|" + "--:|" * len(splits)]
+for arm in ("linear", "nl", "nl_pseudo"):
+    vals = " | ".join(f"{m[arm][k]:.3f}" for k, _ in splits)
+    lines.append(f"| {names[arm]} | {vals} |")
+lines.append(
+    ": Euler–Bernoulli arms, 5 seeds (archive: "
+    "`learned_bie_2026-07-02.json`, iteration 25). The linear arm's "
+    "pressure columns are the wall — exactly 1. {#tbl-ds6-bench-table}")
+print("\n".join(lines))
+```
+
+The composed arm (nonlinear + 0o) is the suite's best on **every**
+column — the parity sector and the nonlinear read-in fix different
+deficits (handedness and degree), and they compose. The declared
+degree-2 mode's story — built after this suite exposed the *implicit*
+degree of the nonlinear read-in detonating off-range — is told at
+@sec-nonlinear-fragility.
+
+## Variations
+
+::: {.callout-note title="In flight"}
+Resolution-transfer cells land with E3. The drive-amplitude
+extrapolation axis — where the degree declaration earns its keep — is
+this suite's natural variation and is measured in
+@sec-nonlinear-fragility (amplitude probe: implicit degree ~21;
+declared degree exact by construction).
+:::
+
+## The full evidence
+
+Moved from the benchmarks chapter.
+
+### Euler–Bernoulli: the first multi-field suite {#sec-euler-bernoulli}
+
+The first **multi-field** benchmark (checked-in key
+`iteration_25_euler_bernoulli_multifield`): exterior flow with *two
+simultaneous targets* — velocity (rank 1) and pressure (rank 0). The
+pressure is the Bernoulli field
+$p^* = (|U|^2 - |u|^2)/2$, which is exactly **drive-quadratic**: exact
+labels with no solver, and the parity structure is verified exactly —
+velocity is *odd* under drive negation, pressure *even*. Multi-field
+output worked through the core unchanged.
+
+The suite carries a **pre-registered second wall**, a designed sibling
+of the Liouville superposition wall (@sec-liouville): a linear-mode arm
+is *bitwise drive-odd*, so its pressure response is **structurally
+zero** — the even part of its output is exactly nothing, and relative
+error 1.000 is a theorem, not a failure to train.
+
+| arm (5-seed means) | velocity ID | pressure ID | circ-OOD (velocity) | circ-OOD (pressure) | PDE residual | Bernoulli consistency |
+|---|--:|--:|--:|--:|--:|--:|
+| linear (wall control) | 0.134 | **1.000** | 0.646 | 1.000 | — | — |
+| nonlinear | 0.150 | 0.210 | 0.882 | 0.983 | — | — |
+| **nonlinear + $0o$ channels** | **0.031** | **0.063** | **0.346** | **0.348** | — | — |
+
+: Euler–Bernoulli at five seeds, 3,000 steps. The linear arm's pressure
+column is pinned at exactly 1.000 on every split and every seed — the
+structural wall, held bitwise. The two fidelity columns this multi-field
+suite licenses — velocity harmonicity and the cross-field Bernoulli
+identity applied to the model's own outputs — are em-dashed: the archived
+runs predate fidelity-first reporting (@sec-fidelity-columns).
+{#tbl-euler-bernoulli}
+
+What this establishes:
+
+- **The second structural wall held exactly.** Linear-mode pressure is
+  1.000 on every split at five seeds — to the fourth decimal — while its
+  velocity fits (0.134): the drive-odd proof, measured. Nonlinear mode
+  breaks the wall (pressure 0.210), exactly as the zero-preserving
+  nonlinear contract is designed to allow.
+- **The parity and nonlinearity mechanisms compose** — the section's
+  takeaway. The nonlinear + $0o$ arm dominates *every* split: velocity
+  0.031 and pressure 0.063 in-distribution, 5$\times$/3$\times$ better
+  than plain nonlinear. The two extensions the fluid line forced —
+  drive nonlinearity (@sec-liouville) and parity
+  channels (@sec-pseudo-extension) — are not alternatives but factors,
+  and the first multivariate target needs both at once.
+- **The worst split at the time — since closed.** Circulation-OOD —
+  drive-*amplitude* extrapolation — was the weakest axis even for the
+  best arm here (0.35), with a 200-step smoke anomaly (catastrophic
+  blowup, 37–147) that largely resolved with training. The
+  nonlinear-fragility ladder later diagnosed the mechanism (implicit
+  drive degree $\sim$21) and the declared-degree mode, composed with
+  parity, closed the axis at 0.086 (@sec-nonlinear-fragility).
+
+*History: @sec-nb-iter25.*

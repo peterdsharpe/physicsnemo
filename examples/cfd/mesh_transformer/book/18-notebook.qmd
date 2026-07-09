@@ -69,21 +69,29 @@ import numpy as np
 
 reference = json.load(open(Path("..") / "results" / "reference_2026-07-01.json"))
 moment = reference["pure_mode_relative_l2"]["mesh_transformer"]
-kernel = json.load(
-    open("/tmp/kernel_decoder_bench/mesh_transformer_kernel_reference.json")
-)["evaluation"]["mode_response"]
+_artifact = Path("/tmp/kernel_decoder_bench/mesh_transformer_kernel_reference.json")
+kd = None
+if _artifact.exists():
+    kernel = json.load(open(_artifact))["evaluation"]["mode_response"]
+    kd = [kernel[str(m)]["relative_l2_mean"] for m in range(9)]
 
 modes = list(range(9))
 mt = [moment[str(m)] for m in modes]
-kd = [kernel[str(m)]["relative_l2_mean"] for m in modes]
 
 x = np.arange(len(modes))
 width = 0.38
 fig, ax = plt.subplots(figsize=(6.8, 3.4))
 ax.bar(x - width / 2, mt, width, color="#e34948",
        label="moment decoder (checked-in, 3 seeds)")
-ax.bar(x + width / 2, kd, width, color="#2a78d6",
-       label="kernel decoder (session artifact, seed 17)")
+if kd is not None:
+    ax.bar(x + width / 2, kd, width, color="#2a78d6",
+           label="kernel decoder (session artifact, seed 17)")
+else:
+    ax.text(0.35, 0.62,
+            "kernel-decoder session artifact no longer on disk\n"
+            "(host /tmp cleared); recorded response: essentially\n"
+            "flat, 0.08 at m=3, 0.08-0.29 through m=12 (caption)",
+            transform=ax.transAxes, fontsize=8.5, color="#2a78d6")
 ax.axhline(1.0, color="#0b0b0b", lw=1.0, ls="--")
 ax.text(8.42, 1.02, "no response", fontsize=8, color="#0b0b0b",
         ha="right", va="bottom")
@@ -1927,3 +1935,581 @@ points (field metrics + force coefficients with a subsample-bias
 caveat; full-resolution reserved for final numbers — the dense decode
 prices it at ~473 GPU-h, another argument for the hierarchical
 backend, task #41).
+
+## 2026-07-07 — why the tunnel panels weren't ignored: the quadrature-weight fight {#sec-nb-measure-asymmetry}
+
+Peter's question on the H-ground negative — *why doesn't the model
+just learn to ignore unhelpful tunnel panels via the BC type?* — has a
+code-grounded answer, and it names an architectural operating-point
+assumption we had never tested:
+
+- BC typing is present and in the right form: a **one-hot over
+  declared boundary names** enters every cell's lift (one channel per
+  boundary; no scalar enumeration, no false BC metric). "Ignore
+  tunnel-typed cells" is representable.
+- But attention moments are quadrature-weighted with **raw cell
+  areas** (`weighted_score = score × cell_areas`), and the gauge
+  divides all areas uniformly — the ~10⁶ tunnel-to-vehicle panel-area
+  ratio survives into every moment integral. At init the tunnel
+  dominates by 10⁶; the optimizer must earn a type-conditioned
+  suppression of that size before vehicle information flows. The
+  allbc arm's *underfitting* (train 0.098 vs vehicle-only's 0.067)
+  is the signature of that fight, partially won at 500 epochs.
+- Pattern-level lesson (second instance in a week): the architecture's
+  deliberately norm-free pathways — the drive stream (zero-preservation
+  forbids normalization) and the moment quadrature (honest measure
+  forbids per-cell renormalization) — put their operating point in the
+  *input statistics*. Every prior suite was quasi-uniformly panelized
+  (measure ratios ≲10²); DrivAerML's mm-car-in-m-tunnel is the first
+  10⁶-ratio input. Contracts that are exact can still be
+  *operating-point fragile*.
+- The principled fix matches Peter's per-BC-heads instinct and has an
+  exact license: **Green's representation splits over boundary
+  components**, so per-boundary moment pools with learned dimensionless
+  cross-boundary combination is exact structure, not normalization —
+  within a boundary, big panels rightly dominate *their own* integral.
+- Dispatched: a checkpoint probe (per-boundary moment-contribution
+  fractions at init vs trained — did suppression reach 10⁻⁶ or stall
+  at 10⁻²?) that discriminates the optimization story from the
+  independent coarse-quadrature story (722 panels for the whole
+  ground plane may be physically low-value at any weighting); and a
+  design sketch for the per-boundary-pool arm, pre-registered before
+  implementation.
+
+## 2026-07-07 — the probe fires twice: a stalled 10⁷ fight, and a starved vehicle {#sec-nb-probe-verdict}
+
+The per-boundary moment-contribution probe (hooks-only, partition
+residual ~2×10⁻⁶ certifying the decomposition) ran on the trained
+allbc checkpoint. Two findings, one per suspect class:
+
+1. **Optimization pathology: confirmed, quantified.** At init the
+   tunnel dominates the vehicle's moment contribution by 2.2×10⁷
+   (operator layer) and 6.3×10⁷ (drive layer — worse than the raw
+   area ratio because far-cell drive features are themselves larger).
+   After 500 epochs the trained ratios are 1.0×10⁷ and 4.3×10⁷: the
+   model won a ~20× suppression of tunnel drive values (mean|value|
+   12.4 → 0.59 on inlet/outlet) — twenty-fold, of the needed
+   ten-million-fold. The fight is real, the model was losing it
+   slowly, exactly as hypothesized.
+2. **A pipeline confound the probe caught for free**: the allbc
+   chain's post-pipeline vehicle boundary carries **378 cells**
+   against 5,054 tunnel cells (the stock arm feeds ~10k vehicle
+   cells). The arms were never information-matched; the H-ground
+   pilot verdict is contaminated and must be rerun after the fix.
+
+Consequences: the normalized per-boundary moment pool (Green's
+identity splits over boundary components; measure-normalize within,
+learn log-scale gains across — one optimizer step then moves a
+boundary's weight a decade instead of grinding through feature
+magnitudes) is greenlit with full contract tests; the clean three-arm
+comparison (vehicle-only / allbc-fixed / allbc-pooled) reruns once
+both land. The H-ground verdict is hereby demoted from "falsifier
+fired" to "pending clean rerun" — the earlier entry stands as the
+record of why.
+
+## 2026-07-07 — the velocity-front fan-out: pre-registration {#sec-nb-velocity-sweep}
+
+Peter's directive: use the cluster at scale — parallel hypotheses, not
+one bigger run. The open front is AirFRANS velocity (members arm
+0.020–0.025 vs GraphSAGE 0.0146, MARIO 0.0015). Four independent
+hypotheses about what limits it, each with its deciding experiment,
+all launched in parallel (registered here BEFORE launch):
+
+- **V1 (capacity response).** If velocity is member-capacity-limited,
+  it falls monotonically along `mlp_members` ∈ {8, 16, 32} at 3 seeds.
+  *Falsifier: flat from 8 — structure-limited, wider members not
+  bought (parsimony bar: a member count is bought only if the smaller
+  count measurably fails).*
+- **V2 (supervision density).** 4,096 queries/step was GLOBE-matched,
+  not optimized; the near-wall bands are sparsely sampled per step. If
+  supervision-limited, 16,384 queries/step improves velocity at
+  matched epochs. *Falsifier: no improvement — sampling density is
+  not binding.*
+- **V3 (optimization tail).** The members arm's seed-20 blowup and hot
+  early cosine phase suggest LR sensitivity. Peak LR ÷2 and ÷4 at 5
+  seeds each: if the tail is LR-borne, blowups vanish and the median
+  holds; if the median *improves*, the whole arm was over-hot.
+  *Falsifier: tail persists at ÷4 — instability is architectural, not
+  schedule.*
+- **V4 (learnable scales, H4-L, task #42).** Log-radial pair features
+  make any power-law scale linearly learnable. If the members arm's
+  learned radial structure is still scale-crippled, log features beat
+  plain members. *Falsifier: no improvement — plain invariants + ln Re
+  conditioning already span the needed scales, and H4-L's generality
+  argument rests on other PDEs, not AirFRANS.* (Implementation
+  dispatched; runs join the sweep when it lands.)
+
+Also to 5-seed discipline: members seeds 22–26, members_pseudo seeds
+20–24. DrivAerML: the clean three-arm rerun (vehicle-only reference /
+fixed-allbc / fixed-allbc-pooled) launches at 4-node DDP per arm.
+Selection gates: all comparisons on the reference-persample convention,
+median-of-seeds with full ranges reported, blowups included in the
+record.
+
+## 2026-07-07 — composition confirmed; the GeoTransolver anchor lands hard {#sec-nb-compose-geot}
+
+Harvest from the overnight batch (queue congestion is holding the
+sweep and DrivAerML v2 arms — Monday; they run as slots free):
+
+- **Composition CONFIRMED** (`mt_nl_members_pseudo`, scarce, 3 seeds,
+  pooled convention, no blowups): $u_x$ 0.0139–0.0158, $p$
+  0.0020–0.0023, $p_s$ 0.0070–0.0130 — the parity sector and the
+  learned members stack (~30% velocity over members alone), as
+  pre-registered for independent mechanisms. If the reference-convention
+  re-score tracks pooled the way the members arm did, the composed arm
+  meets H1's velocity clause (best Bonnet baseline 0.0146) — re-score
+  in queue, plus the official reynolds/aoa zero-shot evals from the
+  full-trained checkpoints (the H2-stretch prediction — "parity helps
+  AoA asymmetry" — finally gets its test).
+- **Full-split helps modestly** (mt_nl $u_x$ 0.089–0.092 vs 0.12
+  scarce; pseudo 0.075–0.083 vs 0.10), same ordering as scarce.
+  Members s21 clean (tail 1/5 so far).
+- **The GeoTransolver anchor is sobering**: identical harness, matched
+  10k resolution, recipe-default 500 epochs — GeoTransolver val
+  0.00253 vs our pilot vehicle arm's 0.0677 (27×). Caveats before
+  taking the ratio at face value: the pilot arm trained under the
+  raw-38.9 m/s drive pathology (fixed only in the queued v2 arms), and
+  the capacity gap is large (GeoTransolver is a multi-M-parameter
+  recipe default vs our 150k reference config). But the anchor is the
+  anchor: on DrivAerML surface fields, under the recipe's own
+  protocol, we are far behind the incumbent — the same story AirFRANS
+  told before the members rung. The members lesson transfers as a
+  hypothesis: the DrivAerML arms run singpair-only (NO learned smooth
+  members) — the exact configuration AirFRANS just showed to be
+  capacity-starved for nonlinear problems. A members-carrying DrivAerML
+  arm is the obvious next rung once the v2 protocol arms land.
+
+## 2026-07-07 (evening) — sweep addendum: V5 width, composed-log, and the transfer arms {#sec-nb-sweep-addendum}
+
+Evening idle capacity; additions pre-registered here at launch:
+
+- **V5 (width response)**: `mt_nl_members_wide` — encoder/decoder
+  channel widths doubled at fixed members=8 (1.13M params vs 202k),
+  seeds 17–21. Decides whether channel width binds after the members
+  rung. *Falsifier: no improvement at 2× width — reference width
+  sufficient, wide not bought.*
+- **Composed-log positioning** (`mt_nl_members_log_pseudo`, seeds
+  17–19, exploratory): if V4 confirms, this is the presumptive best
+  arm; if V4 is null it reads as a members_pseudo replicate.
+- **Full-split extension**: composed arm seeds 18/19 + members 20/21
+  (chains armed).
+- **DrivAerML capacity-parity probe**: `members_wide` vehicle arm at
+  4-node DDP — the fair-capacity direction against the multi-M-param
+  GeoTransolver anchor (0.00253 val at matched harness).
+
+Mid-run reads from the running batch (validation printouts doing
+their job): the three DrivAerML v2 protocol arms are **level at
+matched epochs** (vehicle ≈ allbc ≈ pooled ≈ 0.113 around epoch 70)
+— the starvation and drive fixes eliminated the pilot's 42% allbc
+deficit, so H-ground is live again; verdicts at epoch 500. The
+members-transfer arm trails at epoch 14 (late queue start). Sweep
+arms training on-trend; evalx extrapolation evals partially done
+(full harvest when the job drains).
+
+## 2026-07-07 (late) — two speed threads registered: FLARE-separable and Barnes–Hut {#sec-nb-speed-threads}
+
+Peter surfaced FLARE (the low-rank attention variant accelerating
+GeoTransolver in-repo) as a speed direction orthogonal to the
+hierarchical plan. The architecture-specific mapping, worked out
+before dispatching: our *encoder* attention is already O(N) separable
+moments — FLARE has nothing to accelerate there. The dense cost is the
+*kernel decode*, which splits along the dictionary's own boundary:
+
+- **Smooth members** (the pair-MLP, load-bearing since the H4 verdict,
+  and the likely FLOP-dominant decode term) are FLARE-shaped: smooth
+  kernels admit low-rank factorized features φ(x)·ψ(y) → O(Q+S). The
+  open tension, flagged for the design study: exact O(D) equivariance
+  vs separability vs expressivity — random-feature routes are
+  equivariant only in expectation, and the program's standard is exact
+  contracts. (Task #43, fork dispatched: analysis + measured cost
+  split + prototype if the contracts survive.)
+- **Exact singular members** must stay exact — their sublinear path is
+  the Barnes–Hut/multipole thread (task #41, design-only fork
+  dispatched: coefficient-weighted multipoles of the panel integrals,
+  torch-native tree ops per GLOBE's Python-traversal lesson,
+  pre-registered acceptance <1e-3 deviation from the dense oracle at
+  θ=0.5 and <60 s at the 82k×10⁶ corner vs 978 s dense).
+
+Per Peter: neither needs to ship now — registered as standing threads
+with their falsifiers; implementation follows the sweep verdicts (the
+kernel feature set is still moving; an FMM built against last week's
+dictionary would chase a moving target).
+
+## 2026-07-07 (late) — the decode cost split: 97% is the member MLP {#sec-nb-flare-verdict}
+
+The FLARE analysis fork measured what was previously assumed (cluster
+job 4257002, GB200): in members-class configs, **the smooth-member
+pairwise MLP owns 96.9–97.4% of decode wall-clock** at both AirFRANS
+(115.6 of 119.3 ms) and DrivAerML (2,834 of 2,910 ms) scales — the
+exact panel integrals are the residual ~3%. Consequences:
+
+- **Speed priorities are configuration-dependent and now measured**:
+  for members-class arms (the current best configs) the smooth-member
+  path is the binding constraint and Barnes–Hut (#41) accelerates only
+  ~3%; for singpair configs at product scope, the priorities reverse.
+  The members arms' 2–5× epoch slowdown in the running sweep is fully
+  explained.
+- **FLARE itself is N/A for our encoder** — read against the in-repo
+  implementation, FLARE is two-pass rank-S routing through learned
+  global slots; our separable signed-moment attention already is that
+  pattern in a stronger, typed, quadrature-licensed form.
+- **Exact equivariance and expressive separability do not coexist**
+  for the smooth members (exactly-separable polynomial expansions are
+  expressively wrong for near-wall structure; learned Fourier features
+  of r break exact O(D) equivariance at finite rank). The supported
+  design — the "in-house FLARE" — is a **hybrid decoder**: exact
+  singular members stay dense; smooth content routes through the
+  existing typed-moment machinery (exact contracts by construction,
+  rank = moment channels). The honest pre-registered risk closes a
+  loop: the moment decoder was originally replaced because of its
+  proved m≤2 angular ceiling — the hybrid bets that the *smooth*
+  stream doesn't need the angular orders (the exact members carry the
+  angular content) while the members' real cargo is conditioned radial
+  structure. Falsifier: hybrid-vs-members accuracy loss concentrated
+  in angular-rich content. Experiment spec in
+  `studies/notes/flare_separable_members.md`; prototype deferred until
+  the sweep verdicts freeze the members configuration.
+
+Ops incident, recorded: the fork's first benchmark materialized 10⁸
+pairs unchunked locally (>46 GB RSS — the near-OOM Peter warned
+about); the script now defaults chunked+small, big scales are
+cluster-only, and the measurement came from an HPC node as it should
+have from the start.
+
+## 2026-07-07 (dataset-chapters fork) — thread opened: per-suite chapters, E1 launched {#sec-nb-ds-chapters}
+
+Peter commissioned per-dataset chapters (task #44); scope settled by
+Q&A: **8 chapters** (2D Laplace + stress families, screened, 3D
+Laplace, Liouville, potential flow, Euler–Bernoulli, rotational Euler,
+N-S star-cavity), **06 slims to the cross-cutting core** (evaluation
+methodology, walls arc, component evidence, Transolver), **datasets
+before industrial** with one atomic renumber at the end. Approved new
+experiments: **E1** wide-Reynolds N-S bands, **E2** unseen-geometry
+showcases, **E3** resolution-transfer galleries (new-BC generalization
+not commissioned). Plan of record:
+`studies/notes/dataset_chapters_plan.md`; scaffolds `ds1..ds8-*.qmd`
+render clean and sit after 06 in the chapter list (temporary names —
+09/10 untouched until the atomic pass).
+
+**E1 pre-registration (launched before results, jobs
+mt_ds_gen_re{1,10,100,1000}):** four N-S catalog bands, log-uniform
+Re [1,10], [10,100], [100,1000], [1000,5000] with matched unseen
+bands, 500 cases each, v1's exact geometry/h/verification protocol
+(only the Reynolds slice moves — the generator's supplementary-slice
+mechanism), noise-floor re-solves every 10th case. Prediction (logged
+now): accuracy degrades and the label-noise floor rises with Re;
+the top band may substantially fail the convergence/noise gates at
+h=0.0105 — which would itself be a reportable steady-solver limit,
+not a failure of the experiment. Training arms per band follow
+generation; the chapter's headline variation is the accuracy-vs-Re
+curve with the noise floor drawn honestly beside it.
+
+## 2026-07-07 (night) — extrapolation harvest: the pre-registered stretch lands {#sec-nb-extrapolation}
+
+Reference-convention evals of the full-trained arms on the official
+extrapolation tasks (zero-shot, exactly the published protocol), plus
+the composed arm's re-score. Three results, in descending order of
+surprise:
+
+1. **The H2-stretch prediction is CONFIRMED — and it beats GLOBE.**
+   Pre-registered in @sec-airfrans: "parity typing helps AoA asymmetry
+   — a genuine coin-flip." Measured, AoA-extrapolation volume
+   pressure (3 seeds): `mt_nl_pseudo` **0.0134–0.0214** vs GLOBE's
+   published **0.1138** (its one weakness — it ties the Bonnet
+   baselines there, GraphSAGE 0.1091). The parity-typed arm is
+   **5–8× better than every published model** on exactly the metric
+   where the flow's handedness shifts hardest. Mechanism-consistent:
+   an AoA shift is a parity-asymmetric perturbation, and the 0o
+   sector is the machinery for handed content. Within-program
+   control: `mt_nl` (no parity) reads 0.024–0.048 — the sector, not
+   the architecture, carries it.
+2. **Reynolds extrapolation, volume pressure**: 0.0125–0.0154 — ~10×
+   better than the Bonnet baselines (~0.10–0.14), ~6× behind GLOBE
+   (0.0024). Velocity: ~0.10, at the baseline pack, 50× behind GLOBE.
+3. **Composed-arm re-score (scarce, reference convention)**: u_x
+   0.0151–0.0173 — *at the front of the baseline pack* (GraphSAGE
+   0.0146) but not cleanly past it; H1's velocity clause reads
+   "tied within seed noise," not "met." c_p 0.0036–0.0044 (8× past
+   baselines, 1.6× behind MARIO); c_p_surface 0.0063–0.0087 —
+   **3–4× better than MARIO**, second only to GLOBE.
+
+Honest caveats attached to (1)-(2): the extrapolation arms are
+singpair-class (the full-split members/composed runs are still
+training) — their surface pressure on extrapolation is accordingly
+weak (0.48–0.56); members-class extrapolation evals queue when the
+full chains land, and the composed arm should be strictly stronger.
+The velocity front remains the gap everywhere; the sweep verdicts
+(V1–V5) are the next signal.
+
+## 2026-07-08 — the engineering review, executed {#sec-nb-engreview-executed}
+
+Peter: the review "captures a lot of this; I think that you want to
+actually execute it." Executed, one item at a time, with the review
+section itself updated into its live-gap-tracker form:
+
+- **Hot-loop dead work: closed.** `PairInvariantFeatures` now skips
+  entirely on smooth-member-free dictionaries; a regression test pins
+  never-computed (singular-only/singpair) vs still-computed (every
+  member-carrying dictionary), with the existing bitwise contract
+  tests passing unchanged across the change. Measured saving: ≈7% of
+  singpair decode (upper-bounded, CPU fp64, 2048×8192) — the
+  ten-floats-per-pair arithmetic, confirmed.
+- **Evidence-orphaned defaults: closed.** `HarmonicPanelBIE` defaults
+  to the pruning-proved 3-parameter config; every named arm in
+  `train.py` pins its full historical configuration so archive arm
+  names build exactly what they always built (55 affected tests
+  green). `SelfConsistentPairKernel` carries a FROZEN LADDER RECORD
+  warning: refuted-configuration flags are the executable
+  falsification record, not recommendations.
+- **README bank trap: closed.** Both tables now name the other
+  number's bank (0.458 = 64-case reference bank; 0.4251 = 32-case
+  finalist bank).
+- **Three "dead/orphaned code" findings: closed as stale** — the code
+  evolved past the review (the dead assignment is gone;
+  `_STAR_MODES_OOD` and `solid_angle_influence` gained their consumer
+  when `laplace3d_study.py` landed, with test coverage). Verified
+  in-source.
+- **Deferred with reasons, still open:** the ×4 panel-influence
+  consolidation (the review's own condition — a stable research
+  surface — is explicitly not met this week) and the Bessel-K
+  autograd upstream contribution (public-API placement is Peter's
+  call).
+
+Verification: full mesh_attention suite 426 green (424 + 2 new),
+affected example tests 55 + 16 green, ruff check/format clean on all
+touched files.
+
+## 2026-07-08 — H-ground verdict: level; capacity dominates again {#sec-nb-hground-verdict}
+
+The clean three-arm DrivAerML comparison completed (500 epochs each,
+matched 4-node DDP, fixed pipeline, 1 seed/arm): vehicle-only val
+**0.1019**, all-five-boundaries **0.1026**, pooled **0.1036** — level
+within single-seed noise. The pre-registered falsifier fires in its
+*neutral* form: with the starvation and drive confounds fixed, the
+four labeled tunnel boundaries neither help nor hurt, and the
+per-boundary moment pool (which measurably relocates the 10⁷
+optimization fight) unlocks nothing further — consistent with the
+coarse-quadrature reading: at 722 panels for a whole ground plane,
+the tunnel boundaries carry little exploitable signal regardless of
+weighting. H-ground is honestly answered at this resolution:
+**the boundary-value problem's far boundaries are adequately encoded
+in the freestream vector for surface-field prediction.** (Caveat:
+1 seed/arm; ground-effect-sensitive fields like underbody pressure
+were not separately scored — a banded surface decomposition would
+sharpen this if it ever matters.)
+
+The louder result is the transfer confirmation running beside it:
+**`members` (val 0.1001 at epoch 156) and `members_wide` (0.0990 at
+epoch 93) are already below all three finished protocol arms at
+≤⅓ of the budget** — the AirFRANS capacity lesson transfers to
+DrivAerML, and the wide arm leads. The GeoTransolver anchor (0.0025)
+remains far ahead; the capacity ladder is the live thread there.
+
+First V3 verdicts (HSG, LR÷2, 3 seeds): u_x 0.021–0.025 — median no
+better than full-LR members; no blowups in 3 seeds (tail
+characterization needs the remaining seeds). The two-cluster race is
+on (16 runs queued on ORD's 7-day backfill).
+
+## 2026-07-08 — the GeoTransolver gap investigation: pre-registration {#sec-nb-geot-gap}
+
+Peter's redirect: stop climbing small rungs while a 40× gap to
+GeoTransolver (0.0025 vs ~0.10 val, matched harness) stands
+unexplained. Understand-before-solving. The cross-dataset pattern,
+assembled first: our standing degrades monotonically with the
+fraction of queries ON the boundary (in-house interior-only:
+dominant; AirFRANS mixed: mid, with surface pressure the weak column
+until members; DrivAerML surface-only: worst). Rival hypotheses,
+each with its discriminator, registered before running:
+
+- **H-A (field/metric artifact, possible bug)**: the gap concentrates
+  in one field (wss vector?) rather than being uniform.
+  *Test: per-field val decomposition of both checkpoints under the
+  recipe's own metrics.*
+- **H-C (capacity/trajectory)**: members/wide arms' curves head to
+  GeoTransolver's level given budget. *Test: overlay loss curves;
+  extrapolate plateaus; the wide arm at 500 epochs.*
+- **H-D (on-surface structural — the leading candidate)**: queries on
+  the source surface sit at the kernels' singular limit AND have no
+  identity by the query-independence contract — they cannot see
+  "I am panel j" and must recover their own cell's data through
+  kernels at their most degenerate point. Right prior for interior
+  maps, wrong information flow for boundary→boundary tasks.
+  *Tests: (i) one-case overfit — if the model cannot drive a single
+  case's train loss toward zero, expressivity is structurally capped;
+  (ii) a nearest-panel-features probe arm (give surface queries their
+  own panel's lifted state — breaks no contract if implemented as a
+  declared boundary→boundary mode) as the constructive test.*
+- **H-E (plain bug)**: anything non-smooth in the overfit probe or a
+  catastrophic single-field residual.
+
+Falsifiers: H-D dies if the one-case overfit succeeds easily and
+curves show pure capacity scaling (then H-C owns the gap); H-A/H-E
+die if per-field losses are proportionate. Consequence if H-D
+confirms: the architecture needs a declared **boundary-trace mode**
+(surface queries receive their own cell's encoded state — a
+boundary→boundary read-out head beside the interior decode), which is
+a first-principles extension, not a hack: the trace of a layer
+potential has an exact local term (the jump relation ±σ/2) that the
+current decode structurally omits.
+
+## 2026-07-09 — sweep harvest: V3 refuted, composition stable at 7 seeds, and the tail gets a name {#sec-nb-sweep-harvest1}
+
+Fourteen sweep verdicts (pooled convention). By hypothesis:
+
+- **V3 (optimization tail) — REFUTED both ways.** LR÷2 at 5 seeds:
+  median u_x 0.023 (no better than full LR) and seed 20 still blows a
+  field (u_x 0.157); LR÷4 (2 seeds): worse medians (0.031–0.032). The
+  members-class tail is not schedule-borne at these settings; the
+  full-LR protocol stands.
+- **Composition at 7 seeds — the flagship arm, stable.** members_pseudo
+  seeds 17–23: median u_x ≈ 0.0157 (range 0.0139–0.0209 excluding one
+  u_y tail event), p 0.0016–0.0032, p_surface 0.0066–0.0148. Reference
+  re-score queued for the four new seeds.
+- **V1 (capacity) — suggestive, incomplete.** members16 s17 posts the
+  best members-class velocity yet (u_x 0.0146) but s18 throws a
+  two-field tail event (0.076); members32 verdicts pending. The
+  capacity-response curve needs its remaining points before any claim.
+- **The anomaly, named for the record**: across ALL members-class arms,
+  ~1 in 4–5 seeds shows a *single-field partial blowup* (u_x at s20,
+  u_y at s21-pseudo, both-u at s18-members16) while the other fields
+  stay healthy. Not schedule (V3), not specific to width or parity.
+  This is now the flagship arm's top reliability question — hypothesis
+  space (member-MLP init variance; hot-phase cosine × member growth;
+  a data-order interaction) to be pre-registered as its own
+  investigation after the V1/V4/V5 verdicts complete the picture.
+
+## 2026-07-09 — the GeoTransolver gap: verdict memo {#sec-nb-geot-gap-verdict}
+
+All pre-registered discriminators (@sec-nb-geot-gap) have run. The
+40× gap decomposes; no single villain, but a clear mechanism and a
+clear owner of the balance.
+
+**Evidence, by discriminator:**
+
+1. *Per-field decomposition* (end-of-training recipe metrics, val):
+   the gap is **uniform** — our relative L2 is 0.70 (pressure) /
+   0.77–0.93 (wss components) vs GeoTransolver's 0.057 / 0.081–0.153.
+   Near-mean prediction on every field. **H-A dead; no single-field
+   bug.**
+2. *Trajectories*: GeoTransolver's val after **one epoch (0.061)
+   already beats our arms after 500 (0.102)**; it reaches 0.0126 by
+   epoch 10 and plateaus at 0.0025 by 200. Training throughput,
+   steps, LR, and schedule are all eliminated — the task is trivially
+   learnable for a per-point-feature architecture and structurally
+   hard for ours. **The bulk of the 40× is representational
+   generalization efficiency (H-C), not optimization.**
+3. *One-case overfit probe* (2000 steps, both LRs; NOTE the caveat:
+   one-case normalization units — floors are NOT comparable to the
+   0.0025 anchor; within-probe comparisons are clean):
+   GeoTransolver floors at **0.070–0.075**; our singpair at
+   **0.141–0.143**; our members arm ~0.135–0.14 (incomplete,
+   ~epoch 1450 at walltime). A real but bounded **~2× single-case
+   expressivity cap** — and members ≈ singpair on ONE case, so the
+   members advantage on full data is *cross-case* structure, not
+   per-case fitting power.
+4. *The trace-branch defect, verified numerically* (the sharpest
+   H-D finding, and it corrected my own wrong analytic guess): the
+   exact double-layer member evaluated AT a query on its own panel
+   returns **−1/2**, while at +ε above the surface it returns
+   **+1/2** — the jump discontinuity sits exactly on every surface
+   query, and the decode serves the **interior-limit branch** to
+   points whose physical values are the exterior trace. No learned
+   coefficient can repair a term that flips sign under infinitesimal
+   displacement; the model's only escape is to suppress its primary
+   exact member at the trace.
+5. *AirFRANS cross-check* (existing archive): the surface-vs-volume
+   pressure penalty is **27–40×** for singpair-class arms and
+   **1.4–2.4×** for members-class — smooth members are what carries
+   the trace when the exact members can't.
+
+**Weight assignment:** H-A and H-E: dead (uniform fields, smooth
+curves, sane probes). **H-D: confirmed as the mechanism** — the trace
+evaluates a discontinuous kernel on its wrong branch, worth ~2× in
+raw single-case expressivity and plausibly a large drag on cross-case
+learning (the wrong-branch self-term is case-geometry-dependent
+structure the model must fight around). **H-C owns the numeric
+balance**: a per-point-feature architecture generalizes surface
+fields across similar geometries almost instantly; our
+boundary→interior operator, pointed at a boundary→boundary task,
+does not. The two are coupled: H-D is *why* our representation is
+inefficient at the trace; H-C is *how much* that costs across cases.
+
+**Consequence — the declared boundary-trace mode (design sketch,
+pre-registered before implementation):** a per-problem declared mode
+for surface tasks, exact structure not a hack:
+
+- *Side-corrected self-terms*: for queries declared to lie ON a
+  source panel, the double-layer self-entry takes the **declared
+  trace side's one-sided limit** (exterior: +1/2·conditioned density
+  + PV integral; the jump relation is textbook potential theory) —
+  replacing the accidental interior branch.
+- *Query identity as declared structure*: trace queries receive a
+  typed read-out of **their own cell's post-attention encoded
+  state** (the boundary solve already computes the trace — Dirichlet
+  data IS the trace on Dirichlet patches; this is the information
+  flow the interior contract rightly denies bare interior points but
+  a declared trace query legitimately owns). Query independence
+  survives: the cell identity is declared input, not inferred from
+  the query set; equivariance survives: the read-out is a typed
+  projection of typed state.
+- *Surface shape*: `trace_of: <boundary>` declared in the recipe
+  template / decode call; interior decode unchanged; default off,
+  bitwise.
+- *Pre-registered acceptance*: on DrivAerML surface, trace-mode
+  singpair beats plain singpair ≥5× on val (the AirFRANS signature
+  bounds the plausible gain); falsifier: no improvement ⇒ the trace
+  defect was cosmetic and H-C owns everything, redirecting effort to
+  representation-level capacity (members/wide/hybrid ladder).
+
+Artifacts: `output/gap_overfit/*` (k8hsg), trajectory parse
+`/tmp/gap_trajectories.py`, self-term check in this entry's text;
+probe protocol in `mt_gap_overfit.sbatch` +
+`datasets/drivaer_ml_surface_1case.yaml`.
+
+## 2026-07-09 — trace mode lands; the acceptance experiment launches {#sec-nb-trace-mode}
+
+The boundary-trace mode is implemented to full standard (457 core +
+165 recipe tests), and the physics came out *cleaner than the memo's
+sketch*: for a query declared on its own flat panel, the double
+layer's principal value is exactly **zero** (n·(x−y) ≡ 0 in the panel
+plane), so the exterior-trace correction is the pure constant **+½**
+— dimension-independent, shape-independent, no geometry gradient.
+Measured before the fix: the closed form's on-centroid diagonal lands
+on *both* signed-zero atan2 branches across panels of the same mesh
+(−½ and +½ mixed) — worse than the investigation's single-branch
+finding; the replacement fixes both. The single layer was verified
+(not assumed) to need no value correction — continuous across its own
+layer, on-panel closed forms already the two-sided limit, pinned
+against analytic circle/sphere traces. Own-cell identity read-outs
+(operator state before drive lift; drive state after the kernel
+message) preserve drive-linearity, declared degree, zero preservation,
+and equivariance — all pinned. The jump-relation tests hit ≤7.5×10⁻¹⁶
+against analytic exterior limits.
+
+**Acceptance experiment launched** (job 4335380): trace-singpair vs
+the existing plain-singpair v2 vehicle arm, matched protocol.
+Pre-registered: ≥5× val improvement = trace mode carries H-D's share;
+falsifier: no improvement ⇒ H-C owns the whole 40× and effort
+redirects to the capacity ladder. Ledger note carried by the build:
+a pre-existing 1-ulp CUDA batch-shape drift in the 3D closed forms at
+larger shapes (flagged, not fixed — out of the build's scope).
+
+## 2026-07-09 — main merged; the mesher comes home upstream {#sec-nb-main-merge}
+
+Peter upstreamed the in-tree quality mesher (PR #1800, landed in
+NVIDIA/physicsnemo main as `tessellation.fill_interior`); the branch
+is now synced (merge commit `0aea56d4`, working tree stash-protected,
+five conflicts all resolved toward upstream) and
+`fem_reference._triangulate` refactored onto the upstream API — the
+rename was mandatory (upstream privatized `delaunay_mesh`), and the
+new path is cleaner: hole nesting auto-resolved by even-odd
+containment (no interior seed points), vertex markers via
+`provenance=True`, boundary sub-segments recovered as once-referenced
+triangle edges (exact by the fill contract). **Quality gate: MMS
+convergence orders under `fill_interior` are 3.073/2.120 — identical
+to the local implementation**, same error sequence. Suites green
+across the board (tessellation 93, FEM/NS 29, mesh_attention incl.
+trace mode 457, calculus under the upstream gradient-layout change
+192). Provenance discipline: the cluster-sync embargo holds until
+E1's generation bands complete under old-mesher provenance; catalogs
+generated after the sync will record `fill_interior (PR #1800)`.

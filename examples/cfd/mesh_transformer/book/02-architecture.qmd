@@ -328,6 +328,34 @@ declared dimensionless input, similarity covariance holds by
 construction. Licensed per problem class, exactly when such a scale is
 physically known; default off.
 
+One declared *mode* extends the decoder to boundary→boundary tasks: the
+**boundary-trace mode** (`trace_of: <boundary>`). A layer potential is
+discontinuous across its own layer — the classical **jump relation**: the
+double layer's exterior and interior traces differ from the principal
+value by $\pm\sigma/2$ — so a query sitting exactly ON a source panel
+receives whichever branch of the discontinuity floating point happens to
+land on (measured on DrivAerML: the *interior* branch $-1/2$, while
+surface pressure and shear are the *exterior* trace $+1/2$; no learned
+coefficient can repair a term that flips sign under infinitesimal
+displacement — the GeoTransolver-gap verdict, @sec-nb-geot-gap-verdict).
+The mode declares that the query mesh IS the named boundary's cell
+centroids, index-aligned, and that declaration licenses exactly two
+changes: the double layer's own-panel entries take the declared exterior
+side's one-sided limit — exactly $+1/2$ in both 2D and 3D, the side the
+cell normals point toward; the on-panel principal value vanishes for flat
+panels, and the single layer needs no value correction because it is
+continuous across the layer (only its normal derivative jumps) — and each
+query gains typed read-outs of its *own* cell's post-attention encoded
+state, the information flow the interior contract rightly denies bare
+interior points but a declared trace query legitimately owns (Dirichlet
+data IS the trace on Dirichlet patches). Equivariance is untouched (the
+read-out is a typed projection of typed state), drive-linearity and zero
+preservation survive (the drive read-out is bias-free and linear), and
+query independence survives as independence *given the declared identity
+map*. Licensed exactly when the queries are the source boundary's own
+cell centroids on a declared side — surface loads on the body that drives
+the flow; default off, bitwise.
+
 Because each query's decode reads only the cached encoding and its own
 position, predictions are **query-independent** — bitwise, by test: asking
 for one point or a million, in any order, gives identical values at shared

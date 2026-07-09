@@ -144,6 +144,28 @@ including one live bug found (and confirmed) during figure generation.
   zero-point misspecification lesson — a contract can be exactly
   enforced and exactly wrong — is on record
   (@sec-stream-factorization).
+- **The GeoTransolver gap is decomposed, and the trace defect is fixed
+  in structure.** The 40$\times$ DrivAerML-surface gap ran its
+  pre-registered discriminators (@sec-nb-geot-gap,
+  @sec-nb-geot-gap-verdict): uniform per-field losses killed H-A/H-E; a
+  one-case overfit bounded the raw expressivity cap at $\sim$2$\times$;
+  and the sharpest finding verified H-D numerically — the exact double
+  layer evaluated AT a query on its own panel returns the **interior**
+  jump branch ($-1/2$) while surface data are the **exterior** trace
+  ($+1/2$ at $+\epsilon$), a sign flip under infinitesimal displacement
+  that no learned coefficient can repair. H-C (representational
+  generalization efficiency) owns the numeric balance; H-D is *why* the
+  representation is inefficient at the trace. The constructive
+  consequence is implemented to core standard: the declared
+  **boundary-trace mode** (`trace_of`) side-corrects the own-panel
+  double-layer entries to the exact exterior one-sided limit (the single
+  layer is continuous and needs none) and gives each query typed
+  read-outs of its own cell's encoded state — jump relation pinned on
+  the analytic circle/sphere case to roundoff, equivariance/linearity/
+  zero-preservation/chunking contracts tested, bitwise-off default, and
+  a matched-protocol recipe arm
+  (`mesh_transformer_surface_trace`, one declared delta by test)
+  (@sec-decoder-role).
 
 **Honestly incomplete:**
 
@@ -175,6 +197,15 @@ including one live bug found (and confirmed) during figure generation.
 - **Product-scale training is gated** on one of the two characterized
   memory fixes — an engineering task, not an open research question,
   but not yet done (@sec-scale).
+- **The trace-mode acceptance experiment is unpaid.** Pre-registered in
+  the verdict memo (@sec-nb-geot-gap-verdict): trace-singpair beats
+  plain singpair $\ge 5\times$ on DrivAerML surface val at matched
+  protocol (the AirFRANS surface-vs-volume signature, 27–40$\times$ for
+  singpair-class arms, bounds the plausible gain). Falsifier: no
+  improvement $\Rightarrow$ the trace defect was cosmetic and H-C owns
+  everything, redirecting effort to the members/wide/hybrid capacity
+  ladder. The arm is ready
+  (`mesh_transformer_surface_trace`); the run is not.
 
 ## The redirected agenda
 
@@ -305,19 +336,13 @@ only after the incident, and a loose analytic bound in a rejection sampler
 fails *silently* as an infinite loop rather than loudly as an error —
 per-surface empirical bounds are the robust default.
 
-**Dead and orphaned code.**
-
-- `icosphere()`'s edge-midpoint helper assigns
-  `edge_midpoint[key] = points.shape[0] + len(new_points) - 1` and
-  immediately overwrites it with the recomputed value on the next line — the
-  first assignment is dead.
-- `_STAR_MODES_OOD` in `laplace3d.py` declares the degree-4 geometry-OOD
-  modes but has no consumer: the 3D study driver that would use it does not
-  exist yet.
-- `solid_angle_influence` — the exact 3D double-layer quadrature — is
-  exported but unused by any model or test. Both are *planned*-use code (the
-  iteration-5 model), but until that model lands they are untested public
-  surface.
+**Dead and orphaned code.** *Closed as stale, 2026-07-07 (review
+execution): the code evolved past all three findings.* The `icosphere()`
+dead assignment is already gone from the source; `_STAR_MODES_OOD` gained
+its consumer when the 3D study driver (`laplace3d_study.py`) landed; and
+`solid_angle_influence` is now consumed at six sites in that driver and
+covered by `test_laplace3d_study.py` (the solid-angle oracle arm runs
+through the study end-to-end). Verified in-source, not from memory.
 
 **Duplication: the panel-influence math exists four times.** The
 subtended-angle singular integral and the entire-order antiderivatives are
@@ -332,30 +357,37 @@ invisible for conjugation-even Dirichlet terms — the exact trap iteration 2
 fell into and documented) that is currently re-explained per file.
 Consolidation into one panel-quadrature helper, with the frame convention
 stated once and the brute-force quadrature tests attached to it, is the
-right refactor once the research surface stabilizes.
+right refactor once the research surface stabilizes. *Status 2026-07-07
+(review execution): deliberately deferred again — the kernel feature
+surface is actively moving (log-radial features, auxiliary scales, and the
+member sweep landed or are in flight this week), which is exactly the
+instability the deferral condition names.*
 
-**Evidence-orphaned defaults.** The pruning study (@sec-pruning) proved that `regular_orders=0`
-plus a single shared relaxation is lossless (identical to four decimals) and
-*better* than the 13-parameter original — yet `HarmonicPanelBIE` still
-defaults to `regular_orders=3, shared_relaxation=False`. The archived runs
-that used the old defaults are reproducible from their recorded configs
-either way; new users get a strictly dominated default. Similarly, the
-refuted-hypothesis machinery in `SelfConsistentPairKernel` (`trace_loss`,
-`kernel_pde_loss`, `tied=False`, the midpoint-quadrature
-`_HarmonicPairKernel` family) remains live, maintained, tested surface. It
-is legitimate as an executable record of the falsification ladder, but it
-should be explicitly frozen (or moved to a clearly-labeled ladder module) so
-its options are not mistaken for recommendations — three of its four flags
-reproduce *refuted* configurations.
+**Evidence-orphaned defaults.** *Closed 2026-07-07 (review execution).*
+`HarmonicPanelBIE` now defaults to the pruning-proved configuration
+(`regular_orders=0`, `shared_relaxation=True`; @sec-pruning showed it
+lossless to four decimals and better than the 13-parameter original), and
+every named arm in `train.py` pins its full historical configuration
+explicitly so the archive's arm names keep building exactly what they
+always built (55 affected example tests green). `SelfConsistentPairKernel`
+carries an explicit FROZEN LADDER RECORD warning in its class docstring —
+its refuted-configuration flags are labeled as the executable falsification
+record, not recommendations, and the module is maintenance-frozen.
 
 **Dead work in the dense hot loop** *(found while
-profiling the scale study, @sec-scale)*. `PairInvariantFeatures` computes
+profiling the scale study, @sec-scale)*. `PairInvariantFeatures` computed
 unconditionally inside the dense $O(N_qN_s)$ decode even when the
-dictionary has no smooth members to consume its output — roughly ten
-dead floats per pair on the flagship singular-only and singpair arms,
-i.e. on precisely the models the emerging architecture keeps. A
-straightforward conditional skip; queued as engineering hygiene, not
-research.
+dictionary had no smooth members to consume its output — roughly ten
+dead floats per pair on the flagship singular-only and singpair arms.
+*Closed 2026-07-07 (review execution): conditional skip landed; a
+regression test pins that the invariants are never computed on
+smooth-member-free dictionaries and still computed on every
+member-carrying one, with the existing singular-only/singpair bitwise
+contract tests passing unchanged across the change (behavioral
+invisibility). Measured effect: $\approx$7% of singpair decode wall-clock
+(upper-bounded via the cheapest forced consumer; CPU fp64,
+$S{=}2048 \times Q{=}8192$) — modest, as the ten-floats-per-pair
+arithmetic predicted against the exact members' closed forms.*
 
 **A latent contract bug, found by de-biasing the test data** *(found
 during the intrinsic-gauge work, @sec-intrinsic-gauge)*. The
@@ -369,14 +401,18 @@ special value of an input is a contract test with a hole in it.
 **Two reference numbers, two banks.** The reference `MeshTransformer` row is
 0.458 on the 64-case reference bank and 0.425 on the 32-case finalist bank.
 Both are correct, both appear in the README, and they are one careless
-citation apart from contradicting each other. A single canonical comparison
-bank (or an explicit cross-reference table) would remove the trap.
+citation apart from contradicting each other. *Closed 2026-07-07 (review
+execution): both README tables now carry an explicit bank-disambiguation
+note naming the other number and its bank; citations should name the bank.*
 
 **Upstream gap worth contributing.** `torch.special.modified_bessel_k0/k1`
 lack autograd derivatives; the iteration-3 custom `Function`s with analytic
 recurrences ($K_0' = -K_1$, $K_1' = -K_0 - K_1/z$) are small,
 nested-derivative-tested, and generally useful — a candidate for
-PhysicsNeMo's utility layer or an upstream PyTorch contribution.
+PhysicsNeMo's utility layer or an upstream PyTorch contribution. *Status
+2026-07-07 (review execution): deferred — placement is a public-API
+decision (physicsnemo utility layer vs upstream PyTorch PR) that belongs
+to Peter; the Functions remain tested where they live.*
 
 ## Standing caveats, restated
 
