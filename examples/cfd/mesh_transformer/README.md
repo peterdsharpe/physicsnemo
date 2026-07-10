@@ -455,7 +455,12 @@ by sample standard deviations across training seeds.
 
 Only the learned Richardson-density candidate passed every early gate. The
 three-seed finalist protocol compares it with the current moment model and the
-minimal dense pair control on the larger common evaluation bank:
+minimal dense pair control on the larger common evaluation bank — the
+**32-case finalist bank**. Bank disambiguation (the engineering review's
+"two reference numbers, two banks" trap): the reference `MeshTransformer`
+reads **0.4251 here on the 32-case finalist bank** and **0.458 on the
+64-case reference bank** used by the reference-configuration table further
+down; both are correct, and every citation should name its bank.
 
 | Model | Parameters | ID L2 | Unseen geometry | Strong deformation | Unseen frequencies | Mode 3 | Mode 4 | Trace | Laplacian |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -593,6 +598,10 @@ saturation. Learned models used 1,000 online updates with seeds 17, 29, and 43;
 all frozen checkpoints were then evaluated on the same fresh 64-case-per-split
 bank (`evaluation_seed=97000037`). Values below are mean ± sample standard
 deviation across training seeds; the parameter-free mean has one replicate.
+(Bank disambiguation: the `MeshTransformer` row reads **0.458 on this
+64-case reference bank** and **0.4251 on the 32-case finalist bank** of the
+finalist-decision table above — two banks, two correct numbers; cite with
+the bank named.)
 
 | Model | Parameters | ID relative L2 | Unseen geometry | Strong deformation | Mixed geometry | Unseen frequencies |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |

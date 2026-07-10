@@ -363,6 +363,50 @@ def test_aux_scale_arm_responds_to_the_declared_viscous_scale(case):
             assert responded is should_respond, arm
 
 
+def test_log_radial_arm_differs_from_members_only_by_the_feature_knob():
+    """H4-L / V4 wiring: the log arm is the members arm plus one knob.
+
+    ``mt_nl_members_log`` must differ from ``mt_nl_members`` -- its
+    pre-registered comparison arm -- by ``kernel_log_radial_features=True``
+    alone (kwargs diff), so the experiment isolates the feature map.
+    Capacity check: the built models carry identical parameter NAMES and
+    differ in size by exactly the member MLP's widened first-layer input
+    (nearly equal totals; the campaign records both in the reports).
+    """
+
+    members_kwargs = airfrans_train._ARM_KWARGS["mt_nl_members"]
+    log_kwargs = airfrans_train._ARM_KWARGS["mt_nl_members_log"]
+    assert {
+        key: value
+        for key, value in log_kwargs.items()
+        if members_kwargs.get(key) != value
+    } == {"kernel_log_radial_features": True}
+    assert set(members_kwargs) - set(log_kwargs) == set()
+
+    torch.manual_seed(6)
+    log_arm = airfrans_train.build_arm("mt_nl_members_log")
+    torch.manual_seed(6)
+    members_arm = airfrans_train.build_arm("mt_nl_members")
+    assert log_arm.kernel_decoder.log_radial_features is True
+    assert members_arm.kernel_decoder.log_radial_features is False
+    assert log_arm.kernel_decoder.mlp_members == 8
+    assert members_arm.kernel_decoder.mlp_members == 8
+    assert log_arm.kernel_auxiliary_scale_key is None
+
+    # Same parameter set; the only shape change is the appended log-radial
+    # input block of the member MLP's first layer.
+    assert list(log_arm.state_dict()) == list(members_arm.state_dict())
+    members_first = members_arm.kernel_decoder.member_mlp[0].weight
+    log_first = log_arm.kernel_decoder.member_mlp[0].weight
+    assert log_first.shape[-1] == 2 * members_first.shape[-1]
+    log_params = sum(p.numel() for p in log_arm.parameters())
+    members_params = sum(p.numel() for p in members_arm.parameters())
+    assert log_params - members_params == (
+        members_first.shape[0] * members_first.shape[-1]
+    )
+    assert (log_params - members_params) / members_params < 0.05
+
+
 def test_normalization_and_metrics_are_finite(catalog):
     device = torch.device("cpu")
     bank = airfrans_train.AirFRANSCaseBank(catalog, device=device)

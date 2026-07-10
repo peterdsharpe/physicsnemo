@@ -29,6 +29,7 @@ linear-mode (or declared-degree) contract.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
@@ -1068,8 +1069,59 @@ class QuadraticFieldReadIn(nn.Module):
         return _add(field, quadratic)
 
 
+def _init_moment_segment_gain(
+    module: nn.Module, n_moment_segments: int, heads: int
+) -> None:
+    """Attach the per-segment moment-pool log-gain parameter (or ``None``).
+
+    ``n_moment_segments == 0`` (the default) registers ``None``: no
+    parameter is created, the state dict is unchanged, and the block is
+    bitwise the historical one.  A positive count creates a zero-initialized
+    ``(n_moment_segments, heads)`` log-gain, so the pooled combination
+    reproduces the plain quadrature sum at initialization (see
+    :meth:`MeshAttention.build_moments`).
+    """
+    if not isinstance(n_moment_segments, int) or isinstance(n_moment_segments, bool):
+        raise TypeError(
+            f"n_moment_segments must be an integer, got {n_moment_segments!r}"
+        )
+    if n_moment_segments < 0:
+        raise ValueError(
+            f"n_moment_segments must be nonnegative, got {n_moment_segments}"
+        )
+    if n_moment_segments:
+        module.moment_segment_log_gain = nn.Parameter(
+            torch.zeros(n_moment_segments, heads)
+        )
+    else:
+        module.register_parameter("moment_segment_log_gain", None)
+
+
+def _moment_segment_gain(
+    module: nn.Module, moment_segments: Sequence[slice] | None
+) -> torch.Tensor | None:
+    """Resolve the log-gain for a forward call, rejecting mismatched use."""
+    if moment_segments is None:
+        return None
+    gain = module.moment_segment_log_gain
+    if gain is None:
+        raise ValueError(
+            f"{type(module).__name__} received moment_segments but was "
+            "constructed with n_moment_segments=0; construct the block with "
+            "the segment count to enable the per-segment moment pool"
+        )
+    return gain
+
+
 class MeshOperatorBlock(nn.Module):
-    """Nonlinear global self-interaction block for operator geometry."""
+    """Nonlinear global self-interaction block for operator geometry.
+
+    ``n_moment_segments`` (default 0: bitwise pre-extension behavior) equips
+    the block with per-segment, per-head moment-pool log-gains; forward
+    calls may then pass ``moment_segments`` (one slice per source segment,
+    e.g. per boundary component) to combine per-segment attention moments
+    through the learned dimensionless gains.
+    """
 
     def __init__(
         self,
@@ -1082,6 +1134,7 @@ class MeshOperatorBlock(nn.Module):
         hidden_ratio: int = 2,
         layer_scale: float = 1.0e-2,
         entity_chunk_size: int | None = 65536,
+        n_moment_segments: int = 0,
     ) -> None:
         super().__init__()
         self.attention_norm = TypedRMSNorm(scalar_dim, vector_dim)
@@ -1111,13 +1164,26 @@ class MeshOperatorBlock(nn.Module):
         self.feed_forward_scale = StateLayerScale(
             scalar_dim, vector_dim, init=layer_scale
         )
+        _init_moment_segment_gain(self, n_moment_segments, heads)
 
-    def forward(self, source_mesh: Mesh, state: ScalarVectorState) -> ScalarVectorState:
+    def forward(
+        self,
+        source_mesh: Mesh,
+        state: ScalarVectorState,
+        moment_segments: Sequence[slice] | None = None,
+    ) -> ScalarVectorState:
         normalized = self.attention_norm(state)
         state = _add(
             state,
             self.attention_scale(
-                self.attention(source_mesh, normalized, normalized, normalized)
+                self.attention(
+                    source_mesh,
+                    normalized,
+                    normalized,
+                    normalized,
+                    segments=moment_segments,
+                    segment_log_gain=_moment_segment_gain(self, moment_segments),
+                )
             ),
         )
         return _add(
@@ -1176,6 +1242,7 @@ class LinearMeshFieldBlock(nn.Module):
         message_layer_scale: float | None = None,
         entity_chunk_size: int | None = 65536,
         field_pseudo_dim: int = 0,
+        n_moment_segments: int = 0,
     ) -> None:
         super().__init__()
         self.field_scalar_dim = field_scalar_dim
@@ -1229,15 +1296,23 @@ class LinearMeshFieldBlock(nn.Module):
             init=layer_scale,
             pseudo_dim=field_pseudo_dim,
         )
+        _init_moment_segment_gain(self, n_moment_segments, heads)
 
     def build_source_moments(
         self,
         source_mesh: Mesh,
         source_geometry: ScalarVectorState,
         source_field: ScalarVectorState,
+        moment_segments: Sequence[slice] | None = None,
     ) -> AttentionMoments:
         """Compress one global source integral for reuse by many queries."""
-        return self.attention.build_moments(source_mesh, source_geometry, source_field)
+        return self.attention.build_moments(
+            source_mesh,
+            source_geometry,
+            source_field,
+            segments=moment_segments,
+            segment_log_gain=_moment_segment_gain(self, moment_segments),
+        )
 
     def evaluate_cross(
         self,
@@ -1262,10 +1337,16 @@ class LinearMeshFieldBlock(nn.Module):
         source_geometry: ScalarVectorState,
         source_field: ScalarVectorState,
         query_field: ScalarVectorState | None = None,
+        moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
         return self.evaluate_cross(
             query_geometry,
-            self.build_source_moments(source_mesh, source_geometry, source_field),
+            self.build_source_moments(
+                source_mesh,
+                source_geometry,
+                source_field,
+                moment_segments=moment_segments,
+            ),
             query_field,
         )
 
@@ -1274,8 +1355,16 @@ class LinearMeshFieldBlock(nn.Module):
         source_mesh: Mesh,
         geometry: ScalarVectorState,
         field: ScalarVectorState,
+        moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
-        return self.cross(source_mesh, geometry, geometry, field, field)
+        return self.cross(
+            source_mesh,
+            geometry,
+            geometry,
+            field,
+            field,
+            moment_segments=moment_segments,
+        )
 
 
 class NonlinearZeroMeshFieldBlock(nn.Module):
@@ -1302,6 +1391,7 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         message_layer_scale: float | None = None,
         entity_chunk_size: int | None = 65536,
         field_pseudo_dim: int = 0,
+        n_moment_segments: int = 0,
     ) -> None:
         super().__init__()
         self.field_scalar_dim = field_scalar_dim
@@ -1356,18 +1446,22 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
             init=layer_scale,
             pseudo_dim=field_pseudo_dim,
         )
+        _init_moment_segment_gain(self, n_moment_segments, heads)
 
     def build_source_moments(
         self,
         source_mesh: Mesh,
         source_geometry: ScalarVectorState,
         source_field: ScalarVectorState,
+        moment_segments: Sequence[slice] | None = None,
     ) -> AttentionMoments:
         """Compress content-dependent source keys and values for query reuse."""
         return self.attention.build_moments(
             source_mesh,
             source_geometry.cat(source_field),
             source_field,
+            segments=moment_segments,
+            segment_log_gain=_moment_segment_gain(self, moment_segments),
         )
 
     def evaluate_cross(
@@ -1406,10 +1500,16 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         source_geometry: ScalarVectorState,
         source_field: ScalarVectorState,
         query_field: ScalarVectorState | None = None,
+        moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
         return self.evaluate_cross(
             query_geometry,
-            self.build_source_moments(source_mesh, source_geometry, source_field),
+            self.build_source_moments(
+                source_mesh,
+                source_geometry,
+                source_field,
+                moment_segments=moment_segments,
+            ),
             query_field,
         )
 
@@ -1418,8 +1518,16 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         source_mesh: Mesh,
         geometry: ScalarVectorState,
         field: ScalarVectorState,
+        moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
-        return self.cross(source_mesh, geometry, geometry, field, field)
+        return self.cross(
+            source_mesh,
+            geometry,
+            geometry,
+            field,
+            field,
+            moment_segments=moment_segments,
+        )
 
 
 __all__ = [

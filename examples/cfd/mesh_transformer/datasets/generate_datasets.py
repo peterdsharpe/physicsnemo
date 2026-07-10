@@ -1154,7 +1154,7 @@ def generate_dataset(
             ),
             "element": "Taylor-Hood P2-P1 triangles",
             "mesher": (
-                "physicsnemo.mesh.tessellation.delaunay_mesh (constrained "
+                "physicsnemo.mesh.tessellation.fill_interior (PR #1800; constrained "
                 "Delaunay + Ruppert refinement, 30 deg min angle, "
                 "max_area = sqrt(3)/4 h^2)"
             ),
@@ -1189,7 +1189,7 @@ def generate_dataset(
             "solver": "fem_reference.solve_dirichlet",
             "element": "P2 triangles",
             "mesher": (
-                "physicsnemo.mesh.tessellation.delaunay_mesh (constrained "
+                "physicsnemo.mesh.tessellation.fill_interior (PR #1800; constrained "
                 "Delaunay + Ruppert refinement, 30 deg min angle, "
                 "max_area = sqrt(3)/4 h^2)"
             ),

@@ -140,6 +140,61 @@ Member dictionary :math:`\varphi`
   declared dimensionless input, the auxiliary invariants are similarity
   invariant exactly like the base ones, and scalar division changes no
   transformation law (no new typed content, no parity change).
+- **Log-radial pair features for the smooth members**
+  (``log_radial_features=True``).  Any power-law auxiliary length scale
+  :math:`\delta=L_{\mathrm{ref}}\,\Pi^\alpha` built from a dimensionless
+  group :math:`\Pi` is LINEAR in log space:
+  :math:`\ln(r/\delta)=\ln r-\alpha\ln\Pi`.  The smooth members already
+  receive dimensionless-group conditioning through the operator-scalar
+  coefficient map (e.g. :math:`\ln\mathrm{Re}` on AirFRANS); this knob
+  additionally hands the pair MLP the radial coordinate in the same log
+  space -- ``ln(a + eps)`` (with :math:`a=\lVert r\rVert^2`, so
+  :math:`\ln a=2\ln\lVert r\rVert` linearizes every radial power law) --
+  together with the scale-free normalized alignments ``b / sqrt(a + eps)``
+  (bounded, cosine-like) and ``v_c . r / sqrt(a + eps)``, which decouple
+  angular content from radial magnitude so the MLP need not disentangle
+  them multiplicatively.  ANY power-law scale thereby becomes learnable:
+  no declared exponent, no semantically named input, PDE-general.
+  HISTORY (H4 -> H4-L, the pre-registered V4 follow-up): the
+  declared-viscous-scale contract above (``auxiliary_scale`` with
+  :math:`\lambda=\mathrm{Re}^{-1/2}`) was REFUTED by its own capacity
+  control -- plain MLP members beat the declared arm ~6x on AirFRANS
+  velocity -- and the declaration self-sabotaged numerically by feeding
+  the MLP invariants divided by :math:`\lambda\sim5\times10^{-4}`
+  (features scaled by ~4e6).  The refuted knob stays runnable; this knob
+  keeps the winning members and makes the scale a learnable exponent in
+  log space instead of a declared ratio.  Parity and similarity: all
+  three features are similarity invariant in the normalized frame exactly
+  like their parents (elementwise ``log`` and division by the even,
+  positive ``sqrt(a + eps)`` change no transformation law) and
+  parity-typed identically -- ``ln(a + eps)`` is even like :math:`a`;
+  the normalized alignments are odd in the normal and in :math:`v_c`
+  exactly like :math:`b` and :math:`v_c\cdot r`.  ``eps`` is the fixed
+  tiny constant :data:`_LOG_RADIAL_EPS`: :math:`a` is a normalized-frame
+  gauge quantity of order one, and a query has :math:`a=0` only at
+  measure-zero coincidence with a source centroid (on-panel queries are
+  otherwise finite), so the floor only guards the log there.  Only the
+  learned smooth members read the block (``mlp_members > 0`` required);
+  it composes freely with ``auxiliary_scale`` as an independent appended
+  feature block (the MLP input widths add).
+
+Declared boundary-trace self-entries
+------------------------------------
+
+For boundary-to-boundary tasks the caller may declare, per decode call
+(``self_indices`` in :meth:`KernelBasisCrossDecoder.forward`), that query
+``i`` lies ON source panel ``self_indices[i]``.  The exact double-layer
+member is discontinuous across its own panel -- the jump relation of
+potential theory -- and evaluated exactly on the panel its closed form
+returns an accidental signed-zero branch of ``atan2`` rather than the
+principal value; with the declaration, the own-panel entries are replaced
+by the exact one-sided limit of the declared trace side
+(:func:`exterior_trace_self_entries` carries the full jump-relation
+analysis, including why the single-layer member needs no value
+correction).  The model-level declaration is
+:class:`~physicsnemo.experimental.nn.mesh_attention.model.MeshTransformer`'s
+``trace_of``.  The default ``self_indices=None`` is bitwise identical to
+the pre-extension decoder.
 
 The coefficients :math:`C_{mh}` are a linear map of each source token's
 operator-state invariants (scalars plus vector Gram invariants), so the
@@ -192,6 +247,14 @@ from .block import StateLayerScale
 
 _TWO_PI = 2.0 * math.pi
 _FOUR_PI = 4.0 * math.pi
+
+#: Additive floor inside the log-radial features' ``log`` and ``sqrt``
+#: arguments.  ``a`` lives in the model's normalized frame (gauge units of
+#: order one), so a fixed tiny constant -- representable in both fp32 and
+#: fp64 -- is scale-appropriate; it matters only at the measure-zero
+#: coincidence of a query point with a source centroid, where it guards the
+#: log without perturbing any resolvable pair.
+_LOG_RADIAL_EPS = 1.0e-24
 
 #: Boundary cell vertex counts admitting an exact double-layer member.
 _EXACT_MEMBER_VERTICES = {2: 2, 3: 3}
@@ -271,6 +334,31 @@ class PairInvariantFeatures:
     exactly like the base block, and scalar division preserves every
     transformation law (no new typed content).  At :math:`\lambda=1` the
     auxiliary block equals the base block bitwise.
+
+    With ``log_radial=True`` passed to :meth:`compute`, a log-radial block
+    of the SAME invariants is additionally stored,
+
+    .. math::
+
+       \ln(a+\epsilon),\qquad
+       b/\sqrt{a+\epsilon},\qquad
+       v_c\cdot r/\sqrt{a+\epsilon},
+
+    with :math:`\epsilon` the fixed floor :data:`_LOG_RADIAL_EPS`.
+    :math:`\ln a=2\ln\lVert r\rVert` makes every radial power law -- and
+    hence any power-law auxiliary scale,
+    :math:`\ln(r/(L_{\mathrm{ref}}\Pi^\alpha))=\ln r-\alpha\ln\Pi` for a
+    dimensionless group :math:`\Pi` -- a LINEAR function of features the
+    smooth-member MLP sees, while the normalized alignments carry the
+    angular content scale-free (bounded: :math:`|b|\le\lVert r\rVert` for
+    a unit normal), so the MLP need not disentangle angle from radius
+    multiplicatively.  Parity typing follows the parents exactly:
+    :math:`\ln(a+\epsilon)` is even like :math:`a`; the normalized
+    alignments are odd in the normal and in :math:`v_c` exactly like
+    :math:`b` and :math:`v_c\cdot r` (division by the even, positive
+    :math:`\sqrt{a+\epsilon}` changes no transformation law), and every
+    entry is similarity invariant in the normalized frame like the base
+    block.
     """
 
     squared_distance: torch.Tensor  # (Q, S)
@@ -281,6 +369,11 @@ class PairInvariantFeatures:
     auxiliary_squared_distance: torch.Tensor | None = None  # (Q, S)
     auxiliary_normal_alignment: torch.Tensor | None = None  # (Q, S)
     auxiliary_vector_alignments: torch.Tensor | None = None  # (Q, S, C)
+    # Log-radial feature block; ``None`` unless ``compute`` was asked for it
+    # (``log_radial=True``), which keeps older callers bitwise untouched.
+    log_squared_distance: torch.Tensor | None = None  # (Q, S)
+    normalized_normal_alignment: torch.Tensor | None = None  # (Q, S)
+    normalized_vector_alignments: torch.Tensor | None = None  # (Q, S, C)
 
     @classmethod
     def compute(
@@ -290,6 +383,7 @@ class PairInvariantFeatures:
         source_normals: torch.Tensor,
         source_vectors: torch.Tensor,
         auxiliary_scale: torch.Tensor | None = None,
+        log_radial: bool = False,
     ) -> "PairInvariantFeatures":
         """Build the per-pair invariants for one query chunk."""
         if query_points.ndim != 2 or source_centroids.ndim != 2:
@@ -328,19 +422,34 @@ class PairInvariantFeatures:
                 auxiliary_normal_alignment=normal_alignment / auxiliary_scale,
                 auxiliary_vector_alignments=vector_alignments / auxiliary_scale,
             )
+        log_radial_kwargs = {}
+        if log_radial:
+            # Elementwise per-pair maps of the invariants computed above: no
+            # batch-shape-dependent reduction is introduced, so the bitwise
+            # query-set-independence contract is untouched, and negating a
+            # parent (normal or state vector) negates its normalized child
+            # exactly (IEEE negation and division are sign-exact).
+            radius = torch.sqrt(squared_distance + _LOG_RADIAL_EPS)
+            log_radial_kwargs = dict(
+                log_squared_distance=torch.log(squared_distance + _LOG_RADIAL_EPS),
+                normalized_normal_alignment=normal_alignment / radius,
+                normalized_vector_alignments=vector_alignments / radius.unsqueeze(-1),
+            )
         return cls(
             squared_distance=squared_distance,
             normal_alignment=normal_alignment,
             vector_alignments=vector_alignments,
             **auxiliary_kwargs,
+            **log_radial_kwargs,
         )
 
     def stacked(self) -> torch.Tensor:
         """Return all invariants stacked as ``(Q, S, F)`` features.
 
-        ``F`` is ``2 + C`` without an auxiliary scale and ``2 * (2 + C)``
-        with one: the auxiliary block is appended AFTER the base block in
-        the same ``(a, b, alignments)`` order.
+        The base block contributes ``2 + C`` features; the auxiliary block
+        (when present) appends another ``2 + C`` AFTER it, and the
+        log-radial block (when present) appends a final ``2 + C`` after
+        every other block, each in the same ``(a, b, alignments)`` order.
         """
         parts = [
             self.squared_distance.unsqueeze(-1),
@@ -353,6 +462,14 @@ class PairInvariantFeatures:
                     self.auxiliary_squared_distance.unsqueeze(-1),
                     self.auxiliary_normal_alignment.unsqueeze(-1),
                     self.auxiliary_vector_alignments,
+                )
+            )
+        if self.log_squared_distance is not None:
+            parts.extend(
+                (
+                    self.log_squared_distance.unsqueeze(-1),
+                    self.normalized_normal_alignment.unsqueeze(-1),
+                    self.normalized_vector_alignments,
                 )
             )
         return torch.cat(parts, dim=-1)
@@ -637,6 +754,80 @@ def exact_single_layer_member(
     return _triangle_single_layer_member(query_points, panel_vertices)
 
 
+def exterior_trace_self_entries(
+    double_layer: torch.Tensor,
+    self_indices: torch.Tensor,
+) -> torch.Tensor:
+    r"""Replace declared own-panel double-layer entries with the exterior trace.
+
+    ``double_layer`` is a ``(Q, S)`` matrix from
+    :func:`exact_double_layer_member`; ``self_indices`` is a ``(Q,)``
+    ``torch.long`` tensor declaring that query ``i`` lies ON source panel
+    ``self_indices[i]``.  The returned matrix equals the input everywhere
+    except the declared entries ``(i, self_indices[i])``, which are set to
+    exactly ``+1/2`` -- the one-sided limit of the own-panel integral from
+    the side the supplied cell normal points toward.
+
+    **The jump relation, in this decoder's normalization.**  The
+    cell-integrated double layer :math:`\int_{P}\partial G/\partial n_y\,ds`
+    (rows sum to :math:`-1` at interior points of a closed outward-oriented
+    boundary; Gauss) is discontinuous exactly across its own panel.  For a
+    FLAT panel (2D straight segment or 3D flat triangle) the on-panel
+    principal value of the own-panel integral is exactly zero
+    (:math:`n\cdot(x-y)\equiv 0` for :math:`x, y` in the panel's own
+    plane), and the two one-sided limits are exactly :math:`\pm 1/2`
+    independent of panel shape, size, and ambient dimension: the panel
+    subtends the half angle :math:`\pi` of :math:`2\pi` (2D) or the half
+    solid angle :math:`2\pi` of :math:`4\pi` (3D) from a point approaching
+    its own interior, with the sign :math:`+1/2` on the side the supplied
+    normal points toward (:math:`n\cdot(x-y)>0` there).  Equivalently, by
+    the Gauss bookkeeping on a closed outward boundary: the smooth-point
+    principal-value row sum is :math:`-1/2`, so the own-panel exterior
+    limit is :math:`0-(-1/2)=+1/2` and the interior limit
+    :math:`-1-(-1/2)=-1/2`.
+
+    **Why a replacement is needed at all.**  Evaluated exactly ON the
+    panel, the closed forms do not return the principal value: the
+    ``atan2`` argument pair degenerates to ``(signed zero, negative)``, so
+    the member lands on an accidental :math:`\pm 1/2` branch decided by
+    floating-point sign bits (measured on the DrivAerML surface task: the
+    INTERIOR branch, while the physical surface values are the exterior
+    trace -- the GeoTransolver-gap verdict's H-D mechanism).  No learned
+    coefficient can repair a term that flips sign under infinitesimal
+    displacement; the declared replacement serves the correct branch
+    exactly.  Because the limit is the constant :math:`+1/2` for any flat
+    panel, the replaced entries carry zero geometry gradient -- which is
+    also the analytically correct sensitivity.
+
+    **Why the single layer receives no correction.**  The single-layer
+    potential is continuous across its own layer -- its VALUE has no jump
+    (only its normal derivative jumps, by minus the density), and the
+    exact closed forms in :func:`exact_single_layer_member` are finite on
+    the panel and already evaluate the common two-sided limit, in both 2D
+    and 3D.  Smooth (polynomial and MLP) members are continuous functions
+    of the pair invariants and are likewise untouched.
+
+    The replacement writes one entry per query row from that row's own
+    declared index, so the bitwise query-set-independence contract is
+    preserved (each row's arithmetic never reads another row).
+    """
+    if double_layer.ndim != 2:
+        raise ValueError(
+            f"double_layer must have shape (Q, S), got {tuple(double_layer.shape)}"
+        )
+    if self_indices.ndim != 1 or self_indices.shape[0] != double_layer.shape[0]:
+        raise ValueError(
+            "self_indices must have shape (Q,) matching the query count, got "
+            f"{tuple(self_indices.shape)} for {double_layer.shape[0]} queries"
+        )
+    if self_indices.dtype != torch.long:
+        raise ValueError(
+            f"self_indices must be a torch.long index tensor, got {self_indices.dtype}"
+        )
+    rows = torch.arange(double_layer.shape[0], device=double_layer.device)
+    return double_layer.index_put((rows, self_indices), double_layer.new_full((), 0.5))
+
+
 @dataclass(frozen=True)
 class KernelDecoderCache:
     r"""Source-side quantities cached by ``encode`` for kernel decoding.
@@ -739,6 +930,33 @@ class KernelBasisCrossDecoder(nn.Module):
         already :math:`L_{\mathrm{ref}}`-normalized and :math:`\lambda` is
         dimensionless.  Default ``False`` adds no parameters and is bitwise
         identical to the pre-extension decoder (state dict and outputs).
+    log_radial_features : bool
+        Append the log-radial pair-feature block -- ``ln(a + eps)`` and the
+        scale-free normalized alignments ``b / sqrt(a + eps)`` and
+        ``v_c . r / sqrt(a + eps)``, with ``eps`` the fixed floor
+        :data:`_LOG_RADIAL_EPS` -- AFTER every other block of the
+        smooth-member MLP input (whose width grows by one base-block copy).
+        PHYSICS LICENSE: a power-law auxiliary scale
+        :math:`\delta=L_{\mathrm{ref}}\,\Pi^\alpha` is linear in log space
+        (:math:`\ln(r/\delta)=\ln r-\alpha\ln\Pi`), so with the
+        dimensionless-group conditioning the members already receive
+        through the coefficient map, ``ln a`` makes ANY power-law scale
+        learnable -- no declared exponent, no semantic naming, PDE-general.
+        This is the pre-registered follow-up (H4-L / V4) to the REFUTED
+        declared-scale experiment above: ``auxiliary_scale`` with
+        :math:`\lambda=\mathrm{Re}^{-1/2}` lost to its own plain-member
+        capacity control ~6x on AirFRANS velocity (see the module
+        docstring), so the exponent becomes learnable structure instead of
+        a declaration.  The block feeds ONLY the learned smooth members,
+        hence ``mlp_members > 0`` is required (no carrier otherwise --
+        mirroring ``auxiliary_scale``); it composes freely with
+        ``auxiliary_scale`` as an independent feature block (widths add).
+        Every feature is similarity invariant in the normalized frame and
+        parity-typed identically to its parent (``ln(a + eps)`` even like
+        ``a``; the normalized alignments odd in the normal and state
+        vector exactly like ``b`` and ``v . r``).  Default ``False`` adds
+        no parameters and is bitwise identical to the pre-extension
+        decoder (state dict and outputs).
     mlp_members : int
         Number of learned smooth dictionary members produced by the pair MLP.
     mlp_hidden_dim : int
@@ -786,6 +1004,7 @@ class KernelBasisCrossDecoder(nn.Module):
         include_single_layer_member: bool = False,
         monopole_free_single_layer: bool = False,
         auxiliary_scale: bool = False,
+        log_radial_features: bool = False,
         mlp_members: int = 8,
         mlp_hidden_dim: int = 48,
         query_chunk_size: int = 2048,
@@ -808,6 +1027,8 @@ class KernelBasisCrossDecoder(nn.Module):
             raise ValueError("monopole_free_single_layer must be a bool")
         if not isinstance(auxiliary_scale, bool):
             raise ValueError("auxiliary_scale must be a bool")
+        if not isinstance(log_radial_features, bool):
+            raise ValueError("log_radial_features must be a bool")
         if not isinstance(checkpoint_query_chunks, bool):
             raise ValueError("checkpoint_query_chunks must be a bool")
         if monopole_free_single_layer and not include_single_layer_member:
@@ -824,6 +1045,14 @@ class KernelBasisCrossDecoder(nn.Module):
                 "smooth-member MLP (the exact singular and polynomial members "
                 "never read them), so without MLP members the declared scale "
                 "has no carrier"
+            )
+        if log_radial_features and mlp_members == 0:
+            raise ValueError(
+                "log_radial_features=True requires mlp_members > 0: the "
+                "log-radial pair features feed only the learned "
+                "smooth-member MLP (the exact singular and polynomial "
+                "members never read them), so without MLP members the "
+                "features have no carrier"
             )
         # The two vector channel counts may be zero independently: a
         # vector-less operator state simply contributes no pair alignments or
@@ -865,6 +1094,7 @@ class KernelBasisCrossDecoder(nn.Module):
         self.include_single_layer_member = include_single_layer_member
         self.monopole_free_single_layer = monopole_free_single_layer
         self.auxiliary_scale = auxiliary_scale
+        self.log_radial_features = log_radial_features
         self.mlp_members = mlp_members
         # Members: exact double layer, exact single layer (optional),
         # polynomial {1, b, a} (optional), learned MLP.
@@ -899,6 +1129,12 @@ class KernelBasisCrossDecoder(nn.Module):
             # doubles the smooth-member MLP's input width; nothing else in
             # the decoder reads the auxiliary invariants.
             pair_features *= 2
+        if log_radial_features:
+            # The log-radial block appends one more base-width copy of the
+            # pair invariants (ln a, b/sqrt a, v.r/sqrt a) after every other
+            # block; nothing else in the decoder reads it, and it composes
+            # with the auxiliary block as independent widths.
+            pair_features += 2 + self._pair_vector_channels()
         final = _RowStableLinear(mlp_hidden_dim, mlp_members, bias=False)
         # Small final-layer initialization: the learned smooth members start
         # near zero while the exact and polynomial members carry the initial
@@ -1090,28 +1326,56 @@ class KernelBasisCrossDecoder(nn.Module):
         self,
         query_points: torch.Tensor,
         cache: KernelDecoderCache,
+        self_indices: torch.Tensor | None = None,
     ) -> ScalarVectorState:
         # Geometry-derived pair quantities keep the input geometry precision
         # even under an ambient autocast scope: the exact member and the
         # invariants are numerical mesh operations, not learned layers.
         device_type = query_points.device.type
+        # Pair invariants feed only the smooth members (polynomial and MLP).
+        # On the singular-only and singpair arms neither exists, and the
+        # dense O(Q x S) invariant tensors were measured dead work in the
+        # decode hot loop (engineering review, "dead work in the dense hot
+        # loop") -- skip them entirely; the exact members never read them.
+        needs_pair_features = (
+            self.member_mlp is not None or self.include_polynomial_members
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            features = PairInvariantFeatures.compute(
-                query_points,
-                cache.centroids,
-                cache.normals,
-                cache.pair_vectors,
-                # The declared auxiliary scale reaches only the pair
-                # invariants' auxiliary block (and through it only the
-                # smooth-member MLP below); the exact singular members and
-                # polynomial members never read it.
-                auxiliary_scale=(
-                    cache.auxiliary_scale if self.auxiliary_scale else None
-                ),
+            features = (
+                PairInvariantFeatures.compute(
+                    query_points,
+                    cache.centroids,
+                    cache.normals,
+                    cache.pair_vectors,
+                    # The declared auxiliary scale reaches only the pair
+                    # invariants' auxiliary block (and through it only the
+                    # smooth-member MLP below); the exact singular members and
+                    # polynomial members never read it.
+                    auxiliary_scale=(
+                        cache.auxiliary_scale if self.auxiliary_scale else None
+                    ),
+                    # The log-radial block is derived elementwise from the same
+                    # chunk quantities (no new cache tensor, no new checkpoint
+                    # argument) and likewise reaches only the smooth-member MLP.
+                    log_radial=self.log_radial_features,
+                )
+                if needs_pair_features
+                else None
             )
             singular = exact_double_layer_member(
                 query_points, cache.panel_vertices, cache.normals
-            ).unsqueeze(-1)
+            )
+            if self_indices is not None:
+                # Declared boundary-trace queries: the closed form lands on
+                # an accidental signed-zero branch of the jump discontinuity
+                # at its own panel; replace the (query, own panel) entries
+                # with the exact exterior one-sided limit +1/2 (see
+                # exterior_trace_self_entries for the jump relation).  The
+                # single-layer member below is continuous across the
+                # boundary -- only its normal derivative jumps -- so its
+                # value needs, and receives, no correction.
+                singular = exterior_trace_self_entries(singular, self_indices)
+            singular = singular.unsqueeze(-1)
             if self.include_single_layer_member:
                 # Second exact singular member: the single layer never reads
                 # the cell normals (orientation independent, unlike the
@@ -1236,6 +1500,7 @@ class KernelBasisCrossDecoder(nn.Module):
         self,
         query_points: torch.Tensor,
         cache: KernelDecoderCache,
+        self_indices: torch.Tensor | None = None,
     ) -> ScalarVectorState:
         # Autograd connects only through tensors passed as explicit
         # checkpoint arguments, so the cache is unpacked here and rebuilt
@@ -1245,9 +1510,11 @@ class KernelBasisCrossDecoder(nn.Module):
         # the recomputation is deterministic without the state round-trip.
         # The optional cache fields (pseudo values, declared auxiliary
         # scale) ride through the same explicit argument packing so their
-        # gradients survive checkpointing.
+        # gradients survive checkpointing; the declared trace indices are
+        # gradient-free integers but ride the same packing for uniformity.
         has_pseudos = cache.value_pseudos is not None
         has_auxiliary = cache.auxiliary_scale is not None
+        has_self_indices = self_indices is not None
 
         def run(
             points: torch.Tensor,
@@ -1276,6 +1543,7 @@ class KernelBasisCrossDecoder(nn.Module):
                     value_pseudos=extras.pop(0) if has_pseudos else None,
                     auxiliary_scale=extras.pop(0) if has_auxiliary else None,
                 ),
+                self_indices=extras.pop(0) if has_self_indices else None,
             )
             return message.scalars, message.vectors, message.pseudos
 
@@ -1294,6 +1562,8 @@ class KernelBasisCrossDecoder(nn.Module):
             tensors = tensors + (cache.value_pseudos,)
         if has_auxiliary:
             tensors = tensors + (cache.auxiliary_scale,)
+        if has_self_indices:
+            tensors = tensors + (self_indices,)
         scalars, vectors, out_pseudos = torch.utils.checkpoint.checkpoint(
             run,
             *tensors,
@@ -1306,8 +1576,21 @@ class KernelBasisCrossDecoder(nn.Module):
         self,
         query_points: torch.Tensor,
         cache: KernelDecoderCache,
+        self_indices: torch.Tensor | None = None,
     ) -> ScalarVectorState:
-        """Evaluate the dense pair-kernel message at independent query points."""
+        """Evaluate the dense pair-kernel message at independent query points.
+
+        ``self_indices`` (optional, ``(Q,)`` ``torch.long``) declares that
+        query ``i`` lies ON source panel ``self_indices[i]``: the exact
+        double-layer member's own-panel entries are then replaced by the
+        exterior one-sided limit of the jump relation (see
+        :func:`exterior_trace_self_entries`; the single-layer member is
+        continuous across the boundary and is untouched).  The default
+        ``None`` is bitwise identical to the pre-extension decode.  Query
+        independence becomes independence *given the declared identity
+        map*: each row still never reads another row, and chunking remains
+        a pure memory control.
+        """
         if query_points.ndim != 2 or query_points.shape[-1] != self.n_spatial_dims:
             raise ValueError(
                 f"query_points must have shape (Q, {self.n_spatial_dims}), got "
@@ -1347,6 +1630,36 @@ class KernelBasisCrossDecoder(nn.Module):
                 "auxiliary-scale contract"
             )
         n_queries = query_points.shape[0]
+        if self_indices is not None:
+            if (
+                not isinstance(self_indices, torch.Tensor)
+                or self_indices.ndim != 1
+                or self_indices.dtype != torch.long
+            ):
+                raise ValueError(
+                    "self_indices must be a 1-D torch.long tensor of declared "
+                    "own-panel source indices, one per query point"
+                )
+            if self_indices.shape[0] != n_queries:
+                raise ValueError(
+                    f"self_indices declares {self_indices.shape[0]} own-panel "
+                    f"indices for {n_queries} query points; the boundary-trace "
+                    "declaration requires exactly one source cell per query"
+                )
+            if self_indices.device != query_points.device:
+                raise ValueError("self_indices must share the query device")
+            n_sources = cache.coefficients.shape[0]
+            if (
+                not torch.compiler.is_compiling()
+                and n_queries
+                and (
+                    int(self_indices.min()) < 0 or int(self_indices.max()) >= n_sources
+                )
+            ):
+                raise ValueError(
+                    "self_indices must index the cached source cells "
+                    f"[0, {n_sources}); got values outside that range"
+                )
         if n_queries == 0:
             return ScalarVectorState.zeros(
                 0,
@@ -1365,7 +1678,13 @@ class KernelBasisCrossDecoder(nn.Module):
             else self._evaluate_chunk
         )
         outputs = [
-            evaluate(query_points[start : start + self.query_chunk_size], cache)
+            evaluate(
+                query_points[start : start + self.query_chunk_size],
+                cache,
+                None
+                if self_indices is None
+                else self_indices[start : start + self.query_chunk_size],
+            )
             for start in range(0, n_queries, self.query_chunk_size)
         ]
         if len(outputs) == 1:
@@ -1476,4 +1795,5 @@ __all__ = [
     "PairInvariantFeatures",
     "exact_double_layer_member",
     "exact_single_layer_member",
+    "exterior_trace_self_entries",
 ]

@@ -161,6 +161,13 @@ class Laplace3DSample:
     target: torch.Tensor
     bc_types: dict[str, str]  # boundary name -> {dirichlet, neumann, robin}
     tier: str
+    # The exterior point charges generating the exact field, exposed so
+    # documentation and diagnostics can evaluate the closed-form solution
+    # at arbitrary points (e.g. exact planar sections) instead of
+    # interpolating scattered query samples.  ``None`` on samples built by
+    # older callers; the builder always populates them.
+    charges: torch.Tensor | None = None
+    charge_positions: torch.Tensor | None = None
 
 
 def _potential_and_gradient(
@@ -360,6 +367,8 @@ def build_laplace3d_sample(
         target=target.to(device=device, dtype=dtype),
         bc_types=bc_types,
         tier=tier,
+        charges=charges.to(device=device, dtype=dtype),
+        charge_positions=positions.to(device=device, dtype=dtype),
     )
 
 

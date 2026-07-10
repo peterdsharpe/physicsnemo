@@ -33,6 +33,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+    _LOG_RADIAL_EPS,
     PairInvariantFeatures,
     exact_double_layer_member,
     exact_single_layer_member,
@@ -2380,6 +2381,494 @@ def test_auxiliary_scale_similarity_contract(device):
     torch.testing.assert_close(transformed, original, rtol=2.0e-10, atol=2.0e-11)
 
 
+# ---------------------------------------------------------------------------
+# Log-radial pair features: learnable power-law kernel scales (H4-L / V4).
+# Lineage (book/10-notebook.qmd @sec-nb-h4-verdict): the declared-viscous-
+# scale contract above was REFUTED by its own capacity control -- plain MLP
+# members beat the declared arm ~6x on AirFRANS velocity.  The pre-registered
+# follow-up (@sec-nb-velocity-sweep, V4): a power-law scale r/(L Pi^alpha) is
+# LINEAR in log space (ln r - alpha ln Pi), so log-radial pair features plus
+# the dimensionless-group conditioning the members already receive make ANY
+# power-law scale learnable -- no declared exponent, no semantic naming,
+# PDE-general.
+# ---------------------------------------------------------------------------
+
+
+def test_log_radial_knob_default_is_bitwise_noop(device):
+    """Explicitly passing the default knob must not change anything.
+
+    Mirrors ``test_polynomial_member_knob_default_is_bitwise_noop``: with
+    ``kernel_log_radial_features=False`` spelled out, same seed gives the
+    same parameter tensors in the same order and bitwise identical outputs.
+    """
+    reference = _disk_model("kernel", device, seed=379)
+    explicit = _disk_model("kernel", device, seed=379, kernel_log_radial_features=False)
+    assert reference.kernel_decoder.log_radial_features is False
+    assert explicit.kernel_decoder.log_radial_features is False
+
+    reference_state = reference.state_dict()
+    explicit_state = explicit.state_dict()
+    assert list(reference_state) == list(explicit_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(explicit_state[name], expected, rtol=0.0, atol=0.0)
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(380)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+    with torch.no_grad():
+        expected = reference(domain).point_data["potential"]
+        actual = explicit(domain).point_data["potential"]
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+
+
+def test_log_radial_decoder_default_is_bitwise_noop(device):
+    """The decoder-level knob default must also be a bitwise no-op.
+
+    Same seed, explicit ``log_radial_features=False`` versus the unstated
+    default: identical parameter tensors in the same order (the knob at its
+    default adds no parameters and leaves the MLP input width alone) and
+    bitwise identical messages from the same cache.
+    """
+    reference = _aux_decoder(
+        device, seed=381, auxiliary_scale=False, log_radial_features=False
+    )
+    torch.manual_seed(381)
+    from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+        LinearKernelBasisCrossDecoder,
+    )
+
+    implicit = LinearKernelBasisCrossDecoder(
+        n_spatial_dims=2,
+        operator_scalar_dim=3,
+        operator_vector_dim=2,
+        drive_scalar_dim=4,
+        drive_vector_dim=2,
+        heads=2,
+        mlp_members=4,
+        mlp_hidden_dim=8,
+        auxiliary_scale=False,
+    ).to(device=device, dtype=torch.float64)
+    implicit.accumulation_dtype = torch.float64
+    assert reference.log_radial_features is False
+    assert implicit.log_radial_features is False
+    # Base pair-feature width: 2 + operator_vector_dim, unextended.
+    assert reference.member_mlp[0].weight.shape[-1] == 2 + 2
+
+    reference_state = reference.state_dict()
+    implicit_state = implicit.state_dict()
+    assert list(reference_state) == list(implicit_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(implicit_state[name], expected, rtol=0.0, atol=0.0)
+
+    mesh, operator, drive = _aux_decoder_states(device, seed=382)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.7, -0.4], [1.5, 0.6]], dtype=torch.float64
+    ).to(device)
+    with torch.no_grad():
+        expected = reference(
+            queries, reference.build_source_cache(mesh, operator, drive)
+        )
+        actual = implicit(queries, implicit.build_source_cache(mesh, operator, drive))
+    torch.testing.assert_close(actual.scalars, expected.scalars, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(actual.vectors, expected.vectors, rtol=0.0, atol=0.0)
+
+
+def test_log_radial_validation_errors(device):
+    """The carrier and decoder-mode rules are validated with clear errors."""
+    base = dict(
+        n_spatial_dims=2,
+        output_field_ranks={"potential": 0},
+        boundary_field_ranks={"disk": {"drive": {"boundary_value": 0}}},
+    )
+    # The moment decoder has no dense pair features to extend.
+    with pytest.raises(ValueError, match="requires query_decoder='kernel'"):
+        MeshTransformer(**base, query_decoder="moment", kernel_log_radial_features=True)
+    # Without MLP members the log-radial features have no carrier.
+    with pytest.raises(ValueError, match="requires mlp_members > 0"):
+        MeshTransformer(
+            **base,
+            query_decoder="kernel",
+            kernel_log_radial_features=True,
+            kernel_mlp_members=0,
+        )
+    # Decoder level: the same carrier rule, and the knob must be a bool.
+    with pytest.raises(ValueError, match="log_radial_features must be a bool"):
+        _aux_decoder(device, seed=383, auxiliary_scale=False, log_radial_features=1)
+    with pytest.raises(ValueError, match="requires mlp_members > 0"):
+        _aux_decoder(
+            device,
+            seed=383,
+            auxiliary_scale=False,
+            log_radial_features=True,
+            mlp_members=0,
+        )
+
+
+def test_log_radial_features_linearize_and_type_like_their_parents(device):
+    """Exact feature values, and parity typed identically to the parents.
+
+    Direct :class:`PairInvariantFeatures` inspection, all claims bitwise:
+
+    - values equal the declared formulas ``ln(a + eps)``,
+      ``b / sqrt(a + eps)``, ``v.r / sqrt(a + eps)`` with the module's
+      fixed ``eps`` (``ln a = 2 ln|r|``, so any radial power law -- and
+      hence any power-law scale ``ln(r / (L Pi^alpha)) = ln r - alpha
+      ln Pi`` -- is a linear function of what the member MLP sees);
+    - the base block is untouched and the block is appended LAST;
+    - flipping the normals negates ``b / sqrt(a + eps)`` exactly as it
+      negates ``b`` and leaves the even ``ln(a + eps)`` untouched;
+      flipping the state vectors negates only their alignments (IEEE
+      negation and division are sign-exact, so these hold bitwise);
+    - a joint axis reflection of ALL geometry and vectors leaves every
+      entry unchanged bitwise (an axis flip is exact negation and the
+      invariants pair the sign flips away).
+    """
+    generator = torch.Generator().manual_seed(389)
+    queries = torch.randn(5, 2, generator=generator, dtype=torch.float64).to(device)
+    centroids = torch.randn(7, 2, generator=generator, dtype=torch.float64).to(device)
+    normals = torch.randn(7, 2, generator=generator, dtype=torch.float64)
+    normals = (normals / normals.norm(dim=-1, keepdim=True)).to(device)
+    vectors = torch.randn(7, 3, 2, generator=generator, dtype=torch.float64).to(device)
+
+    plain = PairInvariantFeatures.compute(queries, centroids, normals, vectors)
+    assert plain.log_squared_distance is None
+    assert plain.stacked().shape == (5, 7, 5)
+
+    logged = PairInvariantFeatures.compute(
+        queries, centroids, normals, vectors, log_radial=True
+    )
+    # Base block bitwise untouched by the log-radial computation.
+    torch.testing.assert_close(
+        logged.squared_distance, plain.squared_distance, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        logged.normal_alignment, plain.normal_alignment, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        logged.vector_alignments, plain.vector_alignments, rtol=0.0, atol=0.0
+    )
+    # Declared formulas, bitwise.
+    radius = torch.sqrt(plain.squared_distance + _LOG_RADIAL_EPS)
+    torch.testing.assert_close(
+        logged.log_squared_distance,
+        torch.log(plain.squared_distance + _LOG_RADIAL_EPS),
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        logged.normalized_normal_alignment,
+        plain.normal_alignment / radius,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        logged.normalized_vector_alignments,
+        plain.vector_alignments / radius.unsqueeze(-1),
+        rtol=0.0,
+        atol=0.0,
+    )
+    # The normalized normal alignment is the bounded cosine-like feature.
+    assert (logged.normalized_normal_alignment.abs() <= 1.0).all()
+    # The block is appended AFTER the base block.
+    stacked = logged.stacked()
+    assert stacked.shape == (5, 7, 10)
+    torch.testing.assert_close(stacked[..., :5], plain.stacked(), rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        stacked[..., 5], logged.log_squared_distance, rtol=0.0, atol=0.0
+    )
+
+    # Parity: odd in the normal exactly like b, even radial feature.
+    flipped_normals = PairInvariantFeatures.compute(
+        queries, centroids, -normals, vectors, log_radial=True
+    )
+    torch.testing.assert_close(
+        flipped_normals.normalized_normal_alignment,
+        -logged.normalized_normal_alignment,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        flipped_normals.log_squared_distance,
+        logged.log_squared_distance,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        flipped_normals.normalized_vector_alignments,
+        logged.normalized_vector_alignments,
+        rtol=0.0,
+        atol=0.0,
+    )
+    # Parity: odd in the state vectors exactly like v.r.
+    flipped_vectors = PairInvariantFeatures.compute(
+        queries, centroids, normals, -vectors, log_radial=True
+    )
+    torch.testing.assert_close(
+        flipped_vectors.normalized_vector_alignments,
+        -logged.normalized_vector_alignments,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        flipped_vectors.log_squared_distance,
+        logged.log_squared_distance,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        flipped_vectors.normalized_normal_alignment,
+        logged.normalized_normal_alignment,
+        rtol=0.0,
+        atol=0.0,
+    )
+    # Joint axis reflection: every entry is an O(2) invariant, bitwise.
+    mirror = torch.tensor([[1.0, 0.0], [0.0, -1.0]], dtype=torch.float64, device=device)
+    reflected = PairInvariantFeatures.compute(
+        queries @ mirror.T,
+        centroids @ mirror.T,
+        normals @ mirror.T,
+        vectors @ mirror.T,
+        log_radial=True,
+    )
+    for name in (
+        "squared_distance",
+        "normal_alignment",
+        "vector_alignments",
+        "log_squared_distance",
+        "normalized_normal_alignment",
+        "normalized_vector_alignments",
+    ):
+        torch.testing.assert_close(
+            getattr(reflected, name), getattr(logged, name), rtol=0.0, atol=0.0
+        )
+
+
+def test_log_radial_model_reflection_and_similarity_contract(device):
+    """O(2) parity and similarity survive the knob at the house tolerance.
+
+    Reflection (all geometry and vector data mirrored, boundary orientation
+    reversed so the winding still represents outward normals): scalar
+    outputs are invariant and rank-1 outputs mirror -- the message vector
+    components flip exactly as required, because each new pair feature is
+    parity-typed identically to its parent.  Similarity (rotation,
+    translation, scale): outputs are invariant up to the output rotation,
+    at the same tolerance as ``test_auxiliary_scale_similarity_contract``
+    -- ``ln(a + eps)`` and the normalized alignments read the
+    already-normalized frame, so no scale leaks in.
+    """
+    torch.manual_seed(397)
+    model = (
+        MeshTransformer(
+            n_spatial_dims=2,
+            output_field_ranks={"potential": 0, "flux": 1},
+            boundary_field_ranks={"disk": {"drive": {"boundary_value": 0}}},
+            field_mode="linear",
+            query_decoder="kernel",
+            kernel_log_radial_features=True,
+            operator_scalar_dim=7,
+            operator_vector_dim=3,
+            drive_scalar_dim=9,
+            drive_vector_dim=3,
+            operator_layers=1,
+            drive_layers=1,
+            heads=2,
+            scalar_rank=4,
+            vector_rank=2,
+        )
+        .to(device=device, dtype=torch.float64)
+        .eval()
+    )
+    for module in model.modules():
+        if hasattr(module, "accumulation_dtype"):
+            module.accumulation_dtype = torch.float64
+
+    generator = torch.Generator().manual_seed(398)
+    values = torch.randn(24, generator=generator, dtype=torch.float64).to(device)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.6, 0.2]], dtype=torch.float64
+    ).to(device)
+
+    def build_domain(
+        *,
+        transform: torch.Tensor | None = None,
+        reverse_orientation: bool = False,
+        scale: float = 1.0,
+        translation=(0.0, 0.0),
+    ) -> DomainMesh:
+        boundary = _circle_boundary(24, device)
+        points, transformed_queries = boundary.points, queries
+        if transform is not None:
+            points = points @ transform.T
+            transformed_queries = transformed_queries @ transform.T
+        offset = torch.tensor(translation, dtype=torch.float64, device=device)
+        points = scale * points + offset
+        transformed_queries = scale * transformed_queries + offset
+        cells = boundary.cells[:, [1, 0]] if reverse_orientation else boundary.cells
+        boundary = Mesh(points=points, cells=cells).with_data(
+            cell_data={"boundary_value": values}
+        )
+        return DomainMesh(
+            interior=Mesh(points=transformed_queries),
+            boundaries={"disk": boundary},
+        )
+
+    mirror = torch.tensor([[1.0, 0.0], [0.0, -1.0]], dtype=torch.float64, device=device)
+    angle = 0.37
+    rotation = torch.tensor(
+        [
+            [math.cos(angle), -math.sin(angle)],
+            [math.sin(angle), math.cos(angle)],
+        ],
+        dtype=torch.float64,
+        device=device,
+    )
+    with torch.no_grad():
+        original = model(build_domain())
+        reflected = model(build_domain(transform=mirror, reverse_orientation=True))
+        similar = model(
+            build_domain(transform=rotation, scale=3.7, translation=(8.2, -4.3))
+        )
+    torch.testing.assert_close(
+        reflected.point_data["potential"],
+        original.point_data["potential"],
+        rtol=2.0e-10,
+        atol=2.0e-11,
+    )
+    torch.testing.assert_close(
+        reflected.point_data["flux"],
+        original.point_data["flux"] @ mirror.T,
+        rtol=2.0e-10,
+        atol=2.0e-11,
+    )
+    torch.testing.assert_close(
+        similar.point_data["potential"],
+        original.point_data["potential"],
+        rtol=2.0e-10,
+        atol=2.0e-11,
+    )
+    torch.testing.assert_close(
+        similar.point_data["flux"],
+        original.point_data["flux"] @ rotation.T,
+        rtol=2.0e-10,
+        atol=2.0e-11,
+    )
+
+
+def test_log_radial_arm_constructs_trains_and_stays_row_stable(device):
+    """The model-level log-radial arm: constructs, trains, stays row stable.
+
+    The MLP input width grows by one base-block copy (the only
+    parameter-shape change; the member count is unchanged -- the knob adds
+    inputs, not members), every nonzero-width parameter receives a finite
+    gradient, the log-radial input columns of the first pair layer carry
+    nonzero gradient (the block is live, not dead width), and bitwise
+    query-subset independence survives with the knob on.
+    """
+    model = _disk_model(
+        "kernel", device, seed=401, kernel_log_radial_features=True, query_chunk_size=1
+    )
+    decoder = model.kernel_decoder
+    assert decoder.log_radial_features is True
+    assert decoder.n_members == 1 + 3 + decoder.mlp_members
+    # Linear decoder pair features: base 2 + operator_vector_dim (= 3),
+    # plus the appended log-radial block of the same width.
+    assert decoder.member_mlp[0].weight.shape[-1] == (2 + 3) + (2 + 3)
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(402)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+
+    potential = model(domain).point_data["potential"]
+    assert potential.shape == (4,)
+    assert torch.isfinite(potential).all()
+    potential.square().sum().backward()
+    for name, parameter in model.named_parameters():
+        if parameter.numel() == 0:
+            continue
+        assert parameter.grad is not None, f"missing gradient for {name}"
+        assert torch.isfinite(parameter.grad).all(), f"non-finite gradient for {name}"
+    log_columns = decoder.member_mlp[0].weight.grad[:, 2 + 3 :]
+    assert float(log_columns.abs().sum()) > 0.0
+
+    subset = torch.tensor([2, 0], device=device)
+    with torch.no_grad():
+        encoded = model.encode(domain)
+        message_full = model.kernel_decoder(queries, encoded.kernel_cache)
+        message_subset = model.kernel_decoder(queries[subset], encoded.kernel_cache)
+        full = model.decode(encoded).point_data["potential"]
+        partial = model.decode(encoded, Mesh(points=queries[subset]))
+    torch.testing.assert_close(
+        message_subset.scalars, message_full.scalars[subset], rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        message_subset.vectors, message_full.vectors[subset], rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        partial.point_data["potential"], full[subset], rtol=0.0, atol=0.0
+    )
+
+
+def test_log_radial_composes_with_auxiliary_scale(device):
+    """Independent feature blocks: the widths add and the composition runs.
+
+    Decoder-level: with both knobs the MLP input is the doubled auxiliary
+    width plus one log-radial base-block copy, ``2*(2+C) + (2+C)``, and
+    messages stay bitwise query-subset independent.  Model-level: the
+    composed configuration (declared viscous scale AND log-radial
+    features) constructs, runs forward and backward with finite gradients
+    everywhere, and both contracts are active at once.
+    """
+    decoder = _aux_decoder(
+        device, seed=409, auxiliary_scale=True, log_radial_features=True
+    )
+    assert decoder.auxiliary_scale is True
+    assert decoder.log_radial_features is True
+    assert decoder.member_mlp[0].weight.shape[-1] == 2 * (2 + 2) + (2 + 2)
+
+    mesh, operator, drive = _aux_decoder_states(device, seed=410)
+    lam = torch.tensor(5.0e-2, dtype=torch.float64, device=device)
+    cache = decoder.build_source_cache(mesh, operator, drive, auxiliary_scale=lam)
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.7, -0.4], [1.5, 0.6], [-0.8, 0.3]], dtype=torch.float64
+    ).to(device)
+    with torch.no_grad():
+        message = decoder(queries, cache)
+        message_subset = decoder(queries[torch.tensor([3, 1], device=device)], cache)
+    assert torch.isfinite(message.scalars).all()
+    assert torch.isfinite(message.vectors).all()
+    torch.testing.assert_close(
+        message_subset.scalars,
+        message.scalars[torch.tensor([3, 1], device=device)],
+        rtol=0.0,
+        atol=0.0,
+    )
+
+    model = _aux_scale_model(device, seed=411, kernel_log_radial_features=True)
+    assert model.kernel_decoder.auxiliary_scale is True
+    assert model.kernel_decoder.log_radial_features is True
+    assert model.kernel_decoder.member_mlp[0].weight.shape[-1] == 2 * (2 + 3) + (2 + 3)
+    model_queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(412)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _viscous_disk_domain(16, model_queries, values, 5.0e-2)
+    potential = model(domain).point_data["potential"]
+    assert torch.isfinite(potential).all()
+    potential.square().sum().backward()
+    for name, parameter in model.named_parameters():
+        if parameter.numel() == 0:
+            continue
+        assert parameter.grad is not None, f"missing gradient for {name}"
+        assert torch.isfinite(parameter.grad).all(), f"non-finite gradient for {name}"
+
+
 def _ring_fourier_high_order_ratio(
     model: MeshTransformer,
     device: torch.device | str,
@@ -2663,6 +3152,62 @@ def test_checkpointed_training_step_is_bitwise_identical_aux_scale(device):
         )
 
 
+def test_checkpointed_training_step_is_bitwise_identical_log_radial(device):
+    """The log-radial features ride through checkpointing with NO new packing.
+
+    Unlike ``value_pseudos`` and ``auxiliary_scale``, the log-radial block
+    adds no cache tensor: the features are derived elementwise inside the
+    chunk from quantities that are already explicit checkpoint arguments,
+    so ``_checkpointed_chunk`` needs no change -- verified here by a
+    checkpointed training step with the knob on matching the retained
+    graph bitwise (outputs and every parameter gradient).
+    """
+    kwargs = dict(kernel_log_radial_features=True)
+    reference = _disk_model("kernel", device, seed=419, **kwargs)
+    checkpointed = _disk_model(
+        "kernel", device, seed=419, kernel_checkpoint_query_chunks=True, **kwargs
+    )
+    reference_state = reference.state_dict()
+    checkpointed_state = checkpointed.state_dict()
+    assert list(reference_state) == list(checkpointed_state)
+    for name, expected in reference_state.items():
+        torch.testing.assert_close(
+            checkpointed_state[name], expected, rtol=0.0, atol=0.0
+        )
+    # Force several decode chunks so the chunk loop, not just one call, is
+    # exercised under the checkpoint wrapper.
+    reference.kernel_decoder.query_chunk_size = 2
+    checkpointed.kernel_decoder.query_chunk_size = 2
+    reference.train()
+    checkpointed.train()
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4], [-0.4, 0.2], [0.05, 0.35]],
+        dtype=torch.float64,
+    ).to(device)
+    generator = torch.Generator().manual_seed(420)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+
+    outputs = {}
+    for label, model in (("reference", reference), ("checkpointed", checkpointed)):
+        potential = model(domain).point_data["potential"]
+        potential.square().sum().backward()
+        outputs[label] = potential
+    torch.testing.assert_close(
+        outputs["checkpointed"], outputs["reference"], rtol=0.0, atol=0.0
+    )
+    for (name, parameter), (_, other) in zip(
+        reference.named_parameters(), checkpointed.named_parameters(), strict=True
+    ):
+        if parameter.grad is None:
+            assert other.grad is None, name
+            continue
+        torch.testing.assert_close(
+            other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
+        )
+
+
 def test_checkpointed_training_step_is_bitwise_identical_3d(device):
     """The 3D singular-pair arm under checkpointing mirrors the 2D contract."""
 
@@ -2739,3 +3284,56 @@ def test_checkpointed_training_step_is_bitwise_identical_3d(device):
         torch.testing.assert_close(
             other.grad, parameter.grad, rtol=0.0, atol=0.0, msg=name
         )
+
+
+def test_pair_features_skipped_when_no_smooth_members_consume_them(device, monkeypatch):
+    """The dense pair invariants are dead work on singular-only/singpair arms
+    (engineering review, "dead work in the dense hot loop") and must not be
+    computed there -- while every member-carrying dictionary still computes
+    them. Correctness of the skip is separately pinned by the existing
+    singular-only and singpair bitwise contract tests, which ran unchanged
+    across the change."""
+
+    def _forbidden(*args, **kwargs):
+        raise AssertionError(
+            "PairInvariantFeatures.compute ran on a dictionary with no smooth members"
+        )
+
+    queries = torch.tensor(
+        [[0.2, 0.1], [0.1, -0.3], [0.5, 0.4]], dtype=torch.float64
+    ).to(device)
+    generator = torch.Generator().manual_seed(411)
+    values = torch.randn(16, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(16, queries, values)
+
+    singular_only = _disk_model(
+        "kernel",
+        device,
+        seed=409,
+        kernel_include_polynomial_members=False,
+        kernel_mlp_members=0,
+        kernel_include_single_layer_member=True,
+    )
+    monkeypatch.setattr(PairInvariantFeatures, "compute", _forbidden)
+    with torch.no_grad():
+        potential = singular_only(domain).point_data["potential"]
+    assert torch.isfinite(potential).all()
+
+    monkeypatch.undo()
+    for overrides in (
+        {"kernel_include_polynomial_members": True, "kernel_mlp_members": 0},
+        {"kernel_include_polynomial_members": False, "kernel_mlp_members": 4},
+    ):
+        consumer = _disk_model("kernel", device, seed=409, **overrides)
+        calls = []
+        original = PairInvariantFeatures.compute.__func__
+
+        def _counting(cls, *args, **kwargs):
+            calls.append(1)
+            return original(cls, *args, **kwargs)
+
+        monkeypatch.setattr(PairInvariantFeatures, "compute", classmethod(_counting))
+        with torch.no_grad():
+            consumer(domain)
+        monkeypatch.undo()
+        assert calls, overrides

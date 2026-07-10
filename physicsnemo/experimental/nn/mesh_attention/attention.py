@@ -74,6 +74,7 @@ identical to its pre-extension behavior.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import torch
@@ -722,8 +723,33 @@ class MeshAttention(nn.Module):
         source_mesh: Mesh,
         key_state: ScalarVectorState,
         value_state: ScalarVectorState,
+        segments: Sequence[slice] | None = None,
+        segment_log_gain: torch.Tensor | None = None,
     ) -> AttentionMoments:
-        r"""Project and quadrature-integrate keys and values once."""
+        r"""Project and quadrature-integrate keys and values once.
+
+        With the default ``segments=None`` the moments are the plain
+        quadrature sum over every source cell -- byte-identical to the
+        historical operator.  Supplying ``segments`` (a contiguous,
+        non-overlapping partition of the source cells, e.g. one slice per
+        boundary component) together with ``segment_log_gain`` (shape
+        ``(len(segments), heads)``) computes each segment's moments
+        separately and combines them as
+
+        .. math:: M = \sum_s e^{g_s}\, M_s
+                    = \sum_s e^{g_s + \ln A_s}\, \bar M_s,
+
+        where :math:`\bar M_s = M_s / A_s` is the segment's
+        measure-averaged moment and :math:`A_s` its total measure: the
+        learned, dimensionless per-segment/per-head gain shifts each
+        segment's log-measure weight additively, so a measure imbalance
+        between segments (e.g. tunnel panels vs vehicle cells) is a
+        log-scale parameter away rather than a feature-magnitude fight.
+        At ``segment_log_gain = 0`` the combination reproduces the plain
+        sum exactly (up to floating-point summation order).  The gain is a
+        pure number per (segment, head): similarity covariance, parity
+        typing, and drive-linearity of the moments are unchanged.
+        """
         if source_mesh.n_cells != key_state.n_entities:
             raise ValueError("source Mesh cell count must match key state entity count")
         if key_state.n_entities != value_state.n_entities:
@@ -732,6 +758,16 @@ class MeshAttention(nn.Module):
             raise ValueError("source Mesh and key state spatial dims differ")
         if source_mesh.n_spatial_dims != value_state.n_spatial_dims:
             raise ValueError("source Mesh and value state spatial dims differ")
+        if (segments is None) != (segment_log_gain is None):
+            raise ValueError(
+                "segments and segment_log_gain must be provided together: "
+                "the segmented moment pool is defined by both the source "
+                "partition and its per-segment log-gains"
+            )
+        if segments is not None:
+            return self._build_segmented_moments(
+                source_mesh, key_state, value_state, segments, segment_log_gain
+            )
 
         # Attention heads are aligned groups, not axes to outer-product with
         # one another. The Mesh owns quadrature measure; the shared weighted
@@ -839,6 +875,81 @@ class MeshAttention(nn.Module):
         if accumulated is None:
             raise RuntimeError("Cannot build attention moments from an empty source")
         return accumulated
+
+    def _build_segmented_moments(
+        self,
+        source_mesh: Mesh,
+        key_state: ScalarVectorState,
+        value_state: ScalarVectorState,
+        segments: Sequence[slice],
+        segment_log_gain: torch.Tensor,
+    ) -> AttentionMoments:
+        r"""Combine per-segment moments with dimensionless per-head gains.
+
+        See :meth:`build_moments` for the operator definition.  Segments
+        must be non-empty, unit-stride, and contiguously partition
+        ``[0, n_entities)``; the moments are linear over source cells, so
+        the per-segment computation reuses the plain path on cell slices
+        and the gained sum reproduces the plain moments exactly when every
+        gain is zero (up to summation order).
+        """
+        if len(segments) == 0:
+            raise ValueError("segments must contain at least one slice")
+        if not isinstance(segment_log_gain, torch.Tensor) or tuple(
+            segment_log_gain.shape
+        ) != (len(segments), self.heads):
+            actual = (
+                tuple(segment_log_gain.shape)
+                if isinstance(segment_log_gain, torch.Tensor)
+                else type(segment_log_gain).__name__
+            )
+            raise ValueError(
+                f"segment_log_gain must be a tensor of shape "
+                f"(len(segments), heads) = ({len(segments)}, {self.heads}), "
+                f"got {actual}"
+            )
+        expected_start = 0
+        for segment in segments:
+            if not isinstance(segment, slice) or segment.step not in (None, 1):
+                raise ValueError(
+                    f"segments must be unit-stride slices, got {segment!r}"
+                )
+            if segment.start != expected_start or segment.stop <= segment.start:
+                raise ValueError(
+                    "segments must be non-empty and contiguously partition "
+                    f"the source cells starting at 0; segment {segment!r} "
+                    f"does not begin at {expected_start}"
+                )
+            expected_start = segment.stop
+        if expected_start != key_state.n_entities:
+            raise ValueError(
+                f"segments end at {expected_start} but the source has "
+                f"{key_state.n_entities} cells; segments must cover every "
+                "source cell exactly once"
+            )
+
+        combined: list[torch.Tensor] | None = None
+        for index, segment in enumerate(segments):
+            part = self.build_moments(
+                source_mesh.slice_cells(segment),
+                key_state.slice(segment),
+                value_state.slice(segment),
+            )
+            gain = torch.exp(segment_log_gain[index]).to(
+                part.scalar_key_scalar_value.dtype
+            )
+            gained = [
+                part.scalar_key_scalar_value * gain[:, None, None],
+                part.vector_key_scalar_value * gain[:, None, None, None],
+                part.scalar_key_vector_value * gain[:, None, None, None],
+                part.vector_key_vector_value * gain[:, None, None, None, None],
+            ]
+            combined = (
+                gained
+                if combined is None
+                else [total + term for total, term in zip(combined, gained)]
+            )
+        return AttentionMoments(*combined)
 
     def evaluate_moments(
         self,
@@ -981,10 +1092,18 @@ class MeshAttention(nn.Module):
         query_state: ScalarVectorState,
         key_state: ScalarVectorState,
         value_state: ScalarVectorState,
+        segments: Sequence[slice] | None = None,
+        segment_log_gain: torch.Tensor | None = None,
     ) -> ScalarVectorState:
         return self.evaluate_moments(
             query_state,
-            self.build_moments(source_mesh, key_state, value_state),
+            self.build_moments(
+                source_mesh,
+                key_state,
+                value_state,
+                segments=segments,
+                segment_log_gain=segment_log_gain,
+            ),
         )
 
     def forward_reference(

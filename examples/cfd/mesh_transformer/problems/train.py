@@ -760,12 +760,22 @@ def make_model(
     if model_name.startswith("harmonic_panel"):
         from self_consistent_kernel import HarmonicPanelBIE
 
+        # Every named arm pins its FULL historical configuration explicitly:
+        # the class defaults flipped to the pruned 3-parameter config on
+        # 2026-07-07 (engineering review, "evidence-orphaned defaults"), and
+        # these names must keep building exactly what the archive recorded.
         settings = {
-            "harmonic_panel_direct": dict(n_iterations=0),
-            "harmonic_panel_bie": dict(),
-            "harmonic_panel_bie_minimal": dict(regular_orders=0),
+            "harmonic_panel_direct": dict(
+                n_iterations=0, regular_orders=3, shared_relaxation=False
+            ),
+            "harmonic_panel_bie": dict(regular_orders=3, shared_relaxation=False),
+            "harmonic_panel_bie_minimal": dict(
+                regular_orders=0, shared_relaxation=False
+            ),
             "harmonic_panel_bie_2param": dict(regular_orders=0, shared_relaxation=True),
-            "harmonic_panel_bie_p2": dict(regular_orders=0, n_iterations=2),
+            "harmonic_panel_bie_p2": dict(
+                regular_orders=0, n_iterations=2, shared_relaxation=False
+            ),
         }
         return HarmonicPanelBIE(**settings[model_name])
     if model_name.startswith(("self_consistent_pair_kernel", "harmonic_kernel")) or (

@@ -61,6 +61,16 @@ nonlinear, so drive-linearity is not declared):
 - ``mt_nl_members`` -- identical 8 smooth members WITHOUT the auxiliary
   scale: H4's pre-registered capacity control, isolating "declared scale"
   from "more members".
+- ``mt_nl_members_log`` -- identical 8 smooth members plus
+  ``kernel_log_radial_features=True`` (H4-L, pre-registered as V4 in the
+  velocity-front fan-out): the members arm's feature map gains ln(a+eps)
+  and the scale-free normalized alignments, making any power-law radial
+  scale linearly learnable (H4's verdict refuted the DECLARED scale --
+  the capacity control won ~6x -- so the scale exponent becomes learnable
+  log-space structure instead).  Capacity-matched to ``mt_nl_members``
+  except the feature map: only the member MLP's input width differs, so
+  parameter counts are nearly equal (both recorded in the reports).
+  Falsifier: no improvement over ``mt_nl_members``.
 
 PROTOCOL (pre-registered; deviations would be protocol violations):
 
@@ -180,6 +190,11 @@ ARM_NAMES: tuple[str, ...] = (
     "mt_nl_scale",
     "mt_nl_members",
     "mt_nl_members_pseudo",
+    "mt_nl_members16",
+    "mt_nl_members32",
+    "mt_nl_members_log",
+    "mt_nl_members_wide",
+    "mt_nl_members_log_pseudo",
 )
 
 #: Arm-specific model kwargs on top of the shared reference construction.
@@ -206,6 +221,46 @@ _ARM_KWARGS: dict[str, dict] = {
     # (@sec-nb-h4-verdict): the mechanisms are independent (typed drive
     # content vs pair-radial capacity), so the gains compose.
     "mt_nl_members_pseudo": {"kernel_mlp_members": 8, "drive_pseudo_dim": 8},
+    # Capacity-response ladder for the velocity front (@sec-nb-velocity-sweep):
+    # if velocity error falls monotonically with member count, the front is
+    # capacity-limited; if flat from 8, it is structure-limited and wider
+    # members are not bought (parsimony bar pre-registered in the notebook).
+    "mt_nl_members16": {"kernel_mlp_members": 16},
+    "mt_nl_members32": {"kernel_mlp_members": 32},
+    # H4-L / V4 (@sec-nb-velocity-sweep): the members arm with log-radial
+    # pair features -- a power-law scale r/(L*Pi^alpha) is LINEAR in log
+    # space (ln r - alpha ln Pi), so ln(a+eps) plus the ln Re conditioning
+    # the members already receive makes ANY power-law scale learnable, with
+    # no declared exponent (the declared-scale contract was refuted by its
+    # capacity control, @sec-nb-h4-verdict).  Capacity-matched to
+    # mt_nl_members except the feature map: only the member MLP's input
+    # width differs (params nearly equal; both recorded in the reports).
+    "mt_nl_members_log": {
+        "kernel_mlp_members": 8,
+        "kernel_log_radial_features": True,
+    },
+    # V5 (width response): doubles the encoder/decoder channel widths at
+    # fixed members=8 -- decides whether width binds after the members
+    # rung.  Falsifier: no improvement at 2x width -- the reference width
+    # is sufficient and wide is not bought (parsimony bar).  These keys
+    # override the shared reference capacity in build_arm.
+    "mt_nl_members_wide": {
+        "kernel_mlp_members": 8,
+        "scalar_rank": 96,
+        "vector_rank": 32,
+        "operator_scalar_dim": 64,
+        "operator_vector_dim": 16,
+        "drive_scalar_dim": 96,
+        "drive_vector_dim": 24,
+    },
+    # Exploratory positioning of the likely-best composition (V4-dependent:
+    # if V4 is null this reads as a members_pseudo replicate whose extra
+    # log features are inert).
+    "mt_nl_members_log_pseudo": {
+        "kernel_mlp_members": 8,
+        "kernel_log_radial_features": True,
+        "drive_pseudo_dim": 8,
+    },
 }
 
 #: The four pooled-convention headline metrics (validation model selection
@@ -383,6 +438,19 @@ _DESIGN_NOTES = {
         "identical 8 members, no declared scale -- separating 'declared "
         "contract' from 'more capacity'"
     ),
+    "log_radial_arm": (
+        "mt_nl_members_log (H4-L, pre-registered as V4) is mt_nl_members "
+        "plus kernel_log_radial_features=True and nothing else: the member "
+        "MLP additionally sees ln(a+eps) and the scale-free normalized "
+        "alignments, so any power-law radial scale ln(r/(L*Pi^alpha)) = "
+        "ln r - alpha*ln Pi is linearly learnable from features it already "
+        "has (ln Re rides in as an operator scalar).  Lineage: H4's "
+        "declared viscous scale was refuted by this very capacity control "
+        "(~6x on velocity), so the exponent is learned, not declared.  "
+        "Capacity-matched except the feature map -- only the MLP input "
+        "width differs, parameter counts nearly equal, both recorded.  "
+        "Falsifier: no improvement over mt_nl_members"
+    ),
     "validation_protocol": (
         "GLOBE-matched: the scarce task defines no test list of its own and "
         "is validated/evaluated against full_test; validation for model "
@@ -443,6 +511,11 @@ def build_arm(arm: str) -> nn.Module:
     capacity["operator_layers"] = 1  # the reference configuration's one layer
     kernel_kwargs = dict(_SINGPAIR_KWARGS)
     kernel_kwargs.update(_ARM_KWARGS[arm])
+    # Capacity-axis arm knobs (the V5 width arms) override the shared
+    # reference capacity instead of colliding with it at the constructor.
+    for key in list(kernel_kwargs):
+        if key in capacity:
+            capacity[key] = kernel_kwargs.pop(key)
     global_field_ranks = {
         role: dict(fields) for role, fields in _SCHEMA["global_field_ranks"].items()
     }

@@ -553,6 +553,22 @@ read-in composition, never inside the kernel). In
 `zero_preserving_nonlinear` mode the kernel may additionally read drive
 invariants while values stay bias-free.
 
+For declared boundary-to-boundary tasks the model-level `trace_of` knob
+selects the **boundary-trace mode**: the query mesh is declared to be the
+named boundary's cell centroids, index-aligned. The double-layer member is
+discontinuous across its own panel — the jump relation of potential theory
+— and its closed form evaluated exactly on the panel returns an accidental
+signed-zero \(\pm 1/2\) branch, never the principal value; trace mode
+replaces each query's own-panel entry with the exact exterior one-sided
+limit \(+1/2\) (the side the cell normals point toward; the on-panel
+principal value of a flat panel vanishes identically, and the single-layer
+member is continuous across the boundary so its value needs no
+correction), and each query additionally receives bias-free typed
+read-outs of its own cell's post-attention encoded operator and drive
+states. Query independence becomes independence *given the declared
+identity map*; equivariance, drive-linearity, and zero preservation are
+unchanged, and the default-off knob is bitwise the historical model.
+
 The trade is cost: one decode is a dense \(O(N_qN_s)\) evaluation, chunked
 over queries for memory only, instead of the moment decoder's
 \(O(N_s+N_q)\). Query rows are evaluated with batch-shape-independent

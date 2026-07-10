@@ -215,6 +215,19 @@ class SelfConsistentPairKernel(nn.Module):
         self-solve (ablation isolating tying from iteration).
     query_chunk_size : int
         Queries evaluated per chunk; changes memory only.
+
+    .. warning:: FROZEN LADDER RECORD (2026-07-07, executing the engineering
+       review).  This class is the *executable record* of the learned-BIE
+       falsification ladder (book chapter "The road to a learned BIE"), kept
+       runnable so every refuted configuration stays reproducible.  Its
+       options are NOT recommendations: ``trace_loss``, ``kernel_pde_loss``,
+       and ``tied=False`` each reproduce a configuration the ladder
+       *refuted*, and the midpoint-quadrature ``kernel_family`` variants
+       lose to exact panel quadrature (:class:`HarmonicPanelBIE`) by an
+       order of magnitude near boundaries.  For anything other than
+       reproducing the ladder, use :class:`HarmonicPanelBIE` (Dirichlet) or
+       :class:`NeumannHarmonicPanelBIE` (Neumann).  The module is
+       maintenance-frozen: bug fixes only, no new options.
     """
 
     def __init__(
@@ -553,15 +566,25 @@ class HarmonicPanelBIE(nn.Module):
     The map from Dirichlet data to potential is exactly linear at fixed
     geometry, queries never interact, and all features are joint O(2)
     invariants of relative geometry.
+
+    DEFAULTS (changed 2026-07-07, executing the engineering review's
+    "evidence-orphaned defaults" item): the pruning study proved
+    ``regular_orders=0`` with a single shared relaxation lossless (identical
+    to four decimals) and *better* than the 13-parameter original, so the
+    pruned 3-parameter configuration is now the default.  The archived
+    13-parameter arm remains reproducible by name: ``train.py`` pins
+    ``harmonic_panel_bie`` to the explicit historical configuration
+    (``regular_orders=3, shared_relaxation=False``), and every archived run
+    records its full config either way.
     """
 
     def __init__(
         self,
         *,
-        regular_orders: int = 3,
+        regular_orders: int = 0,
         n_iterations: int = 8,
         initial_relaxation: float = 1.0,
-        shared_relaxation: bool = False,
+        shared_relaxation: bool = True,
         query_chunk_size: int = 1024,
     ) -> None:
         super().__init__()
@@ -585,9 +608,7 @@ class HarmonicPanelBIE(nn.Module):
             # Every converged run learned a uniform per-step relaxation, so a
             # single shared scalar is the ablation-motivated default candidate.
             shape = () if shared_relaxation else (n_iterations,)
-            self.relaxation = nn.Parameter(
-                torch.full(shape, float(initial_relaxation))
-            )
+            self.relaxation = nn.Parameter(torch.full(shape, float(initial_relaxation)))
         else:
             self.register_parameter("relaxation", None)
         self.query_chunk_size = query_chunk_size

@@ -32,7 +32,7 @@ library):
   :math:`-\Delta u + \kappa^2 u = 0` (both homogeneous, Dirichlet only).
 - Geometry: one outer closed polyline loop plus zero or more inner hole
   loops.  Meshing uses
-  :func:`physicsnemo.mesh.tessellation.delaunay_mesh` (constrained
+  :func:`physicsnemo.mesh.tessellation.fill_interior` (PR #1800; constrained
   Delaunay + Ruppert refinement): a global area constraint and a 30-degree
   minimum-angle quality bound, with holes handled natively from their
   loops.
@@ -248,22 +248,53 @@ def _triangulate(
     The area constraint is the area of an equilateral triangle with edge
     ``target_h``; together with the 30-degree minimum-angle quality bound
     this keeps edge lengths near ``target_h`` away from the (finer)
-    boundary polyline.  Hole loops are passed through directly;
-    ``delaunay_mesh`` seeds hole removal internally.
+    boundary polyline.
+
+    Backed by the upstreamed :func:`physicsnemo.mesh.tessellation
+    .fill_interior` (PR #1800): the loops become one closed edge ``Mesh``
+    (hole nesting is resolved automatically by even-odd containment, so
+    hole loops are passed like any other), and the four legacy arrays are
+    recovered from the output mesh -- the ``boundary_marker`` provenance
+    field for the vertex markers, and the once-referenced triangle edges
+    for the final (refinement-subdivided) boundary segments, whose union
+    the fill contract guarantees equals the input boundary exactly.
     """
 
-    from physicsnemo.mesh.tessellation import delaunay_mesh
+    import torch
+
+    from physicsnemo.mesh import Mesh
+    from physicsnemo.mesh.tessellation import fill_interior
+
+    vertices = np.concatenate([np.asarray(loop, dtype=np.float64) for loop in loops])
+    segment_blocks = []
+    offset = 0
+    for loop in loops:
+        first = np.arange(loop.shape[0], dtype=np.int64) + offset
+        segment_blocks.append(np.stack((first, np.roll(first, -1)), axis=1))
+        offset += loop.shape[0]
+    boundary = Mesh(
+        points=torch.from_numpy(np.ascontiguousarray(vertices)),
+        cells=torch.from_numpy(np.concatenate(segment_blocks)),
+    )
 
     max_area = math.sqrt(3.0) / 4.0 * target_h * target_h
-    points, triangles, vertex_markers, boundary_segments = delaunay_mesh(
-        loops, max_area=max_area, min_angle_degrees=30.0
+    filled = fill_interior(
+        boundary,
+        max_cell_size=max_area,
+        min_angle_degrees=30.0,
+        provenance=True,
     )
-    return (
-        points.numpy(),
-        triangles.numpy(),
-        vertex_markers.numpy(),
-        boundary_segments.numpy(),
-    )
+    points = filled.points.numpy()
+    triangles = filled.cells.numpy().astype(np.int64)
+    vertex_markers = filled.point_data["boundary_marker"].numpy().astype(np.int64)
+
+    # Boundary sub-segments = triangle edges referenced exactly once; the
+    # fill contract guarantees their union equals the input boundary.
+    local_edges = np.sort(triangles[:, [[1, 2], [2, 0], [0, 1]]].reshape(-1, 2), axis=1)
+    unique_edges, counts = np.unique(local_edges, axis=0, return_counts=True)
+    boundary_segments = unique_edges[counts == 1]
+
+    return points, triangles, vertex_markers, boundary_segments
 
 
 def _build_p2_connectivity(

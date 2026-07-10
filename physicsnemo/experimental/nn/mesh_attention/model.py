@@ -145,6 +145,12 @@ class EncodedBoundary:
     # the query-independent source cache of the dense kernel-basis decoder
     # (normalized cell vertices, kernel coefficients, and projected values).
     kernel_cache: KernelDecoderCache | None = None
+    # Populated only by models constructed with a declared boundary-trace
+    # mode (``trace_of``): the declared boundary's contiguous cell range in
+    # the merged source, whose cell centroids the query mesh is declared to
+    # be (index-aligned, in cell order).  ``None`` keeps caches from
+    # trace-free models valid, and lets trace models reject them loudly.
+    trace_slice: slice | None = None
 
 
 def _role_spec(
@@ -572,11 +578,138 @@ class MeshTransformer(Module):
         dimensionless), and parity typing is unchanged (scalar division
         alters no transformation law).  Default ``None`` adds no
         parameters and is bitwise identical to the pre-extension model
+        (state dict and outputs).  MEASURED OUTCOME (H4 verdict,
+        book/10-notebook.qmd): REFUTED by its own pre-registered capacity
+        control -- ``kernel_mlp_members=8`` WITHOUT the declared scale
+        beat the declared arm ~6x on AirFRANS velocity, and dividing the
+        invariants by :math:`\lambda\sim5\times10^{-4}` fed the member
+        MLP features scaled by ~4e6 (an optimization handicap).  The knob
+        stays runnable (refuted configurations remain reproducible); the
+        successor is ``kernel_log_radial_features`` below.
+    kernel_log_radial_features : bool, default=False
+        With ``query_decoder="kernel"``, append the log-radial pair-feature
+        block -- ``ln(a + eps)`` plus the scale-free normalized alignments
+        ``b / sqrt(a + eps)`` and ``v . r / sqrt(a + eps)`` -- to the
+        kernel decoder's smooth-member MLP input, after every other block
+        (see
+        :class:`~physicsnemo.experimental.nn.mesh_attention.kernel_decoder.KernelBasisCrossDecoder`).
+        MOTIVATION (H4-L, pre-registered as V4 in the velocity-front
+        fan-out): any power-law auxiliary length scale
+        :math:`\delta=L_{\mathrm{ref}}\,\Pi^\alpha` built from a
+        dimensionless group :math:`\Pi` is LINEAR in log space,
+        :math:`\ln(r/\delta)=\ln r-\alpha\ln\Pi`, so handing the smooth
+        members ``ln a`` alongside the dimensionless-group conditioning
+        they already receive (e.g. :math:`\ln\mathrm{Re}` as a global
+        operator scalar) makes ANY power-law scale learnable -- no
+        declared exponent, no semantically named input, PDE-general.
+        LINEAGE: the declared-scale contract
+        (``kernel_auxiliary_scale_key`` above) was REFUTED by its own
+        capacity control (plain members won ~6x on AirFRANS velocity);
+        this knob keeps the winning members and turns the scale's
+        exponent into learnable log-space structure instead of a
+        declaration.  The block feeds ONLY the learned smooth members, so
+        ``kernel_mlp_members > 0`` is required (no carrier otherwise;
+        rejected at construction), and it composes freely with the
+        auxiliary-scale contract (independent feature blocks; the MLP
+        input widths add).  Similarity covariance and parity typing are
+        preserved feature by feature (``ln(a + eps)`` is even like ``a``;
+        the normalized alignments are odd in the normal and state vector
+        exactly like their parents).  Default ``False`` adds no
+        parameters and is bitwise identical to the pre-extension model
         (state dict and outputs).
     attention_chunk_size : int or None, default=65536
         Maximum entities passed through a typed attention projection at once.
         Chunking changes temporary memory, not the moment operator. ``None``
         disables projection chunking.
+    per_boundary_moment_pool : bool, default=False
+        Compute every encoder attention moment per declared boundary and
+        combine the per-boundary moments through learned, dimensionless
+        per-boundary/per-head log-gains:
+        :math:`M=\sum_b e^{g_b} M_b=\sum_b e^{g_b+\ln A_b}\,\bar M_b`
+        with :math:`\bar M_b` the boundary's measure-averaged moment and
+        :math:`A_b` its total measure.  PHYSICS LICENSE: Green's identity
+        splits over boundary components, so a per-component decomposition
+        of the boundary integrals recombined by pure numbers is exact
+        structure; the gain is dimensionless per (boundary, head), so
+        similarity covariance, parity typing, drive-linearity (the gain is
+        drive-independent), and zero preservation are all unchanged.
+        MOTIVATION (DrivAerML all-boundary probe, 2026-07): the moments are
+        quadrature-weighted with raw cell measures, and the tunnel panels
+        carry ~1e6x the vehicle's measure -- at init the tunnel/vehicle
+        moment-contribution ratio is ~5e6 (operator stream) to ~1e9 (drive
+        stream), and 500 trained epochs suppressed drive values by only
+        ~20x of the needed ~1e7: an optimization pathology, since ignoring
+        a boundary requires the type-conditioned features to fight the
+        measure ratio multiplicatively.  With the pool, that correction is
+        an additive shift of a per-boundary log-scale parameter.  At
+        initialization the gains are zero, so the pooled moments reproduce
+        the plain quadrature sum exactly (up to floating-point summation
+        order).  The default ``False`` adds no parameters and does not
+        change the forward pass (state dicts and outputs are bitwise the
+        historical model).  Scope: the encoder's operator/drive blocks and
+        the moment decoder's query cross moments; the kernel decoder's
+        dense pair read is per-cell-weighted and is not pooled.
+
+    trace_of : str or None, default=None
+        Declare that the query mesh IS the named boundary's cell centroids,
+        index-aligned -- query ``i`` is cell ``i`` of
+        ``boundary_field_ranks[trace_of]``, in cell order -- turning the
+        decode into a declared **boundary-trace** (boundary-to-boundary)
+        read instead of a boundary-to-interior map.  Requires
+        ``query_decoder="kernel"``.  MOTIVATION (the GeoTransolver-gap
+        verdict, book/18-notebook.qmd @sec-nb-geot-gap-verdict): on
+        surface-only tasks every query sits at the kernels' singular limit
+        with no identity, and the exact double-layer member evaluated AT a
+        query on its own panel was measured returning the INTERIOR jump
+        branch (:math:`-1/2`) while the physical surface values are the
+        exterior trace (:math:`+1/2` at :math:`+\epsilon` outside) -- a
+        term that flips sign under infinitesimal displacement, repairable
+        by no learned coefficient.  The declaration licenses exactly two
+        structural changes, both denied to bare interior queries:
+
+        * **Side-corrected self-terms.**  Every query's own-panel
+          double-layer entry is replaced by the exact one-sided limit of
+          the declared trace side: :math:`+1/2`, in both 2D and 3D, for
+          any flat panel -- the side the cell normals point toward
+          (external aerodynamics: normals out of the body, into the
+          fluid).  The on-panel principal value of a flat panel's own
+          integral is exactly zero (:math:`n\cdot(x-y)\equiv 0` in the
+          panel plane), so the jump correction IS the whole self-term;
+          off-panel entries are regular and unchanged, so the corrected
+          trace equals the exterior limit exactly (pinned numerically:
+          constant density on a closed polygon/triangulation sums to the
+          analytic exterior value 0 to roundoff).  The exact single-layer
+          member needs NO value correction and receives none: the
+          single-layer potential is continuous across its own layer (only
+          its normal derivative jumps, by minus the density) and its
+          closed forms already evaluate the exact finite on-panel value.
+          See :func:`~.kernel_decoder.exterior_trace_self_entries`.
+        * **Own-cell typed read-outs.**  Each query receives bias-free
+          :class:`~.attention.TypedProjection` read-outs of its own cell's
+          post-attention encoded states: the cell's operator state joins
+          the query operator state (the query now knows *which* panel it
+          is -- encoded local geometry, normal direction), and the cell's
+          drive state joins the query field state (the boundary solve
+          already computes the trace; Dirichlet data IS the trace on
+          Dirichlet patches).  The drive read-out is an exactly linear
+          typed channel mix (no invariant lift, no bias), so
+          drive-linearity (linear and quadratic modes) and zero
+          preservation (nonlinear mode) survive; both read-outs are typed
+          projections of typed state, so O(D)/similarity equivariance
+          survives.  Query independence survives as independence *given
+          the declared identity map*: the cell identity is declared input,
+          not inferred from the query set, each query still reads only its
+          own declared cell, and chunking remains a pure memory control.
+
+        ``decode`` validates the declaration loudly: the query count must
+        equal the declared boundary's cell count (the ORDER of the
+        alignment is the caller's declaration -- the recipe pipeline pins
+        it by test).  Default ``None`` adds no parameters and is bitwise
+        identical to the pre-extension model (state dict and outputs).
+        Pre-registered acceptance (the verdict memo): trace-mode singpair
+        beats plain singpair :math:`\ge 5\times` on DrivAerML surface val
+        at matched protocol; falsifier: no improvement means the trace
+        defect was cosmetic and capacity (H-C) owns the gap.
 
     drive_pseudo_dim : int, default=0
         Width of the drive stream's 2D pseudoscalar (``0o``) channel sector.
@@ -627,6 +760,7 @@ class MeshTransformer(Module):
         kernel_monopole_free_single_layer: bool = False,
         kernel_checkpoint_query_chunks: bool = False,
         kernel_auxiliary_scale_key: str | None = None,
+        kernel_log_radial_features: bool = False,
         bounded_output_gate_invariants: bool = False,
         bounded_query_geometry: bool = False,
         decaying_direct_drive: bool = False,
@@ -643,8 +777,15 @@ class MeshTransformer(Module):
         vector_rank: int = 4,
         query_chunk_size: int = 65536,
         attention_chunk_size: int | None = 65536,
+        per_boundary_moment_pool: bool = False,
+        trace_of: str | None = None,
     ) -> None:
         _require_int("n_spatial_dims", n_spatial_dims, minimum=2)
+        if not isinstance(per_boundary_moment_pool, bool):
+            raise TypeError(
+                "per_boundary_moment_pool must be a bool, got "
+                f"{per_boundary_moment_pool!r}"
+            )
         if not isinstance(boundary_field_ranks, dict):
             raise TypeError("boundary_field_ranks must be a dict")
         if not boundary_field_ranks:
@@ -690,6 +831,29 @@ class MeshTransformer(Module):
                 "decoder's pair invariants, and the moment decoder has no "
                 "pair-radial argument for it to rescale"
             )
+        if kernel_log_radial_features and query_decoder != "kernel":
+            raise ValueError(
+                "kernel_log_radial_features requires query_decoder='kernel': "
+                "the log-radial features extend the kernel decoder's pair "
+                "invariants, and the moment decoder has no dense pair "
+                "features to extend"
+            )
+        if trace_of is not None:
+            if not isinstance(trace_of, str) or not trace_of:
+                raise TypeError("trace_of must be a non-empty string or None")
+            if trace_of not in boundary_field_ranks:
+                raise ValueError(
+                    f"trace_of={trace_of!r} must name a declared boundary in "
+                    f"boundary_field_ranks; declared boundaries: "
+                    f"{sorted(boundary_field_ranks)}"
+                )
+            if query_decoder != "kernel":
+                raise ValueError(
+                    "trace_of requires query_decoder='kernel': the declared "
+                    "boundary-trace mode side-corrects the exact singular "
+                    "members' own-panel entries per the jump relation, and "
+                    "the moment decoder has no exact members to correct"
+                )
         for name, value, minimum in (
             ("operator_scalar_dim", operator_scalar_dim, 1),
             ("operator_vector_dim", operator_vector_dim, 0),
@@ -941,6 +1105,11 @@ class MeshTransformer(Module):
         self.query_chunk_size = query_chunk_size
         self.attention_chunk_size = attention_chunk_size
         self.boundary_names = tuple(boundary_names)
+        self.per_boundary_moment_pool = per_boundary_moment_pool
+        self.trace_of = trace_of
+        # One moment-pool segment per declared boundary when the knob is on;
+        # 0 keeps every block bitwise pre-extension (no gain parameters).
+        n_moment_segments = len(boundary_names) if per_boundary_moment_pool else 0
 
         self._boundary_layouts: dict[str, dict[str, FieldLayout | None]] = {
             role: {} for role in _FIELD_ROLES
@@ -1045,6 +1214,7 @@ class MeshTransformer(Module):
                     scalar_rank=scalar_rank,
                     vector_rank=vector_rank,
                     entity_chunk_size=attention_chunk_size,
+                    n_moment_segments=n_moment_segments,
                 )
                 for _ in range(operator_layers)
             ]
@@ -1108,6 +1278,7 @@ class MeshTransformer(Module):
             vector_rank=vector_rank,
             entity_chunk_size=attention_chunk_size,
             field_pseudo_dim=drive_pseudo_dim,
+            n_moment_segments=n_moment_segments,
         )
         self.drive_blocks = nn.ModuleList(
             [block_type(**block_kwargs) for _ in range(drive_layers)]
@@ -1133,6 +1304,7 @@ class MeshTransformer(Module):
                 include_single_layer_member=kernel_include_single_layer_member,
                 monopole_free_single_layer=kernel_monopole_free_single_layer,
                 auxiliary_scale=kernel_auxiliary_scale_key is not None,
+                log_radial_features=kernel_log_radial_features,
                 checkpoint_query_chunks=kernel_checkpoint_query_chunks,
                 mlp_members=kernel_mlp_members,
                 drive_pseudo_dim=drive_pseudo_dim,
@@ -1154,6 +1326,37 @@ class MeshTransformer(Module):
                     for index in range(query_layers)
                 ]
             )
+
+        # Declared boundary-trace read-outs: typed projections of the query's
+        # OWN cell's post-attention encoded states (the declared identity map
+        # query index <-> trace-boundary cell index).  The operator read-out
+        # joins the query operator state (panel identity: encoded local
+        # geometry, normal direction); the drive read-out joins the query
+        # field state and is an exactly linear typed channel mix (no
+        # invariant lift, no bias) so drive-linearity and zero preservation
+        # survive.  None when the mode is off: the knob adds no parameters,
+        # keeping default state dicts bitwise pre-extension.
+        if trace_of is not None:
+            self.trace_operator_read_out = TypedProjection(
+                operator_scalar_dim,
+                operator_vector_dim,
+                operator_scalar_dim,
+                operator_vector_dim,
+                scalar_bias=False,
+            )
+            self.trace_drive_read_out = TypedProjection(
+                drive_scalar_dim,
+                drive_vector_dim,
+                drive_scalar_dim,
+                drive_vector_dim,
+                scalar_bias=False,
+                include_vector_invariants=False,
+                pseudo_in=drive_pseudo_dim,
+                pseudo_out=drive_pseudo_dim,
+            )
+        else:
+            self.trace_operator_read_out = None
+            self.trace_drive_read_out = None
 
         # The quadratic mode's single declared bilinear composition, applied
         # to the assembled query field state in decode() immediately before
@@ -1609,8 +1812,20 @@ class MeshTransformer(Module):
                 )
             )
         )
+        # Per-boundary moment-pool segments: cell ranges of the merged source
+        # in ``self.boundary_names`` order (the merge order above).  ``None``
+        # (knob off) leaves every attention call on the historical path.
+        moment_segments: tuple[slice, ...] | None = None
+        if self.per_boundary_moment_pool:
+            segment_list: list[slice] = []
+            offset = 0
+            for name in self.boundary_names:
+                count = domain.boundaries[name].n_cells
+                segment_list.append(slice(offset, offset + count))
+                offset += count
+            moment_segments = tuple(segment_list)
         for block in self.operator_blocks:
-            operator = block(source_mesh, operator)
+            operator = block(source_mesh, operator, moment_segments=moment_segments)
 
         boundary_drive = self._pack_boundary_role(domain, "drive")
         global_drive = self._pack_global_role(
@@ -1626,7 +1841,7 @@ class MeshTransformer(Module):
         )
         drive = self.drive_lift(operator, raw_drive)
         for block in self.drive_blocks:
-            drive = block(source_mesh, operator, drive)
+            drive = block(source_mesh, operator, drive, moment_segments=moment_segments)
 
         global_operator_single = self._pack_global_role(
             domain.global_data,
@@ -1655,7 +1870,9 @@ class MeshTransformer(Module):
             )
         else:
             query_moments = tuple(
-                block.build_source_moments(source_mesh, operator, drive)
+                block.build_source_moments(
+                    source_mesh, operator, drive, moment_segments=moment_segments
+                )
                 for block in self.query_blocks
             )
         query_mesh = domain.interior.with_data(
@@ -1663,6 +1880,19 @@ class MeshTransformer(Module):
             cell_data={},
             global_data=domain.global_data,
         )
+        # The declared trace boundary's cell range in the merged source (the
+        # merge above concatenates boundaries in ``self.boundary_names``
+        # order, and each boundary's cells keep their mesh order), recorded
+        # so decode can align query i with its declared own cell.
+        trace_slice: slice | None = None
+        if self.trace_of is not None:
+            offset = 0
+            for name in self.boundary_names:
+                count = domain.boundaries[name].n_cells
+                if name == self.trace_of:
+                    trace_slice = slice(offset, offset + count)
+                    break
+                offset += count
         return EncodedBoundary(
             source_mesh=source_mesh,
             operator_state=operator,
@@ -1675,6 +1905,7 @@ class MeshTransformer(Module):
             query_mesh=query_mesh,
             global_data=domain.global_data.copy(),
             kernel_cache=kernel_cache,
+            trace_slice=trace_slice,
         )
 
     def decode(
@@ -1708,6 +1939,30 @@ class MeshTransformer(Module):
             raise ValueError(
                 "EncodedBoundary query moments do not match this decoder depth"
             )
+        # Declared boundary-trace alignment: query i IS cell i of the trace
+        # boundary (offset into the merged source by ``trace_slice.start``).
+        # The count is validated loudly; the ORDER is the caller's
+        # declaration and cannot be checked here.
+        trace_start: int | None = None
+        if self.trace_of is not None:
+            if encoded.trace_slice is None:
+                raise ValueError(
+                    "EncodedBoundary carries no declared trace alignment; it "
+                    "was encoded by a model without trace_of.  Re-encode with "
+                    "this model so the declared boundary's cell range is "
+                    "recorded"
+                )
+            n_trace = encoded.trace_slice.stop - encoded.trace_slice.start
+            if query_mesh.n_points != n_trace:
+                raise ValueError(
+                    f"trace_of={self.trace_of!r} declares the query mesh to "
+                    "be that boundary's cell centroids, index-aligned, but "
+                    f"the query mesh has {query_mesh.n_points} points while "
+                    f"the encoded boundary has {n_trace} cells; the declared "
+                    "identity map requires exactly one query per cell, in "
+                    "cell order"
+                )
+            trace_start = encoded.trace_slice.start
         scalar_outputs: list[torch.Tensor] = []
         vector_outputs: list[torch.Tensor] = []
         pseudo_outputs: list[torch.Tensor] = []
@@ -1731,6 +1986,23 @@ class MeshTransformer(Module):
                     )
                 )
             )
+            own: slice | None = None
+            if trace_start is not None:
+                # The declared identity map, chunk-local: queries
+                # [chunk.start, chunk.stop) are cells [own.start, own.stop)
+                # of the merged source.  The own-cell operator read-out is
+                # applied first so every downstream conditioning path (the
+                # query drive lift, the output gates, the quadratic
+                # read-in) sees the panel identity.
+                own = slice(trace_start + chunk.start, trace_start + chunk.stop)
+                own_operator = self.trace_operator_read_out(
+                    encoded.operator_state.slice(own)
+                )
+                query_operator = ScalarVectorState(
+                    query_operator.scalars + own_operator.scalars,
+                    query_operator.vectors + own_operator.vectors,
+                    query_operator.pseudos + own_operator.pseudos,
+                )
             n_chunk = normalized_points.shape[0]
             # Global drive quantities (for example a prescribed far field)
             # are legitimate pointwise query inputs as well as boundary
@@ -1795,8 +2067,20 @@ class MeshTransformer(Module):
             if self.query_decoder == "kernel":
                 # The dense pair-kernel message is the read-in of the query
                 # field state; a pointwise global drive keeps its additional
-                # lifted path exactly as in moment mode.
-                message = self.kernel_decoder(normalized_points, encoded.kernel_cache)
+                # lifted path exactly as in moment mode.  In trace mode the
+                # declared own-panel indices side-correct the exact
+                # double-layer member's self-entries (the jump relation).
+                message = self.kernel_decoder(
+                    normalized_points,
+                    encoded.kernel_cache,
+                    self_indices=(
+                        None
+                        if own is None
+                        else torch.arange(
+                            own.start, own.stop, device=normalized_points.device
+                        )
+                    ),
+                )
                 if query_drive is None:
                     query_drive = message
                 else:
@@ -1814,6 +2098,20 @@ class MeshTransformer(Module):
                     )
             if query_drive is None:  # guarded by query_layers >= 1 at construction
                 raise RuntimeError("query decoder produced no field state")
+            if own is not None:
+                # The own-cell drive read-out: an exactly linear typed
+                # channel mix of the declared cell's post-attention drive
+                # state, added to the query field state.  Drive-linear and
+                # zero-preserving by construction (bias-free, no invariant
+                # lift), so every field-mode contract survives; applied
+                # before the quadratic read-in so the declared drive degree
+                # counts it as part of the drive-linear state u.
+                trace_state = self.trace_drive_read_out(encoded.drive_state.slice(own))
+                query_drive = ScalarVectorState(
+                    query_drive.scalars + trace_state.scalars,
+                    query_drive.vectors + trace_state.vectors,
+                    query_drive.pseudos + trace_state.pseudos,
+                )
             if self.quadratic_read_in is not None:
                 # Every stage above is exactly linear in the drive at fixed
                 # geometry; this one bilinear composition raises the state to

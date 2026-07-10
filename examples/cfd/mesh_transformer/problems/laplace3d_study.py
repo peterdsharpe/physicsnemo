@@ -541,6 +541,7 @@ def run_experiment(
     output_dir: str,
     device: str = "cuda",
     eval_cases: int = 12,
+    save_checkpoint: bool = False,
 ):
     torch.manual_seed(seed)
     dtype = torch.float32
@@ -602,6 +603,21 @@ def run_experiment(
 
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
+    if save_checkpoint:
+        # Mirror problems/potential_flow.py's convention: the best-
+        # validation state dict plus the rebuild key (_build_model),
+        # for the dataset-chapter showcase runner (studies/ds_showcase.py).
+        checkpoint_name = f"{model_name}_seed{seed}.pt"
+        torch.save(
+            {
+                "model": model_name,
+                "seed": seed,
+                "steps": steps,
+                "state_dict": model.state_dict(),
+            },
+            out / checkpoint_name,
+        )
+        report["checkpoint"] = checkpoint_name
     (out / f"{model_name}_seed{seed}.json").write_text(json.dumps(report, indent=2))
     return report
 
@@ -629,6 +645,11 @@ if __name__ == "__main__":
     parser.add_argument("--steps", type=int, default=1500)
     parser.add_argument("--seed", type=int, default=17)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--save-checkpoint",
+        action="store_true",
+        help="write the best-validation state dict next to the JSON report",
+    )
     parser.add_argument("--device", default="cuda")
     arguments = parser.parse_args()
     result = run_experiment(
@@ -636,6 +657,7 @@ if __name__ == "__main__":
         steps=arguments.steps,
         seed=arguments.seed,
         output_dir=arguments.output_dir,
+        save_checkpoint=arguments.save_checkpoint,
         device=arguments.device,
     )
     summary_keys = ("model", "parameters", "splits", "state")
