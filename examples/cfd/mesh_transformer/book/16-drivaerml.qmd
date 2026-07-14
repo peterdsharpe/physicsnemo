@@ -1,12 +1,14 @@
 # DrivAerML: the industrial target {#sec-drivaerml}
 
-::: {.callout-warning title="Status: pre-registered outline, gated"}
-This campaign is **gated on two predecessors**: the training-memory fix
-(gradient checkpointing over decode chunks, whose paired measurement is
-in flight) and the AirFRANS campaign of @sec-airfrans. This chapter
-holds the standing hypothesis and the integration plan; the full
-pre-registration sharpens after AirFRANS lands and will be recorded
-here before any DrivAerML training run.
+::: {.callout-note title="Status: campaign run; results below"}
+The pre-registration sections (standing hypothesis, integration plan)
+are preserved as written before any run. The results
+(@sec-drivaerml-results) close H-ground, the gap investigation, the
+capacity ladder (3-seed), the members×trace factorial, the
+matched-protocol GeoTransolver control, and the
+representational-efficiency probes (corrector no-go). One thread is
+interim and marked as such: the flagship composition arm (final at
+ep500 pending).
 :::
 
 ## The dataset, and what makes our variant special
@@ -66,7 +68,196 @@ resolution (50k–200k surface points, batch 1) requires the
 checkpointed decode — the wall and its fix are @sec-scale's story,
 whose paired B200 measurement accompanies this campaign.
 
-## Results
+## Results {#sec-drivaerml-results}
 
-*(To be filled from the archive; the pre-registered acceptance
-criteria land here first, before any training run.)*
+Two campaigns resolved here. The first answered the chapter's
+pre-registered question (H-ground) — with its falsifier, in the
+neutral form. The second was not planned in this chapter at all: a
+40× deficit against the recipe's incumbent triggered a
+root-cause investigation (@sec-nb-geot-gap) whose constructive output
+— the boundary-trace mode plus two protocol findings — moved the
+program's DrivAerML floor by 4.5× with a per-step mechanism
+attribution.
+
+### H-ground: level, and honestly answered
+
+Three arms at matched 500-epoch, 4-node protocol (1 seed/arm;
+provenance `output/drivaer_v2/*.log`, HSG): vehicle-only val
+**0.1019**, all-five-boundaries **0.1026**, per-boundary-pooled
+**0.1036**. The pre-registered falsifier fires in its neutral form
+(@sec-nb-hground-verdict): with the vehicle-starvation and
+drive-overflow confounds fixed, the four labeled tunnel boundaries
+neither help nor hurt. At 722 panels for an entire ground plane, the
+far boundaries carry little exploitable signal beyond what the
+freestream vector already encodes — **for surface-field prediction at
+this resolution, the boundary-value problem's far boundaries are
+adequately encoded in the freestream.** A publishable negative, per
+the pre-registration; caveats attached: single seed per arm, no
+banded underbody/wake decomposition.
+
+Two pipeline findings from this campaign outlived it (both
+upstreamed): the reader's dual-cap subsampling starved the vehicle to
+378 cells (fixed by the topology-aware reader, PR #1819), and the
+norm-free drive stream overflows on raw dimensional freestreams
+(fixed by unit-direction encoding — a model *lesson*, not a bug: the
+zero-preserving stream is deliberately norm-free, so its inputs must
+arrive nondimensionalized).
+
+### The gap investigation and the trace mechanism
+
+Every capacity variant at the v2 protocol crowded into one band —
+plain 0.1019, members 0.0999, wide 0.0990, allbc/pooled 0.102–0.104 —
+while GeoTransolver reached 0.061 after *one epoch* under the
+identical trainer. The investigation (@sec-nb-geot-gap-verdict)
+killed the metric and data hypotheses and isolated two mechanisms:
+a representational floor specific to on-boundary queries (H-D), and
+a representational-efficiency gap (H-C).
+
+H-D's constructive fix is the **boundary-trace mode**: surface
+queries sit exactly on the double layer's jump discontinuity, and the
+closed form serves the *interior* limit (−½) where the physics needs
+the *exterior* trace (+½). Declaring the query mesh to be the
+boundary licenses the exact one-sided correction plus own-cell typed
+read-outs (@sec-nb-trace-mode). Verdict at protocol end
+(@sec-nb-trace-verdict): **the pre-registered ≥5× acceptance is
+REFUTED — measured 2.03×** (0.1019 → 0.0503) — but trace is the only
+intervention that ever broke the 0.10 plateau, and the corrected arm
+then plateaus again at ~0.049. The floor moved, and stopped: the
+signature of the *next* representational ceiling, owned by H-C.
+
+### The capacity ladder, post-trace (T2)
+
+With the trace floor removed, does capacity buy accuracy again?
+Matched 1-node protocol on GB300 (single seed per rung — the
+pre-registered ladder design; provenance `output/drivaer_t2/*.log`,
+AGA):
+
+| rung | final val (ep500) | vs trace |
+|---|---|---|
+| trace (reference dims) | 0.0288 | — |
+| trace + ranks 2× | 0.0284 | +1.4% (noise) |
+| **trace + operator_layers 2** | **0.0228** | **+26%** |
+
+The ladder is *selectively* ordered (@sec-nb-t2-verdict): encoder
+**depth** buys a solid 26%; attention **rank** buys nothing. The
+post-trace floor is limited by the compositional depth of boundary
+processing, not the width of the attention bottleneck. The depth
+rung's single-seed caveat is resolved: 3-seed finals
+0.0228/0.0224/0.0212 (@sec-nb-probes-verdict) — tight spread, the
++26% holds.
+
+### The effective-batch windfall
+
+The ladder's cross-cluster control produced its own finding: the
+*identical* trace configuration reads **0.0288 at 1-node** (108
+optimizer steps/epoch) vs **0.0503 at the 16-GPU protocol** (27
+steps/epoch) — 1.75× better from effective batch size alone, at a
+500-epoch budget. Consequence, flagged wherever numbers cross
+protocols: **no cross-protocol comparison in this chapter is valid
+without a matched-batch control**, including against the
+GeoTransolver anchor (measured at the 16-GPU protocol; its 1-node
+control is running).
+
+### The ledger
+
+$$
+\underbrace{0.1019}_{\text{v2 protocol}}
+\;\xrightarrow{\text{exterior trace (exact)}}\;
+\underbrace{0.0503}_{2.03\times}
+\;\xrightarrow{\text{effective batch}}\;
+\underbrace{0.0288}_{1.75\times}
+\;\xrightarrow{\text{encoder depth}}\;
+\underbrace{0.0228}_{1.26\times}
+$$
+
+Each step is a licensed, understood mechanism — jump relation,
+optimization steps, compositional depth — not a tuning outcome. The
+distance to the incumbent is *not* quoted here until the
+matched-protocol control lands (PENDING below).
+
+### The matched incumbent control, and where the gap lives
+
+The 1-node GeoTransolver control finished at **0.00249** (ep499) —
+within 2% of its 16-GPU anchor, so the incumbent gains nothing from
+the batch effect that gave us 1.75×. The protocol-clean gap is
+therefore **deep2 0.0228 vs GeoT 0.00249 = 9.2×**, down from 40× at
+the start of the investigation. Per-epoch wall-clock is comparable
+between the models at this protocol: the remaining gap is
+*representational efficiency*, not compute (@sec-nb-tail-verdict,
+@sec-nb-t3-launch).
+
+The efficiency probes locate it further — and then, on the strongest
+base, exclude the leading suspect. **P1** (optimizer): refuted by
+inspection — both models share the trainer's exact settings. **P2**
+(local-geometry diagnostic; deliberately contract-breaking, never a
+keeper): CONFIRMED for efficiency *on the singpair-trace base* —
+persistently ~100 epochs ahead at equal quality — but only +7% at
+the converged floor. **P3** (supervision density): ¼-density costs
+~35% at protocol end. That P2 signature motivated a declared local
+corrector (classical BIE-style near-field structure in the decoder),
+gated on a pre-registered probe ladder — and **the probes returned a
+triple null** (@sec-nb-probes-verdict). On the deep2+members base,
+the same local information — entering through the decode kernel (A),
+restricted to a subtended-angle near field (B), or replaced by a
+matched-width global latent (C) — moves neither the efficiency curve
+nor the floor:
+
+| arm (seed 43) | ep25 | ep50 | ep100 | ep~300 |
+|---|---|---|---|---|
+| control (deep2+members) | 0.0487 | 0.0341 | 0.0234 | 0.0213 |
+| A: kernel-side local | 0.0488 | 0.0352 | 0.0247 | 0.0226 |
+| B: near-field only | 0.0467 | 0.0347 | 0.0244 | 0.0225 |
+| C: global-latent control | 0.0461 | 0.0355 | 0.0246 | 0.0227 |
+
+Synthesis: **local-geometry information is subsumed by
+depth+members capacity** — the strong base learns whatever those
+features encode quickly on its own (the same subsumption pattern as
+the AirFRANS pseudo-composition result, one level up). The corrector
+is a **no-go**: its premise died in a two-GPU-day probe instead of a
+multi-day build. The incumbent's ~25× epoch-efficiency advantage
+persists with local shortcuts now *excluded* as its mechanism on
+strong bases; remaining suspects for a future probe round are the
+direct field parameterization (no integral assembly in the read-out
+path), latent-token global attention, and normalization details.
+
+### The factorial, and the composition story
+
+The members × trace factorial completed at the 16-GPU protocol
+(anchors: plain 0.1019, trace 0.0503, members 0.0999;
+@sec-nb-factorial-verdict):
+
+| arm | final val | vs trace |
+|---|---|---|
+| members + trace | 0.0458 | 1.10× |
+| **members + wide + trace** | **0.0270** | **1.86×** |
+
+Members at reference width remains a near-null even post-trace
+(+10%, echoing its +2% pre-trace). But trace and **width** compose
+*super*-multiplicatively: trace bought 2.03× on the plain arm and
+**3.7×** on the wide arm — width was starved *behind* the trace
+defect. This is the interaction the flagship arm banks on.
+
+### The flagship (interim — final pending)
+
+The all-mechanism composition — trace × members × wide ×
+operator_layers 2, 1-node protocol, 3 seeds — stands at
+**0.0139/0.0140/0.0156 at ep~300**, already below its
+pre-registered ≤0.020 acceptance with 200 epochs of cosine decay
+remaining. *Interim numbers; the verdict is read at ep500.* At the
+current trajectory the protocol-clean distance to the incumbent
+lands near **5–6×** (from 40× at the start of the gap
+investigation).
+
+### Decode efficiency: the 14× repricing
+
+The profile that the cluster's idle-GPU telemetry forced
+(@sec-nb-decode-profile) found a 102k-launch dispatch storm in the
+shared closed-forms path (an `einsum` lowering to a 4.2×10⁷-batch
+bmm) and a deliberately-sequential bitwise member loop. Both fixed —
+the second under a physics-lined contract split
+(@sec-nb-contract-split): closed forms stay bitwise, learned members
+move to measured-tolerance GEMMs with a bitwise reference mode
+retained. Result: **7.2× (singpair) and 14.2× (members) step
+speedups**, 474/474 tests, live on both clusters. Every wall-clock
+number in this chapter is now ~an order of magnitude cheaper than
+when it was measured.

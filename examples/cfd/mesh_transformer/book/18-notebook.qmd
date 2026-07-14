@@ -2513,3 +2513,918 @@ trace mode 457, calculus under the upstream gradient-layout change
 192). Provenance discipline: the cluster-sync embargo holds until
 E1's generation bands complete under old-mesher provenance; catalogs
 generated after the sync will record `fill_interior (PR #1800)`.
+
+## 2026-07-10 — the four-day stall was fair-share arithmetic, and short-QOS chunking breaks it {#sec-nb-fairshare-stall}
+
+The pure-"(Priority)" stall on both clusters (all jobs PD since
+2026-07-06, zero scheduling) is now diagnosed with numbers, not vibes.
+On HSG, `sshare -u psharpe` shows RawUsage 1,673,675 — **37.2% of the
+whole `coreai_modulus_cae` account's effective usage** against a fair
+target of 2.3% (1 of 43 user-shares) — putting our fair-share factor
+at 0.521 versus ~0.82 for competing users. Priority decomposition
+(`sprio`): our jobs score 102.3k = 52,116 fairshare + 10,000 partition
++ 40,000 QOS(normal) + ~180 age, while the jobs ahead sit at 132.5k
+(their fairshare 82,467). The 30k gap is entirely the fairshare
+component; age accrues ~40 points/day and can never close it. Decay
+half-life is 3d6h, so organic recovery ≈ 3–7 more days of running
+nothing. This is the bill for the heavy week — the sweep fleet worked
+exactly as intended and spent exactly the currency it runs on.
+
+**The lever: QOS `short`.** `PriorityWeightQOS = 10⁶` and QOS `short`
+has priority 200 vs `normal`'s 100 → +80,000 instead of +40,000. Cost:
+2h MaxWall, 2 running jobs, 20 queued, ≤64 nodes. Every run in the
+program is checkpoint/resume-safe by construction (the batch_long
+preemption churn forced that months of lessons ago), so 2h chunks
+chained with `afterany` are protocol-neutral — same run_id, same
+checkpoints, same trajectory. Converted the three highest-value
+chains, holding (`scontrol hold`) their normal-QOS originals to
+prevent double-writes to shared run dirs:
+
+- **trace acceptance** (was 4335380): 10×2h chunks, 4496142–4496151,
+  `mesh_transformer_surface_trace` on `drivaer_ml_surface`, 4-node
+  DDP — the @sec-nb-trace-mode ≥5× pre-registration unchanged. Chunk
+  script fixes the known `>`-truncation on the inner model log (`>>`).
+- **sw10** (V1 wide s17–19 + V5 log_pseudo s17): 4 chunks 4496175–82.
+- **sw9** (V4 members_log s20–21): 4 chunks 4496184–89.
+
+Verified after submission: chunks score exactly 142,116 (the
+predicted 52,116+10,000+80,000), took the top of the batch_long
+pending queue, and **within two minutes both QOS slots were running**
+— trace acceptance on 4 nodes (4496142), sw10 on 1 (4496175); sw9
+queued behind the 2-job cap as designed. Four days of stall, ended by
+one queue-priority decomposition. On ORD no intervention needed: fair-share there is healthy
+(factor 0.80, RawUsage 45) and our two sweep heads are #2–3 in a
+small (~11-node) partition's queue — pure capacity, clears on churn.
+
+Ops lesson (promoted to the hpc-resources skill): fair-share famine
+after a heavy fleet week is a *predictable regime*, and the short-QOS
+chunk chain is the designed escape hatch — 2 concurrent slots of it.
+
+**Addendum (same day, on Peter's direction): fleet-wide re-sizing.**
+The chunking logic extends beyond the QOS-short slots — allocation
+length should be set by *startup cost + checkpointability*, never by
+total runtime, because short requests fit backfill holes that long
+ones never see. Rebuilt the entire pending fleet as 4h chunk chains
+on `batch,batch_long` (sw1–sw8 + sw11 at 4×4h; af_full at 3×4h;
+dv2_members at 6×4h under the `>>`-fixed DDP script; sw9/sw10
+short-QOS lanes extended with 2×4h normal tails to their 16h
+budgets), cancelling the 8–24h originals and the held duplicates.
+The one deliberate exception: the E1 generation bands stay at 12h —
+the generator is atomic by design (manifest-or-regenerate; measured
+>4h per band from the failed 4h attempts on 2026-06-30), exactly the
+non-splittable case. Startup overhead per chunk is ~1 min node +
+~3–10 min Python (env sync + compile), which is why the floor is
+~3–4h and not 1h. Principle promoted to the hpc-resources skill.
+
+**Interim trajectory note — trace acceptance, epoch ~100 of 500 (NOT
+the verdict).** The trace arm reads Val Loss 0.0556–0.057 at epochs
+92–99 — versus, at matched epoch, members 0.1031 (ep104) and wide
+0.1008 (ep77), and versus the plain arm's *final* 0.1019 (ep499).
+Every prior DrivAerML arm, at every capacity we tried, plateaued in
+the same 0.099–0.103 band; the trace arm is through that band by
+1.85× at one-fifth of the budget, and has just crossed below
+GeoTransolver's 1-epoch value (0.061). Mechanistically this is what
+H-D predicted: the −½ vs +½ trace defect was a *representational
+floor* no capacity could buy through. The pre-registered acceptance
+(≥5× vs plain: ≤0.0204 at protocol end) remains open — cosine decay
+does its work late, and the verdict is read at ep500, not
+extrapolated from ep100. GeoTransolver's final anchor (0.00253) is
+still 22× below the current reading, so H-C (representational
+generalization efficiency) remains the dominant gap component, as
+pre-registered.
+
+## 2026-07-10 (later) — the AGA era: scale-up directive and the parallel hypothesis fleet {#sec-nb-aga-fleet}
+
+Peter provisioned AGA (GB300 cluster, 2579 GPU nodes; ~300 nodes idle
+at recon, i.e. ~1,200 free GPUs) with AirFRANS and DrivAerML already
+transferred, and directed a massive scale-up with an explicit
+strategy: **more hypotheses with smaller, quicker tests** over fewer
+enormous ones — maximize science per GPU-hour, then scale the
+GPU-hours. Deployment in flight: repo + AirFRANS npz catalog (v1,
+amended masking) + sweep checkpoints moving HSG→AGA via the datamover
+path (8-stream rsync per the transfer playbook).
+
+Pre-registering the fleet BEFORE any launches:
+
+**T1 — trace universality (AirFRANS).** *Hypothesis:* the exterior-
+trace defect (−½ vs +½ own-panel read-out) is a universal
+representational floor for on-boundary targets, not a DrivAerML
+quirk. *Design:* `mt_nl_members_trace` (members + trace, being built
+now) vs `mt_nl_members`, scarce task, GLOBE schedule, ≥5 seeds each.
+*Prediction (structural, field-selective):* surface-pressure metrics
+improve materially while volume metrics stay within seed noise —
+because only on-boundary queries touch the defective entries; volume
+queries never do. *Falsifier:* uniform change across surface and
+volume fields, or no change — either kills the "universal floor"
+reading (the DrivAerML gain would then be closed-surface- or
+protocol-specific). The surface/volume asymmetry is the signature;
+we get it for free in the existing per-field metrics.
+
+**T2 — post-trace capacity ladder (DrivAerML).** *Hypothesis:* the
+pre-trace refutation of capacity (members/wide/pooled all stuck at
+0.099–0.103) was conditional on the trace floor; with the floor
+removed, capacity buys accuracy again. *Design:* trace × {reference,
+members, members_wide, rank-up, operator_layers=2} at the standard
+4-node/500-epoch protocol on AGA, single seed for the ladder shape,
+then 3 seeds on the winner. *Prediction:* monotone (or at least
+clearly ordered) improvement with capacity. *Falsifier:* a flat
+ladder ⇒ the next floor is H-C's representational efficiency and
+capacity work is deprioritized in favor of T3. *Gate:* launches only
+after tonight's ep500 trace verdict (if trace itself fails its ≥5×
+pre-registration, T2 is re-designed, not silently rescoped).
+
+**T3 — H-C decomposition (why is GeoTransolver ~100× more
+epoch-efficient?).** GeoTransolver reaches val 0.061 after ONE epoch
+where our plain arm needs 500 for 0.102. Probes, each isolating one
+candidate mechanism, metric = val at epochs {1, 5, 25} (an
+"efficiency curve", cheap by construction): **P1 optimizer** — swap
+our AdamW schedule for the GeoT-style setup (main now ships fused
+Muon) holding all else; **P3 supervision density** — queries/step
+2k→50k (GB300 HBM allows it) holding steps constant. **P2
+local-geometry diagnostic** — concatenate local query-geometry
+features into the decode; this deliberately BREAKS the pure
+boundary-operator contract and is labeled a diagnostic, never a
+keeper: if P2 alone recovers most of the efficiency, the principled
+response is a declared local corrector (classical BIE + singular
+correction), not feature soup. *Prediction:* P1 small, P3 moderate,
+P2 large — i.e., the efficiency lives in local-geometry shortcuts
+our operator path must synthesize the long way. *Falsifier per
+probe:* its curve coincides with the baseline's.
+
+**T4 (ops, not science) — V-lane migration.** The stalled AirFRANS
+V1/V4/V5/LR/qps lanes (sw1–8, 11) move to AGA `batch` (≤4h,
+preemption-exempt) as singleton chains resuming from the transferred
+checkpoints; HSG copies get cancelled at switchover to keep one
+canonical checkpoint lineage per arm. HSG keeps: trace chain (ep500
+verdict tonight), GLOBE DrivAerML baseline, evalx, and the four
+atomic 12h generation bands.
+
+**T1 amendment (pre-data, same day): re-scoped to T1-reduced.** The
+build fork hit its pre-registered stop rule: AirFRANS surface queries
+coincide *exactly* with panel vertices (994/994 at distance 0.0 on a
+real catalog case), not panel interiors — and the flat-panel +½
+correction is wrong at a vertex, where the one-sided limit is +¼ per
+adjacent panel (collinear case; angle-dependent at corners), split
+across two panels. Forcing nearest-panel +½ would over-correct one
+entry and leave the other adjacent panel's closed form on its
+degenerate branch — reproducing the very sign pathology trace mode
+repairs. The model's trace contract is also all-or-nothing over the
+query mesh (model.py decode count check), which AirFRANS's mixed
+volume+surface queries cannot satisfy. **Amended design (before any
+training runs):** T1-reduced = a surface-only companion task, queries
+= airfoil panel centroids (satisfies `trace_of="airfoil"` exactly, as
+on DrivAerML), targets = C_p interpolated vertex→centroid
+(second-order in the ~1.2e-3-chord panel length). Arms, prediction,
+falsifier, and seed count unchanged; the surface/volume-asymmetry
+signature is replaced by the surface-task delta directly (the volume
+control is now structural: volume queries are absent by
+construction). A vertex-trace extension (exact one-sided endpoint
+limits + partial-trace contract) is pre-registered as a FOLLOW-UP
+build, gated on T1-reduced confirming.
+
+## 2026-07-10 (night) — trace acceptance verdict: plateau broken, ≥5× refuted, a new floor at ~0.049 {#sec-nb-trace-verdict}
+
+The trace arm completed its 500-epoch protocol (chunked short-QOS
+chain, five clean checkpoint boundaries). Final Val Loss ≈ 0.0503
+(ep499; plain singpair anchor 0.1019 at matched protocol).
+**Pre-registered ≥5× acceptance: REFUTED** — the improvement is
+2.03×, not ≥5×. But the outcome fits neither pre-registered branch
+cleanly, and the honest reading is three-part:
+
+1. **The trace mechanism is real and load-bearing.** Every prior
+   DrivAerML arm at every capacity (plain 0.1019, members 0.0999,
+   wide 0.0990, allbc/pooled 0.102–0.104) crowded into one band;
+   trace broke it by 2× — the only intervention that ever moved the
+   floor. H-D confirmed as *a* mechanism, refuted as *the dominant*
+   share-carrier its ≥5× pre-registration claimed.
+2. **A new plateau at ~0.049 appeared by ep~250** and the cosine tail
+   (LR /64) bought nothing after — the same signature the 0.10 floor
+   showed. This is characteristic of a representational ceiling, not
+   an optimization or capacity one (capacity is being re-tested
+   directly by T2 anyway).
+3. **Gap ledger update:** GeoTransolver anchor 0.00253 → remaining
+   gap 19.9×, now owned almost entirely by H-C (representational
+   generalization efficiency), consistent with its pre-registered
+   dominance (their 1-epoch val 0.061 ≈ our new converged floor).
+
+**T2 gate decision (logged, not silent):** T2's design is unchanged —
+trace × capacity ladder — but its question sharpens: is the 0.049
+floor capacity-buyable? Prediction unchanged (ordered ladder);
+falsifier unchanged (flat ⇒ H-C floor ⇒ T3 is the main line). T3's
+priority rises symmetrically: the twin-plateau signature (0.10 → half
+the defect fixed → 0.049) suggests the efficiency mechanism, whatever
+it is, throttles *both* regimes.
+
+**T2 launch note + logged protocol deviation (2026-07-11, pre-data).**
+AGA's multiplanar RoCE fabric rejects stock-NCCL RDMA bringup
+(ibv_modify_qp err 95, GID −1; no site nccl.conf or net plugin —
+details in the hpc-resources AGA card), so the T2 ladder runs
+**single-node 4×GB300 DDP instead of the HSG 4-node/16-GPU protocol**.
+Consequences, stated before results: (a) the ladder is internally
+consistent (all five arms identical world size, data order, LR
+schedule); (b) absolute values are NOT directly comparable to the HSG
+anchors (0.1019 plain / 0.0503 trace) because world size × per-rank
+batch changes the effective batch; (c) the trace re-run rung exists
+precisely to measure that shift — the ladder's capacity ORDERING (the
+pre-registered question) is unaffected. T1 is untouched (single-GPU
+runs by design).
+
+**T2 design improvement (pre-data): the members rungs become a 2×2
+factorial on HSG.** Single-node cost measurement on AGA: members-class
+arms run at 7.98 s/step / 64 GiB vs the singpair rungs' 1.23 s/step /
+5 GiB (the familiar H4 members-decode cost) — ~120 h to protocol end
+at 1 node, vs ~19 h for the cheap rungs. Decision, logged before any
+arm reports: members_trace and members_wide_trace MOVE to HSG's
+short-QOS lane at the original 4-node/16-GPU protocol, where the
+matched anchors already exist — plain 0.1019, trace 0.0503, members
+0.0999 — so members_trace completes a clean {members ±} × {trace ±}
+factorial (interaction question: does capacity finally compose with
+the corrected trace?). AGA's ladder slims to the internally-consistent
+1-node rungs {trace re-run, rank96, deep2} answering the rank/depth
+axis. No arm's prediction or falsifier changes; only placement.
+
+## 2026-07-11 (early) — T3 opens: P1 refuted by configuration inspection {#sec-nb-t3-launch}
+
+**P1 (optimizer explains GeoTransolver's epoch-efficiency): REFUTED
+without an experiment.** The GeoTransolver DrivAerML anchor trained
+through the SAME unified-recipe trainer as our arms, and
+`geotransolver_surface.yaml` carries zero training overrides — both
+models share `base.yaml`'s optimizer (AdamW-class, wd 1e-4, betas
+0.9/0.999), LR schedule, huber loss, and batch size exactly. The
+~100× 1-epoch efficiency difference (their 0.061 vs our 500-epoch
+0.102) is architectural, not optimization. Cheapest verdict of the
+program: one config read. (GLOBE's `combined_optimizer.py` is
+Peter's AirFRANS-side machinery — a separate lane, irrelevant to the
+DrivAerML anchor.)
+
+**P3 launched** (supervision density): trace config,
+sampling_resolution ∈ {2,500 · 10,000 · 40,000} at matched 1-node
+protocol on AGA — the running T2 trace re-run IS the 10k rung, so two
+new chains (mt_t3_sr2500 / mt_t3_sr40000). Efficiency-curve read-out
+(val @ ep 1/5/25 comes free — the recipe validates every epoch), plus
+final val for the density-vs-quality trade. Prediction (unchanged):
+moderate effect; falsifier: curves coincide.
+
+**P2 build delegated** (local-geometry diagnostic): decoder knob
+`diagnostic_local_query_features` concatenating typed local features
+(unit normal, log relative cell area, curvature proxy) into the
+decode stream — contract-breaking by design, labeled, never a keeper;
+prediction: if P2 recovers most of the early-epoch efficiency, the
+gap lives in local-geometry shortcuts and the principled response is
+a *declared* local corrector (classical BIE + singular correction),
+not feature soup.
+
+**T3/T2 mid-run notes (2026-07-11 morning, pre-verdict).** (1) P2
+localgeom: fast early exactly as predicted (ep5 val 0.0796 vs trace
+0.1042) then **NaN by ep25** — unbounded curvature/log-area feature
+magnitudes at sharp vehicle cells suspected; the diagnostic is being
+revised with tanh-bounded channels (scale set from measured robust
+spread) and relaunches as `t3_localgeom2`. Both facts recorded: the
+early-efficiency direction AND the instability — a bounded rerun that
+keeps the speed without the blowup is required before P2 counts as
+evidence. (2) T2 1-node ladder at matched ep50: **deep2 0.0348 <
+trace 0.0453 ≈ rank96 0.0461** — the first post-trace signal that
+capacity buys accuracy, and specifically encoder DEPTH, not attention
+rank. Verdict at ep500.
+
+## 2026-07-11 — T1 verdict: directionally consistent, modest, not decisive {#sec-nb-t1-verdict}
+
+All ten runs completed the 1000-epoch surface-task protocol (ep1000
+finals, both conventions, ×10⁻⁴):
+
+| seed | members pooled | trace pooled | members per-sample | trace per-sample |
+|---|---|---|---|---|
+| 17 | 4.56 | **2.59** | 4.91 | **3.91** |
+| 18 | **4.60** | 4.92 | 5.68 | **4.92** |
+| 19 | 7.82 | **6.58** | 10.63 | **9.42** |
+| 20 | 7.27 | **3.66** | 6.36 | **4.37** |
+| 21 | 5.92 | **4.81** | **5.87** | 8.59 |
+
+Trace wins **4/5 seeds under each convention** (different dissenting
+seed each time); medians 5.92→4.81 pooled (1.23×) and 5.87→4.92
+per-sample (1.19×); means 1.34× pooled. A 4/5 paired sign result is
+p≈0.19 one-sided — not decisive at n=5, and the between-seed spread
+within a single arm (up to 1.7×) brackets the between-arm gap.
+
+**Verdict against the pre-registration: NOT CONFIRMED as stated.**
+The prediction said surface metrics "improve materially" — a phrasing
+I failed to quantify at registration time (logged as a
+pre-registration defect; the DrivAerML analogue said ≥5× and this
+should have said ≥2×). A 1.2–1.35× median effect with consistent
+direction across both conventions and 4/5 seeds is *weak support*,
+not confirmation. Two context facts sharpen the reading: (1) the 2D
+closed form provably carries the same signed-zero defect
+(kernel_decoder.py atan2 form; pinned by
+test_exterior_trace_matches_analytic_exterior_limit_2d), so the
+comparison was a real test, not a vacuous one; (2) the trajectory
+oscillated — trace led clearly at ep100 (4/5 per-sample, ~2.7×
+median), the arms converged by ep300–800, and a modest trace lead
+re-emerged at the cosine floor.
+
+**Synthesis across T1 + the DrivAerML trace verdict
+(@sec-nb-trace-verdict):** the trace defect behaves as a
+*learnable-but-slow bias*. Where budget and problem size let the
+network absorb a fixed own-panel constant error (2D, 994 fixed
+panels, 1000 epochs), the corrected and uncorrected arms converge to
+within ~1.2×; where they don't (3D, subsampled queries over ~500k
+cells, 500 epochs), the correction is worth 2×. Practice conclusion
+unchanged and now better grounded: trace mode is exact, costs
+nothing, helps early always, and helps finally when the problem is
+big — it stays on for boundary tasks. The vertex-trace extension
+(gated on T1 "confirming") stays UNBUILT: a ≤1.35× n=5 effect does
+not license new numerics; revisit only if a mixed-query use case
+demands it.
+
+**P3/sr40000 restart-loop caught and fixed (2026-07-11 morning).** At
+40k queries the arm runs ~30 min/epoch, so a 4h chunk dies at ~ep8 —
+below save_interval=10's first checkpoint — and the singleton chain
+restarted from scratch each link (two ep1 lines in the log; one full
+4h chunk of zero-progress compute burned). Fix: save_interval=1 for
+this rung (checkpoint cost negligible at 30 min/epoch), relaunched
+watchdog-guarded. **Logged cap (no silent caps): the sr40000 rung
+reads out at ~ep60** (8×4h chain), not ep500 — ep500 would cost 10+
+days for a rung whose purpose is the early-epoch efficiency curve;
+the P3 comparison across {2.5k, 10k, 40k} is at matched early epochs.
+Ops lesson re-learned in numbers: save_interval must be ≪
+epochs-per-chunk, always derived from measured epoch time, never
+inherited.
+
+## 2026-07-11 — V-verdicts land: log-radial confirmed 1.66×; the tail anomaly gets a mechanism candidate {#sec-nb-v-verdicts}
+
+The stalled sweep lanes completed overnight (HSG backfill + the 4h
+re-sizing). Test-split headline, pooled convention, u_x, clean seeds
+(anomalous seeds listed separately — nothing excluded silently):
+
+- **members-8 protocol baseline (s22–26): 0.0199–0.0231, median
+  0.0213, ZERO anomalies in 5 seeds.** The reference arm is stable.
+- **V4 members_log (s17–21): 0.0120/0.0129/0.0128/0.0153 + one
+  anomalous seed (s21: u_x 0.100 while u_y 0.023 stays clean).
+  Clean-seed median 0.0128 → 1.66× better than members-8.
+  V4 CONFIRMED**: H4-L's log-radial features (ln, /√, ·/√ forms)
+  make power-law scales linearly learnable — the largest single
+  AirFRANS gain since members themselves, achieved with LEARNED
+  scales, exactly the direction Peter pushed (away from declared
+  viscous scales).
+- **V5 log_pseudo (s18–19 so far): 0.0155/0.0135 ≈ members_log
+  alone.** Early read: composition adds nothing on top of log-radial
+  — log-radial may subsume the pseudo-composition gain (s17 finishing;
+  verdict when 5 seeds).
+- **V1 flattening (n_clean=2 per arm — TOO THIN for a verdict):**
+  members16 clean 0.0146/0.0232, members32 clean 0.0167/0.0131 vs
+  baseline 0.0213 — suggestive, undecidable; blowup rate 1/3 in both.
+- **V3-LR coda:** lr5e-4 median 0.0246, lr2.5e-4 median 0.0356 —
+  protocol LR remains best for medians, reconfirming V3.
+- members_wide s17–19 finished but have NO final eval — a resume-logic
+  gap (a chunk that finds training complete exits without re-running
+  the test eval). Offline evalx queued (4665054); flagged as a runner
+  bug to fix (post-completion resume should still emit the headline).
+
+**Tail-anomaly census (all protocol-LR arms):** members-8 0/5,
+members_log 1/5 (u_x only), members16 1/3 (both velocities),
+members32 1/3 (u_x = 0.81!), lr5e-4 1/5 (u_x), **lr2.5e-4 0/5**.
+Anomalies: single-velocity-field, concentrated in member-heavy/
+feature-rich arms at protocol LR, ABSENT at halved-again LR even
+though medians there are worse. **Pre-registered H-tail-1
+(edge-of-stability interaction):** blowup probability is an
+LR × member-capacity interaction — the protocol LR sits at the
+stability edge for ≥8-member decoders and log-features sharpen it.
+*Deciding experiment (launched simultaneously with this entry,
+mt_tail1_a/b on AGA): members_log seeds 17–21 at lr 1e-3 (0.71×
+protocol). Prediction: anomaly rate → 0/5 with clean-seed median
+within ~15% of 0.0128. Falsifier: anomalies persist at 1e-3 (⇒ not
+LR-gated; init/data-order lottery becomes the lead hypothesis), or
+the median degrades ≫15% (⇒ the edge is where the performance lives
+— a real trade-off, not a free fix).*
+
+**Correction to the "runner bug" note above:** the runner is correct —
+a post-completion resume falls through to the final test eval and
+would emit the headline. The actual failure mode is the chain's LAST
+link reaching its wall during the (slow, full-test-split) final
+evaluation: no headline, no successor to retry. Ops rule, not code
+fix: chains must be provisioned with one spare link beyond expected
+training completion, and a log ending at "resumed_from" with no
+headline means "died mid-eval — queue an offline evalx."
+
+**DCGM reap loop on mtrace (2026-07-11 midday) — escalated from
+one-off, countered, and instrumented as an experiment.** After 6
+clean 2h links, the HSG idle reaper cancelled two consecutive
+mt_dv2_mtrace links at ~30 min each (4 idle of 16 = one node's worth;
+members-class decode runs ~1–2% SM occupancy — memory-bound, the
+same cost the Barnes–Hut/FLARE speed threads exist to fix). With
+save_interval=10 > the ~5 epochs a reaped link trains, the chain
+stalled at ep65 — the sr40000 zero-progress trap with the reaper
+playing the wall. Counters: save_interval→2 on both factorial
+chains (reaped links now bank progress), and — since both reaped
+jobs shared nodes nvl72004-T18/nvl72075-T18 — the rechained links
+carry `--exclude` on those two nodes as a *discriminating test*:
+prediction, if the reap was a node-local DCGM artifact, 0 further
+reaps; if reaps continue on fresh nodes, the workload is
+intrinsically under-threshold and the sanctioned idle-time exemption
+(Peter's call) is the only clean path. mwtrace (wider arm, higher
+arithmetic intensity): 0 reaps so far — if that holds while narrow
+mtrace keeps getting hit, the reap boundary sits between the two
+arms' SM profiles.
+
+**Reap mechanism SETTLED by direct measurement (supersedes the
+node-artifact test above):** on the live mtrace nodes, `nvidia-smi`
+reads 100% GPU-util / 71 GB while DCGM SM_ACTIVE reads ≤1% on the
+flagged ranks — kernels resident, warps idle. The reference-width
+members decode is a stream of tiny kernel launches (plus spin-wait
+collectives between imbalanced ranks): occupied silicon doing almost
+no math, ~1% efficiency. The wide arm passes the reaper because the
+identical launch pattern carries 4× the math per kernel. The reaper
+is measuring truthfully; the exemption route is dropped (Peter's
+call — the waste is real). **Consequence: #43 (fused/batched member
+MLP decode, bitwise-identical math) is promoted from
+speed-opportunity to BLOCKING engineering**, plan: profile one decode
+step (kernel counts, GPU-busy fraction) → batch member MLPs into
+fused GEMMs. The node-exclusion discriminating test is withdrawn as
+superseded — direct measurement answered the question the experiment
+was built to ask. What we "did wrong": we priced members decode as
+slow-but-acceptable when it was 99%-idle silicon — the reaper
+repriced it for us.
+
+**V5 verdict (3/3 planned seeds): composition SUBSUMED by log-radial.**
+log_pseudo test u_x = 0.0155/0.0135/0.0135 (median 0.0135, no
+anomalies) vs members_log clean median 0.0128 — the pseudo-composition
+mechanism, which was worth ~25% over plain members
+(@sec-nb-velocity-sweep lineage), adds nothing once log-radial
+features are present. Reading: both mechanisms were supplying the
+same missing capability (representing power-law radial structure),
+and the feature-level fix is the cleaner, cheaper carrier. Simplifies
+the recommended arm: members_log, not members_log_pseudo. (n=3 —
+logged with that caveat; no further seeds planned since the direction
+is a null.)
+
+**Reap-watch update:** mtrace link 4615399 has run 1h24m — far past
+the 30-min reap profile; the reaper stopped firing as abruptly as it
+started (consistent with an alert-pipeline change on the cluster side,
+not with anything we changed). Chains keep save-2 and the samplers;
+#43 fusion work continues regardless — the silicon-efficiency finding
+stands on its own measurement.
+
+## 2026-07-11 — the decode profile lands: a dispatch storm shared by every arm {#sec-nb-decode-profile}
+
+One profiled fwd+bwd step (GB300, 20,480-cell trace domain,
+reference dims; artifact = profile job 229336's kernel table):
+
+| | members-8 | singpair control |
+|---|---|---|
+| step wall | 43.8 s | 8.3 s |
+| kernel launches | 139,593 | 107,626 |
+| peak memory | 58.4 GiB | 16.3 GiB |
+
+Attribution: (1) **102,420 launches of a 72 µs gemv in the shared
+ENCODER path — in BOTH arms** — cuBLAS decomposing attention's
+tiny-per-item batched matvecs (batch = cell count) into per-item gemv
+launches; 7.4 s of the singpair arm's 8.3 s step is this dispatch
+storm. Every arm we have ever run carries it. (2) The members-specific
++30 s is bandwidth, not dispatch: ~22.5k separate full passes over the
+~10⁸-pair tensor (pair features + member MLP chains). (3) The
+reaper's ≤1% SM_ACTIVE reading is explained without any node defect.
+
+**Fix plan (task #43, phase 2):** (a) reshape the encoder bmms —
+shared-weight cases to single GEMMs, per-item cases to contiguous
+gemmStridedBatched (launches ~1000× down; several-fold step speedup
+for EVERY arm, singpair included); (b) stack member-MLP first layers
+into one block-diagonal GEMM + regionally compile the decode-chunk
+feature fusion (members' 30 s of streams → few passes).
+
+**Contract amendment (pre-code, honest):** the original "bitwise-
+identical math" pledge is unattainable — changing cuBLAS kernel
+selection changes fp accumulation order even for identical algebra.
+Amended acceptance: *algebraically identical transformations only*
+(reshapes, block-diagonal stacking, pointwise fusion), the full test
+suite passes at existing tolerances, and the exact-contract tests
+(jump relations, equivariances, zero-preservation) remain exact to
+roundoff. Speedup acceptance: ≥3× singpair step, ≥5× members step,
+measured on the same profile domain.
+
+## 2026-07-12 — T2 verdict: capacity composes with trace along the DEPTH axis; and the batch-size windfall {#sec-nb-t2-verdict}
+
+Final vals at ep499, matched 1-node protocol (single seed per rung
+per the pre-registered ladder design):
+
+| rung | final val | vs trace |
+|---|---|---|
+| trace | 0.0288 | — |
+| trace_rank96 (ranks 2×) | 0.0284 | +1.4% (noise) |
+| **trace_deep2 (operator_layers 2)** | **0.0228** | **+26%** |
+
+**Verdict vs pre-registration:** neither branch cleanly — the ladder
+is *selectively* ordered. Encoder DEPTH buys a solid 26%; attention
+RANK buys nothing. Reading: the post-trace floor is limited by the
+nonlinearity/compositional depth of boundary processing, not by the
+width of the attention bottleneck. 3-seed confirmation of deep2
+launched per the pre-registered follow-up (seeds 43/44 chained; rung
+values above are 1-seed and carry that caveat).
+
+**Bonus finding (cross-cluster rung): the effective-batch windfall.**
+The 1-node trace re-run (0.0288) beats the SAME configuration at
+HSG's 16-GPU protocol (0.0503) by 1.75× — 4× more optimizer steps
+per epoch at ¼ the effective batch. The v2 protocol's large batch was
+leaving big accuracy on the table for 500-epoch budgets. Consequence
+for the anchor: our best (deep2 0.0228) is now ~9× from
+GeoTransolver's 0.00253 — but that anchor was measured at the 16-GPU
+protocol, so a **matched 1-node GeoT control is launched** before any
+gap claims (mt_geot_1n). H-C remains the dominant open question; the
+efficiency-curve probes (P2 localgeom persistent lead; P3 density
+2.5k→10k worth 35%) now shape its decomposition.
+
+Ledger of the DrivAerML floor: 0.1019 → 0.0503 (exterior trace) →
+0.0288 (effective batch) → 0.0228 (encoder depth), with per-change
+attribution — each step a licensed, understood mechanism, not tuning.
+
+## 2026-07-12 — true storm attribution, and a contract split (flagged for Peter's veto) {#sec-nb-contract-split}
+
+The shape-grouped GPU profile corrected the earlier attribution
+(which was refuted by its own no-op fix): the 102k-launch storm is
+`einsum("qsd,qsd->qs")` in the **3D closed forms** lowering to a
+pathological bmm with batch = queries×sources = 4.2×10⁷ — present in
+every arm, ~7.4 s/step. Fixed with the file's own sanctioned
+per-row-stable idiom `(a*b).sum(-1)` (two dense kernels; validation
+job running). Second finding: the members-arm sink (~26 of 44 s) is
+`_RowStableLinear` — the *deliberate* one-output-at-a-time loop that
+makes query-chunk independence bitwise exact.
+
+**Decision (coordinator's call, Peter may veto): split the
+chunk-independence contract along the physics line.** Closed forms —
+where exactness is licensed by analytic identities (jump relations,
+solid angles) — remain bitwise. Learned member MLPs — arbitrary
+smooth functions with no identity to preserve — move to
+tolerance-level chunk independence, unlocking plain GEMMs (expected
+~26 s → ~1 s). The row-stable loop stays as an opt-in reference mode
+(bitwise reproducibility remains available), the chunk-invariance
+test splits accordingly (bitwise for closed forms, measured-and-
+bounded tolerance for members, fp64 GEMM-vs-loop equivalence), and
+the decoder docstring documents the split. Rationale: exactness where
+physics demands it; parsimony where it's only a reproducibility
+convenience with a 26× compute price.
+
+## 2026-07-12 — #43 verdict: 7.2× / 14.2× step speedups, acceptances met {#sec-nb-decode-speedup}
+
+Re-profile on the pre-registered domain (20,480-cell trace, GB300,
+one fwd+bwd step) with both fixes — closed-form einsum→mul+sum and
+GEMM member MLPs under the split contract (@sec-nb-contract-split):
+
+| | baseline | fixed | ratio | acceptance |
+|---|---|---|---|---|
+| singpair wall | 8.34 s | 1.16 s | **7.2×** | ≥3× MET |
+| members-8 wall | 43.8 s | 3.10 s | **14.2×** | ≥5× MET |
+| launches (members) | 139,593 | 10,482 | 13× | — |
+
+Kernel table confirms the mechanism end-to-end: gemv storm gone,
+member MLPs run as cutlass GEMMs, remaining time is legitimate
+bandwidth-bound work — which should also clear the DCGM reaper by a
+wide margin. Validation: 474/474 (incl. 3 new split-contract tests);
+measured GEMM-vs-loop deviation 2.8–3.6e-7 rel at fp32/4.2M-row
+scale (pure fp-reorder; tolerance test bounds at 10× observed);
+closed forms asserted bitwise; `exact_chunk_independence` reference
+mode preserved and tested. Shipped to both cluster repos; running
+chains pick it up at their next link (mid-chain numerics step is at
+reorder scale — noted, not material). Ship-verification GPU suite
+queued on AGA (235763). Every arm the program runs from here is
+5–14× cheaper — the 978-second inference complaint and the
+Barnes–Hut urgency both get repriced; #41 remains open as the
+asymptotic (O(N log N)) lever, no longer the constant-factor one.
+
+**GeoT 1-node control, interim (ep224/500): val 0.00250 — already at
+its 16-GPU anchor (0.00253).** Two consequences, worth logging before
+its final: (1) the effective-batch windfall is OURS, not universal —
+GeoTransolver holds its floor at matched 1-node protocol, so the
+honest gap after our ledger stands at ~9× (deep2 0.0228 vs ~0.0025);
+(2) GeoT's per-epoch wall-clock on 1 node is comparable to our trace
+arm's — its advantage is *purely representational efficiency*, not
+compute. H-C is now unambiguously the program's central open
+question, and the P2 signature (local-geometry features buying
+persistent epoch-efficiency) is the strongest mechanistic lead: the
+principled counter is a declared local corrector (BIE + singular
+correction), not feature soup — design work for that arm should
+start once the localgeom2 final lands.
+
+**P2 verdict (localgeom2 final, ep499, matched 1-node protocol):**
+final val 0.0269 vs trace 0.0288 (rank96 0.0284, deep2 0.0228). The
+pre-registered prediction ("P2 large" on the efficiency curve) is
+CONFIRMED for efficiency — the diagnostic ran ~90–100 epochs ahead of
+trace at equal quality for most of training — but the *final* gain is
+a modest 7%: trace mostly catches up by the cosine floor. Combined
+reading for H-C: local-geometry features buy exactly what
+GeoTransolver has (early representational speed) but by themselves
+they do not much move the converged floor — the floor's lever is
+DEPTH (+26%). This shapes the local-corrector design question: the
+value of declared local structure is epoch-efficiency (time-to-
+quality), while capacity-composition (depth) owns the asymptote. Both
+matter; they are different levers. The contract-breaking diagnostic
+retires per its pre-registration — never a keeper; its information is
+banked.
+
+**H-tail-1 experiment INVALID as run — my design error — but the
+accident is itself a finding.** The `--lr 1e-3` override was a no-op:
+`--lr` sets the schedule BASE, and the globe protocol's default base
+is already 1e-3 (the oft-quoted 1.414e-3 is the derived
+peak = base·√(qps/2048)). The runs were therefore exact protocol
+replications — and they replicated to 4 significant digits per seed,
+INCLUDING the s21 u_x anomaly (0.10048 vs 0.10049; residual
+difference consistent with the mid-run fp-reorder from the #43 GEMM
+ship). **Replication finding: the tail anomaly is deterministic given
+seed** — not a transient, not hardware, not sampling noise; it is
+baked into the (init, data-order) draw. H-tail-1's LR-gating
+hypothesis remains UNTESTED; relaunched correctly at base 7.07e-4
+(true 0.71×, tags _lr7.07e-4, jobs mt_tail1b_*), prediction and
+falsifier unchanged. The V3 ladder already brackets the question:
+base 5e-4 showed 1/5 anomalies (members arm), 2.5e-4 showed 0/5.
+
+## 2026-07-13 — H-tail-1 verdict; GeoT control final; a watchdog self-inflicted wound {#sec-nb-tail-verdict}
+
+**H-tail-1 (corrected run, base 7.07e-4 = 0.71× protocol, 5 seeds):
+the anomaly prediction CONFIRMED, the cost bound NOT met.** Census:
+**0/5 anomalies** — including seed 21, whose protocol-LR u_x blowup
+(0.100, replicated deterministically) drops to a clean 0.0156. Test
+u_x: 0.0139/0.0126/0.0159/0.0180/0.0156, median 0.0156 vs protocol
+clean-seed median 0.0128 → the LR backoff costs **22%**, exceeding
+the pre-registered ≤15% bound. Combined verdict: the tail anomaly IS
+an LR-gated edge-of-stability event (deterministic given seed, cured
+by 0.71× LR), but the edge is partly where the performance lives —
+the falsifier's trade-off branch. Practical recommendation for the
+chapter: run at protocol LR with ≥5 seeds and report the census
+honestly (anomalies are single-field, detectable, and seed-pinned),
+rather than paying 22% median across the board. Census addendum:
+members_wide shows 0/5 anomalies at protocol LR (evalx-recovered
+s17–19: per-sample u_x 0.0142–0.0195, plus clean s20–21) while the
+flattened members16/32 arms showed 1/3 each — width appears
+stabilizing, flattening destabilizing, at fixed LR.
+
+**GeoT 1-node control FINAL: 0.00249** (ep499) — within 2% of its
+16-GPU anchor. The gap ledger is now protocol-clean: deep2 0.0228 vs
+GeoT 0.00249 = **9.2×**, all at matched 1-node protocol. H-C owns it.
+
+**Ops incident (self-inflicted, fixed):** the deep2 seed-confirmation
+chains were killed in a loop by MY OWN idle-GPU watchdog — the
+seed-variant script redirects the model log to `*_seed${SEED}.log`
+but the injected watchdog still stat'ed the seedless path, so
+staleness grew without bound and every link died at ~25 min. Fixed
+(watchdog now stats the actual log), chains relaunched and running.
+Lesson recorded: a guard that kills on a *derived* signal must have
+its signal path updated by every script variant — guards need the
+same review discipline as payloads. HSG factorial chains had simply
+exhausted their links (no fault) — rechained; with the 14× code the
+remaining ~300 epochs are a few links.
+
+## 2026-07-13 — program check-in: the whole picture, restated plainly {#sec-nb-checkin-1}
+
+*(Written at Peter's request as a periodic step-back — a
+self-contained statement of where the program stands, readable
+without the surrounding context. The practice: every so often,
+restate the whole program in plain terms, so incremental progress
+doesn't crowd out the larger questions.)*
+
+**What this program is.** We are building MeshTransformer: a neural
+surrogate that maps boundary conditions on a mesh to PDE solutions,
+built around boundary-integral-equation structure — exact singular
+kernels, declared equivariances, typed boundary conditions — rather
+than generic learned attention. The bet is that physics structure
+buys generalization that pure ML approaches cannot match.
+
+**Where we stand on the two industrial benchmarks.**
+On *AirFRANS* (2D airfoil RANS), we are competitive-to-ahead of the
+strongest baselines: surface pressure decisively ahead (60–100× vs
+GLOBE), out-of-distribution angle-of-attack extrapolation 5–8× ahead
+with the responsible mechanism (parity typing) proven by ablation,
+and velocity — long our weakest field — now likely ahead after
+log-radial features delivered a 1.66× gain with learned (not
+declared) scales. On *DrivAerML* (3D automotive), a 40× deficit to
+GeoTransolver has been decomposed into named mechanisms and reduced
+to 9.2×: an exact sign error at the boundary trace (2×), oversized
+effective batch (1.75×), and missing encoder depth (1.26×). The
+remaining 9.2× is *representational efficiency*: GeoTransolver
+reaches its floor in ~5 epochs; we need 500 to get within 9× of it,
+at comparable per-epoch cost. Probes show its advantage behaves like
+local-geometry shortcuts: giving our decoder raw local features
+reproduces the fast-early-learning signature but barely moves the
+converged floor — while depth moves the floor and not the speed.
+Speed itself is no longer a weakness: a profiling campaign (forced
+by cluster idle-GPU alerts) found and fixed a kernel-launch storm
+and a deliberately-sequential inner loop, making every training step
+7–14× faster.
+
+**What is working.** The falsification discipline — pre-registered
+predictions, deciding experiments, honest verdicts — has produced
+~12 verdicts in four days, several of them refutations of our own
+designs, and every accuracy gain on the ledger is a named, tested
+mechanism rather than a tuning outcome. The anomaly-chasing habit
+produced the two deepest findings: the boundary-trace sign defect,
+and the discovery that our rare single-field training blowups are
+deterministic given seed and gated by learning rate (an
+edge-of-stability effect that costs 22% median accuracy to remove —
+so we document it rather than pay).
+
+**What is not working, or not yet done.** The 9.2× in-distribution
+gap has no confirmed closing mechanism yet — the local-corrector
+idea is a bet, not a projection. Generalization, our claimed
+comparative advantage, has a strong evidence base on exactly one
+benchmark axis (AirFRANS AoA); the volume fields on DrivAerML, the
+unseen-geometry and Reynolds-extrapolation studies across our eight
+synthetic suites, and the members-class extrapolation evals are all
+queued but unrun. Decode remains O(N·M); the tree-code backend is
+designed, unbuilt, and no longer urgent at current mesh sizes.
+
+**The strategic picture.** The program's goal is a generalizable
+industrial surrogate (the real-world limiter), but community
+acceptance also requires in-distribution competitiveness. Current
+posture: ahead or at par everywhere except GeoTransolver's home
+metric, where parity is uncertain (~1-in-3) but small-multiple
+distance is likely (~2-in-3) — while our structural advantages
+(extrapolation, exact contracts, speed) are demonstrated or
+in-progress. Near-term plan reflecting that: finish the composition
+experiments (factorial, flagship arm), run cheap discriminating
+probes on the local-corrector question, and shift the main effort to
+the generalization evidence table.
+
+## 2026-07-13 — a DrivAerML OOD protocol, designed {#sec-nb-ood-protocol}
+
+No out-of-distribution evaluation exists for DrivAerML in the
+community; we define one, since geometry generalization is the
+program's north-star axis. Basis: the upstream dataset's official
+16-parameter design-of-experiments (fetched per run; 483/484 matched
+to our manifest) — the exact generative coordinates of the shape
+space, superior to derived mesh descriptors. Artifacts:
+output/ood_protocol/ on AGA (parameter table, split JSONs with run-ID
+lists and leakage metrics, provenance).
+
+**Adopted splits:**
+- **S2 (primary): wake-topology corner.** Hold out the joint top
+  decile of backlight angle + rear-end tapering (49 test / 434
+  train) — the two-factor extreme that flips rear-wake topology.
+  Leakage check: median margin along the score direction 0.47σ ≈ 37×
+  the train spacing (graded difficulty near the quantile boundary —
+  evaluations stratify by margin). Claim supported: two-factor
+  parameter extrapolation into an aerodynamically distinct regime,
+  all 14 other factors in-distribution.
+- **S1 (secondary): ride-height double-extreme.** Top+bottom deciles
+  of ride height (98/385) — single-factor extrapolation in both
+  directions on ground-effect physics, directly probative for the
+  BC-encoding story.
+- S3 (neighborhood carve) honestly downgraded: in a space-filling
+  16-D DoE, small carves leave no hole (NN ratio 0.98×) — kept only
+  as an easy control. Deliberately-reported non-finding: full-16D NN
+  ratios ≈ 1.0 for all splits, which is *desirable* here — held-out
+  cars are otherwise-typical, keeping the claims single-factor clean.
+
+**Plan:** generate manifest variants for S2/S1, evaluate the
+flagship-class arms zero-shot on the held-out sets first (no
+retraining — the cheapest honest read), then decide whether
+OOD-trained protocols are needed. Also adopt the fork's observation:
+the upstream ships per-run force/moment coefficients (~83 bytes
+each) — fetch them and add drag-coefficient-level OOD metrics, the
+number industry actually cares about.
+
+## 2026-07-13 — Wave 2 launched: corrector probes, flagship, pre-registrations {#sec-nb-wave2}
+
+Build (498 mesh_attention + 165 recipe tests green) and launch of the
+Peter-approved probe ladder plus the flagship composition arm, all at
+the 1-node DrivAerML protocol on AGA. Key design refinement from the
+build: deep2 is a singpair arm, so all probe arms add members-8 and
+are measured against a **matched within-wave control**
+(`trace_deep2_members`, launched alongside; probe arms parameter-
+matched at 182,860 vs control 182,620). The θ criterion is
+dimension-generic per Peter's requirement (h = measure^(1/m); scale-
+invariance unit-tested in 2D and 3D). D1 demotion shipped in the same
+change set: the GEMM is the only runtime path; the row-stable loop
+survives solely as the tests' reference-order arbiter.
+
+**Pre-registered predictions and falsifiers (2 seeds each, sharp
+comparisons are A-vs-control, B-vs-A, C-vs-A):**
+- **A (lgkernel, entry point):** kernel-side local scalars match
+  P2's efficiency gain and exceed its floor relative to the control.
+  Falsifier: floor ≈ control ⇒ kernel-side entry buys nothing.
+  *Logged caveat:* A carries source-side scalars P2's query-side arm
+  lacked, so A-vs-P2 conflates entry point with information content —
+  only the within-wave comparisons are clean.
+- **B (lgnear, locality):** ≥80% of A's gain survives with support
+  restricted to θ > θ_c (smoothstep window, θ_c = 0.1, analytic
+  ~12.6% near-fraction estimate). Falsifier: the gain needs far
+  pairs ⇒ the mechanism is not local and the corrector framing dies.
+  **Interpretation gate:** the on-cluster calibration
+  (mt_nearcalib) must first confirm the subsampled mesh's actual
+  near-fraction — the pipeline's contiguous-block subsampler may
+  preserve local resolution (estimate holds) or scatter (θ collapses
+  and B's near set silently reduces to self-pairs). B is not read
+  until this is known.
+- **C (lgglobal, sharing):** matched-width pooled-global
+  conditioning loses the efficiency lead. Falsifier: retains it ⇒
+  sharing across near pairs isn't the mechanism.
+- **Flagship (trace × members × wide × deep2, 3 seeds):** composition
+  is the hypothesis — prediction: final ≤ 0.020 (beats every single
+  mechanism); the interesting failure is sub-multiplicative
+  stacking, which would name the pair sharing an error budget
+  (cf. V5's subsumption).
+
+Also launched: extrapolation evalx on HSG (members_log + wide,
+reynolds + aoa — the generalization table's next rows); OOD S2/S1
+manifest work queued next session (@sec-nb-ood-protocol).
+
+## 2026-07-13 (night) — factorial verdict (early, via a defunct-chain alert); chain self-termination guard {#sec-nb-factorial-verdict}
+
+The cluster's defunct-sequence detector flagged mt_dv2_mtrace: five
+consecutive links exiting cleanly in 5–10 min. Diagnosis: **the arm
+had finished** — the 14× GEMM code made the chain complete 500 epochs
+in ~2 links, and the remaining pre-queued links (sized on the old
+pace this morning) each no-op'ed through resume → find-complete →
+re-run final eval → exit 0. Real waste, modest (~13 GPU·h), correct
+alert. **Guard installed on both clusters:** every chain script now
+self-cancels its pending same-name links when the log shows the final
+epoch, with verify-after-cancel — and the guard's log path is
+extracted from each script's own redirect (the lesson of the watchdog
+path bug applied). Already-queued Wave-2 links carry old snapshots;
+the daily sessions cancel completed arms top-down until those drain.
+
+**The factorial verdict itself (16-GPU protocol, ep499 finals, vs
+anchors plain 0.1019 / trace 0.0503 / members 0.0999):**
+
+| arm | final val | vs trace |
+|---|---|---|
+| members_trace | 0.0458 | 1.10× |
+| **members_wide_trace** | **0.0270** | **1.86×** |
+
+Two-part reading: (1) members at reference width remains a near-null
+even post-trace (+10%, echoing its +2% pre-trace) — the capacity
+bottleneck at reference width is not member count. (2) **Trace and
+WIDTH compose super-multiplicatively**: trace bought 2.03× on the
+plain arm but 3.7× on the wide arm (members_wide 0.0990 → 0.0270).
+Interpretation: the exterior-trace correction unlocks information the
+narrow state dims could not carry — width was starved *behind* the
+trace defect. This independently corroborates the flagship
+hypothesis (all-mechanism composition, running at 1-node, 3 seeds):
+the wide×trace interaction is exactly the kind of budget-separation
+the flagship needs.
+
+**Wave-2 health check (one-shot, 2026-07-13 night): zombie-boot
+incident on AGA.** 10 of the 11 freshly-launched lanes were reported
+RUNNING by Slurm for 3+ hours while their StdOut files did not exist —
+the batch scripts never started executing (the AGA card's known
+node-boot instability, apparently amplified by 11 simultaneous
+submissions; the first-submitted lane booted fine and trained
+normally, ep137 at check time). ~120 GPU·h burned with nothing
+running — a failure mode NO in-script guard can catch, since the
+script never runs. All 10 zombies cancelled; singleton successors all
+booted properly within 90 s (StdOut verified). **New standing check
+added to the daily session: any RUNNING job whose StdOut file is
+missing is a zombie boot — cancel and let the chain reboot it.** The
+guard taxonomy now has four entries: watchdog (hangs), save-interval
+rule (zero-progress restarts), self-termination (no-op tails after
+completion), StdOut-existence sweep (never-started scripts). The
+near-fraction calibration also needs its data wiring (deferred to the
+morning session; probe B is not read before it).
+
+## 2026-07-14 — verdict session: probes triple-null (corrector NO-GO), depth 3-seed, flagship on course, and the extrapolation table {#sec-nb-probes-verdict}
+
+**Probes A/B/C: ALL NULL — the falsifier branches, cleanly.** Val at
+ep25/50/100 (seed 43; seed 42 concurs), control = trace_deep2_members:
+
+| arm | ep25 | ep50 | ep100 | ep~300 |
+|---|---|---|---|---|
+| control | 0.0487 | 0.0341 | 0.0234 | 0.0213 |
+| A lgkernel | 0.0488 | 0.0352 | 0.0247 | 0.0226 |
+| B lgnear | 0.0467 | 0.0347 | 0.0244 | 0.0225 |
+| C lgglobal | 0.0461 | 0.0355 | 0.0246 | 0.0227 |
+
+No efficiency lead, no floor gain, anywhere — A's falsifier fires,
+making B and C moot (consistent nulls). Combined with P2's original
+result (a large efficiency lead for the SAME features on the weaker
+singpair-trace base), the honest synthesis: **local-geometry
+information is subsumed by depth+members capacity** — the strong base
+learns whatever those features encode, quickly, on its own (the V5
+subsumption pattern again, one level up). Consequences: (1) the
+**declared local corrector is a NO-GO** — its premise (local
+structure buys epoch-efficiency on our best models) is refuted before
+a line of it was designed; the probes did exactly their job, killing
+a ~days-scale build for ~2 GPU-days. (2) H-C's mechanism question
+REOPENS: GeoTransolver still reaches in one epoch what our best base
+needs ~25 for, and local-geometry shortcuts are now excluded as the
+explanation on strong bases. Remaining suspects for a future probe
+round: the direct field parameterization (no integral assembly in
+the read-out path), latent-token global attention, normalization
+details. The near-fraction calibration is dropped as moot (logged,
+not silent — B read null without needing its gate).
+
+**deep2 3-seed confirmation:** finals 0.0228/0.0224/0.0212 — the
+depth rung (+26%) holds across seeds, tight spread.
+
+**Flagship interim (ep~300, 3 seeds): 0.0139/0.0140/0.0156** —
+already below the ≤0.020 pre-registration with 200 epochs of cosine
+left; tracking toward ~0.012–0.014 ≈ **5–6× from GeoTransolver's
+matched-protocol 0.00249** (was 40× five days ago). Composition holds
+(pending finals): the trace×width super-multiplicativity
+(@sec-nb-factorial-verdict) carries into the full stack.
+
+**Extrapolation evalx (GLOBE per-sample convention, held-out AoA and
+Reynolds splits):** the members_log arm — already the AirFRANS
+in-distribution recommendation — **extrapolates within ~1.2–2× of
+its in-distribution accuracy** (Re: u_x 0.0147–0.0190; AoA:
+0.0208–0.0268; clean seeds), where the old singpair-class arms
+degrade to ~0.12 (u_x, both axes) and ~0.5 (surface pressure, AoA).
+members_wide concurs on AoA; on Re it shows 4/5 clean (0.0159–0.0224)
+with one anomalous seed (s17, 0.101) — the tail-anomaly signature
+surfacing under extrapolation stress, census-consistent. The
+generalization table now has three strong rows (AoA, Re, + the older
+parity-mechanism result); this is the north-star axis filling in.

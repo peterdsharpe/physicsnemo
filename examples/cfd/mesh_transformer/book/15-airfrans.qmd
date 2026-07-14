@@ -1,11 +1,12 @@
 # AirFRANS: the first industrial benchmark {#sec-airfrans}
 
-::: {.callout-warning title="Status: pre-registered, not yet run"}
-This chapter currently holds the **pre-registration** for the AirFRANS
-campaign: the hypotheses, the arms, the protocol, and the acceptance
-criteria, written before any training run. Results will replace this
-notice as they land; until then, every number quoted here is from the
-published literature, not from this program.
+::: {.callout-note title="Status: campaign run; results below"}
+The pre-registration sections of this chapter (hypotheses, arms,
+protocol) are preserved exactly as written before any training run —
+they are the record against which @sec-airfrans-results reports.
+All previously-PENDING threads have landed: the tail-anomaly
+experiment (H-tail-1, verdict in the tail section) and the
+members-class extrapolation evals (in the extrapolation section).
 :::
 
 ## Why AirFRANS, and why now
@@ -195,9 +196,163 @@ drive-linearity is not declared. The arms:
   segments — far below the dense-decode wall), seeds packed 4-per-node
   on B200 nodes.
 
-## Results
+## Results {#sec-airfrans-results}
 
-*(Pre-registered structure; to be filled from the archive as runs
-land: per-task tables against the published comparison surface, the
-H1–H3 verdicts with seeds and distributions, and the standard
-operator-fidelity columns.)*
+The campaign resolved as a **mechanism ladder**: five rungs, each a
+pre-registered hypothesis with a falsifier, each verdict logged in the
+notebook before the next rung was designed. The headline: from
+~600× behind GLOBE at the pilot to the front of the published
+baseline pack on velocity and second-only-to-GLOBE on surface
+pressure — with every gain attributed to a named mechanism, not
+tuning.
+
+### The ladder at a glance
+
+| rung | mechanism | verdict | u_x effect | notebook |
+|---|---|---|---|---|
+| schedule | GLOBE-endpoint cosine | adopted | ~13% | @sec-nb-airfrans-v1 |
+| H2 parity | 2D pseudoscalar sector | **confirmed** (4 seeds, no overlap) | ~15% + AoA windfall | @sec-nb-airfrans-v1 |
+| H3 far-field | $r^{-2}$ decay envelope | **refuted** — wakes don't decay like point singularities | −20% (worse) | @sec-nb-airfrans-v1 |
+| H4 members | smooth MLP members (capacity control **beat** the declared viscous scale) | control wins 6× | 6× | @sec-nb-h4-verdict |
+| V4 log-radial | $\ln$, $/\!\sqrt{\cdot}$ pair features | **confirmed** | 1.66× | @sec-nb-v-verdicts |
+
+H3 is the chapter's honest negative: the decay contract that closed
+the exact-label far-field ladder is *exactly enforced and exactly
+wrong* for a wake-shedding airfoil. H4's verdict is the program's
+strongest parsimony datum: the pre-registered capacity control
+(members *without* the declared viscous scale) beat the declared-scale
+arm ~6× — the deficit was a missing learned pair-radial pathway, not a
+missing declaration.
+
+### Head-to-head on the scarce split
+
+Reference (per-sample) convention, directly comparable to the
+published table. Our arms: 3–5 seeds, ranges shown; published:
+single reported values. Provenance: sweep logs
+`output/airfrans_sweep/*.log` (HSG), re-scores of 2026-07-06/07.
+
+| field | best Bonnet baseline | Transolver | MARIO | GLOBE | `mt_nl_members` | `mt_nl_members_pseudo` |
+|---|---|---|---|---|---|---|
+| $u_x$ | 0.0146 | 0.0211 | 0.0015 | 0.00021 | 0.020–0.025 | **0.0151–0.0173** |
+| $C_p$ | 0.033 | 0.0443 | 0.0024 | 0.00029 | 0.0044–0.0057 | **0.0036–0.0044** |
+| $C_p$ surface | 0.147 | 0.2367 | 0.027 | 0.00039 | 0.0062–0.0118 | **0.0063–0.0087** |
+
+Standing: velocity at the front of the baseline pack (tied with
+GraphSAGE within seed noise — H1's velocity clause reads "tied," not
+"met"); volume pressure ~8× past every baseline, within ~2× of MARIO;
+**surface pressure 3–4× better than MARIO**, second only to GLOBE.
+The family-acceptance bar (≤2× GLOBE) is not met on velocity; the
+refutation condition (>5× worse with bespoke machinery load-bearing)
+is also not the story — the gap closed 600× → ~40× by removable
+mechanisms and continues to close.
+
+### V4: learned log-radial scales, the largest single rung
+
+`mt_nl_members_log` replaces nothing and declares nothing — it feeds
+the member MLPs log-radial pair features
+($\ln(a{+}\epsilon)$, $b/\sqrt{a{+}\epsilon}$,
+$v\!\cdot\!r/\sqrt{a{+}\epsilon}$) that make power-law scales
+*linearly learnable*. Pooled convention, test split, clean seeds
+(anomalous seeds reported separately below, nothing silently
+excluded):
+
+| arm | seeds (clean) | u_x median | vs members-8 |
+|---|---|---|---|
+| `mt_nl_members` (protocol LR) | 5/5 clean | 0.0213 | — |
+| `mt_nl_members_log` | 4/5 clean | **0.0128** | **1.66×** |
+
+This is the H4-L thesis vindicated in its learnable form
+(@sec-nb-v-verdicts): the viscous scale the H4 declaration tried to
+*inject* is better *learned* — the same conclusion twice, by
+different routes.
+
+**V5 (subsumption, a simplifying null):** composing log-radial
+features with the parity-composition arm
+(`mt_nl_members_log_pseudo`, 3/3 seeds: 0.0135–0.0155) adds nothing
+over `members_log` alone. The pseudo-composition's earlier ~30% gain
+and the log-features' gain were the *same missing capability*
+(power-law radial structure); the feature-level carrier is cheaper.
+**Recommended arm going forward: `mt_nl_members_log`.**
+
+**LR ladder (V3 coda):** halving LR costs medians monotonically
+(protocol 0.0213 → 5×10⁻⁴: 0.0246 → 2.5×10⁻⁴: 0.0356) — but see the
+anomaly census below for what lower LR *buys*.
+
+### The AoA-extrapolation windfall (pre-registered stretch)
+
+The chapter's pre-registered coin-flip ("parity typing helps AoA
+asymmetry") resolved as the campaign's sharpest single result
+(@sec-nb-extrapolation): zero-shot AoA-extrapolation volume pressure,
+official protocol, 3 seeds — `mt_nl_pseudo` **0.0134–0.0214** vs
+GLOBE's published **0.1138** (its one weakness, where it ties the
+Bonnet baselines). The parity-typed arm beats *every published model
+5–8×* on exactly the metric where the flow's handedness shifts
+hardest, and the within-program control (`mt_nl`, no parity sector:
+0.024–0.048) pins the mechanism to the sector, not the architecture.
+
+The members-class extrapolation evals have now landed
+(@sec-nb-probes-verdict; GLOBE per-sample convention, official
+held-out `reynolds` and `aoa` splits, zero-shot from scarce-trained
+checkpoints; provenance: evalx jobs 5048837/5048838,
+`output/airfrans_evalx`, HSG), and they extend the story from
+pressure to **velocity**:
+
+| arm (clean seeds) | u_x, Re-extrap | u_x, AoA-extrap | u_x, in-dist |
+|---|---|---|---|
+| singpair-class (`mt_nl`) | 0.118–0.122 | 0.119–0.123 | — |
+| `mt_nl_members_log` | **0.0147–0.0190** | **0.0208–0.0268** | 0.0128 |
+| `mt_nl_members_wide` | 0.0159–0.0224 (4/5) | 0.0212–0.0297 | — |
+
+The recommended arm (`members_log`) **extrapolates to within
+~1.2–2× of its own in-distribution accuracy** on both official
+axes, where singpair-class arms degrade ~10×. One honest asterisk:
+`members_wide` seed 17 blows up on the Reynolds split (u_x 0.101)
+while clean in-distribution — the tail-anomaly signature (see the
+tail section below) surfacing under extrapolation stress; the census
+discipline (≥5 seeds, report all) is what catches it. Convention
+and split caveats as above: per-sample GLOBE convention, official
+extrapolation protocol, no fine-tuning.
+
+### The surface-task probe (T1-reduced)
+
+A surface-only companion task (queries = airfoil panel centroids)
+tested whether the exterior-trace correction that bought 2× on
+DrivAerML (@sec-drivaerml) transfers to 2D. Verdict
+(@sec-nb-t1-verdict): **weak support, not confirmation** — trace wins
+4/5 seeds under both metric conventions but only by 1.2–1.35× in the
+median, within the arm-internal seed spread. The synthesis, consistent
+across both datasets: the trace defect is a *learnable-but-slow bias*
+— absorbable where budget and problem size allow (2D, 1000 epochs),
+worth 2× where they don't (3D, 500 epochs). Trace mode stays on
+everywhere: it is exact and costs nothing.
+
+### The tail anomaly: LR-gated, deterministic, and partly load-bearing
+
+Across all protocol-LR member-class arms, a minority of seeds blow up
+in a *single velocity field* while other fields stay clean. The
+census (@sec-nb-v-verdicts): members-8 0/5, members_log 1/5,
+members16 1/3, members32 1/3, members_wide 0/5, LR-halved 1/5,
+LR-quartered **0/5**. Three facts now pin the mechanism
+(@sec-nb-tail-verdict):
+
+1. **Deterministic given seed.** An accidental exact replication
+   (a no-op LR override — logged as a design error) reproduced the
+   anomalous seed's blowup to four significant digits. Not a
+   transient, not hardware: it is baked into the (init, data-order)
+   draw.
+2. **LR-gated.** The corrected deciding experiment (`members_log`
+   seeds 17–21 at base 7.07×10⁻⁴ = 0.71× protocol) delivered the
+   pre-registered prediction exactly: **0/5 anomalies**, with the
+   protocol-anomalous seed dropping from u_x 0.100 to a clean 0.0156.
+3. **The edge is partly where the performance lives.** The backoff
+   cost 22% in clean-seed median (0.0156 vs 0.0128), exceeding the
+   pre-registered ≤15% bound — the falsifier's trade-off branch.
+
+Verdict: an LR × member-capacity edge-of-stability interaction,
+confirmed in its anomaly prediction, refused in its free-lunch
+clause. Practical recommendation: run member-class arms at protocol
+LR with ≥5 seeds and report the census — anomalies are single-field,
+detectable, and seed-pinned — rather than paying 22% median for
+their absence. Width appears stabilizing (wide 0/5) while flattening
+destabilizes (16/32 at 1/3 each) at fixed LR; that interaction is
+open.
