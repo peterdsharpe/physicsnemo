@@ -43,12 +43,13 @@ pip install -e ".[mesh]"
 | Tutorial | Topic | What You'll Learn |
 |----------|-------|-------------------|
 | **1. Getting Started** | Core concepts | Mesh structure, data attachment, GPU acceleration |
-| **2. Operations** | Mesh manipulation | Transformations, subdivision, slicing, merging |
+| **2. Operations** | Mesh manipulation | Transformations, displacement, morphing, subdivision, slicing, merging |
 | **3. Discrete Calculus** | Mathematical operators | Gradients, divergence, curl, curvature |
 | **4. Neighbors & Spatial** | Queries | Adjacency, BVH, sampling, interpolation |
 | **5. Quality & Repair** | Mesh health | Validation, quality metrics, repair |
 | **6. ML Integration** | Production workflows | Performance, batching, torch.compile |
 | **7. Domain Mesh** | Simulation domains | DomainMesh, boundaries, transforms, validation |
+| **8. I/O, Interop & Serialization** | Getting data in/out | PyVista import/export, polygon tessellation, save/load |
 <!-- markdownlint-enable MD013 -->
 
 ## Running the Tutorials
@@ -96,6 +97,8 @@ Learn the core concepts - a `Mesh` is just 5 fields: 2 for geometry, 3 for data.
 Learn mesh manipulation operations.
 
 - Geometric transformations (translate, rotate, scale, transform)
+- Dense point displacement from tensors or point-data fields
+- Sparse control-point morphing with single or multiple controls
 - Subdivision schemes (linear, Loop, Butterfly)
 - Slicing (slice_cells, slice_points)
 - Merging multiple meshes
@@ -166,6 +169,20 @@ Learn to represent full simulation domains with interior meshes and named bounda
 - Validation and boundary watertightness checking
 - Visualization of boundary patches by BC type
 - Domain-wide operations (subdivide, clean)
+
+### Tutorial 8: I/O - Interoperability and Serialization
+
+**File**: `tutorial_8_io_interop.ipynb`
+
+Learn to get meshes in and out of PhysicsNeMo-Mesh.
+
+- The simplex-only data model (why importing usually means triangulating)
+- Importing from PyVista with `from_pyvista` (automatic triangulation)
+- Importing raw polygon soups with `Adjacency` + `triangulate` / `Mesh.from_polygons`
+- Convex vs non-convex polygons: ear clipping for correct areas and forces
+- Exporting to PyVista with `to_pyvista`
+- Saving and loading the native, folder-based memmap format, including its
+  on-disk layout (`.pmsh` for `Mesh`, `.pdmsh` for `DomainMesh`)
 
 ## Assets
 

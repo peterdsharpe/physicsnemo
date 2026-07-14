@@ -15,11 +15,13 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import torch
 from jaxtyping import Int
+from tensordict import TensorDict
 
 from physicsnemo.core.version_check import OptionalImport, require_version_spec
 from physicsnemo.mesh.mesh import Mesh
@@ -37,15 +39,48 @@ else:
     vtk = OptionalImport("vtk")
 
 
-def _vtk_data_to_tensor_dict(data) -> dict[str, torch.Tensor]:  # noqa: ANN001
-    """Convert a PyVista/VTK data container to a plain tensor dictionary."""
+def _vtk_data_to_tensor_dict(
+    data: "pv.DataSetAttributes",
+    force_copy: bool = False,
+) -> TensorDict:
+    """Convert a PyVista/VTK data container to a TensorDict.
+
+    The returned TensorDict has no batch dimensions; ``Mesh.__post_init__``
+    assigns the batch_size appropriate to the container it lands in.
+    """
     tensor_data: dict[str, torch.Tensor] = {}
     for key, value in dict(data).items():
         array = np.asarray(value)
         if not np.issubdtype(array.dtype, np.number) and array.dtype != np.bool_:
             continue
+        if force_copy:
+            array = array.copy()
         tensor_data[str(key)] = torch.as_tensor(array)
-    return tensor_data
+    return TensorDict(tensor_data, device="cpu")
+
+
+def _tensor_to_vtk_numpy(tensor: torch.Tensor) -> np.ndarray:
+    """Convert tensor data without narrowing dtypes supported by PyVista."""
+    tensor = tensor.detach().cpu()
+    # VTK has no native real type below float32. PyVista represents complex
+    # values with two real components, but likewise only supports complex64
+    # and complex128 inputs.
+    if tensor.is_floating_point() and tensor.element_size() < 4:
+        tensor = tensor.to(dtype=torch.float32)
+    elif tensor.is_complex() and tensor.element_size() < 8:
+        tensor = tensor.to(dtype=torch.complex64)
+    return tensor.resolve_conj().resolve_neg().numpy()
+
+
+def _geometry_to_vtk_numpy(tensor: torch.Tensor) -> np.ndarray:
+    """Convert coordinates using PhysicsNeMo's PyVista dtype policy."""
+    tensor = tensor.detach()
+    if tensor.dtype not in (torch.float32, torch.float64):
+        # PyVista/VTK can store some additional coordinate dtypes, but
+        # PhysicsNeMo has historically exported integer, reduced-precision,
+        # and complex geometry as float32. Keep that compatibility policy.
+        tensor = tensor.float()
+    return tensor.cpu().resolve_conj().resolve_neg().numpy()
 
 
 @require_version_spec("pyvista")
@@ -81,20 +116,20 @@ def from_pyvista(
         - ``"cell_centroids"``: Cell centroids become points, ``cell_data``
           is mapped to ``point_data``. With ``manifold_dim=0`` the result is
           a point cloud; with ``manifold_dim=1`` the result is a dual graph
-          whose edges connect cells that share a face in the original mesh.
-          This mode avoids expensive tetrahedralization and is suitable for
-          large polyhedral meshes.
+          whose edges connect cells that share a facet (an edge for surface
+          meshes, a face for volume meshes) in the original mesh. This mode
+          avoids expensive tetrahedralization and is suitable for large
+          polyhedral meshes.
     warn_on_lost_data : bool
         If True, emit a ``UserWarning`` when the conversion discards non-empty
         data arrays. Cell data is lost when ``point_source="vertices"`` and
         ``manifold_dim`` is lower than the detected mesh dimension. Point data
         is lost when ``point_source="cell_centroids"``.
     force_copy : bool
-        If True, copy point and cell arrays so the returned Mesh owns its
-        memory independently of the source PyVista mesh.  When False
-        (default), the returned tensors may share memory with the source
-        for efficiency; mutating the Mesh's ``points`` or ``cells`` could
-        then also modify the PyVista mesh.
+        If True, copy geometry and attached data arrays so the returned Mesh
+        owns its memory independently of the source PyVista mesh. When False
+        (default), returned tensors may share memory with the source for
+        efficiency.
 
     Returns
     -------
@@ -107,6 +142,15 @@ def from_pyvista(
         If manifold dimension cannot be determined or is invalid.
     ImportError
         If pyvista is not installed.
+
+    Notes
+    -----
+    Point coordinates with a ``float32`` or ``float64`` dtype retain that
+    dtype. Other coordinate dtypes are converted to ``float32``. Retaining
+    ``float64`` doubles coordinate storage relative to ``float32``, and
+    downstream geometric calculations generally remain in ``float64``. To
+    normalize the returned mesh and its floating data to ``float32``, use
+    ``from_pyvista(...).to(torch.float32)``.
     """
     ### Validate point_source
     if point_source not in {"vertices", "cell_centroids"}:
@@ -117,7 +161,7 @@ def from_pyvista(
     ### Handle cell_centroids path (completely separate flow)
     if point_source == "cell_centroids":
         return _from_pyvista_cell_centroids(
-            pyvista_mesh, manifold_dim, warn_on_lost_data
+            pyvista_mesh, manifold_dim, warn_on_lost_data, force_copy
         )
 
     ### Determine native mesh dimension (used for auto-detection, data-loss
@@ -196,8 +240,11 @@ def from_pyvista(
     def _maybe_copy(arr: np.ndarray) -> np.ndarray:
         return arr.copy() if force_copy else arr
 
-    # Points
-    points = torch.from_numpy(_maybe_copy(pyvista_mesh.points)).float()
+    # Preserve float32/float64 coordinates. Convert other coordinate dtypes to
+    # float32, matching PhysicsNeMo's prior geometry contract.
+    points = torch.from_numpy(_maybe_copy(pyvista_mesh.points))
+    if not points.is_floating_point() or points.element_size() < 4:
+        points = points.float()
 
     # Cells
     if manifold_dim == 0:
@@ -275,6 +322,7 @@ def from_pyvista(
         if isinstance(pyvista_mesh, pv.PolyData):
             tri_faces = _maybe_copy(pyvista_mesh.regular_faces)
         elif isinstance(pyvista_mesh, pv.UnstructuredGrid):
+            # cells_dict materializes independent regular connectivity arrays.
             tri_faces = pyvista_mesh.cells_dict[np.uint8(pv.CellType.TRIANGLE)]
         else:
             raise NotImplementedError(
@@ -290,6 +338,7 @@ def from_pyvista(
             raise ValueError(
                 f"Expected tetrahedral cells after triangulation, but got {list(cells_dict.keys())}"
             )
+        # cells_dict materializes independent regular connectivity arrays.
         tetra_cells = cells_dict[np.uint8(pv.CellType.TETRA)]
         cells = torch.from_numpy(tetra_cells).long()
 
@@ -310,17 +359,19 @@ def from_pyvista(
     return Mesh(
         points=points,
         cells=cells,
-        point_data=_vtk_data_to_tensor_dict(pyvista_mesh.point_data),
-        cell_data=_vtk_data_to_tensor_dict(pyvista_mesh.cell_data)
+        point_data=_vtk_data_to_tensor_dict(pyvista_mesh.point_data, force_copy),
+        cell_data=_vtk_data_to_tensor_dict(pyvista_mesh.cell_data, force_copy)
         if pass_cell_data
         else {},
-        global_data=_vtk_data_to_tensor_dict(pyvista_mesh.field_data),
+        global_data=_vtk_data_to_tensor_dict(pyvista_mesh.field_data, force_copy),
     )
 
 
 @require_version_spec("pyvista")
 def to_pyvista(
     mesh: Mesh,
+    *,
+    force_copy: bool = False,
 ) -> "pv.PolyData | pv.UnstructuredGrid | pv.PointSet":
     """Convert a physicsnemo.mesh Mesh to a PyVista mesh.
 
@@ -328,6 +379,10 @@ def to_pyvista(
     ----------
     mesh : Mesh
         Input physicsnemo.mesh Mesh object.
+    force_copy : bool
+        If True, copy geometry and attached data arrays so the returned
+        PyVista object cannot mutate the source Mesh through shared CPU
+        storage. When False (default), arrays may share storage for efficiency.
 
     Returns
     -------
@@ -340,12 +395,23 @@ def to_pyvista(
         If manifold dimension is not supported.
     ImportError
         If pyvista is not installed.
+
+    Notes
+    -----
+    ``float32`` and ``float64`` point coordinates are exported without
+    narrowing; other coordinate dtypes are converted to ``float32``. To
+    normalize a mesh and all its floating data before export, use
+    ``to_pyvista(mesh.to(torch.float32))``. Retaining ``float64`` coordinates
+    doubles their storage relative to ``float32`` and may keep downstream
+    PyVista computations in double precision.
     """
     ### Convert points to numpy and pad to 3D if needed (PyVista requires 3D points)
-    points_np = mesh.points.float().cpu().numpy()
+    # .detach() first so a grad-tracked mesh can still be exported (.numpy() would
+    # otherwise raise on a tensor that requires grad).
+    points_np = _geometry_to_vtk_numpy(mesh.points)
 
     if mesh.n_spatial_dims < 3:
-        # Pad with zeros to make 3D
+        # Pad with zeros to make 3D. np.pad already returns independent storage.
         padding_width = 3 - mesh.n_spatial_dims
         points_np = np.pad(
             points_np,
@@ -353,6 +419,8 @@ def to_pyvista(
             mode="constant",
             constant_values=0.0,
         )
+    elif force_copy:
+        points_np = points_np.copy()
 
     ### Convert based on manifold dimension
     if mesh.n_manifold_dims == 0:
@@ -363,6 +431,7 @@ def to_pyvista(
         if mesh.n_cells == 0:
             pv_mesh = pv.PolyData(points_np)
         else:
+            # _to_vtk_cell_array returns independent VTK-format connectivity.
             pv_mesh = pv.PolyData(points_np, lines=_to_vtk_cell_array(cells_np))
 
     elif mesh.n_manifold_dims == 2:
@@ -370,6 +439,8 @@ def to_pyvista(
         if mesh.n_cells == 0:
             pv_mesh = pv.PolyData(points_np)
         else:
+            if force_copy:
+                cells_np = cells_np.copy()
             pv_mesh = pv.PolyData.from_regular_faces(points_np, cells_np)
 
     elif mesh.n_manifold_dims == 3:
@@ -382,6 +453,7 @@ def to_pyvista(
             )
         else:
             celltypes = np.full(mesh.n_cells, pv.CellType.TETRA, dtype=np.uint8)
+            # _to_vtk_cell_array returns independent VTK-format connectivity.
             pv_mesh = pv.UnstructuredGrid(
                 _to_vtk_cell_array(cells_np), celltypes, points_np
             )
@@ -396,8 +468,9 @@ def to_pyvista(
         (mesh.global_data, pv_mesh.field_data),
     ]:
         for k, v in source.items(include_nested=True, leaves_only=True):
-            arr = v.float().cpu().numpy()
-            target[str(k)] = arr.reshape(arr.shape[0], -1) if arr.ndim > 2 else arr
+            arr = _tensor_to_vtk_numpy(v)
+            arr = arr.reshape(arr.shape[0], -1) if arr.ndim > 2 else arr
+            target[str(k)] = arr.copy() if force_copy else arr
 
     return pv_mesh
 
@@ -406,6 +479,7 @@ def _from_pyvista_cell_centroids(
     pyvista_mesh: "pv.PolyData | pv.UnstructuredGrid",
     manifold_dim: int | Literal["auto"],
     warn_on_lost_data: bool,
+    force_copy: bool,
 ) -> Mesh:
     """Build a Mesh from cell centroids, mapping cell_data to point_data.
 
@@ -414,10 +488,12 @@ def _from_pyvista_cell_centroids(
     pyvista_mesh : pv.PolyData or pv.UnstructuredGrid
         Input PyVista mesh.
     manifold_dim : int or {"auto"}
-        0 for a point cloud, 1 for a dual graph (cell-neighbor edges).
-        "auto" resolves to 0.
+        0 for a point cloud, 1 for a dual graph (edges between cells that
+        share a (d-1)-facet). "auto" resolves to 0.
     warn_on_lost_data : bool
         Emit a warning if non-empty point_data will be discarded.
+    force_copy : bool
+        Copy attached data arrays instead of sharing their storage.
 
     Returns
     -------
@@ -442,7 +518,9 @@ def _from_pyvista_cell_centroids(
 
     ### Compute cell centroids (fast C++ filter, works for all cell types)
     centroids_np = pyvista_mesh.cell_centers().points
-    points = torch.from_numpy(centroids_np.copy()).float()
+    points = torch.from_numpy(centroids_np.copy())
+    if not points.is_floating_point() or points.element_size() < 4:
+        points = points.float()
 
     ### Build cells
     if manifold_dim == 0:
@@ -454,8 +532,8 @@ def _from_pyvista_cell_centroids(
     return Mesh(
         points=points,
         cells=cells,
-        point_data=_vtk_data_to_tensor_dict(pyvista_mesh.cell_data),
-        global_data=_vtk_data_to_tensor_dict(pyvista_mesh.field_data),
+        point_data=_vtk_data_to_tensor_dict(pyvista_mesh.cell_data, force_copy),
+        global_data=_vtk_data_to_tensor_dict(pyvista_mesh.field_data, force_copy),
     )
 
 
@@ -481,19 +559,70 @@ def _to_vtk_cell_array(cells_np: np.ndarray) -> np.ndarray:
     ).ravel()
 
 
+def _cell_facet_point_ids(cell: "vtk.vtkCell") -> Iterator[list[int]]:
+    """Yield the point-id lists of a cell's (d-1)-facets (dimension-generic).
+
+    A volume cell's facets are its 2D faces, a surface cell's facets are its
+    edges (1-faces), and a line cell's facets are its endpoint vertices. Two
+    cells are adjacent across a shared facet, so these are precisely the facets
+    that define dual-graph edges in any dimension.
+
+    Parameters
+    ----------
+    cell : vtk.vtkCell
+        A VTK cell.
+
+    Yields
+    ------
+    list[int]
+        Point ids of one (d-1)-facet. Nothing is yielded for 0D cells
+        (isolated points have no facets, hence no adjacency).
+
+    Notes
+    -----
+    Facets are yielded in VTK's canonical per-cell-type order, and the point
+    ids within each facet follow VTK's canonical winding; both are
+    deterministic. The sole consumer, :func:`_build_dual_graph_edges`, passes
+    these ids to ``vtkDataSet.GetCellNeighbors``, which matches cells
+    containing the full point *set* and is therefore insensitive to facet
+    ordering and to point order within a facet.
+    """
+    # VTK cell dimensions are bounded to {0, 1, 2, 3}, so matching the
+    # exact dimension is equivalent to the previous ``dim >= 3`` guard.
+    match cell.GetCellDimension():
+        case 3:  # Volume cell: facets are its 2D faces.
+            subcells = (cell.GetFace(f) for f in range(cell.GetNumberOfFaces()))
+        case 2:  # Surface cell: facets are its edges (1-faces).
+            subcells = (cell.GetEdge(e) for e in range(cell.GetNumberOfEdges()))
+        case 1:  # Line cell: facets are its two endpoint vertices (0-faces).
+            for p in range(cell.GetNumberOfPoints()):
+                yield [cell.GetPointId(p)]
+            return
+        case _:  # 0D (or anything unexpected): isolated points have no facets.
+            return
+    for sub in subcells:
+        yield [sub.GetPointId(p) for p in range(sub.GetNumberOfPoints())]
+
+
 @require_version_spec("vtk")
 def _build_dual_graph_edges(
     pyvista_mesh: "pv.PolyData | pv.UnstructuredGrid",
 ) -> Int[torch.Tensor, "n_edges 2"]:
-    """Build (n_edges, 2) tensor of cell-neighbor pairs sharing a face.
+    """Build (n_edges, 2) tensor of cell-neighbor pairs sharing a (d-1)-facet.
 
-    Iterates over every cell and its faces, using VTK's cell links for
-    O(1) per-face neighbor lookups.  VTK objects are reused across
-    iterations and results are written directly to chunked numpy buffers
-    to minimize Python-level overhead (~10x faster than the equivalent
-    PyVista ``cell_neighbors`` wrapper).  The overall cost is one pass
-    over all cells and their faces; for very large meshes (>10M cells)
-    this may still take minutes.
+    Two cells are adjacent (joined by a dual-graph edge) when they share a
+    facet: a 2D face for volume cells, an edge for surface cells, or a vertex
+    for line cells (see :func:`_cell_facet_point_ids`).  Iterates over every
+    cell and its facets, using VTK's cell links for O(1) per-facet neighbor
+    lookups.  VTK objects are reused across iterations and results are written
+    directly to chunked numpy buffers to minimize Python-level overhead
+    (~10x faster than the equivalent PyVista ``cell_neighbors`` wrapper).  The
+    overall cost is one pass over all cells and their facets; for very large
+    meshes (>10M cells) this may still take minutes.  A fully vectorized
+    facet-hashing pass (sorting each cell's facets and matching duplicates) is
+    ~6-10x faster again, but only for homogeneous, manifold meshes; the VTK
+    ``GetCellNeighbors`` path is kept here because it also handles mixed cell
+    types, polyhedra, and non-manifold facets generically.
 
     Parameters
     ----------
@@ -511,7 +640,7 @@ def _build_dual_graph_edges(
     if n_cells == 0:
         return torch.empty((0, 2), dtype=torch.long)
 
-    face_pt_ids = vtk.vtkIdList()
+    facet_pt_ids = vtk.vtkIdList()
     nbr_ids = vtk.vtkIdList()
 
     # Collect upper-triangular neighbor pairs into chunked numpy buffers.
@@ -522,14 +651,13 @@ def _build_dual_graph_edges(
 
     for i in range(n_cells):
         cell = pyvista_mesh.GetCell(i)
-        for f in range(cell.GetNumberOfFaces()):
-            face = cell.GetFace(f)
-            face_pt_ids.Reset()
-            for p in range(face.GetNumberOfPoints()):
-                face_pt_ids.InsertNextId(face.GetPointId(p))
+        for facet_ids in _cell_facet_point_ids(cell):
+            facet_pt_ids.Reset()
+            for point_id in facet_ids:
+                facet_pt_ids.InsertNextId(point_id)
 
             nbr_ids.Reset()
-            pyvista_mesh.GetCellNeighbors(i, face_pt_ids, nbr_ids)
+            pyvista_mesh.GetCellNeighbors(i, facet_pt_ids, nbr_ids)
 
             for k in range(nbr_ids.GetNumberOfIds()):
                 j = nbr_ids.GetId(k)

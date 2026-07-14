@@ -19,6 +19,10 @@ available both as ``Mesh`` methods and as standalone functions in the
 corresponding submodules. The methods are thin wrappers that pass ``self`` to
 the standalone functions.
 
+To construct a triangle mesh from a surface mesh whose cells are arbitrary
+polygons -- a "polygon soup" (see :doc:`tessellation`) -- use
+:meth:`Mesh.from_polygons`.
+
 .. code:: python
 
     import torch
@@ -38,5 +42,19 @@ the standalone functions.
     print(mesh.point_data["T_gradient"])  # shape (3, 2)
 
 .. autoclass:: Mesh
+   :members:
+   :show-inheritance:
+
+DomainMesh
+----------
+
+.. currentmodule:: physicsnemo.mesh.domain_mesh
+
+The :class:`DomainMesh` class groups an interior mesh with named boundary
+meshes and domain-level data. Operations such as
+:meth:`~physicsnemo.mesh.domain_mesh.DomainMesh.morph` apply one consistent
+geometry change to every component and return a new domain.
+
+.. autoclass:: DomainMesh
    :members:
    :show-inheritance:

@@ -16,25 +16,25 @@
 
 """Domain parallelization utilities."""
 
-from collections.abc import Callable, Iterator, Mapping
-from typing import Any
+from collections.abc import Iterator, Mapping
+from typing import Any, Literal
 
 import numpy as np
 import torch
-from torch.distributed.fsdp import (
-    FullyShardedDataParallel as FSDP,
-    ShardingStrategy,
-    BackwardPrefetch,
-)
-from torch.distributed.tensor import DTensor, distribute_module, distribute_tensor
-from torch.distributed.tensor.placement_types import Replicate, Shard
-
-from physicsnemo.distributed import DistributedManager
-from physicsnemo.domain_parallel.shard_tensor import ShardTensor, scatter_tensor
-from physicsnemo.diffusion.noise_schedulers import DomainParallelNoiseScheduler
-
 from datasets.dataset import worker_init
+from torch.distributed.fsdp import FSDPModule, fully_shard
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.tensor import DTensor, distribute_tensor
+from torch.distributed.tensor.placement_types import Replicate, Shard
 from utils.nn import nested_to
+
+from physicsnemo.diffusion.noise_schedulers import DomainParallelNoiseScheduler
+from physicsnemo.distributed import DistributedManager
+from physicsnemo.domain_parallel.shard_tensor import (
+    ShardTensor,
+    scatter_tensor,
+)
 
 
 class ParallelHelper:
@@ -236,8 +236,27 @@ class ParallelHelper:
         else:
             return x
 
-    def distribute_model(self, model: torch.nn.Module) -> FSDP:
-        """Shard model parameters across the domain mesh and wrap with FSDP.
+    def distribute_model(self, model: torch.nn.Module) -> FSDPModule:
+        """Shard model parameters with FSDP2 (``fully_shard``).
+
+        The bulk of the model's weights are left as plain ``torch.Tensor``
+        parameters: FSDP2 shards them across the data-parallel (``ddp``) mesh,
+        all-gathers them in its pre-forward hook, and reduce-scatters their
+        gradients in backward. When such a plain (all-gathered) weight meets a
+        domain-sharded activation inside the forward pass, ``ShardTensor``
+        auto-promotes it to a replicated tensor on the domain mesh (see
+        :class:`~physicsnemo.domain_parallel.shard_tensor.TensorPromotionMode`),
+        so no explicit ``distribute_module`` on the domain mesh is required.
+
+        Only the genuinely spatial parameters (positional embeddings selected by
+        :func:`shard_dim_selector`) are pre-sharded on the domain mesh via
+        :meth:`_shard_spatial_params`, because those must be split -- not
+        replicated -- across domain ranks. FSDP2 then additionally shards them
+        across the ``ddp`` mesh, producing 2D-mesh DTensor parameters.
+
+        Identical parameter initialization across ranks is assumed (the
+        trainer sets ``torch.manual_seed`` before model construction); FSDP2
+        does not perform a sync-from-rank-0 broadcast on its own.
 
         Parameters
         ----------
@@ -246,24 +265,64 @@ class ParallelHelper:
 
         Returns
         -------
-        torch.distributed.fsdp.FullyShardedDataParallel
-            Distributed model wrapper.
+        torch.distributed.fsdp.FSDPModule
+            The input model, now an ``FSDPModule`` with sharded parameters.
         """
+        # FSDP2 rejects non-contiguous parameters with
+        #   NotImplementedError: FSDP does not support non-contiguous parameters
+        # raised from torch.distributed.fsdp._fully_shard._fsdp_param.
+        # https://github.com/pytorch/pytorch/issues/166291
+        # StormCast deliberately makes conv weights channels-last (perf optimization with cuDNN)
+        # --> but results in non-contiguous parameters.
+
+        # Note: cuDNN kernels still convert activations to channels_last when inputs
+        # arrive in that layout, so the perf win is retained.
+        with torch.no_grad():
+            for p in model.parameters():
+                if not p.is_contiguous():
+                    p.data = p.data.contiguous()
+
         if self.use_shard_tensor:
-            model = distribute_module(
-                model,
-                device_mesh=self.mesh["domain"],
-                partition_fn=partition_model_selective,
-            )
-        return FSDP(
-            model,
-            device_mesh=self.mesh["ddp"],
-            use_orig_params=False,  # Required for use with ShardTensor
-            sharding_strategy=ShardingStrategy.NO_SHARD,
-            sync_module_states=True,  # Ensure initialized weights match across ranks
-            forward_prefetch=True,  # Optimization for faster training
-            backward_prefetch=BackwardPrefetch.BACKWARD_PRE,  # Backward prefetching for overlap
-        )
+            self._shard_spatial_params(model)
+        fully_shard(model, mesh=self.mesh["ddp"])
+        return model
+
+    def _shard_spatial_params(self, model: torch.nn.Module) -> None:
+        """Pre-shard spatial parameters (positional embeddings) on the domain mesh.
+
+        Walks every submodule and, for each parameter/buffer whose name matches
+        :func:`shard_dim_selector`, replaces it in-place with a domain-mesh
+        DTensor sharded along the selected dimension. All other parameters are
+        left untouched (plain tensors) so ShardTensor auto-promotion and FSDP2
+        handle them.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            Model whose spatial parameters/buffers should be sharded in place.
+        """
+        domain_mesh = self.mesh["domain"]
+        for module in model.modules():
+            for name, param in list(module.named_parameters(recurse=False)):
+                shard_dim = shard_dim_selector(name)
+                if shard_dim is None:
+                    continue
+                dist_param = torch.nn.Parameter(
+                    distribute_tensor(param.data, domain_mesh, [Shard(shard_dim)]),
+                    requires_grad=param.requires_grad,
+                )
+                module.register_parameter(name, dist_param)
+            for name, buf in list(module.named_buffers(recurse=False)):
+                if buf is None:
+                    continue
+                shard_dim = shard_dim_selector(name)
+                if shard_dim is None:
+                    continue
+                module.register_buffer(
+                    name,
+                    distribute_tensor(buf, domain_mesh, [Shard(shard_dim)]),
+                    persistent=name not in module._non_persistent_buffers_set,
+                )
 
     def make_domain_parallel_scheduler(self, scheduler: object) -> object:
         """Wrap a noise scheduler for domain-parallel diffusion.
@@ -316,6 +375,54 @@ class ParallelHelper:
         return DTensor.from_local(
             t, device_mesh=self.mesh["domain"], placements=[Replicate()]
         )
+
+    def sync_replicated_grads(self, model: torch.nn.Module) -> None:
+        """Average domain-replicated parameter gradients across the domain mesh.
+
+        Under domain parallelism activations are sharded across the domain mesh
+        while most parameters are *replicated* across it (only the spatial
+        params selected by :func:`shard_dim_selector` are domain-sharded). The
+        domain-parallel loss is a SUM over the sharded spatial axis, so every
+        replicated param's gradient is the domain-SUM of per-rank contributions.
+        The ShardTensor promotion boundary already performs that reduction, but
+        residual ~ULP floating-point differences accumulate in the deep
+        conditioning path, so replicated params (and their optimizer state)
+        slowly diverge across domain ranks. Averaging the already-(near-)
+        identical gradients across the domain mesh restores exact
+        bit-consistency without changing the math (mean of identical values is a
+        no-op). Doing it on the gradient -- rather than re-syncing the params --
+        also keeps the Adam moment buffers consistent across domain ranks.
+
+        Domain-*sharded* params are skipped (their gradients are genuinely
+        per-shard). No-op unless domain parallelism is active.
+
+        Parameters
+        ----------
+        model : torch.nn.Module
+            The (FSDP-wrapped) model whose gradients should be synchronized.
+        """
+        if not self.use_shard_tensor:
+            return
+        mesh = self.mesh["domain"]
+        mesh_size = mesh.size(0)
+        if mesh_size == 1:
+            return
+        group = mesh.get_group()
+        # Genuinely domain-sharded params (e.g. positional embeddings) have
+        # per-shard gradients that must NOT be averaged across domain.
+        for name, param in model.named_parameters():
+            if param.grad is None:
+                continue
+            if shard_dim_selector(name) is not None:
+                continue
+            grad = param.grad
+            # Reduce the local shard directly: the gradient's DTensor mesh is the
+            # data-parallel submesh, which does not contain the domain group.
+            local = grad.to_local() if hasattr(grad, "to_local") else grad
+            torch.distributed.all_reduce(
+                local, op=torch.distributed.ReduceOp.SUM, group=group
+            )
+            local.div_(mesh_size)
 
     def nested_scatter(
         self,
@@ -393,12 +500,20 @@ def shard_dim_selector(param_name: str) -> int | None:
         Shard dimension for param_name, or None if the tensor corresponding to
         param_name should not be sharded.
     """
-    # this should find the spatial parameters for SongUNet and DiT
-    sharded_params = ["pos_embed", "pos_embd", "spatial_emb"]
-    if any(sharded_param in param_name for sharded_param in sharded_params):
+    # Spatial parameters/buffers laid out as (1, H*W, C): shard the flattened
+    # spatial axis (dim 1). Covers SongUNet and DiT positional embeddings.
+    sharded_dim1 = ["pos_embed", "pos_embd", "spatial_emb"]
+    if any(name in param_name for name in sharded_dim1):
         return 1
-    else:
-        return None
+    # Spatial buffers laid out with height first: (h_lat, w_lat, head_dim) for
+    # the DiT RoPE cos/sin tables. Sharding dim 0 (height) gives each rank
+    # globally-correct rows with no explicit rank offset needed in model code.
+    # (The DiT invalid-region mask is no longer a model buffer: it is supplied
+    # dynamically per forward call as a ShardTensor sharded along height like x.)
+    sharded_dim0 = ["rope_cos", "rope_sin"]
+    if any(name in param_name for name in sharded_dim0):
+        return 0
+    return None
 
 
 def partition_model_selective(
@@ -436,3 +551,23 @@ def partition_model_selective(
         submodule.register_parameter(
             key, torch.nn.Parameter(dt, requires_grad=param.requires_grad)
         )
+
+    # Buffers are handled explicitly too: spatial buffers (RoPE cos/sin tables,
+    # the DiT invalid-token mask) are sharded so each rank holds its local rows
+    # with globally-correct values; all others are replicated. Doing this here
+    # (rather than relying on distribute_module's internal replication) lets us
+    # shard the spatial ones and preserves each buffer's persistent/state_dict
+    # status.
+    for key, buffer in submodule._buffers.items():
+        if buffer is None:
+            continue
+        if (shard_dim := shard_dim_selector(key)) is not None:
+            dt = distribute_tensor(
+                buffer, device_mesh=device_mesh, placements=[Shard(shard_dim)]
+            )
+        else:
+            dt = distribute_tensor(
+                buffer, device_mesh=device_mesh, placements=[Replicate()]
+            )
+        persistent = key not in submodule._non_persistent_buffers_set
+        submodule.register_buffer(key, dt, persistent=persistent)
