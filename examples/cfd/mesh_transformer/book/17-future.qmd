@@ -194,18 +194,47 @@ including one live bug found (and confirmed) during figure generation.
   turbulence closures, boundary-layer-resolving meshes with a fresh
   noise-floor measurement, and unsteady statistics are all unpaid
   (live item 1 of the agenda below).
-- **Product-scale training is gated** on one of the two characterized
-  memory fixes — an engineering task, not an open research question,
-  but not yet done (@sec-scale).
-- **The trace-mode acceptance experiment is unpaid.** Pre-registered in
-  the verdict memo (@sec-nb-geot-gap-verdict): trace-singpair beats
-  plain singpair $\ge 5\times$ on DrivAerML surface val at matched
-  protocol (the AirFRANS surface-vs-volume signature, 27–40$\times$ for
-  singpair-class arms, bounds the plausible gain). Falsifier: no
-  improvement $\Rightarrow$ the trace defect was cosmetic and H-C owns
-  everything, redirecting effort to the members/wide/hybrid capacity
-  ladder. The arm is ready
-  (`mesh_transformer_surface_trace`); the run is not.
+- ~~Product-scale training is gated on a memory fix~~ — **paid**:
+  chunked decode closed the memory wall, and the subsequent decode
+  profiling campaign made every step 7–14× faster besides
+  (@sec-nb-decode-speedup).
+- ~~The trace-mode acceptance experiment is unpaid~~ — **run and
+  verdicted** (@sec-nb-trace-verdict): 2.03×, the ≥5× acceptance
+  refuted but the 0.10 plateau broken; the full ledger continuation
+  (batch → depth → composition → scale) lives in
+  @sec-drivaerml-results.
+- ~~The ×4-scale rung is unread~~ — **read, and the scale law with
+  it** (@sec-nb-scalelaw-verdict). The rung trains at its
+  stability-required LR/4 and finishes at 0.0123 — worse than ×2
+  despite 4× the parameters (pure width bends under the μP-style
+  LR ∝ 1/width constraint) — while the LR-stable rungs fit
+  val ≈ 0.0125·$P_{\mathrm{M}}^{-0.32}$ with no bend through 4.8M.
+  At the incumbent's ~9.5M budget the curve predicts a 2.5×
+  matched-parameter gap (the ×2L8 rung is in flight to measure it,
+  band pre-registered), and parity by pure scaling projects at
+  40–160M parameters — which is why the parameter-efficiency route
+  (the separable far-field decode registered after the resolution
+  probe, @sec-nb-sr-verdict, and attention structure) stays on the
+  agenda rather than being scaled past.
+- **The incumbent's epoch-efficiency edge is unexplained.** Local
+  shortcuts (corrector probes: triple null, no-go), optimizer
+  (config-identical), supervision density (moderate), iteration count
+  (falsified at matched params), and now raw scale (carries the
+  *floor*, not the ep-1 point) are all excluded or accounted; the
+  per-query-token diagnostic (E2) remains gated. The scale law
+  sharpened the stakes rather than mooting them: scale pays on a
+  clean power law, but the incumbent keeps a ~2.5× matched-parameter
+  advantage (@sec-nb-scalelaw-verdict), so whatever mechanism buys
+  its per-parameter efficiency is still unnamed. What remains
+  untested: the learned soft-slice global exchange itself.
+- **True (full-mesh) OOD drag coefficients.** The OOD verdict's drag
+  numbers are subsample-integrated pseudo-coefficients; the upstream
+  force/moment ground truth is fetched (139/139), but full-resolution
+  inference wiring is unbuilt.
+- **Barnes–Hut decode (#41): demoted to asymptotic.** Design complete,
+  cluster_tree adversarially reviewed clean (182 tests); after the
+  14× constant-factor win it gates only meshes well beyond current
+  protocol sizes.
 
 ## The redirected agenda
 
@@ -319,6 +348,18 @@ where even one attention layer fails.
 
 Findings from reading the sources end-to-end while writing this book. None
 are speculative; each was verified in the code or by execution.
+
+**A live, flagged footgun: concurrent recipe jobs race on the shared
+`dataset_paths.yaml`.** Every launch script in the campaign fleet points
+the recipe at its dataset by `sed`-ing one shared file; two concurrent
+jobs needing *different* datasets race, and the loser silently evaluates
+or trains on the winner's data. This is not hypothetical: the first
+deep-OOD evaluation pass ran six jobs concurrently and the S1 lanes
+silently evaluated S2's held-out set — caught only by per-row run-ID
+provenance, purged, and rerun (@sec-nb-ood-deep-verdict). A durable fix
+(job-local recipe copy, or a code-level dataset-path override) is a
+**blocking precondition** for any future multi-dataset wave; until then,
+jobs against different datasets must be serialized by hand.
 
 **A found-and-fixed bug: the 3D star tier used to hang.**
 As originally written, `build_laplace3d_sample(tier="star")` never returned:

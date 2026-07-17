@@ -3428,3 +3428,421 @@ with one anomalous seed (s17, 0.101) — the tail-anomaly signature
 surfacing under extrapolation stress, census-consistent. The
 generalization table now has three strong rows (AoA, Re, + the older
 parity-mechanism result); this is the north-star axis filling in.
+
+## 2026-07-14 (afternoon) — flagship verdict: composition CONFIRMED, 0.0140 median {#sec-nb-flagship-verdict}
+
+**Flagship finals (trace × members × wide × deep2, 1-node protocol,
+ep499): 0.0138 / 0.0140 / 0.0156 — the ≤0.020 pre-registration is
+met by every seed.** Against the 3-seed deep2 median (0.0224) the
+full composition buys another 1.6×; the mechanisms stack rather than
+substitute (the trace×width super-multiplicativity carrying the
+load, exactly as the factorial predicted). The DrivAerML ledger:
+
+0.1019 → 0.0503 (trace) → 0.0288 (batch) → 0.0224 (depth, 3-seed)
+→ **0.0140 (flagship, 3-seed median)** = **7.3× total**, leaving
+**5.6× to GeoTransolver's matched-protocol anchor** (0.00249).
+
+Probe finals confirm the morning's triple-null (lgkernel/lgnear/
+lgglobal 0.0227–0.0230 vs control 0.0217–0.0223 — if anything a
+small penalty for the extra channels). Members at reference width
+adds nothing on deep2 either (control ≈ deep2-alone) — width remains
+the necessary partner. Next analyses queued: zero-shot OOD (S2/S1)
+evaluation of the flagship checkpoints — the north-star measurement —
+and the H-C round-2 probe design (parameterization / latent-attention
+/ normalization suspects) to be pre-registered next session.
+Generation bands: re10+re100 complete, re1/re1000 running (E1
+resuming); GLOBE DrivAerML baseline chain (v2) progressing on HSG.
+
+## 2026-07-14 (evening) — zero-shot OOD verdict: no cliff at the boundary; the OOD-trained protocol launches {#sec-nb-ood-zeroshot}
+
+**Prediction CONFIRMED, overwhelmingly — but on an honestly-shrunken
+test.** The train-overlap accounting (the eval's core discipline):
+the flagship trained on the standard 435-car split, which already
+contains 88/98 of S1 and 45/49 of S2 — so the valid zero-shot sets
+are only the never-seen cars: **S1 = 10, S2 = 4**, with 36 never-seen
+in-distribution cars as the matched reference. Result (per-field
+relative L2, 3 seeds): OOD/ID degradation **1.00–1.05× on every
+field and seed** — smaller than seed spread — versus pre-registered
+bars of ≤2× (S1) and ≤3× (S2). Pseudo-drag |ΔCD|/CD: 2–4% ID, 4–6%
+S1, ~6% S2 (subsample-integrated; n=4 caveat on S2). All 139
+upstream force/moment CSVs fetched for future true-CD work.
+
+**The caveat that sets the next experiment:** the excluded 88/45 cars
+are precisely the DEEP extremes — today's read is
+boundary-of-OOD, not deep extrapolation. **OOD-trained protocol
+pre-registered and launching now:** retrain the flagship config on
+the S1-train (385) and S2-train (434) sets, 3 seeds each, evaluate
+on the FULL held-out extremes (98/49 incl. deep). Prediction:
+≤2× degradation vs each run's own in-distribution val on S1,
+≤3× on S2 (same bars, now on the real test); falsifier: ≥5× ⇒ the
+generalization claim needs architectural work, not just evidence.
+Cost ~6 node-days on AGA — cheap at current speeds.
+
+**Correction (2026-07-15): the OOD-launch "defect" was a naming
+artifact + my glob mismatch — training was healthy throughout.** The
+model logs live at single-tag filenames (only the run_id carries the
+ood prefix, doubled by a replace-order slip but *consistent* across
+redirect/watchdog/self-termination/resume — which is why everything
+worked); the utilization sampler shows 95–100% GPU through the first
+links; all six lanes advancing (~ep290, e.g. s1_s42 val 0.0167).
+Decision: running chains untouched (renaming mid-chain would orphan
+~10h of checkpoints per lane); script corrected for future
+derivations. Nothing lost. Passing science note for the extremes
+eval: OOD-trained lanes sit ~15% above the standard flagship at
+matched epoch — consistent with their 5–15% smaller training sets;
+to be netted out when reading the deep-OOD degradation (each run is
+compared to its OWN id_reference, so the pre-registration is
+unaffected). Canonical run_ids for the eval:
+ood{s1,s2}_mesh_transformer_surface_flagship_{s1,s2}_seed{42,43,44}.
+
+## 2026-07-15 — H-C round 2 pre-registered and launched: scale vs iteration {#sec-nb-hc2}
+
+The design fork's structural diff of GeoTransolver vs MeshTransformer
+(from source) names four candidate carriers of its ~25× epoch-
+efficiency: (a) per-point residual read-out (direct credit
+assignment) vs our assembled integrals; (b) learned soft-slice global
+routing × 12 refinement rounds vs fixed typed moments × 2; (c)
+LN-everywhere vs our norm-free contracts; and (d) **raw scale: GeoT
+≈9.5M params vs flagship ≈0.6M — a 10–20× gap never tested** (the
+rank96 null was rank-only, pre-trace, singpair; the factorial proved
+width×trace super-multiplicative). Round-1 discipline: the boring
+hypothesis gets excluded first.
+
+**Launched (all on the flagship base, 1-node protocol, efficiency
+read = val @ ep1/5/25 + final floor):**
+- **E3 scale ladder** — flagship dims/ranks ×2 (~×4 params) and ×4
+  (~×16 params ≈ GeoT budget), 2 seeds each. *Prediction:* if scale
+  carries the gap, ≥1.3× floor per ×4 params. *Falsifier:* <10%
+  floor change ×1→×4 ⇒ scale excluded.
+- **E1 iteration ladder** — operator_layers {4, 8} in natural and
+  matched-params forms (L4m: dims÷√2; L8m: dims÷2 = reference dims —
+  8 rounds at reference width), isolating exchange-round count from
+  capacity; continues the confirmed 1→2 rung (+26%). *Prediction:*
+  if iterate-refine carries efficiency, matched-params depth improves
+  ep-5/25 and ≥1.2× floor per doubling. *Falsifier:* flat at matched
+  params beyond 2 layers.
+- **E2 (per-query residual token; diagnostic, build required) is
+  GATED on E3/E1** — uninterpretable until scale and iteration are
+  excluded. Outcome map logged with the design (incl. the
+  uncomfortable all-null residue: the learned-soft-slice exchange
+  itself, an architectural commitment, not a knob).
+
+All 8 lanes boot-verified (StdOut present). Also noted from the
+design pass: GeoT ships an embedded OODGuard (geometry-latent bounds
+collected in training) — a comparison point for our OOD-protocol
+story, filed for the chapter.
+
+## 2026-07-16 — H-C round-2 verdicts: it's parameters, not rounds {#sec-nb-hc2-verdict}
+
+All eight E3/E1 lanes completed and self-terminated overnight.
+Finals (1-node flagship-base protocol, seed 42; ×2 confirmed by
+seed 43):
+
+| rung | params vs flagship | final val | note |
+|---|---|---|---|
+| flagship (×1) | 1× | 0.0140 (3-seed) | anchor |
+| **E3 ×2 dims** | ~4× | **0.0093 / 0.0095** | prediction ≥1.3×/×4-params MET |
+| E3 ×4 dims | ~16× | 0.165 (both seeds) | **optimization failure** — val frozen from ep1; LR/width interaction, not a capacity read |
+| E1 L4 natural | ~2× | 0.0120 | tracks params |
+| E1 L8 natural | ~4× | 0.0102 | tracks params (≈ ×2-width at similar budget) |
+| E1 L4 matched | 1× | 0.0146 | **flat** |
+| E1 L8 matched | 1× | 0.0198 | worse |
+
+**E1 verdict: the iterate-refine hypothesis is FALSIFIED at matched
+parameters** — exchange-round count buys nothing by itself (L4m flat,
+L8m harmful); natural-depth gains are parameter gains. **E3 verdict:
+scale carries** — the outcome map's "gap was mostly parameters"
+branch. Ledger: 0.1019 → **0.0093** (11×), now **3.7× from
+GeoTransolver's matched anchor** — and GeoT's epoch-efficiency edge
+persists (its ep-1 0.061 vs ×2's 0.096) but no longer implies a floor
+disadvantage. Follow-ups launched, boot-verified: ×4 reruns at
+LR/2 and LR/4 (μP intuition: LR ∝ 1/width; the honest ×16-param
+read), ×2 seed 44 (3-seed the winner), and ×2L4 (~×8 params, next
+rung along both confirmed axes). E2 (per-query residual token)
+remains gated and now likely moot if scale closes the floor.
+
+**OOD-trained lanes:** all six finished (ID vals s1
+0.0149–0.0209, s2 0.0153–0.0161); the deep-extrapolation eval
+(extreme_test vs own id_reference, pre-registered ≤2×/≤3×) is
+launching via the eval wiring's author.
+
+## 2026-07-16 (later) — deep-OOD verdict: generalization holds at ~3%, two orders inside the bars {#sec-nb-ood-deep-verdict}
+
+**Pre-registration CONFIRMED with enormous margin.** OOD-trained
+flagship lanes, each on its FULL deep-held-out extreme set vs its own
+in-distribution reference (98/98 ride-height extremes for S1, 49/49
+wake-topology cars for S2, provenance verified per row; 3 seeds
+each): degradation **1.01–1.04× on every field, seed, and protocol**
+— against pre-registered bars of ≤2× (S1) and ≤3× (S2). Drag
+pseudo-CD concurs (4.5–5.4% ID vs 6–7% extremes on S1; 4–6% both on
+S2). The training-set-size confound is controlled by construction
+(each lane vs its own carve). Combined with the boundary read
+(@sec-nb-ood-zeroshot): **geometry generalization on the industrial
+benchmark holds at ~3% degradation — boundary and deep, both
+protocols, three seeds each.** Task #54's evidence chain is complete;
+this is the program's north-star axis, measured.
+
+**Eval incident (diagnosed, repaired, and a standing footgun):** the
+first pass ran six eval jobs concurrently, each sed-ing the SHARED
+recipe `dataset_paths.yaml` to its own shadow dir — the seds raced,
+one value won, and the S1 lanes silently evaluated S2's extreme set
+(caught by run-ID provenance, after an earlier misleading check was
+discarded; invalid rows purged and rerun alone, provenance now
+verified in-table). **Footgun for the whole fleet: any two concurrent
+recipe jobs needing DIFFERENT dataset paths race on this shared
+file.** A durable fix (job-local recipe copy or a code-level
+dataset-path override) is required before the next multi-dataset
+wave — logged as a blocking pre-condition, not a nice-to-have.
+
+## 2026-07-16 (night) — scale-thread interim: the LR/width boundary found; ×8-param rung leading {#sec-nb-scale-interim}
+
+(1) **The ×4-width optimization failure is an LR threshold, located:**
+at LR/4 (7.5e-4) the ×16-param rung trains cleanly (ep49 val 0.031,
+healthy curve); at LR/2 it freezes at initialization exactly like the
+original — the stability boundary sits between, consistent with the
+μP-style LR ∝ 1/width scaling that motivated the reruns. The frozen
+LR/2 chain is cancelled (question answered; one link draining in CG).
+(2) **×2L4 (~×8 params) leads everything at matched epoch** — val
+0.0172 at ep61 vs ×2's 0.0226 at ep63 — the scale curve is not yet
+bending. (3) **Logged cap (no silent caps):** the big rungs run
+~2.5–3 ep/h at 1 node, so their ep500 finals are ~5–8 days out;
+the pre-registered E3 read at ×4 will use matched-epoch trajectory
+comparisons plus whatever final the chains reach, topped up at daily
+sessions — under-provisioned chains are the safe direction with
+self-termination guards in place. **Planned analysis at final read
+(pre-registered now): fit val-vs-params across the five clean rungs
+(0.6M → ~9.6M) and place GeoT-parity (0.00249) on the fitted curve —
+the "does it bend before the budget?" number.**
+
+## 2026-07-16 (late) — multi-node unblocked (Peter's fabric fix); two new registered threads {#sec-nb-mn-track}
+
+Peter root-caused the AGA multi-node failure (NCCL defaulting to the
+PF rails whose GID tables carry no usable RoCEv2 entry; the VF rails
++ AF_INET6 work — validated at 165–270 GB/s busbw; full record in the
+hpc-resources AGA card). The fix is baked into all fleet launch
+scripts. Registered consequences, both launched and boot-verified:
+
+**(1) VRAM-dividend test (mt_x2nochunk):** B300's 278 GiB may fit the
+big rungs WITHOUT kernel_checkpoint_query_chunks, whose backward
+recompute costs ~1.9×. Bitwise-identical math (checkpointing was
+exact); read-out = step time + peak memory on the ×2 rung.
+Prediction: ~1.9× step speedup if it fits; falsifier: OOM (then
+chunking stays mandatory and the dividend is only headroom).
+
+**(2) Multi-node scale track (mt_mn_x1/x2/x4, 4-node/16-GPU, LRs
+matched to 1-node twins):** its own internally-consistent ladder —
+NOT a swap of the 1-node ladder (the batch windfall forbids mixing).
+The ×1/×2/×4 twins measure the effective-batch penalty AS A FUNCTION
+OF SCALE: prediction — the penalty (1.75× at ×1 scale, 500-epoch
+budget) shrinks with model size; if it shrinks to ~1×, multi-node
+becomes free exactly where it's needed and the ×8 rung (~40M params,
+past GeoT's budget) gets registered next — gated additionally on
+BH/no-chunk making its step cost sane. Falsifier: penalty persists ⇒
+multi-node stays reserved for inference and production retrains.
+
+## 2026-07-17 — the chunking dividend (~10×), ladder restarts, and BH's honest reframe {#sec-nb-nochunk}
+
+**The B300 VRAM dividend is ~10×, not the predicted 1.9×:** the ×2
+rung without kernel_checkpoint_query_chunks runs 0.59–0.66 s/step at
+58 GiB (vs ~6.2 s chunked) — dropping the chunk loop restores one
+large batched decode pass, not merely the recompute. Chunking was
+sized for HSG's 185 GiB and has been silently taxing every B300 run.
+Math is bitwise-identical (checkpointing's original contract), so:
+the slow chunked rungs (×4-lr/4, ×2L4, ×2-s44) are CANCELLED and
+RESTARTED as no-chunk lanes — same rung definitions, ~17 h to finals
+instead of ~4 more days. All booted.
+
+**Ladder interims before restart (1-node):** ×2L4 read 0.00724 at
+ep242 — below ×2's FINAL at half the budget; ×4-lr/4 healthy at
+0.0133 @ep211. GeoT parity (0.00249) is in sight.
+
+**Multi-node track interims:** mn_×1 final 0.0221 vs 1-node twin
+0.0140 — the batch penalty (1.58×) replicates and is NOT shrinking
+at ×2/×4 at matched LR. Trending to the falsifier branch: multi-node
+reserved for inference/production, not ladder rungs.
+
+**BH interim (acceptances A/B in):** fidelity is dial-able —
+error ~θ^2.3, passing ≤1e-3 at θ≤0.125 — but **acceptance B FAILED:
+6.2× SLOWER than dense at 50k** (near-field gather constants swamp
+the asymptotic win; no crossover through 100k). Honest reframe
+pending C: BH is a **memory lever** (dense OOMs at 100k; BH bounded)
+— i.e., the enabler for full-resolution true-CD inference, not a
+training-speed lever. C (training neutrality, 100 epochs) running.
+
+**BH post-mortem adopted; two consequences launched (2026-07-17).**
+The mechanism behind acceptance B's failure: BH-v1's near-field pairs
+cost ~35× dense's per-pair constant (indexed gathers vs coalesced
+GEMMs), and at the fidelity-required θ≤0.125 the near fraction is
+30–50% — so even ideal leaf-tile engineering (~3× overhead) yields no
+win below ~150–300k sources. Verdict: **classic BH does not earn its
+place at training resolutions**; v1 is kept as a memory-bounded
+fallback and calibrated harness. The re-ordered plan (adopted):
+(1) **resolution-scaling probe launched** (flagship @ sr20k nochunk +
+sr50k chunked, 1-node, both booted): does val improve with source
+resolution at matched epoch? Prediction: ≥15% @ep100 ⇒ the
+separable-far-field design (windowed near members + learned rank-r
+global term — GeoT-like far field, our exact near field) gets
+registered; falsifier: flat ⇒ dense+chunking is the permanent decode
+answer. (2) **Full-resolution true-CD commissioned** — the BH
+feasibility analysis showed dense chunked inference is LINEAR in
+queries (~20 min/sample at 8.8M cells); the OOD extreme sets
+(~183 evals, ~60–70 GPU·h) get TRUE force coefficients vs the
+upstream truth CSVs, pre-registered: true |ΔCD|/CD within 2× of the
+pseudo numbers; falsifier ≥3× ⇒ subsample integration hid real force
+error. (3) Triton fusion of the member pipeline noted as 2–3× dense
+headroom — queued behind the probe verdicts.
+
+## 2026-07-16 (23:23 session) — resolution axis CONFIRMED at ep100; sweeps earn their keep {#sec-nb-sr-verdict}
+
+**Resolution probe crosses its pre-registered bar decisively:**
+flagship at sampling_resolution 20k reads val 0.0159 at ep100 vs
+~0.023 at the standard 10k — **~31% better at matched epoch** (bar:
+≥15%), and by ep222 (0.012x) it is already below the 10k flagship's
+FINAL. Source resolution is a second confirmed scaling axis alongside
+parameters. Per the pre-registration, the **separable-far-field
+design** (windowed exact near field + learned rank-r global term —
+O(N) far field) is now REGISTERED as the path to exploit it at high
+N, since dense at 50k costs 20.6 s/step and BH doesn't pay below
+~150k. The 50k probe rung OOM'ed even "chunked" (both chunk knobs
+default to 65536 = unchunked at this size — config oversight);
+relaunched with 16k chunks (flagship_hires).
+
+**Multi-node track (final rungs in):** mn_×2 0.0145 vs 1-node ×2
+0.0093 → penalty 1.56×; mn_×4 0.0270 (1-node twin pending, penalty
+trending ~2×). The batch penalty does NOT shrink with scale —
+falsifier branch essentially confirmed; multi-node is for inference
+and production retrains, not ladder rungs. Full verdict when the
+1-node ×4 lands.
+
+**Ops:** three zombie-booted links caught and killed by the sweep
+(the no-chunk lanes had silently stalled — finals slipped ~half a
+day; successors boot-verified); x2nc s44 chain topped up; the sr50k
+crash-loop self-limited to ~5-min links (guards working) but the
+sbatch wrapper's set +e masks payload failure as COMPLETED — noted
+for a future guard refinement (propagate payload exit code to job
+state).
+
+## 2026-07-17 — multi-node track verdict; sr50k parked; ladder finals in flight {#sec-nb-mn-verdict}
+
+**Multi-node track: falsifier branch CONFIRMED.** Final penalties vs
+1-node twins at matched LR: ×1 → 1.58× (0.0221 vs 0.0140), ×2 →
+1.56× (0.0145 vs 0.0093), ×4 → ~2.2× (0.0270 vs the 1-node rung's
+trajectory; exact ratio when its final lands). The effective-batch
+penalty does NOT shrink with model scale at a 500-epoch budget —
+**multi-node DDP is for inference and production retrains, not
+ladder rungs.** (Peter's fabric fix stands as the enabler for those
+uses — validated 165–270 GB/s — the physics of small-batch
+optimization is just indifferent to bandwidth.)
+
+**sr50k parked, with mechanism:** OOM persists at real chunk sizes —
+the failing allocation is a (queries×sources)-scale tensor outside
+both chunk knobs' control. High-N is task #55's job (separable far
+field); the resolution verdict stands on the 20k rung
+(@sec-nb-sr-verdict). No debug cycle spent on a bonus point.
+
+**Ladder state:** ×4 pure-width final 0.0123 at its
+stability-required LR/4 — pure width BENDS under its LR constraint;
+mixed width×depth (×2L4, trending ~0.0065) continues. The two
+decisive finals (×2nc s42 — the paired chunk-on/off control — and
+×2L4nc) stalled 20 epochs short on exhausted chains (sizing too tight
+after zombie kills); topped up, landing this morning. The scale-law
+fit runs when they do.
+
+## 2026-07-17 — pre-registration: x2L8, the GeoT-budget-matched rung {#sec-nb-scalelaw}
+
+**×2L4 FINAL: 0.00702** (ep500, 1-node, nochunk). Program ledger:
+0.1019 → 0.00702 = **14.5×**; gap to GeoT parity (0.00249) now
+**2.8×**. Notably the mixed width×depth direction is running
+*steeper* than pure width: x2→x2L4 (2× params) bought 1.34×
+(exponent ≈0.42/doubling-decade) vs the global 0.6M→4.8M exponent
+≈0.33. Pure width ×4 BENT under its LR/4 stability constraint:
+0.0123 — *worse* than x2's 0.0093 despite 4× the parameters.
+
+**Next rung (launching now): x2L8** — dims ×2, operator_layers 8,
+**~9.6M params ≈ GeoT's own budget**. This makes the fit's most
+interesting point measurable instead of extrapolated: what does OUR
+curve deliver at THEIR parameter count?
+**Pre-registered prediction:** final val 0.0052–0.0056 if the
+mixed-direction slope holds (0.42 → 0.0052; global 0.33 → 0.0056).
+**Falsifier:** ≥0.0070 = the curve bends at/below GeoT budget and
+parity-by-pure-scaling is dead; architectural efficiency work (#55
+far-field, or attention structure) becomes the only route.
+LR stays 3.0e-3 (per-layer width unchanged from x2 — the μP-style
+constraint binds on width, not depth; early-kill + relaunch at
+lower LR if frozen). Chain: 12 singleton links, oversized on
+purpose — chain self-termination makes overshoot free; today's
+20-epoch stalls came from undershoot.
+
+## 2026-07-17 — VERDICTS: paired chunk control + the scale-law fit {#sec-nb-scalelaw-verdict}
+
+**Paired chunk-on/off control (same seed 42, x2 rung): NEUTRAL.**
+nochunk 0.00896 vs chunked 0.0093 — 3.7% *better*, within seed
+noise. x2nc_s44's 0.0114 was seed variance, not a chunking effect.
+Verdict: `kernel_checkpoint_query_chunks: false` is accuracy-neutral
+and ~10× faster on B300s — nochunk is the default for all future
+rungs. Corollary worth stating: **seed spread at the x2 rung is
+0.0090–0.0114 (±12%)** — single-seed rung values carry that error
+bar, and the fit below uses the per-rung mean.
+
+**The pre-registered scale-law fit** (val vs params, 1-node 500ep,
+LR-stable Pareto rungs only; x4-at-LR/4 EXCLUDED as
+optimization-constrained, reported separately as the width bend):
+
+| rung | params | val (500ep) |
+|---|---|---|
+| flagship | 0.6M | 0.0140 (3-seed) |
+| L4 | 1.2M | 0.0120 |
+| L8 | 2.4M | 0.0102 |
+| ×2 | 2.4M | 0.00979 (4-run mean) |
+| ×2L4 | 4.8M | 0.00702 |
+
+**Fit: val ≈ 0.0125 · P_M^−0.32** (rms log-residual 0.056 — the
+rungs sit on a line; no bend through 4.8M).
+
+Placing GeoT parity (0.00249, ~9.5M params) on the curve:
+
+- **At GeoT's own budget (9.5M) the curve predicts 0.0061 — a
+  2.5× gap at matched params.** That number stops being an
+  extrapolation ~30h from now: x2L8 (9.6M) is in flight
+  (@sec-nb-scalelaw; prediction band 0.0050 local-slope /
+  0.0061 global-slope; falsifier ≥0.0070).
+- **Parity by pure scaling projects at ~40–160M params** (local
+  slope 0.48 → 42M; global 0.32 → 161M) — 4–17× GeoT's budget.
+  Feasible in absolute compute (nochunk x2L4 = ~1 day/500ep; a
+  ~40M rung ≈ 3–4 days) but NOT parameter-efficient parity.
+
+**Honest reading:** scaling works and hasn't bent, but GeoT holds a
+genuine ~2.5× per-parameter advantage in-distribution. Our
+compensating assets are exactly the pre-registered program bets:
+OOD degradation 1.01–1.04× (@sec-nb-ood-deep-verdict), exact
+contracts, similarity equivariance, zero-shot BC handling. Which
+makes the decisive experiment obvious and cheap:
+
+**Pre-registration — GeoT on the OOD splits (eval-only, existing
+checkpoints).** Evaluate the GeoT matched anchor on S1
+(ride-height double-extreme) and S2 (wake-topology corner)
+extreme_test sets, same harness as @sec-nb-ood-deep-verdict.
+*Prediction:* GeoT (learned geometry tokens, no exact kernel
+structure) degrades ≥1.5× on S2 while MT holds ≤1.1× — in which
+case the OOD-adjusted comparison at matched params roughly closes
+(GeoT 0.00249×1.5+ ≈ 0.0037+ vs our x2L8-projected ×1.04 ≈
+0.0052–0.0064) and the "generalization premium" gets its first
+differential number. *Falsifier:* GeoT also holds ≤1.1× — its
+advantage survives OOD and our generalization story loses its
+comparative teeth (still absolute, no longer differential).
+Decision-4 note: this, not ID parity, is the industrially-relevant
+comparison.
+
+**Provenance audit on the fit's lanes (the sed race, retired).** The
+OOD wave's `dataset_paths.yaml` sed race (@sec-nb-ood-deep-verdict)
+could in principle have repointed any ladder chain link that booted
+during the wave window at the shadow train split — which would
+contaminate the fit. Audit: epoch-to-epoch val-ratio screen over the
+full series of all three nochunk lanes. x2nc_s42: zero jumps >15%.
+x2L4nc ep95 and x2nc_s44 eps 22/38: one-epoch blips that revert to
+trend immediately (e.g. 0.0156→0.0183→0.0157) — early-training
+noise, not split-change regime shifts. **Fit lanes clean.** The race
+itself is now retired: all OOD eval scripts pass the shadow path as
+a per-job `train_datadir=` CLI override; the shared-file sed is
+deleted. (GeoT differential eval — pre-registered above — is the
+first job running under the fixed scheme.)
