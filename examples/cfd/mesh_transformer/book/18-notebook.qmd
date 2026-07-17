@@ -3842,7 +3842,16 @@ full series of all three nochunk lanes. x2nc_s42: zero jumps >15%.
 x2L4nc ep95 and x2nc_s44 eps 22/38: one-epoch blips that revert to
 trend immediately (e.g. 0.0156→0.0183→0.0157) — early-training
 noise, not split-change regime shifts. **Fit lanes clean.** The race
-itself is now retired: all OOD eval scripts pass the shadow path as
-a per-job `train_datadir=` CLI override; the shared-file sed is
-deleted. (GeoT differential eval — pre-registered above — is the
-first job running under the fixed scheme.)
+itself is now retired, on the second attempt: a `train_datadir=`
+hydra CLI override does NOT reach the dataset config (the recipe
+code-loads `datasets/<name>.yaml` outside hydra — the override died
+with "not in struct", and the GeoT eval's first submission crashed
+on it, all three splits). The working mechanism: `datasets.py` joins
+`recipe_root / "datasets" / f"{name}.yaml"` with pathlib, and a
+pathlib join with an *absolute* path replaces the base — so
+`dataset=$JOBCONF/drivaer_ml_surface` loads a job-private copy of
+the dataset yaml, and `load_dataset_config()` reads
+`dataset_paths.yaml` from that same private dir. Each OOD job now
+builds a `mktemp -d` config dir; the shared-file sed is deleted from
+all three eval scripts. (GeoT differential eval resubmitted under
+the fixed scheme.)
