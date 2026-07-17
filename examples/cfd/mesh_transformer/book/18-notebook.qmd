@@ -3855,3 +3855,51 @@ the dataset yaml, and `load_dataset_config()` reads
 builds a `mktemp -d` config dir; the shared-file sed is deleted from
 all three eval scripts. (GeoT differential eval resubmitted under
 the fixed scheme.)
+
+## 2026-07-17 — GeoT zero-shot OOD verdict: the FALSIFIER lands {#sec-nb-geot-ood-zeroshot}
+
+**My pre-registered prediction was WRONG.** GeoT on the identical
+zero-shot splits (job 253903, same harness/resolution/splits as
+@sec-nb-ood-zeroshot; first job under the job-local dataset-config
+scheme), per-field relative L2 over {S1=10, S2=4, ID=36} never-seen
+cars:
+
+| split | pressure_l2 | wss_l2 | OOD/ID (p) | OOD/ID (wss) |
+|---|---|---|---|---|
+| id_reference | 0.0610 | 0.0915 | — | — |
+| s1_zeroshot | 0.0655 | 0.0999 | 1.07× | 1.09× |
+| s2_zeroshot | 0.0620 | 0.0936 | 1.02× | 1.02× |
+
+GeoT holds ≤1.1× on both splits — the falsifier branch. MT's
+matched band was 1.00–1.05×; GeoT's S1 sits nominally above it
+(1.07–1.09×) but n=10/n=4 and MT's own seed spread make that a
+non-claim. **At boundary-of-OOD depth, both architectures
+generalize essentially unimpaired; there is no differential.** The
+generalization result of @sec-nb-ood-deep-verdict stays absolute,
+not comparative.
+
+Two honest outs, one cheap and one structural:
+
+1. **Depth.** The zero-shot sets are boundary-of-OOD by
+   construction (the deep extremes were in both models' training
+   set). MT's deep verdict came from the RETRAINED protocol
+   (exclusion training) — GeoT has no such arms. **Pre-registered
+   and launching now: GeoT exclusion-retrain**, same protocol as
+   @sec-nb-ood-zeroshot's launch — geotransolver_surface on
+   S1-train (385 cars) and S2-train (434), 3 seeds each, deep-eval
+   on the full held-out extremes vs each run's own id_reference.
+   *Prediction (recalibrated by today's refutation):* GeoT holds
+   ≤1.5× deep as well — the DoE family is likely too narrow to
+   separate architectures. *Falsifier of the recalibration:* GeoT
+   ≥2× deep where MT held 1.01–1.04× — the differential lives at
+   depth. Either way the comparison chapter gets its number.
+2. **Family.** If GeoT holds deep too, the honest conclusion is
+   that DrivAerML's 16-parameter DoE cannot measure cross-family
+   generalization at all — the differential question moves to
+   cross-geometry transfer (train DrivAerML → eval a different
+   vehicle family), which is a program-level protocol design, not
+   a wave.
+
+Also banked from this eval: GeoT ID reference at 10k sampling,
+pressure_l2 0.0610 / wss_l2 0.0915 — the l2-space ID anchors for
+the chapter's comparison table.
