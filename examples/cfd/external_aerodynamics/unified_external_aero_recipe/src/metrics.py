@@ -232,8 +232,10 @@ class MetricCalculator:
             0-D ``TensorDict`` (``batch_size=[]``) keyed by
             ``"<prefix>/<name>_<metric>"`` for scalar fields and by
             ``"<prefix>/<name>_<comp>_<metric>"`` plus
-            ``"<prefix>/<name>_<metric>"`` (aggregate magnitude) for
-            vector fields. Slash-containing keys are stored verbatim;
+            ``"<prefix>/<name>_<metric>"`` (aggregate over all
+            components jointly -- true vector metric) and
+            ``"<prefix>/<name>_mag_<metric>"`` (direction-blind
+            magnitude comparison) for vector fields. Slash-containing keys are stored verbatim;
             TensorDict only treats ``/`` as nested when the caller
             explicitly invokes ``flatten_keys("/")``.
         """
@@ -262,10 +264,19 @@ class MetricCalculator:
                         out.update(
                             self._metrics_for_tensor(p[..., i], t[..., i], (name, comp))
                         )
-                    ### Aggregate magnitude metric.
+                    ### Aggregate TRUE vector metric: all components jointly
+                    ### (norms over the flattened field -- Frobenius for l2),
+                    ### so direction errors count. Keyed as the bare field
+                    ### name; this is the headline aggregate.
+                    out.update(self._metrics_for_tensor(p, t, (name,)))
+                    ### Direction-blind magnitude comparison, kept under an
+                    ### explicit "mag" component key. NEVER the headline: a
+                    ### prediction with correct magnitude and arbitrary
+                    ### direction scores 0 here (pre-2026-07-17 this was the
+                    ### bare-name aggregate -- external review finding).
                     p_mag = torch.linalg.vector_norm(p, dim=-1)
                     t_mag = torch.linalg.vector_norm(t, dim=-1)
-                    out.update(self._metrics_for_tensor(p_mag, t_mag, (name,)))
+                    out.update(self._metrics_for_tensor(p_mag, t_mag, (name, "mag")))
 
         return TensorDict(out)
 

@@ -3187,8 +3187,11 @@ buys generalization that pure ML approaches cannot match.
 
 **Where we stand on the two industrial benchmarks.**
 On *AirFRANS* (2D airfoil RANS), we are competitive-to-ahead of the
-strongest baselines: surface pressure decisively ahead (60–100× vs
-GLOBE), out-of-distribution angle-of-attack extrapolation 5–8× ahead
+strongest baselines: surface pressure improved 60–100× over our own
+earlier baseline [CORRECTION 2026-07-17, @sec-nb-review: the original
+text here said "vs GLOBE", which is numerically reversed — GLOBE
+remains ~16–30× ahead of us on that quantity; see the chapter-15
+table, which was always correct], out-of-distribution angle-of-attack extrapolation 5–8× ahead
 with the responsible mechanism (parity typing) proven by ablation,
 and velocity — long our weakest field — now likely ahead after
 log-radial features delivered a 1.66× gain with learned (not
@@ -3903,3 +3906,97 @@ Two honest outs, one cheap and one structural:
 Also banked from this eval: GeoT ID reference at 10k sampling,
 pressure_l2 0.0610 / wss_l2 0.0915 — the l2-space ID anchors for
 the chapter's comparison table.
+
+## 2026-07-17 — external review: triage, corrections, and the thesis ablation {#sec-nb-review}
+
+Peter commissioned an external review of the program (full text in his
+message of 2026-07-17). It is a good review — the strongest kind:
+three P0 findings, all concrete, all checkable. I verified every code
+claim before acting; the reviewer went 3-for-3.
+
+**Verified and acted on this session:**
+
+1. **WSS aggregate metric was direction-blind (P0, CONFIRMED).**
+   `metrics.py` computed the vector aggregate as relative L2 of
+   *magnitudes* — a prediction with correct magnitude and arbitrary
+   direction scores 0. Confirmed on the reviewer's adversarial case
+   ((1,0,0) vs (0,1,0): old aggregate 0, true vector L2 √2). Fixed:
+   `wss_l2` is now the true joint-component (Frobenius) relative L2;
+   the magnitude comparison survives as `wss_mag_l2`, explicitly
+   never-the-headline. The per-component columns (wss_x/y/z) were
+   always direction-sensitive and stand. **Every OOD eval is being
+   recomputed under the fixed metric** (10 eval jobs relaunched:
+   GeoT zero-shot, MT zero-shot ×3 seeds, MT deep ×6 arms; results
+   supersede the wss_l2 columns of @sec-nb-ood-zeroshot,
+   @sec-nb-ood-deep-verdict, @sec-nb-geot-ood-zeroshot). Note the
+   zero-shot GeoT read already contained a hint I under-weighted:
+   GeoT's s1 wss_z ratio was 1.19× — above the ≤1.1 line I quoted
+   from pressure and the (magnitude) aggregate. The recomputed true
+   vector metric decides whether a WSS-direction differential exists.
+   Tonight's GeoT deep evals will run on the corrected metric.
+
+2. **AirFRANS validation is carved from the official test split
+   (P0, CONFIRMED).** `airfrans_train.py`:
+   `validation_names = test_names[:MAX_VALIDATION_CASES]` — best
+   checkpoints were selected on test members, and the wider loop used
+   official-test results to steer architecture. The reviewer's
+   framing is correct: chapter-15 numbers are *development-set*
+   performance until re-established. Remediation (registered, not yet
+   run): (a) validation carved from training cases only; (b) freeze
+   the protocol, re-run headline arms, single-shot the official test;
+   (c) the AoA/parity and GLOBE-comparison *rankings* need re-checking
+   under (b) before any of chapter 15's comparative claims are called
+   confirmatory. Until then chapter 15 gets a protocol-caveat box.
+
+3. **The "60–100× vs GLOBE" line in the 2026-07-16 check-in is
+   REVERSED (CONFIRMED).** 60–100× was our improvement over our own
+   earlier surface-pressure baseline; against GLOBE on that quantity
+   we are ~16–30× *worse* (the chapter-15 table was always right; the
+   check-in prose was wrong). Corrected in place with a pointer here.
+   The AoA-extrapolation advantage stands as reported.
+
+4. **Wording corrections:** "two orders inside the bars" overstated —
+   only the *excess* degradation (0.04 vs allowed 1–2) supports a
+   ~25–50× statement; fixed. The scale-law is renamed what it is:
+   a **provisional LR-stable architectural frontier** (5 rungs, mostly
+   single-seed, width/depth entangled, one point excluded after its
+   optimization pathology was observed). x2L8 (in flight, ep~175 at
+   0.0067) is its first *prospective* test — the pre-registered band
+   @sec-nb-scalelaw stands and the fit does not get extrapolated
+   past it in the chapters.
+
+**Pre-registered and launching now — the thesis ablation the
+industrial program skipped (P0):** at the flagship rung, 1-node
+protocol, 3 seeds each, ONLY the member dictionary varied:
+
+- `flagship_mlponly` — 8 learned members, NO exact singular members
+  (new `kernel_include_double_layer_member: false` switch; default
+  `true` is bitwise-preserving, 529 mesh_attention tests pass, full
+  model forward+backward through the ablation path verified).
+- `flagship_exactonly` — the two exact singular members alone
+  (`kernel_mlp_members: 0`).
+- Control: the existing flagship 3-seed set (0.0138/0.0140/0.0156).
+
+*Prediction:* mlponly ≥1.25× flagship val (exact singular structure
+carries signal beyond generic pairwise capacity); exactonly between
+flagship and mlponly, with the mlponly-vs-exactonly ORDER as the
+capacity-vs-structure readout. *Falsifier:* mlponly within the
+flagship seed band (≲1.1×) ⇒ the industrial gains are generic
+pairwise capacity + scale, and the book's causal claim must be
+demoted to "boundary-integral-inspired" — the reviewer's phrasing —
+with the exact-kernel story confined to the synthetic chapters where
+it was actually proven.
+
+**Registered, not yet launched (priority order per review):**
+trace factorial (correction / own-cell readouts / both — the 2.03×
+attribution); batch 2×2 (fixed-updates vs fixed-epochs); AirFRANS
+clean-protocol rerun; H-ground/all-boundary redo (targeted regions,
+forces, seeds); cross-family OOD (already flagged as the real
+generalization test in @sec-nb-geot-ood-zeroshot §2); multi-dataset
+manifest overwrite bug (datasets.py — reject or fix before any
+multi-dataset run); fixed reference_length=8.0 vs the intrinsic gauge
+(scaling equivariance is NOT currently guaranteed for the flagship —
+scope the chapter claim). Adopted as-is: BH stays a memory fallback
+(matches @sec-nb-*bh* verdicts; the reviewer adds a genuine
+prefix-sum cancellation finding to fold into #55's design). Per
+Peter: x2L8 and the GeoT deep arms run to completion.

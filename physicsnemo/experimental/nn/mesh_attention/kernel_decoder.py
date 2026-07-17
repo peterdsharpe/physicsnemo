@@ -221,19 +221,35 @@ separate Python classes rather than flags:
 Each query row of the dense evaluation depends only on that query point and
 the cached source quantities, so query points never interact and the decoded
 value at a point does not depend on which other points are requested.  The
-implementation additionally avoids batch-shape-dependent GEMM reductions on
-the query axis (broadcast multiply-plus-sum contractions and
-:class:`_RowStableLinear` pair layers), making that independence bitwise
-rather than merely tight, and making query chunking a pure memory control.
+strength of that independence is a SPLIT contract (2026-07-12):
+
+- **Closed forms are bitwise.**  The exact double/single-layer members,
+  their jump relations, and the pair invariants use broadcast
+  multiply-plus-fixed-axis-sum contractions whose per-row reduction order
+  ignores the batch shape, so their query-set independence is exact to the
+  bit and physically licensed.
+- **Learned member MLPs are tolerance-level.**  Their
+  :class:`_RowStableLinear` layers run plain GEMMs, whose per-row
+  rounding may vary with the chunk shape at the fp-reorder scale; these are
+  learned smooth functions with no analytic identity to preserve.  The
+  bitwise per-channel reference contraction survives only as the test
+  suite's arbiter (:meth:`_RowStableLinear.reference_forward`); it defines
+  the reference accumulation order that the tolerance tests compare
+  against and is not reachable from any model configuration (ratified
+  2026-07-13, demoting the earlier user-facing reference mode).
+
+Query chunking remains a pure memory control.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from dataclasses import replace as dataclass_replace
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float, Int
 
 from physicsnemo.mesh import Mesh
 
@@ -259,19 +275,48 @@ _LOG_RADIAL_EPS = 1.0e-24
 #: Boundary cell vertex counts admitting an exact double-layer member.
 _EXACT_MEMBER_VERTICES = {2: 2, 3: 3}
 
+#: Rank-block size for the Barnes--Hut lazy segment folds (power of two).
+#: Peak decode memory scales as ``n_queries * _BH_PAIR_BLOCK * heads *
+#: value_channels``; the pair count only sets how many sequential blocks
+#: run.  Must stay a fixed constant: the fold shape is part of the bitwise
+#: query-set-independence contract (see ``barnes_hut.segment_sum_by_query``).
+_BH_PAIR_BLOCK = 32
+
+#: Local-corrector probe modes (task #53).  "windowed": local scalars enter
+#: every pair, weighted by the smooth full-support window theta/(1+theta).
+#: "near_only": identical channels weighted by a C^1 smoothstep that is
+#: EXACTLY zero for theta <= near_theta/2 (compact near-field support).
+#: "global_control": identical channel WIDTH carrying only per-sample
+#: measure-weighted pooled scalars (zero per-pair locality) -- the sharing
+#: control at matched parameter count.
+_LOCAL_PAIR_FEATURE_MODES = {"windowed", "near_only", "global_control"}
+
+#: Probe block width: [window, w*l_q, w*k_q, w*l_s, w*k_s] for the local
+#: modes; [pool_l_s, pool_k_s, 0, 0, 0] broadcast for the global control.
+_LOCAL_PAIR_FEATURE_WIDTH = 5
+
 
 class _RowStableLinear(nn.Module):
-    r"""A linear map whose per-row reduction order ignores the batch shape.
+    r"""The member-MLP linear map, plus the test suite's reference arbiter.
 
-    ``nn.Linear`` dispatches to GEMM kernels whose accumulation order can
-    change with the number of rows, so evaluating a query subset may differ
-    from the corresponding rows of a full batch by roundoff.  Contracting one
-    output channel at a time with an elementwise multiply and a fixed-axis
-    sum keeps every row's result bitwise independent of the other rows in
-    the batch, which is what makes the decoder's query-set independence
-    exact rather than merely tight.  Input feature counts here are small
-    (pair invariants and a narrow hidden width), so the per-channel loop
-    costs only a bounded number of fused elementwise reductions.
+    The runtime path is a plain GEMM.  Per the split contract (2026-07-12,
+    logged in the program notebook): the decoder's *closed forms* keep
+    bitwise query-set independence -- their exactness is physically
+    licensed -- while the *learned member MLPs* served by this layer hold
+    it only to fp-reorder tolerance, because GEMM accumulation order can
+    change with the number of rows.
+
+    :meth:`reference_forward` is the TEST-INTERNAL reference
+    implementation (ratified 2026-07-13): a per-channel multiply-plus-
+    fixed-axis-sum whose per-row reduction order is bitwise independent of
+    the batch shape.  It defines the reference accumulation order that the
+    chunk-tolerance test measures the GEMM against, and doubles as the
+    debugging arbiter for suspected chunk-sensitivity bugs (rerun under
+    ``reference_forward``: any remaining drift is a real bug, not
+    reorder noise).  It re-reads its input once per output unit (measured:
+    ~26 s and ~48x redundant memory traffic per training step at DrivAerML
+    scale, 2026-07-11 decode profile) and is deliberately NOT reachable
+    from any model configuration.
     """
 
     def __init__(
@@ -281,6 +326,8 @@ class _RowStableLinear(nn.Module):
         *,
         bias: bool = True,
     ) -> None:
+        """Allocate the ``(out_features, in_features)`` weight (Kaiming-style
+        scale) and optional bias shared by both forward paths."""
         super().__init__()
         self.weight = nn.Parameter(
             torch.randn(out_features, in_features) / math.sqrt(in_features)
@@ -290,7 +337,22 @@ class _RowStableLinear(nn.Module):
         else:
             self.register_parameter("bias", None)
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, features: Float[torch.Tensor, "*batch in_features"]
+    ) -> Float[torch.Tensor, "*batch out_features"]:
+        """Runtime path: one GEMM (fp-reorder tolerance across batch shapes;
+        see the class docstring for the split contract)."""
+        # The bias is added OUTSIDE the GEMM, mirroring reference_forward,
+        # so the two paths differ only in the contraction kernel.
+        output = features @ self.weight.transpose(0, 1)
+        if self.bias is not None:
+            output = output + self.bias
+        return output
+
+    def reference_forward(
+        self, features: Float[torch.Tensor, "*batch in_features"]
+    ) -> Float[torch.Tensor, "*batch out_features"]:
+        """Test-internal arbiter: bitwise batch-shape-independent contraction."""
         columns = [(features * row).sum(dim=-1) for row in self.weight.unbind(dim=0)]
         output = torch.stack(columns, dim=-1)
         if self.bias is not None:
@@ -361,28 +423,28 @@ class PairInvariantFeatures:
     block.
     """
 
-    squared_distance: torch.Tensor  # (Q, S)
-    normal_alignment: torch.Tensor  # (Q, S)
-    vector_alignments: torch.Tensor  # (Q, S, C)
+    squared_distance: Float[torch.Tensor, "q s"]
+    normal_alignment: Float[torch.Tensor, "q s"]
+    vector_alignments: Float[torch.Tensor, "q s channels"]
     # Auxiliary-scale invariant block; ``None`` unless a declared auxiliary
     # scale was supplied to ``compute``.
-    auxiliary_squared_distance: torch.Tensor | None = None  # (Q, S)
-    auxiliary_normal_alignment: torch.Tensor | None = None  # (Q, S)
-    auxiliary_vector_alignments: torch.Tensor | None = None  # (Q, S, C)
+    auxiliary_squared_distance: Float[torch.Tensor, "q s"] | None = None
+    auxiliary_normal_alignment: Float[torch.Tensor, "q s"] | None = None
+    auxiliary_vector_alignments: Float[torch.Tensor, "q s channels"] | None = None
     # Log-radial feature block; ``None`` unless ``compute`` was asked for it
     # (``log_radial=True``), which keeps older callers bitwise untouched.
-    log_squared_distance: torch.Tensor | None = None  # (Q, S)
-    normalized_normal_alignment: torch.Tensor | None = None  # (Q, S)
-    normalized_vector_alignments: torch.Tensor | None = None  # (Q, S, C)
+    log_squared_distance: Float[torch.Tensor, "q s"] | None = None
+    normalized_normal_alignment: Float[torch.Tensor, "q s"] | None = None
+    normalized_vector_alignments: Float[torch.Tensor, "q s channels"] | None = None
 
     @classmethod
     def compute(
         cls,
-        query_points: torch.Tensor,
-        source_centroids: torch.Tensor,
-        source_normals: torch.Tensor,
-        source_vectors: torch.Tensor,
-        auxiliary_scale: torch.Tensor | None = None,
+        query_points: Float[torch.Tensor, "q spatial_dims"],
+        source_centroids: Float[torch.Tensor, "s spatial_dims"],
+        source_normals: Float[torch.Tensor, "s spatial_dims"],
+        source_vectors: Float[torch.Tensor, "s channels spatial_dims"],
+        auxiliary_scale: Float[torch.Tensor, ""] | None = None,
         log_radial: bool = False,
     ) -> "PairInvariantFeatures":
         """Build the per-pair invariants for one query chunk."""
@@ -401,14 +463,13 @@ class PairInvariantFeatures:
             raise ValueError("auxiliary_scale must be a 0-dimensional tensor")
         displacement = query_points[:, None, :] - source_centroids[None, :, :]
         squared_distance = displacement.square().sum(dim=-1)
-        normal_alignment = torch.einsum("qsd,sd->qs", displacement, source_normals)
-        # Broadcast multiply-plus-sum rather than
-        # ``einsum("qsd,scd->qsc", ...)``: that einsum lowers to a
-        # batched GEMM whose per-row reduction can change with the
-        # query-chunk shape (measured 1-ulp drift on CUDA), breaking the
-        # decoder's bitwise query-set-independence contract.  The
-        # ``qsd,sd->qs`` contractions lower to stable mul-plus-sum
-        # reductions and may remain einsums.
+        # Broadcast multiply-plus-fixed-axis-sum for every query-axis
+        # contraction, NEVER einsum: ``einsum("qsd,scd->qsc", ...)`` lowers
+        # to a batched GEMM and ``einsum("qsd,sd->qs", ...)`` to a batched
+        # cuBLAS gemv, and both pick reduction internals from the batch
+        # shape (measured: Q=1 vs Q=40 rows differ at 1 ulp on CUDA),
+        # breaking the decoder's bitwise query-set-independence contract.
+        normal_alignment = (displacement * source_normals[None, :, :]).sum(dim=-1)
         vector_alignments = (
             displacement[:, :, None, :] * source_vectors[None, :, :, :]
         ).sum(dim=-1)
@@ -443,7 +504,7 @@ class PairInvariantFeatures:
             **log_radial_kwargs,
         )
 
-    def stacked(self) -> torch.Tensor:
+    def stacked(self) -> Float[torch.Tensor, "q s features"]:
         """Return all invariants stacked as ``(Q, S, F)`` features.
 
         The base block contributes ``2 + C`` features; the auxiliary block
@@ -475,11 +536,56 @@ class PairInvariantFeatures:
         return torch.cat(parts, dim=-1)
 
 
+def subtended_angle(
+    squared_distance: Float[torch.Tensor, "q s"],
+    cell_measures: Float[torch.Tensor, " s"],
+    n_manifold_dims: int,
+) -> Float[torch.Tensor, "q s"]:
+    r"""Apparent subtended angle :math:`\theta \approx h/d` of each source panel.
+
+    ``squared_distance`` is the pairwise :math:`\lVert x_q - y_s\rVert^2`
+    with shape ``(Q, S)``; ``cell_measures`` the per-source cell measures
+    (length of a segment, area of a triangle) with shape ``(S,)``.  The
+    panel's linear size is derived DIMENSION-GENERICALLY from its measure,
+
+    .. math:: h_s = \mu_s^{1/m},\qquad
+              \theta_{qs} = h_s\,/\,\sqrt{a_{qs}+\epsilon},
+
+    with :math:`m` the manifold dimension (1 for boundary curves in 2D, 2
+    for boundary surfaces in 3D) -- never an area divided by a distance.
+    Both :math:`h` and :math:`d` are lengths in the same frame, so
+    :math:`\theta` is dimensionless and invariant under uniform coordinate
+    scaling (scaling points by :math:`s` scales :math:`\mu` by
+    :math:`s^m`, hence :math:`h` and :math:`d` both by :math:`s`); it is
+    trivially invariant under rotations, reflections, and translations.
+    This is the Barnes-Hut multipole acceptance criterion: smooth far-field
+    representations err as powers of :math:`h/d`, so "near field" defined
+    as a :math:`\theta` threshold is exactly "where smooth approximations
+    fail," adaptively in the local mesh resolution.
+
+    Every operation is an elementwise per-pair map (no reduction), so the
+    decoder's query-set-independence contract is untouched.
+    """
+    if n_manifold_dims < 1:
+        raise ValueError(
+            f"n_manifold_dims must be a positive integer, got {n_manifold_dims}"
+        )
+    if cell_measures.ndim != 1 or squared_distance.shape[-1] != cell_measures.shape[0]:
+        raise ValueError(
+            "cell_measures must be (S,) matching squared_distance's source "
+            f"axis; got {tuple(cell_measures.shape)} against "
+            f"{tuple(squared_distance.shape)}"
+        )
+    panel_size = cell_measures.clamp_min(0.0).pow(1.0 / n_manifold_dims)
+    distance = torch.sqrt(squared_distance + _LOG_RADIAL_EPS)
+    return panel_size[None, :] / distance
+
+
 def _segment_double_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-    cell_normals: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q 2"],
+    panel_vertices: Float[torch.Tensor, "s 2 2"],
+    cell_normals: Float[torch.Tensor, "s 2"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Exact straight-segment integrals of the 2D double-layer singularity.
 
     Entry ``(i, j)`` is :math:`\int_{P_j} n\cdot(x_i-y)\,/\,
@@ -504,10 +610,10 @@ def _segment_double_layer_member(
 
 
 def _triangle_double_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-    cell_normals: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q 3"],
+    panel_vertices: Float[torch.Tensor, "s 3 3"],
+    cell_normals: Float[torch.Tensor, "s 3"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Exact flat-triangle integrals of the 3D double-layer singularity.
 
     Entry ``(i, j)`` is :math:`\int_{T_j} n\cdot(x_i-y)\,/\,
@@ -523,12 +629,20 @@ def _triangle_double_layer_member(
     b = panel_vertices[None, :, 1, :] - query_points[:, None, :]
     c = panel_vertices[None, :, 2, :] - query_points[:, None, :]
     la, lb, lc = a.norm(dim=-1), b.norm(dim=-1), c.norm(dim=-1)
-    numerator = torch.einsum("qsd,qsd->qs", a, torch.cross(b, c, dim=-1))
+    # Elementwise multiply-plus-fixed-axis-sum, NOT einsum("qsd,qsd->qs"):
+    # that einsum lowers to a batch=Q*S bmm of (1,3)@(3,1) items, which
+    # cuBLAS decomposes into one gemv launch per PAIR -- measured as the
+    # dominant kernel-launch count of every decode step (2026-07-11
+    # profile: ~10^5 launches, ~7.4 s/step at 20k sources).  The mul+sum
+    # form computes the same 3-term dot per pair in two dense kernels and
+    # keeps the per-row reduction independent of the batch shape (the
+    # decoder's bitwise query-set-independence contract).
+    numerator = (a * torch.cross(b, c, dim=-1)).sum(dim=-1)
     denominator = (
         la * lb * lc
-        + torch.einsum("qsd,qsd->qs", a, b) * lc
-        + torch.einsum("qsd,qsd->qs", b, c) * la
-        + torch.einsum("qsd,qsd->qs", c, a) * lb
+        + (a * b).sum(dim=-1) * lc
+        + (b * c).sum(dim=-1) * la
+        + (c * a).sum(dim=-1) * lb
     )
     winding_normal = torch.cross(
         panel_vertices[:, 1, :] - panel_vertices[:, 0, :],
@@ -540,10 +654,10 @@ def _triangle_double_layer_member(
 
 
 def exact_double_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-    cell_normals: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q spatial_dims"],
+    panel_vertices: Float[torch.Tensor, "s vertices spatial_dims"],
+    cell_normals: Float[torch.Tensor, "s spatial_dims"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Dimension-dispatched exact cell integrals of the double layer.
 
     ``panel_vertices`` has shape ``(S, 2, 2)`` for straight 2D segments or
@@ -569,9 +683,9 @@ def exact_double_layer_member(
 
 
 def _segment_single_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q 2"],
+    panel_vertices: Float[torch.Tensor, "s 2 2"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Exact straight-segment integrals of the 2D single-layer kernel.
 
     Entry ``(i, j)`` is :math:`\int_{P_j} -\log\lVert x_i-y\rVert
@@ -612,8 +726,10 @@ def _segment_single_layer_member(
     # Local coordinates of the query point relative to the panel: xi_k is the
     # tangential offset from endpoint k and eta the perpendicular offset (its
     # sign cancels in eta * (theta_2 - theta_1), so no orientation enters).
-    xi_start = -torch.einsum("qsd,sd->qs", start_vector, tangent)
-    xi_end = -torch.einsum("qsd,sd->qs", end_vector, tangent)
+    # Mul+sum, not einsum("qsd,sd->qs"): the einsum's batched-gemv lowering
+    # is batch-shape dependent at 1 ulp on CUDA (query-set independence).
+    xi_start = -(start_vector * tangent[None, :, :]).sum(dim=-1)
+    xi_end = -(end_vector * tangent[None, :, :]).sum(dim=-1)
     eta = (
         tangent[None, :, 1] * start_vector[..., 0]
         - tangent[None, :, 0] * start_vector[..., 1]
@@ -629,9 +745,9 @@ def _segment_single_layer_member(
 
 
 def _triangle_single_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q 3"],
+    panel_vertices: Float[torch.Tensor, "s 3 3"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Exact flat-triangle integrals of the 3D single-layer kernel.
 
     Entry ``(i, j)`` is :math:`\int_{T_j} 1/(4\pi\lVert x_i-y\rVert)\,dS_y`,
@@ -677,7 +793,11 @@ def _triangle_single_layer_member(
         dim=-1,
     )
     unit_normal = winding_normal / winding_normal.norm(dim=-1, keepdim=True)
-    height = torch.einsum("qsd,sd->qs", a, unit_normal)
+    # Mul+sum, not einsum("qsd,sd->qs"), here and per edge below: the
+    # einsum's batched-gemv lowering is batch-shape dependent at 1 ulp on
+    # CUDA (measured at Q=1), breaking bitwise query-set independence and
+    # bitwise parity with the pairwise Barnes--Hut near field.
+    height = (a * unit_normal[None, :, :]).sum(dim=-1)
     tiny = torch.finfo(query_points.dtype).tiny
     relative = (a, b, c)
     edge_terms = query_points.new_zeros(a.shape[:2])
@@ -686,34 +806,42 @@ def _triangle_single_layer_member(
         q = relative[end]
         edge = panel_vertices[:, end, :] - panel_vertices[:, start, :]
         edge_tangent = edge / edge.norm(dim=-1, keepdim=True)
-        s_start = torch.einsum("qsd,sd->qs", p, edge_tangent)
-        s_end = torch.einsum("qsd,sd->qs", q, edge_tangent)
+        s_start = (p * edge_tangent[None, :, :]).sum(dim=-1)
+        s_end = (q * edge_tangent[None, :, :]).sum(dim=-1)
         # Distance from the query point to the edge *line* (includes the
         # out-of-plane component: mu^2 = t^2 + h^2 >= t^2, which is what
         # makes t * asinh(s/mu) vanish smoothly near the edge).
         mu = (p - s_start.unsqueeze(-1) * edge_tangent[None, :, :]).norm(dim=-1)
         mu = mu.clamp_min(tiny)
-        in_plane_distance = torch.einsum(
-            "qsd,sd->qs", p, torch.cross(edge_tangent, unit_normal, dim=-1)
-        )
+        in_plane_distance = (
+            p * torch.cross(edge_tangent, unit_normal, dim=-1)[None, :, :]
+        ).sum(dim=-1)
         edge_terms = edge_terms + in_plane_distance * (
             torch.asinh(s_end / mu) - torch.asinh(s_start / mu)
         )
-    numerator = torch.einsum("qsd,qsd->qs", a, torch.cross(b, c, dim=-1))
+    # Elementwise multiply-plus-fixed-axis-sum, NOT einsum("qsd,qsd->qs"):
+    # that einsum lowers to a batch=Q*S bmm of (1,3)@(3,1) items, which
+    # cuBLAS decomposes into one gemv launch per PAIR -- measured as the
+    # dominant kernel-launch count of every decode step (2026-07-11
+    # profile: ~10^5 launches, ~7.4 s/step at 20k sources).  The mul+sum
+    # form computes the same 3-term dot per pair in two dense kernels and
+    # keeps the per-row reduction independent of the batch shape (the
+    # decoder's bitwise query-set-independence contract).
+    numerator = (a * torch.cross(b, c, dim=-1)).sum(dim=-1)
     denominator = (
         la * lb * lc
-        + torch.einsum("qsd,qsd->qs", a, b) * lc
-        + torch.einsum("qsd,qsd->qs", b, c) * la
-        + torch.einsum("qsd,qsd->qs", c, a) * lb
+        + (a * b).sum(dim=-1) * lc
+        + (b * c).sum(dim=-1) * la
+        + (c * a).sum(dim=-1) * lb
     )
     solid_angle = 2.0 * torch.atan2(numerator, denominator).abs()
     return (edge_terms - height.abs() * solid_angle) / _FOUR_PI
 
 
 def exact_single_layer_member(
-    query_points: torch.Tensor,
-    panel_vertices: torch.Tensor,
-) -> torch.Tensor:
+    query_points: Float[torch.Tensor, "q spatial_dims"],
+    panel_vertices: Float[torch.Tensor, "s vertices spatial_dims"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Dimension-dispatched exact cell integrals of the single layer.
 
     ``panel_vertices`` has shape ``(S, 2, 2)`` for straight 2D segments or
@@ -755,9 +883,9 @@ def exact_single_layer_member(
 
 
 def exterior_trace_self_entries(
-    double_layer: torch.Tensor,
-    self_indices: torch.Tensor,
-) -> torch.Tensor:
+    double_layer: Float[torch.Tensor, "q s"],
+    self_indices: Int[torch.Tensor, " q"],
+) -> Float[torch.Tensor, "q s"]:
     r"""Replace declared own-panel double-layer entries with the exterior trace.
 
     ``double_layer`` is a ``(Q, S)`` matrix from
@@ -839,23 +967,35 @@ class KernelDecoderCache:
     members, and the projected drive values.
     """
 
-    panel_vertices: torch.Tensor  # (S, vertices, D)
-    centroids: torch.Tensor  # (S, D)
-    normals: torch.Tensor  # (S, D)
-    weights: torch.Tensor  # (S,)
-    pair_vectors: torch.Tensor  # (S, C, D)
-    coefficients: torch.Tensor  # (S, M, H)
-    value_scalars: torch.Tensor  # (S, H, F_s)
-    value_vectors: torch.Tensor  # (S, H, F_v, D)
+    panel_vertices: Float[torch.Tensor, "s vertices spatial_dims"]
+    centroids: Float[torch.Tensor, "s spatial_dims"]
+    normals: Float[torch.Tensor, "s spatial_dims"]
+    weights: Float[torch.Tensor, " s"]
+    pair_vectors: Float[torch.Tensor, "s channels spatial_dims"]
+    coefficients: Float[torch.Tensor, "s members heads"]
+    value_scalars: Float[torch.Tensor, "s heads value_scalars"]
+    value_vectors: Float[torch.Tensor, "s heads value_vectors spatial_dims"]
     # Pseudoscalar (0o) value features; ``None`` only for caches built before
     # the pseudo sector existed (equivalent to zero width).
-    value_pseudos: torch.Tensor | None = None
+    value_pseudos: Float[torch.Tensor, "s heads value_pseudos"] | None = None
     # Declared auxiliary length-scale ratio lambda = delta / L_ref (a
     # dimensionless 0-dim tensor, a physical declaration read from the raw
     # global operator input, never a learned feature); ``None`` for caches
     # built without the auxiliary-scale contract, which keeps caches from
     # older decoders valid exactly like ``value_pseudos`` does.
-    auxiliary_scale: torch.Tensor | None = None
+    auxiliary_scale: Float[torch.Tensor, ""] | None = None
+    # Per-source squashed local-geometry scalars ``(S, 2)`` --
+    # [log-relative-measure, nondimensional curvature], both bounded by the
+    # smooth fixed maps documented in ``MeshTransformer.encode`` -- consumed
+    # only by the local-corrector probe block (``local_pair_features``);
+    # ``None`` keeps caches from older decoders valid.
+    local_scalars: Float[torch.Tensor, "s 2"] | None = None
+    # Barnes--Hut backend state (``decode_backend="barnes_hut"`` only):
+    # the source cluster tree and the channel-resolved per-node far-field
+    # aggregates (see ``barnes_hut.py``).  Geometry + learned-density
+    # content, built once per encode; ``None`` on dense caches.
+    bh_tree: "object | None" = None
+    bh_aggregates: "object | None" = None
 
 
 class KernelBasisCrossDecoder(nn.Module):
@@ -885,6 +1025,17 @@ class KernelBasisCrossDecoder(nn.Module):
     heads : int
         Number of independent kernels; each head owns its own member
         coefficients and value channels.
+    include_double_layer_member : bool
+        Whether the exact double-layer member -- the dictionary's default
+        base member, the exact cell-integrated free-space double-layer
+        singularity -- joins the dictionary.  Default ``True`` preserves
+        every existing configuration bitwise.  ``False`` (with the single
+        layer also off) is the MLP-only ablation: the dictionary carries no
+        exact singular structure, the thesis-critical control separating
+        boundary-integral physics from generic learned pairwise capacity
+        (external-review P0).  In trace mode the exterior jump correction
+        rides this member, so with it off no self-entry correction is
+        applied.
     include_polynomial_members : bool
         Whether the fixed polynomial smooth members :math:`\{1,\ b,\ a\}`
         join the dictionary.  ``False`` is the polynomial-off ablation;
@@ -1000,6 +1151,7 @@ class KernelBasisCrossDecoder(nn.Module):
         drive_scalar_dim: int,
         drive_vector_dim: int,
         heads: int = 4,
+        include_double_layer_member: bool = True,
         include_polynomial_members: bool = True,
         include_single_layer_member: bool = False,
         monopole_free_single_layer: bool = False,
@@ -1011,7 +1163,18 @@ class KernelBasisCrossDecoder(nn.Module):
         checkpoint_query_chunks: bool = False,
         accumulation_dtype: torch.dtype | None = torch.float32,
         drive_pseudo_dim: int = 0,
+        local_pair_features: str | None = None,
+        near_theta: float = 0.25,
+        decode_backend: str = "dense",
+        bh_theta: float = 0.5,
+        bh_leaf_size: int = 32,
     ) -> None:
+        """Validate the configuration and build the member dictionary,
+        coefficient map, value projection, and typed output maps.  Every
+        parameter is documented in the class docstring's Parameters
+        section; validation here enforces the coherence rules stated there
+        (dimension dispatch, pseudo-sector planarity, member carriers for
+        the feature blocks, probe-mode names)."""
         super().__init__()
         if n_spatial_dims not in _EXACT_MEMBER_VERTICES:
             raise ValueError(
@@ -1019,8 +1182,21 @@ class KernelBasisCrossDecoder(nn.Module):
                 "exact double-layer member is dimension-dispatched to segment "
                 "and triangle quadrature"
             )
+        if not isinstance(include_double_layer_member, bool):
+            raise ValueError("include_double_layer_member must be a bool")
         if not isinstance(include_polynomial_members, bool):
             raise ValueError("include_polynomial_members must be a bool")
+        if not (
+            include_double_layer_member
+            or include_single_layer_member
+            or include_polynomial_members
+            or mlp_members > 0
+        ):
+            raise ValueError(
+                "the member dictionary is empty: enable at least one of the "
+                "exact double-layer member, the exact single-layer member, "
+                "the polynomial members, or mlp_members > 0"
+            )
         if not isinstance(include_single_layer_member, bool):
             raise ValueError("include_single_layer_member must be a bool")
         if not isinstance(monopole_free_single_layer, bool):
@@ -1054,6 +1230,93 @@ class KernelBasisCrossDecoder(nn.Module):
                 "members never read them), so without MLP members the "
                 "features have no carrier"
             )
+        if local_pair_features is not None:
+            if local_pair_features not in _LOCAL_PAIR_FEATURE_MODES:
+                raise ValueError(
+                    "local_pair_features must be one of "
+                    f"{sorted(_LOCAL_PAIR_FEATURE_MODES)} or None, got "
+                    f"{local_pair_features!r}"
+                )
+            if mlp_members == 0:
+                raise ValueError(
+                    "local_pair_features requires mlp_members > 0: the "
+                    "probe block feeds only the learned smooth-member MLP "
+                    "(the exact singular and polynomial members never read "
+                    "it), so without MLP members it has no carrier"
+                )
+        if not (
+            isinstance(near_theta, float)
+            and math.isfinite(near_theta)
+            and near_theta > 0.0
+        ):
+            raise ValueError(
+                f"near_theta must be a finite positive float, got {near_theta!r}"
+            )
+        if decode_backend not in ("dense", "barnes_hut"):
+            raise ValueError(
+                'decode_backend must be "dense" or "barnes_hut", got '
+                f"{decode_backend!r}"
+            )
+        if decode_backend == "barnes_hut":
+            # v1 scope of the hierarchical backend (task #41, design doc):
+            # 3D triangle boundaries, the two exact singular members plus
+            # smooth MLP members.  Each rejection names the missing
+            # far-field treatment rather than silently approximating.
+            if n_spatial_dims != 3:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' is implemented for 3D "
+                    "triangle boundaries only (v1; the 2D complex-moment "
+                    "expansion is designed but unbuilt)"
+                )
+            if not include_double_layer_member:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' v1 builds its far field "
+                    "around the exact double-layer member; the MLP-only "
+                    "ablation (include_double_layer_member=False) is a "
+                    "dense-backend science arm"
+                )
+            if include_polynomial_members:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' has no far-field treatment "
+                    "for the polynomial members (their {1, b, a} kernels do "
+                    "not decay); disable include_polynomial_members or use "
+                    "the dense backend"
+                )
+            if monopole_free_single_layer:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' does not implement the "
+                    "monopole-free deflation (a global rank-one coupling "
+                    "across all sources); use the dense backend"
+                )
+            if local_pair_features is not None:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' does not carry the "
+                    "local_pair_features probe block (diagnostic-only, "
+                    "retired per @sec-nb-probes-verdict); use the dense "
+                    "backend"
+                )
+            if not (
+                isinstance(bh_theta, float)
+                and math.isfinite(bh_theta)
+                and bh_theta > 0.0
+            ):
+                raise ValueError(
+                    f"bh_theta must be a finite positive float, got {bh_theta!r}"
+                )
+            if isinstance(bh_leaf_size, bool) or (
+                not isinstance(bh_leaf_size, int) or bh_leaf_size < 1
+            ):
+                raise ValueError(
+                    f"bh_leaf_size must be an integer >= 1, got {bh_leaf_size!r}"
+                )
+            if checkpoint_query_chunks:
+                raise NotImplementedError(
+                    "decode_backend='barnes_hut' does not compose with "
+                    "checkpoint_query_chunks in v1 (the checkpoint boundary "
+                    "packs dense cache tensors only).  BH memory is sparse "
+                    "-- O(near pairs + nodes) instead of O(chunk x S) -- so "
+                    "the checkpoint is typically unnecessary; disable it"
+                )
         # The two vector channel counts may be zero independently: a
         # vector-less operator state simply contributes no pair alignments or
         # Gram invariants, and a vector-less drive state carries no vector
@@ -1090,11 +1353,17 @@ class KernelBasisCrossDecoder(nn.Module):
         self.drive_vector_dim = drive_vector_dim
         self.drive_pseudo_dim = drive_pseudo_dim
         self.heads = heads
+        self.decode_backend = decode_backend
+        self.bh_theta = bh_theta
+        self.bh_leaf_size = bh_leaf_size
         self.include_polynomial_members = include_polynomial_members
+        self.include_double_layer_member = include_double_layer_member
         self.include_single_layer_member = include_single_layer_member
         self.monopole_free_single_layer = monopole_free_single_layer
         self.auxiliary_scale = auxiliary_scale
         self.log_radial_features = log_radial_features
+        self.local_pair_features = local_pair_features
+        self.near_theta = near_theta
         self.mlp_members = mlp_members
         # Members: exact double layer, exact single layer (optional),
         # polynomial {1, b, a} (optional), learned MLP.
@@ -1102,9 +1371,13 @@ class KernelBasisCrossDecoder(nn.Module):
         # singular-only ablation: the dictionary is the exact double-layer
         # member alone (plus the exact single-layer member when enabled --
         # the two-member "singpair" science arm), and the decoder must still
-        # construct and run for those science arms.
+        # construct and run for those science arms.  The converse
+        # ``include_double_layer_member=False`` (with the single layer also
+        # off) is the MLP-only ablation: no exact singular structure at all,
+        # the thesis-critical control for attributing industrial gains to
+        # boundary-integral physics rather than generic pairwise capacity.
         self.n_members = (
-            1
+            (1 if include_double_layer_member else 0)
             + (1 if include_single_layer_member else 0)
             + (3 if include_polynomial_members else 0)
             + mlp_members
@@ -1135,7 +1408,18 @@ class KernelBasisCrossDecoder(nn.Module):
             # block; nothing else in the decoder reads it, and it composes
             # with the auxiliary block as independent widths.
             pair_features += 2 + self._pair_vector_channels()
-        final = _RowStableLinear(mlp_hidden_dim, mlp_members, bias=False)
+        if local_pair_features is not None:
+            # Probe block (task #53): five even similarity-invariant scalar
+            # channels appended AFTER every other block; nothing else in the
+            # decoder reads them.  All three modes share the width so their
+            # parameter counts match exactly (the sharing-control comparison
+            # requires it).
+            pair_features += _LOCAL_PAIR_FEATURE_WIDTH
+        final = _RowStableLinear(
+            mlp_hidden_dim,
+            mlp_members,
+            bias=False,
+        )
         # Small final-layer initialization: the learned smooth members start
         # near zero while the exact and polynomial members carry the initial
         # read-in, matching the benchmark-winning pair-kernel initialization.
@@ -1204,12 +1488,16 @@ class KernelBasisCrossDecoder(nn.Module):
     # Linearity-critical hooks; implemented by the two concrete classes.
     # ------------------------------------------------------------------
     def _pair_vector_channels(self) -> int:
+        """Number of per-source state vectors entering the pair invariants
+        (fixes which states the kernel may read; linearity-critical)."""
         raise NotImplementedError(
             "instantiate LinearKernelBasisCrossDecoder or "
             "NonlinearZeroKernelBasisCrossDecoder"
         )
 
     def _source_invariant_channels(self) -> int:
+        """Width of the invariant features feeding the coefficient map
+        (linearity-critical: fixes what may condition the kernel)."""
         raise NotImplementedError(
             "instantiate LinearKernelBasisCrossDecoder or "
             "NonlinearZeroKernelBasisCrossDecoder"
@@ -1219,17 +1507,24 @@ class KernelBasisCrossDecoder(nn.Module):
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s channels spatial_dims"]:
+        """Per-source vectors whose alignments with the displacement join
+        the pair invariants; which states contribute fixes the linearity
+        class (operator-only keeps the kernel drive-independent)."""
         raise NotImplementedError
 
     def _kernel_source_invariants(
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s invariants"]:
+        """Per-source invariant features conditioning the member
+        coefficients; which states contribute fixes the linearity class."""
         raise NotImplementedError
 
     def _value_includes_vector_invariants(self) -> bool:
+        """Whether the value projection may lift quadratic invariants
+        (``False`` keeps values exactly drive-linear)."""
         raise NotImplementedError
 
     # ------------------------------------------------------------------
@@ -1241,7 +1536,8 @@ class KernelBasisCrossDecoder(nn.Module):
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
         *,
-        auxiliary_scale: torch.Tensor | None = None,
+        auxiliary_scale: Float[torch.Tensor, ""] | None = None,
+        local_scalars: Float[torch.Tensor, "s 2"] | None = None,
     ) -> KernelDecoderCache:
         """Cache every query-independent source quantity once per encode.
 
@@ -1294,9 +1590,21 @@ class KernelBasisCrossDecoder(nn.Module):
                 f"double-layer member, got cells with "
                 f"{source_mesh.cells.shape[-1]} vertices"
             )
+        if self.local_pair_features is not None and local_scalars is None:
+            raise ValueError(
+                "local_pair_features is enabled but no per-source local "
+                "scalars were supplied to the cache build"
+            )
+        if local_scalars is not None and (
+            local_scalars.ndim != 2 or local_scalars.shape != (source_mesh.n_cells, 2)
+        ):
+            raise ValueError(
+                "local_scalars must have shape (n_cells, 2), got "
+                f"{tuple(local_scalars.shape)}"
+            )
         values = self.value_projection(drive_state)
         n = drive_state.n_entities
-        return KernelDecoderCache(
+        cache = KernelDecoderCache(
             panel_vertices=source_mesh.points[source_mesh.cells],
             centroids=source_mesh.cell_centroids,
             normals=source_mesh.cell_normals,
@@ -1311,7 +1619,41 @@ class KernelBasisCrossDecoder(nn.Module):
             ),
             value_pseudos=values.pseudos.reshape(n, self.heads, self.pseudo_value_dim),
             auxiliary_scale=auxiliary_scale,
+            local_scalars=local_scalars,
         )
+        if self.decode_backend == "barnes_hut":
+            # Geometry-static tree plus channel-resolved far-field
+            # aggregates, once per encode (barnes_hut module header).  The
+            # tree indices are not differentiated (geometry is not a
+            # training variable); the aggregates are linear in the learned
+            # coefficients/values and carry gradients exactly.
+            from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+            from . import barnes_hut as _bh
+
+            with torch.autocast(device_type=cache.centroids.device.type, enabled=False):
+                tree = ClusterTree.from_points(
+                    cache.centroids,
+                    leaf_size=self.bh_leaf_size,
+                    areas=cache.weights,
+                )
+                aggregates = _bh.build_node_aggregates(
+                    tree,
+                    areas=cache.weights,
+                    centroids=cache.centroids,
+                    normals=cache.normals,
+                    pair_vectors=cache.pair_vectors,
+                    coefficients=cache.coefficients,
+                    value_scalars=cache.value_scalars,
+                    value_vectors=cache.value_vectors,
+                    value_pseudos=(
+                        cache.value_pseudos if self.pseudo_value_dim else None
+                    ),
+                    include_single_layer=self.include_single_layer_member,
+                    n_smooth_members=self.mlp_members,
+                )
+            cache = dataclass_replace(cache, bh_tree=tree, bh_aggregates=aggregates)
+        return cache
 
     def _accumulation_type(self, *tensors: torch.Tensor) -> torch.dtype:
         """Promote inputs with a precision floor, never downcast FP64."""
@@ -1322,12 +1664,77 @@ class KernelBasisCrossDecoder(nn.Module):
             dtype = torch.promote_types(dtype, self.accumulation_dtype)
         return dtype
 
+    def _local_pair_feature_block(
+        self,
+        features: PairInvariantFeatures,
+        cache: KernelDecoderCache,
+        self_indices: Int[torch.Tensor, " q"] | None,
+    ) -> Float[torch.Tensor, "q s 5"]:
+        r"""Local-corrector probe block (task #53), ``(Q, S, 5)``.
+
+        All channels are even, similarity-invariant, bounded scalars, built
+        from elementwise per-pair maps plus (for the local modes) a per-row
+        own-cell gather through the declared trace identity map -- no
+        batch-shape-dependent reduction, so query-set independence is
+        untouched.  The ``global_control`` mode's pooled scalars are
+        measure-weighted means over the FIXED source axis, identical for
+        every chunk by construction.
+        """
+        squared_distance = features.squared_distance
+        if self.local_pair_features == "global_control":
+            # Sharing control: identical width, zero per-pair locality.
+            measure = cache.weights.to(cache.local_scalars.dtype)
+            pooled = (measure[:, None] * cache.local_scalars).sum(
+                dim=0
+            ) / measure.sum().clamp_min(torch.finfo(measure.dtype).tiny)
+            block = squared_distance.new_zeros(
+                (*squared_distance.shape, _LOCAL_PAIR_FEATURE_WIDTH)
+            )
+            block[..., 0] = pooled[0]
+            block[..., 1] = pooled[1]
+            return block
+        theta = subtended_angle(
+            squared_distance, cache.weights, self.n_spatial_dims - 1
+        )
+        if self.local_pair_features == "windowed":
+            # Smooth full-support window: bounded to [0, 1), -> 0 as
+            # d -> infinity, -> 1 on contact; no free constant.
+            window = theta / (1.0 + theta)
+        else:  # "near_only"
+            # C^1 smoothstep, EXACTLY zero for theta <= near_theta / 2 and
+            # one for theta >= near_theta: compact near-field support.
+            ramp = torch.clamp(
+                (theta - 0.5 * self.near_theta) / (0.5 * self.near_theta),
+                min=0.0,
+                max=1.0,
+            )
+            window = ramp.square() * (3.0 - 2.0 * ramp)
+        source_scalars = cache.local_scalars.to(window.dtype)  # (S, 2)
+        # Query-side scalars via the declared trace identity map: row i
+        # reads exactly its own declared cell -- a per-row gather.
+        query_scalars = source_scalars[self_indices]  # (Q, 2)
+        return torch.stack(
+            (
+                window,
+                window * query_scalars[:, 0:1],
+                window * query_scalars[:, 1:2],
+                window * source_scalars[None, :, 0],
+                window * source_scalars[None, :, 1],
+            ),
+            dim=-1,
+        )
+
     def _evaluate_chunk(
         self,
-        query_points: torch.Tensor,
+        query_points: Float[torch.Tensor, "q spatial_dims"],
         cache: KernelDecoderCache,
-        self_indices: torch.Tensor | None = None,
+        self_indices: Int[torch.Tensor, " q"] | None = None,
     ) -> ScalarVectorState:
+        """Evaluate the full dense pair-kernel message for one query chunk
+        (exact members, optional smooth members, typed read-out); the
+        non-checkpointed inner loop of :meth:`forward`."""
+        if self.decode_backend == "barnes_hut":
+            return self._evaluate_chunk_barnes_hut(query_points, cache, self_indices)
         # Geometry-derived pair quantities keep the input geometry precision
         # even under an ambient autocast scope: the exact member and the
         # invariants are numerical mesh operations, not learned layers.
@@ -1362,20 +1769,28 @@ class KernelBasisCrossDecoder(nn.Module):
                 if needs_pair_features
                 else None
             )
-            singular = exact_double_layer_member(
-                query_points, cache.panel_vertices, cache.normals
-            )
-            if self_indices is not None:
-                # Declared boundary-trace queries: the closed form lands on
-                # an accidental signed-zero branch of the jump discontinuity
-                # at its own panel; replace the (query, own panel) entries
-                # with the exact exterior one-sided limit +1/2 (see
-                # exterior_trace_self_entries for the jump relation).  The
-                # single-layer member below is continuous across the
-                # boundary -- only its normal derivative jumps -- so its
-                # value needs, and receives, no correction.
-                singular = exterior_trace_self_entries(singular, self_indices)
-            singular = singular.unsqueeze(-1)
+            if self.include_double_layer_member:
+                singular = exact_double_layer_member(
+                    query_points, cache.panel_vertices, cache.normals
+                )
+                if self_indices is not None:
+                    # Declared boundary-trace queries: the closed form lands
+                    # on an accidental signed-zero branch of the jump
+                    # discontinuity at its own panel; replace the (query, own
+                    # panel) entries with the exact exterior one-sided limit
+                    # +1/2 (see exterior_trace_self_entries for the jump
+                    # relation).  The single-layer member below is continuous
+                    # across the boundary -- only its normal derivative jumps
+                    # -- so its value needs, and receives, no correction.
+                    singular = exterior_trace_self_entries(
+                        singular, self_indices
+                    )
+                singular = singular.unsqueeze(-1)
+            else:
+                # MLP-only ablation (external-review P0): no exact
+                # double-layer stack; the single layer below may still open
+                # the singular block.
+                singular = None
             if self.include_single_layer_member:
                 # Second exact singular member: the single layer never reads
                 # the cell normals (orientation independent, unlike the
@@ -1400,9 +1815,11 @@ class KernelBasisCrossDecoder(nn.Module):
                         - single_layer.sum(dim=-1, keepdim=True)
                         * (weights / weights.sum())[None, :]
                     )
-                singular = torch.cat(
-                    (singular, single_layer.unsqueeze(-1)),
-                    dim=-1,
+                single_layer = single_layer.unsqueeze(-1)
+                singular = (
+                    single_layer
+                    if singular is None
+                    else torch.cat((singular, single_layer), dim=-1)
                 )
             polynomial = (
                 torch.stack(
@@ -1416,8 +1833,21 @@ class KernelBasisCrossDecoder(nn.Module):
                 if self.include_polynomial_members
                 else None
             )
+            probe_block = (
+                self._local_pair_feature_block(features, cache, self_indices)
+                if self.local_pair_features is not None
+                else None
+            )
         if self.member_mlp is not None:
-            learned = self.member_mlp(features.stacked())
+            mlp_input = features.stacked()
+            if probe_block is not None:
+                # The probe block joins AFTER every other feature block
+                # (base, auxiliary, log-radial), mirroring their append
+                # discipline; only the smooth-member MLP reads it.
+                mlp_input = torch.cat(
+                    (mlp_input, probe_block.to(mlp_input.dtype)), dim=-1
+                )
+            learned = self.member_mlp(mlp_input)
             smooth_parts = (
                 torch.cat((polynomial.to(learned.dtype), learned), dim=-1)
                 if polynomial is not None
@@ -1431,10 +1861,16 @@ class KernelBasisCrossDecoder(nn.Module):
             # already exact integrals with measure included and are not
             # weighted again.
             smooth = smooth_parts * cache.weights.to(smooth_parts.dtype)[None, :, None]
-            members = torch.cat((singular.to(smooth.dtype), smooth), dim=-1)
+            members = (
+                smooth
+                if singular is None
+                else torch.cat((singular.to(smooth.dtype), smooth), dim=-1)
+            )
         else:
             # Singular-only ablation: no smooth members exist, so the member
-            # axis carries the exact singular member(s) alone.
+            # axis carries the exact singular member(s) alone.  (The
+            # both-empty case is rejected at construction: the member
+            # dictionary must be non-empty.)
             members = singular
 
         dtype = self._accumulation_type(
@@ -1496,12 +1932,288 @@ class KernelBasisCrossDecoder(nn.Module):
             )
         )
 
+    def _evaluate_chunk_barnes_hut(
+        self,
+        query_points: Float[torch.Tensor, "q spatial_dims"],
+        cache: KernelDecoderCache,
+        self_indices: Int[torch.Tensor, " q"] | None = None,
+    ) -> ScalarVectorState:
+        r"""Hierarchical (Barnes--Hut) evaluation of one query chunk.
+
+        Near pairs run the SAME closed forms and smooth-member MLP as the
+        dense path, pairwise (per-pair values bitwise identical -- pinned by
+        ``test_barnes_hut.py``); far (query, node) pairs read the cache's
+        channel-resolved node aggregates against analytic point kernels
+        (exact members) and the node's virtual source (smooth members).
+        See ``barnes_hut.py`` for the contract; the output projection tail
+        deliberately mirrors :meth:`_evaluate_chunk` (kept duplicated so the
+        bitwise-sensitive dense path is never touched; the equivalence
+        tests couple the two).
+        """
+        from . import barnes_hut as _bh
+
+        if cache.bh_tree is None or cache.bh_aggregates is None:
+            raise ValueError(
+                "decode_backend='barnes_hut' requires a cache built by this "
+                "decoder's build_source_cache (bh_tree/bh_aggregates missing "
+                "-- the cache came from a dense-backend build)"
+            )
+        tree = cache.bh_tree
+        agg = cache.bh_aggregates
+        device_type = query_points.device.type
+        n_queries = query_points.shape[0]
+
+        def _pair_features(
+            displacement: torch.Tensor,  # (P, D)
+            normals: torch.Tensor,  # (P, D)
+            pair_vectors: torch.Tensor,  # (P, C, D)
+        ) -> torch.Tensor:
+            """Per-pair mirror of ``PairInvariantFeatures`` + ``stacked()``:
+            same invariants, same block order (base, auxiliary, log-radial),
+            elementwise ops only."""
+            squared_distance = displacement.square().sum(dim=-1)
+            normal_alignment = (displacement * normals).sum(dim=-1)
+            vector_alignments = (displacement[:, None, :] * pair_vectors).sum(dim=-1)
+            parts = [
+                squared_distance.unsqueeze(-1),
+                normal_alignment.unsqueeze(-1),
+                vector_alignments,
+            ]
+            if self.auxiliary_scale:
+                lam = cache.auxiliary_scale
+                parts.extend(
+                    (
+                        (squared_distance / lam.square()).unsqueeze(-1),
+                        (normal_alignment / lam).unsqueeze(-1),
+                        vector_alignments / lam,
+                    )
+                )
+            if self.log_radial_features:
+                radius = torch.sqrt(squared_distance + _LOG_RADIAL_EPS)
+                parts.extend(
+                    (
+                        torch.log(squared_distance + _LOG_RADIAL_EPS).unsqueeze(-1),
+                        (normal_alignment / radius).unsqueeze(-1),
+                        vector_alignments / radius.unsqueeze(-1),
+                    )
+                )
+            return torch.cat(parts, dim=-1)
+
+        with torch.autocast(device_type=device_type, enabled=False):
+            part = _bh.single_tree_partition(query_points, tree, self.bh_theta)
+        nq, ns = part.near_query, part.near_source
+        fq, fn = part.far_query, part.far_node
+
+        dtype = self._accumulation_type(
+            query_points,
+            cache.coefficients,
+            cache.value_scalars,
+            cache.value_vectors,
+        )
+        n_heads = self.heads
+        f_s = self.scalar_value_dim
+        f_v = self.vector_value_dim
+        f_p = self.pseudo_value_dim
+        has_pseudos = bool(f_p)
+        n_dims = query_points.shape[-1]
+        # One-time dtype promotion of every gathered operand (no-ops when
+        # the cache already carries the accumulation dtype).
+        coefficients = cache.coefficients.to(dtype)
+        value_scalars = cache.value_scalars.to(dtype)
+        value_vectors = cache.value_vectors.to(dtype)
+        value_pseudos = (
+            cache.value_pseudos.to(dtype) if cache.value_pseudos is not None else None
+        )
+
+        # Both fields reduce through the lazy block-fused segment fold: each
+        # rank block gathers at most (n_queries * block) pairs, computes the
+        # per-pair typed rows [scalar | vector | pseudo] flattened to one
+        # (nb, C) tensor, and folds immediately -- nothing (P, H, F)-sized
+        # is ever materialized, so memory is bounded by the block size, not
+        # the pair count.
+
+        def _typed_row(kernel_p: torch.Tensor, ns_s: torch.Tensor) -> torch.Tensor:
+            # Explicit widths: -1 inference fails on empty selections.
+            nb = kernel_p.shape[0]
+            parts = [
+                (kernel_p.unsqueeze(-1) * value_scalars[ns_s]).reshape(
+                    nb, n_heads * f_s
+                ),
+                (kernel_p[:, :, None, None] * value_vectors[ns_s]).reshape(
+                    nb, n_heads * f_v * n_dims
+                ),
+            ]
+            if has_pseudos:
+                parts.append(
+                    (kernel_p.unsqueeze(-1) * value_pseudos[ns_s]).reshape(
+                        nb, n_heads * f_p
+                    )
+                )
+            return torch.cat(parts, dim=-1)
+
+        def _near_rows(sel: torch.Tensor) -> torch.Tensor:
+            nq_s = nq[sel]
+            ns_s = ns[sel]
+            with torch.autocast(device_type=device_type, enabled=False):
+                pieces = []
+                dl = _bh.pair_triangle_double_layer(
+                    query_points[nq_s],
+                    cache.panel_vertices[ns_s],
+                    cache.normals[ns_s],
+                )
+                if self_indices is not None:
+                    own = ns_s == self_indices[nq_s]
+                    dl = torch.where(own, dl.new_full((), 0.5), dl)
+                pieces.append(dl.unsqueeze(-1))
+                if self.include_single_layer_member:
+                    pieces.append(
+                        _bh.pair_triangle_single_layer(
+                            query_points[nq_s], cache.panel_vertices[ns_s]
+                        ).unsqueeze(-1)
+                    )
+                displacement = query_points[nq_s] - cache.centroids[ns_s]
+            if self.member_mlp is not None:
+                # Under ambient autocast, mirroring the dense path.
+                feats = _pair_features(
+                    displacement, cache.normals[ns_s], cache.pair_vectors[ns_s]
+                )
+                learned = self.member_mlp(feats)
+                pieces.append(learned * cache.weights[ns_s].to(learned.dtype)[:, None])
+            with torch.autocast(device_type=device_type, enabled=False):
+                members = torch.cat([p.to(pieces[0].dtype) for p in pieces], dim=-1)
+                kernel_p = (members.to(dtype).unsqueeze(-1) * coefficients[ns_s]).sum(
+                    dim=1
+                )  # (nb, H)
+                return _typed_row(kernel_p, ns_s)
+
+        def _far_rows(sel: torch.Tensor) -> torch.Tensor:
+            fq_s = fq[sel]
+            fn_s = fn[sel]
+            nb = sel.shape[0]
+            with torch.autocast(device_type=device_type, enabled=False):
+                r_vec = query_points[fq_s] - agg.centroid[fn_s]
+                r = torch.sqrt(r_vec.square().sum(dim=-1)).clamp_min(
+                    torch.finfo(query_points.dtype).tiny
+                )
+                # Double layer far limit: sum(A n rho) . (x - c)/(4 pi r^3),
+                # contracted per dipole component so gathers stay (nb, H, F).
+                dl_kernel = (r_vec / (_FOUR_PI * r.pow(3))[:, None]).to(dtype)
+                scal = dl_kernel.new_zeros((nb, n_heads, f_s))
+                vec = dl_kernel.new_zeros((nb, n_heads, f_v, n_dims))
+                pse = dl_kernel.new_zeros((nb, n_heads, f_p)) if has_pseudos else None
+                for d in range(n_dims):
+                    w = dl_kernel[:, d]
+                    scal = scal + w[:, None, None] * agg.dl_scalars.to(dtype)[fn_s, d]
+                    vec = (
+                        vec + w[:, None, None, None] * agg.dl_vectors.to(dtype)[fn_s, d]
+                    )
+                    if pse is not None and agg.dl_pseudos is not None:
+                        pse = pse + w[:, None, None] * agg.dl_pseudos.to(dtype)[fn_s, d]
+                if self.include_single_layer_member:
+                    sl_kernel = (1.0 / (_FOUR_PI * r)).to(dtype)
+                    scal = (
+                        scal + sl_kernel[:, None, None] * agg.sl_scalars.to(dtype)[fn_s]
+                    )
+                    vec = (
+                        vec
+                        + sl_kernel[:, None, None, None]
+                        * agg.sl_vectors.to(dtype)[fn_s]
+                    )
+                    if pse is not None and agg.sl_pseudos is not None:
+                        pse = (
+                            pse
+                            + sl_kernel[:, None, None] * agg.sl_pseudos.to(dtype)[fn_s]
+                        )
+            if self.member_mlp is not None:
+                # Virtual-source smooth members under ambient autocast.
+                far_feats = _pair_features(
+                    query_points[fq_s] - agg.centroid[fn_s],
+                    agg.unit_normal[fn_s],
+                    agg.mean_pair_vectors[fn_s],
+                )
+                far_learned = self.member_mlp(far_feats).to(dtype)  # (nb, M)
+                with torch.autocast(device_type=device_type, enabled=False):
+                    for m in range(self.mlp_members):
+                        w = far_learned[:, m]
+                        scal = (
+                            scal
+                            + w[:, None, None] * agg.smooth_scalars.to(dtype)[fn_s, m]
+                        )
+                        vec = (
+                            vec
+                            + w[:, None, None, None]
+                            * agg.smooth_vectors.to(dtype)[fn_s, m]
+                        )
+                        if pse is not None and agg.smooth_pseudos is not None:
+                            pse = (
+                                pse
+                                + w[:, None, None]
+                                * agg.smooth_pseudos.to(dtype)[fn_s, m]
+                            )
+            parts = [
+                scal.reshape(nb, n_heads * f_s),
+                vec.reshape(nb, n_heads * f_v * n_dims),
+            ]
+            if pse is not None:
+                parts.append(pse.reshape(nb, n_heads * f_p))
+            return torch.cat(parts, dim=-1)
+
+        combined = _bh.segment_sum_by_query(
+            _near_rows, nq, n_queries, block=_BH_PAIR_BLOCK, checkpoint_blocks=True
+        ) + _bh.segment_sum_by_query(
+            _far_rows, fq, n_queries, block=_BH_PAIR_BLOCK, checkpoint_blocks=True
+        )
+        split_s = n_heads * f_s
+        split_v = split_s + n_heads * f_v * n_dims
+        scalar_heads = combined[:, :split_s].reshape(n_queries, n_heads, f_s)
+        vector_heads = combined[:, split_s:split_v].reshape(
+            n_queries, n_heads, f_v, n_dims
+        )
+        pseudo_heads = (
+            combined[:, split_v:].reshape(n_queries, n_heads, f_p)
+            if has_pseudos
+            else None
+        )
+
+        # ---- Typed output projection (mirrors _evaluate_chunk's tail) -----
+        output_dtype = query_points.dtype
+        heads_flat = scalar_heads.to(output_dtype).reshape(
+            n_queries, self.heads * self.scalar_value_dim
+        )
+        scalars = (heads_flat[:, None, :] * self.scalar_output_weight[None, :, :]).sum(
+            dim=-1
+        )
+        vectors = (
+            self.vector_output_weight[None, :, :, :, None]
+            * vector_heads.to(output_dtype)[:, None, :, :, :]
+        ).sum(dim=(2, 3))
+        if self.drive_pseudo_dim:
+            pseudo_flat = pseudo_heads.to(output_dtype).reshape(
+                n_queries, self.heads * self.pseudo_value_dim
+            )
+            pseudos = (
+                pseudo_flat[:, None, :] * self.pseudo_output_weight[None, :, :]
+            ).sum(dim=-1)
+        else:
+            pseudos = scalars.new_empty(n_queries, 0)
+        return self.message_scale(
+            ScalarVectorState(
+                scalars,
+                vectors.to(dtype=scalars.dtype),
+                pseudos.to(dtype=scalars.dtype),
+            )
+        )
+
     def _checkpointed_chunk(
         self,
-        query_points: torch.Tensor,
+        query_points: Float[torch.Tensor, "q spatial_dims"],
         cache: KernelDecoderCache,
-        self_indices: torch.Tensor | None = None,
+        self_indices: Int[torch.Tensor, " q"] | None = None,
     ) -> ScalarVectorState:
+        """:meth:`_evaluate_chunk` under gradient checkpointing: the chunk's
+        dense O(Q x S) activations are recomputed in backward instead of
+        stored, bounding training memory by one chunk (bitwise identical to
+        the plain path; see the module docstring's memory section)."""
         # Autograd connects only through tensors passed as explicit
         # checkpoint arguments, so the cache is unpacked here and rebuilt
         # inside; parameters used within ``_evaluate_chunk`` receive
@@ -1514,6 +2226,7 @@ class KernelBasisCrossDecoder(nn.Module):
         # gradient-free integers but ride the same packing for uniformity.
         has_pseudos = cache.value_pseudos is not None
         has_auxiliary = cache.auxiliary_scale is not None
+        has_local = cache.local_scalars is not None
         has_self_indices = self_indices is not None
 
         def run(
@@ -1542,6 +2255,7 @@ class KernelBasisCrossDecoder(nn.Module):
                     value_vectors=value_vectors,
                     value_pseudos=extras.pop(0) if has_pseudos else None,
                     auxiliary_scale=extras.pop(0) if has_auxiliary else None,
+                    local_scalars=extras.pop(0) if has_local else None,
                 ),
                 self_indices=extras.pop(0) if has_self_indices else None,
             )
@@ -1562,6 +2276,8 @@ class KernelBasisCrossDecoder(nn.Module):
             tensors = tensors + (cache.value_pseudos,)
         if has_auxiliary:
             tensors = tensors + (cache.auxiliary_scale,)
+        if has_local:
+            tensors = tensors + (cache.local_scalars,)
         if has_self_indices:
             tensors = tensors + (self_indices,)
         scalars, vectors, out_pseudos = torch.utils.checkpoint.checkpoint(
@@ -1574,9 +2290,9 @@ class KernelBasisCrossDecoder(nn.Module):
 
     def forward(
         self,
-        query_points: torch.Tensor,
+        query_points: Float[torch.Tensor, "q spatial_dims"],
         cache: KernelDecoderCache,
-        self_indices: torch.Tensor | None = None,
+        self_indices: Int[torch.Tensor, " q"] | None = None,
     ) -> ScalarVectorState:
         """Evaluate the dense pair-kernel message at independent query points.
 
@@ -1629,6 +2345,20 @@ class KernelBasisCrossDecoder(nn.Module):
                 "was built by a decoder without this decoder's "
                 "auxiliary-scale contract"
             )
+        if self.local_pair_features is not None:
+            if cache.local_scalars is None:
+                raise ValueError(
+                    "local_pair_features is enabled but the cache carries no "
+                    "per-source local scalars; it was built by a decoder (or "
+                    "model) without the probe contract -- re-encode"
+                )
+            if self.local_pair_features != "global_control" and self_indices is None:
+                raise ValueError(
+                    "local_pair_features mode "
+                    f"{self.local_pair_features!r} reads query-side local "
+                    "scalars through the declared trace identity map and "
+                    "therefore requires self_indices (trace mode)"
+                )
         n_queries = query_points.shape[0]
         if self_indices is not None:
             if (
@@ -1708,9 +2438,11 @@ class LinearKernelBasisCrossDecoder(KernelBasisCrossDecoder):
     """
 
     def _pair_vector_channels(self) -> int:
+        """Operator vectors only (drive-blind kernel)."""
         return self.operator_vector_dim
 
     def _source_invariant_channels(self) -> int:
+        """Width of the drive-blind invariant feature set."""
         return (
             self.operator_scalar_dim
             + self.operator_vector_dim * (self.operator_vector_dim + 1) // 2
@@ -1720,20 +2452,23 @@ class LinearKernelBasisCrossDecoder(KernelBasisCrossDecoder):
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s channels spatial_dims"]:
+        """Operator vectors only: the kernel never reads the drive."""
         return operator_state.vectors
 
     def _kernel_source_invariants(
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s invariants"]:
+        """Operator scalars plus operator-vector Grams: drive-blind."""
         return torch.cat(
             (operator_state.scalars, _gram_invariants(operator_state.vectors)),
             dim=-1,
         )
 
     def _value_includes_vector_invariants(self) -> bool:
+        """Disabled: values stay exactly drive-linear."""
         return False
 
 
@@ -1750,9 +2485,11 @@ class NonlinearZeroKernelBasisCrossDecoder(KernelBasisCrossDecoder):
     """
 
     def _pair_vector_channels(self) -> int:
+        """Operator vectors only (drive-blind kernel)."""
         return self.operator_vector_dim + self.drive_vector_dim
 
     def _source_invariant_channels(self) -> int:
+        """Width of the drive-inclusive invariant feature set."""
         return (
             self.operator_scalar_dim
             + self.operator_vector_dim * (self.operator_vector_dim + 1) // 2
@@ -1765,14 +2502,16 @@ class NonlinearZeroKernelBasisCrossDecoder(KernelBasisCrossDecoder):
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s channels spatial_dims"]:
+        """Operator AND drive vectors: the kernel is drive-dependent."""
         return torch.cat((operator_state.vectors, drive_state.vectors), dim=1)
 
     def _kernel_source_invariants(
         self,
         operator_state: ScalarVectorState,
         drive_state: ScalarVectorState,
-    ) -> torch.Tensor:
+    ) -> Float[torch.Tensor, "s invariants"]:
+        """Operator and drive invariants (incl. pseudo pair products)."""
         parts = [
             operator_state.scalars,
             _gram_invariants(operator_state.vectors),
@@ -1784,6 +2523,7 @@ class NonlinearZeroKernelBasisCrossDecoder(KernelBasisCrossDecoder):
         return torch.cat(parts, dim=-1)
 
     def _value_includes_vector_invariants(self) -> bool:
+        """Enabled: quadratic drive invariants still vanish at zero drive."""
         return True
 
 

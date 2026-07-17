@@ -24,6 +24,7 @@ from typing import Literal, TypeAlias, Union
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 from tensordict import TensorDict
 
 from physicsnemo.core import ModelMetaData, Module
@@ -131,11 +132,11 @@ class EncodedBoundary:
     source_mesh: Mesh
     operator_state: ScalarVectorState
     drive_state: ScalarVectorState
-    center: torch.Tensor
+    center: Float[torch.Tensor, " spatial_dims"]
     # The resolved scale gauge: the declared ``reference_length_key`` scalar
     # if the model has one, otherwise the intrinsic measure-weighted RMS
     # boundary radius.
-    reference_length: torch.Tensor
+    reference_length: Float[torch.Tensor, ""]
     global_operator_state: ScalarVectorState
     global_drive_state: ScalarVectorState
     query_moments: tuple[AttentionMoments, ...]
@@ -151,11 +152,22 @@ class EncodedBoundary:
     # be (index-aligned, in cell order).  ``None`` keeps caches from
     # trace-free models valid, and lets trace models reject them loudly.
     trace_slice: slice | None = None
+    # Populated only under the CONTRACT-BREAKING DIAGNOSTIC
+    # ``diagnostic_local_query_features``: per-trace-cell (scalars, unit
+    # normals) where scalars = (log relative area, curvature *
+    # reference_length**n_manifold_dims), both similarity-invariant by
+    # construction.
+    diagnostic_query_features: (
+        tuple[Float[torch.Tensor, "s 2"], Float[torch.Tensor, "s spatial_dims"]] | None
+    ) = None
 
 
 def _role_spec(
     spec: FieldRoleRanks, role: str, *, label: str
 ) -> PseudoAwareRankSpecDict:
+    """Extract and validate one role's rank spec from a declared
+    ``FieldRoleRanks`` dict (ranks 0/1 only; the operator role additionally
+    may not carry a pseudoscalar sector)."""
     if not isinstance(spec, dict):
         raise TypeError(f"{label} must be a dict, got {type(spec).__name__}")
     unexpected = set(spec) - set(_FIELD_ROLES)
@@ -186,6 +198,7 @@ def _role_spec(
 
 
 def _require_int(name: str, value: int, *, minimum: int) -> None:
+    """Raise unless ``value`` is a true int (bools rejected) >= ``minimum``."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"{name} must be an integer, got {value!r}")
     if value < minimum:
@@ -197,6 +210,8 @@ def _rank_entries(
     rank_spec: RankSpecDict,
     path: tuple[str, ...] = (),
 ) -> list[tuple[str, tuple[str, ...], int]]:
+    """Flatten a nested rank spec into ``(dotted_name, path, rank)`` leaves
+    in deterministic declaration order."""
     entries: list[tuple[str, tuple[str, ...], int]] = []
     for key, value in rank_spec.items():
         leaf_path = (*path, key)
@@ -208,6 +223,8 @@ def _rank_entries(
 
 
 def _td_get(data: TensorDict, path: tuple[str, ...]) -> torch.Tensor:
+    """Fetch a declared field from a TensorDict, raising a ``ValueError``
+    that names the missing dotted path instead of a bare ``KeyError``."""
     key: str | tuple[str, ...] = path[0] if len(path) == 1 else path
     try:
         return data[key]
@@ -315,7 +332,10 @@ class MeshTransformer(Module):
         (:mod:`.kernel_decoder`) whose dictionary combines exact
         cell-integrated double-layer quadrature with learned smooth members,
         lifting that ceiling at a documented dense :math:`O(N_qN_s)` decode
-        cost.  ``kernel_include_single_layer_member=True`` adds the exact
+        cost.  ``kernel_include_double_layer_member=False`` removes the
+        exact double-layer base member (MLP-only ablation; see
+        KernelBasisCrossDecoder's Parameters -- the member dictionary must
+        stay non-empty).  ``kernel_include_single_layer_member=True`` adds the exact
         single-layer (monopole) member, which a double-layer-only dictionary
         lacks on multiply connected domains (default ``False`` preserves the
         pruned dictionary bitwise).  It requires 2D segment or 3D triangle
@@ -711,6 +731,73 @@ class MeshTransformer(Module):
         at matched protocol; falsifier: no improvement means the trace
         defect was cosmetic and capacity (H-C) owns the gap.
 
+    diagnostic_local_query_features : bool, default=False
+        CONTRACT-BREAKING DIAGNOSTIC -- never a keeper (pre-registered as
+        probe P2 of the H-C decomposition, book/18-notebook.qmd
+        @sec-nb-aga-fleet).  Requires ``trace_of``.  Each trace query
+        additionally reads its own cell's local geometry directly: the unit
+        cell normal (injected through the query slot of the existing typed
+        normal channel, inheriting the source-side transformation law), the
+        log cell area relative to the sample's median cell area, and the
+        cell curvature nondimensionalized by
+        ``reference_length**n_manifold_dims`` (both scalars appended as two
+        channels that are zero on source rows).  All three features are
+        similarity-invariant or equivariant, so the O(D)/similarity
+        contract SURVIVES; what breaks is the boundary-integral
+        *information diet* -- the query no longer learns its local geometry
+        through the kernel path but is handed it.  Purpose: if this arm
+        recovers most of GeoTransolver's early-epoch efficiency, the
+        efficiency lives in local-geometry shortcuts, and the principled
+        response is a declared local corrector, not feature injection.
+        Default ``False`` adds no parameters and is bitwise identical to
+        the pre-extension model.
+
+    kernel_local_pair_features : str or None, default=None
+        Local-corrector probe modes (task #53; pre-registered in the
+        program notebook).  ``"windowed"`` (probe A) appends five even
+        similarity-invariant scalar channels to the smooth-member MLP's
+        per-pair features -- the subtended-angle window
+        :math:`\theta/(1+\theta)` and the windowed query-/source-side
+        squashed local scalars -- so the SAME information as the P2
+        query-stream diagnostic enters through the KERNEL instead.
+        ``"near_only"`` (probe B) replaces the window by a C^1 smoothstep
+        that is exactly zero for :math:`\theta\le\theta_c/2` (compact
+        near-field support; :math:`\theta_c` = ``kernel_near_theta``).
+        ``"global_control"`` (probe C) keeps the channel width (matched
+        parameter count) but carries only per-sample measure-weighted
+        pooled scalars -- the sharing control.  The subtended angle is
+        dimension-generic (:func:`.kernel_decoder.subtended_angle`:
+        :math:`h=\mu^{1/m}`, never an area over a distance).  Requires
+        ``query_decoder='kernel'``, ``kernel_mlp_members > 0``, and
+        ``trace_of``.  Default ``None`` adds no parameters and is bitwise
+        identical to the pre-extension model.
+    kernel_decode_backend : {"dense", "barnes_hut"}, default="dense"
+        Decode evaluation backend (``query_decoder="kernel"``).  ``"dense"``
+        is the exact :math:`O(QS)` pairwise operator (bitwise unchanged
+        default).  ``"barnes_hut"`` is the hierarchical approximation of
+        task #41: near pairs (subtended size above ``kernel_bh_theta``)
+        evaluate through the same closed forms and smooth-member MLP
+        pairwise, bitwise per pair; far cluster nodes contribute through
+        exactly-aggregated channel-resolved densities against analytic far
+        kernels (exact members) and node virtual sources (smooth members).
+        Deterministic and query-set independent by construction; deviation
+        from dense is measured and theta-controlled (theta -> 0 recovers
+        dense).  v1 scope: 3D, no polynomial members, no monopole-free
+        deflation, no local_pair_features, no checkpoint_query_chunks (each
+        rejected loudly; see the decoder docstring).
+    kernel_bh_theta : float, default=0.5
+        Barnes--Hut opening threshold: a source node whose AABB diagonal
+        subtends less than ``bh_theta`` from the query is evaluated in the
+        far field.  Smaller is more accurate and slower.
+    kernel_bh_leaf_size : int, default=32
+        Cluster-tree leaf size; a throughput knob only (larger leaves mean
+        fewer tree levels and more exact near pairs).
+    kernel_near_theta : float, default=0.25
+        Near-field threshold :math:`\theta_c` for the ``"near_only"``
+        probe; calibrate the resulting near fraction on a real sample
+        before drawing locality conclusions (see
+        ``scratch/measure_near_fraction.py``).
+
     drive_pseudo_dim : int, default=0
         Width of the drive stream's 2D pseudoscalar (``0o``) channel sector.
         The default 0 disables the sector and is bitwise identical to the
@@ -755,12 +842,18 @@ class MeshTransformer(Module):
         field_mode: FieldMode = "linear",
         query_decoder: QueryDecoder = "moment",
         kernel_mlp_members: int = 8,
+        kernel_include_double_layer_member: bool = True,
         kernel_include_polynomial_members: bool = True,
         kernel_include_single_layer_member: bool = False,
         kernel_monopole_free_single_layer: bool = False,
         kernel_checkpoint_query_chunks: bool = False,
         kernel_auxiliary_scale_key: str | None = None,
         kernel_log_radial_features: bool = False,
+        kernel_local_pair_features: str | None = None,
+        kernel_near_theta: float = 0.25,
+        kernel_decode_backend: str = "dense",
+        kernel_bh_theta: float = 0.5,
+        kernel_bh_leaf_size: int = 32,
         bounded_output_gate_invariants: bool = False,
         bounded_query_geometry: bool = False,
         decaying_direct_drive: bool = False,
@@ -779,7 +872,13 @@ class MeshTransformer(Module):
         attention_chunk_size: int | None = 65536,
         per_boundary_moment_pool: bool = False,
         trace_of: str | None = None,
+        diagnostic_local_query_features: bool = False,
     ) -> None:
+        """Validate the declared schema and build the full stack (encoder
+        blocks, drive lift, query decoder, typed outputs).  Every public
+        parameter is documented in the class docstring; the coherence rules
+        enforced below (scalar-only mode, pseudo planarity, trace and
+        diagnostic knob requirements) are stated there as well."""
         _require_int("n_spatial_dims", n_spatial_dims, minimum=2)
         if not isinstance(per_boundary_moment_pool, bool):
             raise TypeError(
@@ -854,6 +953,36 @@ class MeshTransformer(Module):
                     "members' own-panel entries per the jump relation, and "
                     "the moment decoder has no exact members to correct"
                 )
+        if not isinstance(diagnostic_local_query_features, bool):
+            raise TypeError(
+                "diagnostic_local_query_features must be a bool, got "
+                f"{diagnostic_local_query_features!r}"
+            )
+        if kernel_local_pair_features is not None:
+            if query_decoder != "kernel":
+                raise ValueError(
+                    "kernel_local_pair_features requires query_decoder="
+                    "'kernel': the probe block lives in the kernel decoder"
+                )
+            if trace_of is None:
+                raise ValueError(
+                    "kernel_local_pair_features requires trace_of: the "
+                    "windowed and near-only modes read query-side local "
+                    "scalars through the declared trace identity map, and "
+                    "the probe protocol (task #53) is defined on trace arms"
+                )
+        if diagnostic_local_query_features and trace_of is None:
+            raise ValueError(
+                "diagnostic_local_query_features requires trace_of: the "
+                "diagnostic features (own-cell normal, log relative area, "
+                "nondimensional curvature) are defined by the query's "
+                "declared own cell, which only the boundary-trace mode "
+                "provides.  This knob is a CONTRACT-BREAKING DIAGNOSTIC "
+                "(the query reads its own local geometry directly instead "
+                "of through the boundary-integral information diet); it "
+                "exists to locate representational-efficiency gaps and "
+                "must never ship as a default"
+            )
         for name, value, minimum in (
             ("operator_scalar_dim", operator_scalar_dim, 1),
             ("operator_vector_dim", operator_vector_dim, 0),
@@ -1107,6 +1236,8 @@ class MeshTransformer(Module):
         self.boundary_names = tuple(boundary_names)
         self.per_boundary_moment_pool = per_boundary_moment_pool
         self.trace_of = trace_of
+        self.diagnostic_local_query_features = diagnostic_local_query_features
+        self.kernel_local_pair_features = kernel_local_pair_features
         # One moment-pool segment per declared boundary when the knob is on;
         # 0 keeps every block bitwise pre-extension (no gain parameters).
         n_moment_segments = len(boundary_names) if per_boundary_moment_pool else 0
@@ -1189,6 +1320,12 @@ class MeshTransformer(Module):
             + len(boundary_names)
             + 2
         )
+        # DIAGNOSTIC ONLY: two extra scalar channels (log relative cell
+        # area, nondimensional own-cell curvature) that are zero on source
+        # rows and populated on trace-query rows.  Changes the lift width,
+        # so knob-off stays bitwise identical to pre-knob models.
+        if diagnostic_local_query_features:
+            raw_operator_scalars += 2
         # Boundary/global vectors + normalized position + source normal.
         raw_operator_vectors = boundary_operator_vectors + global_operator_vectors + 2
         self.operator_lift = TypedProjection(
@@ -1300,6 +1437,7 @@ class MeshTransformer(Module):
                 drive_scalar_dim=drive_scalar_dim,
                 drive_vector_dim=drive_vector_dim,
                 heads=heads,
+                include_double_layer_member=kernel_include_double_layer_member,
                 include_polynomial_members=kernel_include_polynomial_members,
                 include_single_layer_member=kernel_include_single_layer_member,
                 monopole_free_single_layer=kernel_monopole_free_single_layer,
@@ -1308,6 +1446,11 @@ class MeshTransformer(Module):
                 checkpoint_query_chunks=kernel_checkpoint_query_chunks,
                 mlp_members=kernel_mlp_members,
                 drive_pseudo_dim=drive_pseudo_dim,
+                local_pair_features=kernel_local_pair_features,
+                near_theta=kernel_near_theta,
+                decode_backend=kernel_decode_backend,
+                bh_theta=kernel_bh_theta,
+                bh_leaf_size=kernel_bh_leaf_size,
             )
             self.query_blocks = nn.ModuleList()
         else:
@@ -1408,6 +1551,9 @@ class MeshTransformer(Module):
         )
 
     def _validate_domain(self, domain: DomainMesh) -> None:
+        """Raise unless ``domain`` matches the declared schema exactly:
+        boundary names, spatial dimension, geometry dtype/device coherence,
+        codimension-one non-empty boundaries."""
         if not isinstance(domain, DomainMesh):
             raise TypeError(f"domain must be a DomainMesh, got {type(domain).__name__}")
         actual_names = set(domain.boundaries.keys())
@@ -1447,6 +1593,8 @@ class MeshTransformer(Module):
         domain: DomainMesh,
         role: str,
     ) -> ScalarVectorState:
+        """Pack one role's declared per-boundary fields (all boundaries,
+        source cell order) into a typed state, one sector per rank."""
         scalar_names = self._boundary_names_by_rank[role][0]
         vector_names = self._boundary_names_by_rank[role][1]
         pseudo_names = self._boundary_names_by_rank[role][_PSEUDO_RANK]
@@ -1514,8 +1662,11 @@ class MeshTransformer(Module):
         global_data: TensorDict,
         role: str,
         n_entities: int,
-        reference: torch.Tensor,
+        reference: Float[torch.Tensor, ""],
     ) -> ScalarVectorState:
+        """Broadcast one role's declared per-sample global fields to every
+        source entity as a typed state (vectors carried in the normalized
+        frame; shape-validated against the declared ranks)."""
         scalars: list[torch.Tensor] = []
         vectors: list[torch.Tensor] = []
         pseudos: list[torch.Tensor] = []
@@ -1647,6 +1798,44 @@ class MeshTransformer(Module):
             )
         return value
 
+    def _local_cell_scalars(
+        self, source_mesh: Mesh, length: torch.Tensor
+    ) -> torch.Tensor:
+        r"""Per-cell squashed local-geometry scalars, ``(n_cells, 2)``.
+
+        Channel 0 is log-relative-measure, channel 1 nondimensional
+        Gaussian curvature; both SQUASHED to ``(-1, 1)`` by smooth fixed
+        maps (curvature through asinh -- log-like across its ~12 measured
+        decades, smooth at zero -- before tanh; log-relative-measure is
+        already log-scaled and takes a plain tanh).  The constants are
+        FIXED, never per-sample, from DrivAerML run_1 quantiles
+        (2026-07-11): 3.0 ~ p95 of ``log(A / median A)``; 13.0 ~
+        ``asinh(p95 of K * L^m)``.  Both channels are even
+        similarity-invariant scalars; the unbounded predecessors NaN'd
+        training by epoch 25 (measured).  Shared by the P2 diagnostic
+        (query-stream entry) and the task-#53 local-corrector probes
+        (kernel-side entry), so the two entry points carry IDENTICAL
+        information.  Measured caveat: soup-style cell subsampling zeroes
+        the curvature channel (boundary-vertex angle defects are undefined
+        -> NaN -> 0), leaving it harmlessly inert on
+        non-topology-preserving pipelines.
+        """
+        from physicsnemo.mesh.curvature.gaussian import (
+            gaussian_curvature_cells,
+        )
+
+        areas = source_mesh.cell_areas
+        log_rel_area = torch.tanh(
+            torch.log(areas / areas.median().clamp_min(torch.finfo(areas.dtype).tiny))
+            / 3.0
+        )
+        curvature = gaussian_curvature_cells(source_mesh)
+        curvature = torch.nan_to_num(curvature, nan=0.0) * length.pow(
+            source_mesh.n_manifold_dims
+        )
+        curvature = torch.tanh(torch.asinh(curvature) / 13.0)
+        return torch.stack((log_rel_area, curvature), dim=-1)
+
     def _source_operator_input(
         self,
         domain: DomainMesh,
@@ -1654,6 +1843,10 @@ class MeshTransformer(Module):
         boundary_operator: ScalarVectorState,
         global_operator: ScalarVectorState,
     ) -> ScalarVectorState:
+        """Assemble the full source-side operator input: declared boundary
+        and global operator fields, the per-boundary one-hot BC type, and
+        the source/query association flags (plus zero-filled diagnostic
+        channels when that probe knob is on)."""
         n = source_mesh.n_cells
         bc_one_hot = source_mesh.points.new_zeros(n, len(self.boundary_names))
         offset = 0
@@ -1663,16 +1856,19 @@ class MeshTransformer(Module):
             offset += count
         association = source_mesh.points.new_zeros(n, 2)
         association[:, 0] = 1.0
+        scalar_parts = [
+            boundary_operator.scalars,
+            global_operator.scalars,
+            bc_one_hot,
+            association,
+        ]
+        if self.diagnostic_local_query_features:
+            # Source rows carry no diagnostic features; the channels exist
+            # (zero-valued) so source and query rows share one lift layout,
+            # mirroring the association-indicator pattern above.
+            scalar_parts.append(source_mesh.points.new_zeros(n, 2))
         return ScalarVectorState(
-            torch.cat(
-                (
-                    boundary_operator.scalars,
-                    global_operator.scalars,
-                    bc_one_hot,
-                    association,
-                ),
-                dim=-1,
-            ),
+            torch.cat(tuple(scalar_parts), dim=-1),
             torch.cat(
                 (
                     boundary_operator.vectors,
@@ -1688,6 +1884,8 @@ class MeshTransformer(Module):
         self,
         points: torch.Tensor,
         global_operator: ScalarVectorState,
+        diagnostic_scalars: torch.Tensor | None = None,
+        diagnostic_normals: torch.Tensor | None = None,
     ) -> ScalarVectorState:
         r"""Raw operator-state injection at nondimensional query ``points``.
 
@@ -1719,17 +1917,29 @@ class MeshTransformer(Module):
         bc_one_hot = points.new_zeros(n, len(self.boundary_names))
         association = points.new_zeros(n, 2)
         association[:, 1] = 1.0
-        query_normal = points.new_zeros(n, 1, self.n_spatial_dims)
+        # DIAGNOSTIC ONLY: a trace query may read its own cell's unit
+        # normal through the (otherwise zero) query slot of the existing
+        # normal channel -- the same typed channel the sources use, so the
+        # transformation law is inherited rather than reinvented.
+        query_normal = (
+            diagnostic_normals[:, None, :]
+            if diagnostic_normals is not None
+            else points.new_zeros(n, 1, self.n_spatial_dims)
+        )
+        scalar_parts = [
+            boundary_scalars,
+            global_operator.scalars.expand(n, -1),
+            bc_one_hot,
+            association,
+        ]
+        if self.diagnostic_local_query_features:
+            scalar_parts.append(
+                diagnostic_scalars
+                if diagnostic_scalars is not None
+                else points.new_zeros(n, 2)
+            )
         return ScalarVectorState(
-            torch.cat(
-                (
-                    boundary_scalars,
-                    global_operator.scalars.expand(n, -1),
-                    bc_one_hot,
-                    association,
-                ),
-                dim=-1,
-            ),
+            torch.cat(tuple(scalar_parts), dim=-1),
             torch.cat(
                 (
                     boundary_vectors,
@@ -1865,8 +2075,17 @@ class MeshTransformer(Module):
                     domain.global_data, source_mesh.points
                 )
             )
+            cache_local_scalars = (
+                self._local_cell_scalars(source_mesh, length)
+                if self.kernel_local_pair_features is not None
+                else None
+            )
             kernel_cache = self.kernel_decoder.build_source_cache(
-                source_mesh, operator, drive, auxiliary_scale=auxiliary_scale
+                source_mesh,
+                operator,
+                drive,
+                auxiliary_scale=auxiliary_scale,
+                local_scalars=cache_local_scalars,
             )
         else:
             query_moments = tuple(
@@ -1893,6 +2112,34 @@ class MeshTransformer(Module):
                     trace_slice = slice(offset, offset + count)
                     break
                 offset += count
+        diagnostic_query_features: tuple[torch.Tensor, torch.Tensor] | None = None
+        if self.diagnostic_local_query_features and trace_slice is not None:
+            # DIAGNOSTIC ONLY (see constructor): the trace boundary's
+            # per-cell local geometry, nondimensionalized so the similarity
+            # contract is preserved -- what breaks is the INFORMATION diet
+            # (a query reads its own geometry directly instead of through
+            # the boundary-integral path), which is this probe's point.
+            #
+            # Both scalar channels are SQUASHED to (-1, 1) by smooth fixed
+            # maps: raw nondimensional curvature spans ~12 decades on a
+            # real DrivAerML vehicle (run_1 full mesh, 2026-07-11: K*L^2
+            # p50=13, p95=1.9e5, absmax=6.2e8), and unbounded injection
+            # measurably NaN'd training by epoch 25.  Curvature goes
+            # through asinh (log-like across decades, smooth at zero)
+            # before tanh so the bulk keeps resolution instead of being
+            # crushed by the p95 scale; log-relative-area is already
+            # log-scaled and takes a plain tanh.  The constants are FIXED
+            # (never per-sample) for determinism and comparability, from
+            # run_1 quantiles: 3.0 ~ p95 of log(A/median A) (reproduced on
+            # a 10k-cell subsample); 13.0 ~ asinh(p95 of K*L^m).  Caveat,
+            # measured: soup-style cell subsampling zeroes curvature
+            # entirely (every vertex becomes a mesh-boundary vertex with
+            # undefined angle defect -> NaN -> 0), leaving that channel
+            # harmlessly inert on non-topology-preserving pipelines.
+            diagnostic_query_features = (
+                self._local_cell_scalars(source_mesh, length)[trace_slice],
+                source_mesh.cell_normals[trace_slice],
+            )
         return EncodedBoundary(
             source_mesh=source_mesh,
             operator_state=operator,
@@ -1906,6 +2153,7 @@ class MeshTransformer(Module):
             global_data=domain.global_data.copy(),
             kernel_cache=kernel_cache,
             trace_slice=trace_slice,
+            diagnostic_query_features=diagnostic_query_features,
         )
 
     def decode(
@@ -1975,14 +2223,32 @@ class MeshTransformer(Module):
         if not slices:
             slices = [slice(0, 0)]
 
+        if self.diagnostic_local_query_features:
+            if encoded.diagnostic_query_features is None:
+                raise ValueError(
+                    "diagnostic_local_query_features is enabled but the "
+                    "EncodedBoundary carries no diagnostic features; "
+                    "re-encode with this model"
+                )
+            diag_scalars_full, diag_normals_full = encoded.diagnostic_query_features
         for chunk in slices:
             normalized_points = (
                 query_mesh.points[chunk] - encoded.center
             ) / encoded.reference_length
+            diag_scalars = diag_normals = None
+            if self.diagnostic_local_query_features:
+                # The declared trace identity map is chunk-local: query rows
+                # [chunk.start, chunk.stop) are exactly trace cells of the
+                # same indices, so the features slice with the chunk.
+                diag_scalars = diag_scalars_full[chunk]
+                diag_normals = diag_normals_full[chunk]
             query_operator = self.operator_input_block(
                 self.operator_lift(
                     self._query_operator_input(
-                        normalized_points, encoded.global_operator_state
+                        normalized_points,
+                        encoded.global_operator_state,
+                        diagnostic_scalars=diag_scalars,
+                        diagnostic_normals=diag_normals,
                     )
                 )
             )
