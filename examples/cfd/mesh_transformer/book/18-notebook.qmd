@@ -4000,3 +4000,81 @@ scope the chapter claim). Adopted as-is: BH stays a memory fallback
 (matches @sec-nb-*bh* verdicts; the reviewer adds a genuine
 prefix-sum cancellation finding to fold into #55's design). Per
 Peter: x2L8 and the GeoT deep arms run to completion.
+
+## 2026-07-17 (night) — GeoT exclusion finals in; two integration failures owned; canaried relaunch {#sec-nb-night17}
+
+**GeoT exclusion-retrain finals (all six):** own-val at ep500 —
+S1-train: 0.002576 / 0.002457 / 0.002476; S2-train: 0.002340 /
+0.002254 / 0.002300. Tight seeds, all healthy; deep evals on the full
+held-out extremes follow once tonight's metric-fix canary passes
+(they must run on the corrected vector metric).
+
+**x2L8 interim:** ep406, val 0.00572 — inside the pre-registered
+band (0.0050–0.0061) with the cosine tail still to come. Final
+~03:00.
+
+**Two integration failures, both mine, both violations of the
+canary-before-fleet rule written this same afternoon:**
+
+1. The corrected-metric eval wave (10 jobs) crashed at
+   `infer.py` totals: `expected_keys()` — the accumulator contract —
+   was not extended with the new `wss_mag_*` family. My local test
+   validated MetricCalculator's output but not the one consumer that
+   enumerates keys ahead of data. ~7 GPU·h.
+2. The kernel-factorial wave (6 lanes × 5 links) died at boot and
+   burned ALL 30 chain links on rendezvous noise masking the real
+   error: my config generator prepended its header comment ABOVE the
+   `# @package _global_` directive, which hydra honors only on line
+   1 — the whole config silently landed under the wrong namespace
+   and `input_type` vanished. ~20 GPU·h.
+
+Both fixed (expected_keys extended and asserted equal to produced
+keys incl. the totals loop; directive restored to line 1) and
+relaunched as TWO canaries (one eval, one training lane) with the
+fleet gated on their acceptance. Lesson sharpened: "integration
+tested" means the *consumer's* contract, not the producer's output —
+and a green unit test on the changed file is not a canary.
+
+**Local band generation (E1):** running under pypardiso at the v1
+pace — v2-re1 at 266/500+ entries within the first hour (vs zero in
+ten days of aarch64-SuperLU cluster attempts, @sec-nb-review context;
+full root-cause in the hpc-resources skill, infra-side).
+
+## 2026-07-18 (early) — corrected-metric zero-shot verdict: both models lose WSS direction OOD, equally {#sec-nb-corrected-zeroshot}
+
+Recomputed zero-shot tables under the true joint-component vector
+metric (canaried, then fleet; supersedes the wss_l2 columns of
+@sec-nb-ood-zeroshot and @sec-nb-geot-ood-zeroshot):
+
+| model | split | pressure_l2 | wss_l2 (vector) | wss_mag_l2 |
+|---|---|---|---|---|
+| MT flagship (3-seed mean) | id_ref | 0.172 | 0.717 | 0.215 |
+| MT flagship | s1 | 0.173 | 0.804 | 0.218 |
+| MT flagship | s2 | 0.176 | 0.802 | 0.224 |
+| GeoT anchor | id_ref | 0.061 | 0.280 | 0.092 |
+| GeoT anchor | s1 | 0.065 | 0.323 | 0.100 |
+| GeoT anchor | s2 | 0.062 | 0.314 | 0.094 |
+
+Three honest findings:
+
+1. **WSS direction error dominates magnitude error for BOTH
+   architectures** (~3× the magnitude-only number: MT 0.72 vs 0.21,
+   GeoT 0.28 vs 0.09). The direction-blind aggregate was hiding the
+   hardest part of the field from every prior WSS conclusion.
+2. **The zero-shot WSS degradation is ~1.12× for both models** (MT
+   1.12–1.13× across three seeds; GeoT 1.12–1.16×, single anchor,
+   n=10/4 caveat). My hope, written hours ago, that the corrected
+   metric would open a WSS-direction differential for MT: REFUTED —
+   the penalty is architecture-independent at this depth. Pressure
+   ratios stand at ≤1.03 (MT) / ≤1.07 (GeoT).
+3. **The north-star OOD result survives with revised wording:** the
+   pre-registered bars (≤2×/≤3×) hold with large margin on every
+   field, but "1.00–1.05× on every field, smaller than seed spread"
+   is dead — the corrected vector-WSS ratio is ~1.12×, clearly
+   resolvable above seed spread. Chapter 16's OOD section gets the
+   corrected table once the deep-eval recomputes (both models'
+   exclusion arms, in flight) land tonight.
+
+Also banked: the ID gap in L2 space at 10k sampling — MT flagship
+vs GeoT ≈ 2.7× (pressure), 2.6× (vector WSS) — consistent with the
+√(Huber-gap) expectation from the frontier chapter.
