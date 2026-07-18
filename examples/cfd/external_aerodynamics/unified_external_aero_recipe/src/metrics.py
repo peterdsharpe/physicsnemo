@@ -189,8 +189,10 @@ class MetricCalculator:
     def expected_keys(self) -> list[str]:
         """The exact key set :meth:`__call__` produces, derivable without data.
 
-        Vector fields contribute one key per spatial component plus the
-        aggregate-magnitude key; scalars contribute one key per metric.
+        Vector fields contribute one key per spatial component, the true
+        joint-component aggregate (bare name), and the direction-blind
+        magnitude family (``<name>_mag``); scalars contribute one key per
+        metric.
         Lets callers pre-size accumulators identically on every rank --
         e.g. ``infer.py`` zero-fills its running sums with these keys so
         the cross-rank all-reduce packs the same tensor length even on a
@@ -206,6 +208,9 @@ class MetricCalculator:
                     keys.extend(
                         self._make_key(name, comp, m) for m in self.metric_names
                     )
+                keys.extend(
+                    self._make_key(name, "mag", m) for m in self.metric_names
+                )
             keys.extend(self._make_key(name, m) for m in self.metric_names)
         return keys
 
