@@ -3997,7 +3997,7 @@ manifest overwrite bug (datasets.py — reject or fix before any
 multi-dataset run); fixed reference_length=8.0 vs the intrinsic gauge
 (scaling equivariance is NOT currently guaranteed for the flagship —
 scope the chapter claim). Adopted as-is: BH stays a memory fallback
-(matches @sec-nb-*bh* verdicts; the reviewer adds a genuine
+(matches the notebook's BH verdicts; the reviewer adds a genuine
 prefix-sum cancellation finding to fold into #55's design). Per
 Peter: x2L8 and the GeoT deep arms run to completion.
 
@@ -4078,3 +4078,60 @@ Three honest findings:
 Also banked: the ID gap in L2 space at 10k sampling — MT flagship
 vs GeoT ≈ 2.7× (pressure), 2.6× (vector WSS) — consistent with the
 √(Huber-gap) expectation from the frontier chapter.
+
+## 2026-07-18 (morning) — x2L8 CONFIRMED in-band; deep-OOD differential is real; bands landing {#sec-nb-x2l8-verdict}
+
+**x2L8 final: 0.005828 — the pre-registered band (0.0050–0.0061)
+holds; falsifier (≥0.0070) refuted.** The frontier's
+GeoT-budget-matched point is now measured, not extrapolated:
+**2.34× gap at matched 9.6M params** (predicted 2.5×). Updated fit
+over all six rungs: val ≈ 0.0125·P^−0.33 (rms log-resid 0.052).
+Honest wrinkle: the newest doubling's local slope FLATTENED to 0.27
+(x2→x2L4 was 0.42) — a mild bend at the top of the frontier. If that
+local slope persists, parity-by-scaling recedes to ~230M params
+(global-slope projection: ~134M). **Decision: the pure-scaling
+ladder stops here.** The bend, the measured 2.34×, and the external
+review all point the same way — the next factor of 2 belongs to
+architecture (per-parameter efficiency, #55 separable far-field,
+kernel structure), not another rung. x2L8 becomes the program's
+working scale reference.
+
+## 2026-07-18 (morning) — deep-OOD corrected-metric verdict: a REAL differential on S1, modest and consistent {#sec-nb-deep-differential}
+
+The recomputed deep evals (exclusion-trained arms, full held-out
+extremes, corrected vector metric, 3 seeds per model per split):
+
+| | S1 press ratio | S1 wss ratio | S2 press | S2 wss |
+|---|---|---|---|---|
+| MT (3 seeds) | 1.02–1.03 | **1.07–1.09** | 1.03 | 0.97–0.98 |
+| GeoT (3 seeds) | 1.05–1.06 | **1.13–1.14** | 1.03–1.05 | 0.99 |
+
+- **S1 (ride-height double-extreme): the seed ranges do not
+  overlap.** MT's excess WSS degradation is 0.081 vs GeoT's 0.133 —
+  GeoT degrades **1.65× more** (excess terms); pressure shows the
+  same ordering (~2.2× excess ratio). This REVISES the zero-shot
+  falsifier reading (@sec-nb-geot-ood-zeroshot): at boundary depth
+  the architectures were indistinguishable; at DEEP extremes, with
+  the direction-sensitive metric, the paired comparison separates
+  them consistently in MT's favor. My recalibrated prediction
+  ("DoE too narrow to separate architectures") was itself wrong —
+  the corrected metric plus depth resolves a differential.
+- **S2 (wake-topology corner) is benign for both** — no degradation,
+  even slightly inverted on WSS. The S2 axis does not discriminate.
+- **Scope honestly:** the differential is in generalization RATIOS;
+  absolute errors still favor GeoT ~2.5–2.7× everywhere (its
+  capacity advantage). Both models remain far inside the ≤2×/≤3×
+  engineering bars. And per the ≥5-seed rule this is a 3v3 claim:
+  **pre-registered extension launching now** — seeds 45/46 for both
+  models' S1 exclusion arms (4 lanes + deep evals). Prediction: the
+  ranges stay disjoint (MT ≤1.10, GeoT ≥1.11). Falsifier: overlap
+  at 5 seeds ⇒ demote to "suggestive, seed-limited".
+
+**Factorial interim (no verdict):** at matched ~ep210, exactonly
+0.0142–0.0157 vs mlponly 0.0155–0.0172 — exact-only currently ~8%
+ahead of MLP-only at equal params. Finals tonight decide against the
+flagship control band per @sec-nb-review.
+
+**E1 bands (local, PARDISO):** v2-re1 DONE (501 entries, 3.9h),
+v2-re10 DONE (501, 6.2h — higher Re, slower Newton, as expected);
+re100 running, re1000 queued. Rsync to clusters once all four land.
