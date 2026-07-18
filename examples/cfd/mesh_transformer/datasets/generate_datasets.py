@@ -1233,6 +1233,27 @@ def generate_dataset(
 
 
 def main(argv: list[str] | None = None) -> None:
+    # Loud solver identification, FIRST (2026-07-17): pypardiso is an
+    # x86-only optional dependency, and the silent SuperLU fallback is
+    # >=70x slower per case with ~10x the peak memory (measured: ~2.3
+    # worker-minutes / ~2 GB per case with PARDISO on x86 vs >165 min /
+    # >=15 GB with SuperLU on aarch64 -- every cluster band run silently
+    # degraded until this banner existed). The manifest records the
+    # solver, but only at the END of a run; a wrong solver must be
+    # visible at the START.
+    from fem_navier_stokes import LINEAR_SOLVER
+
+    print(f"linear_solver={LINEAR_SOLVER}", flush=True)
+    if LINEAR_SOLVER != "pypardiso":
+        import warnings
+
+        warnings.warn(
+            "pypardiso not importable -- falling back to scipy SuperLU, "
+            ">=70x slower per case with ~10x the memory; N-S catalog "
+            "generation at production scale is impractical on this "
+            "platform (pypardiso wheels are x86-only)",
+            stacklevel=1,
+        )
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--family", required=True, choices=FAMILIES)
     parser.add_argument("--n-cases", type=int, required=True)
