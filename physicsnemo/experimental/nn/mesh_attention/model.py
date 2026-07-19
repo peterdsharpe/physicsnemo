@@ -752,6 +752,25 @@ class MeshTransformer(Module):
         Default ``False`` adds no parameters and is bitwise identical to
         the pre-extension model.
 
+    trace_self_correction : bool, default=True
+        Decomposition switch for the declared boundary-trace mode (the trace
+        factorial, external-review P1): whether the exact exterior jump
+        correction (+1/2 own-panel self-entries; see
+        :func:`~.kernel_decoder.exterior_trace_self_entries`) is applied.
+        ``False`` leaves own-panel entries on the closed form's accidental
+        signed-zero branch, exactly as a non-trace model evaluates
+        on-boundary queries.  Requires ``trace_of``; default preserves
+        every existing trace configuration bitwise.
+    trace_readouts : bool, default=True
+        Decomposition switch for the declared boundary-trace mode: whether
+        the two own-cell read-outs (operator and drive typed projections of
+        the query's own post-attention states) are constructed and applied.
+        ``False`` adds no read-out parameters (state dict matches a
+        pre-read-out model).  With both this and
+        ``trace_self_correction`` False, trace mode reduces to pure query
+        placement (queries are the declared boundary's cell centroids).
+        Requires ``trace_of``; default preserves existing configurations
+        bitwise.
     kernel_local_pair_features : str or None, default=None
         Local-corrector probe modes (task #53; pre-registered in the
         program notebook).  ``"windowed"`` (probe A) appends five even
@@ -872,6 +891,8 @@ class MeshTransformer(Module):
         attention_chunk_size: int | None = 65536,
         per_boundary_moment_pool: bool = False,
         trace_of: str | None = None,
+        trace_self_correction: bool = True,
+        trace_readouts: bool = True,
         diagnostic_local_query_features: bool = False,
     ) -> None:
         """Validate the declared schema and build the full stack (encoder
@@ -936,6 +957,16 @@ class MeshTransformer(Module):
                 "the log-radial features extend the kernel decoder's pair "
                 "invariants, and the moment decoder has no dense pair "
                 "features to extend"
+            )
+        if not isinstance(trace_self_correction, bool):
+            raise ValueError("trace_self_correction must be a bool")
+        if not isinstance(trace_readouts, bool):
+            raise ValueError("trace_readouts must be a bool")
+        if trace_of is None and not (trace_self_correction and trace_readouts):
+            raise ValueError(
+                "trace_self_correction/trace_readouts decompose the declared "
+                "boundary-trace mode and are meaningful only with trace_of; "
+                "leave them at their defaults for trace-free models"
             )
         if trace_of is not None:
             if not isinstance(trace_of, str) or not trace_of:
@@ -1236,6 +1267,8 @@ class MeshTransformer(Module):
         self.boundary_names = tuple(boundary_names)
         self.per_boundary_moment_pool = per_boundary_moment_pool
         self.trace_of = trace_of
+        self.trace_self_correction = trace_self_correction
+        self.trace_readouts = trace_readouts
         self.diagnostic_local_query_features = diagnostic_local_query_features
         self.kernel_local_pair_features = kernel_local_pair_features
         # One moment-pool segment per declared boundary when the knob is on;
@@ -1479,7 +1512,7 @@ class MeshTransformer(Module):
         # invariant lift, no bias) so drive-linearity and zero preservation
         # survive.  None when the mode is off: the knob adds no parameters,
         # keeping default state dicts bitwise pre-extension.
-        if trace_of is not None:
+        if trace_of is not None and trace_readouts:
             self.trace_operator_read_out = TypedProjection(
                 operator_scalar_dim,
                 operator_vector_dim,
@@ -2261,14 +2294,15 @@ class MeshTransformer(Module):
                 # query drive lift, the output gates, the quadratic
                 # read-in) sees the panel identity.
                 own = slice(trace_start + chunk.start, trace_start + chunk.stop)
-                own_operator = self.trace_operator_read_out(
-                    encoded.operator_state.slice(own)
-                )
-                query_operator = ScalarVectorState(
-                    query_operator.scalars + own_operator.scalars,
-                    query_operator.vectors + own_operator.vectors,
-                    query_operator.pseudos + own_operator.pseudos,
-                )
+                if self.trace_operator_read_out is not None:
+                    own_operator = self.trace_operator_read_out(
+                        encoded.operator_state.slice(own)
+                    )
+                    query_operator = ScalarVectorState(
+                        query_operator.scalars + own_operator.scalars,
+                        query_operator.vectors + own_operator.vectors,
+                        query_operator.pseudos + own_operator.pseudos,
+                    )
             n_chunk = normalized_points.shape[0]
             # Global drive quantities (for example a prescribed far field)
             # are legitimate pointwise query inputs as well as boundary
@@ -2341,7 +2375,7 @@ class MeshTransformer(Module):
                     encoded.kernel_cache,
                     self_indices=(
                         None
-                        if own is None
+                        if own is None or not self.trace_self_correction
                         else torch.arange(
                             own.start, own.stop, device=normalized_points.device
                         )
@@ -2364,7 +2398,7 @@ class MeshTransformer(Module):
                     )
             if query_drive is None:  # guarded by query_layers >= 1 at construction
                 raise RuntimeError("query decoder produced no field state")
-            if own is not None:
+            if own is not None and self.trace_drive_read_out is not None:
                 # The own-cell drive read-out: an exactly linear typed
                 # channel mix of the declared cell's post-attention drive
                 # state, added to the query field state.  Drive-linear and

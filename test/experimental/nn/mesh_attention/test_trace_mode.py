@@ -755,3 +755,78 @@ def test_trace_checkpoint_roundtrip(device, tmp_path):
         actual = restored(domain)
     for name in _OUTPUT_RANKS:
         assert torch.equal(actual.point_data[name], expected.point_data[name]), name
+
+
+def test_trace_factorial_switch_defaults_are_bitwise(device):
+    """Explicit defaults == implicit: identical parameters and outputs."""
+    baseline = _model(device)
+    explicit = _model(device, trace_self_correction=True, trace_readouts=True)
+    baseline_state = baseline.state_dict()
+    explicit_state = explicit.state_dict()
+    assert set(baseline_state) == set(explicit_state)
+    for key in baseline_state:
+        assert torch.equal(baseline_state[key], explicit_state[key]), key
+    domain = _domain(device)
+    with torch.no_grad():
+        out_baseline = baseline(domain)
+        out_explicit = explicit(domain)
+    for name in _OUTPUT_RANKS:
+        assert torch.equal(
+            out_baseline.point_data[name], out_explicit.point_data[name]
+        ), name
+
+
+def test_trace_factorial_ablation_arms_run(device):
+    """Each decomposition arm constructs, runs finitely, and carries the
+    declared parameter signature (readouts off => no read-out modules)."""
+    domain = _domain(device)
+
+    corr_only = _model(device, trace_readouts=False)
+    assert corr_only.trace_operator_read_out is None
+    assert corr_only.trace_drive_read_out is None
+    assert not any("trace_" in k for k in corr_only.state_dict())
+
+    readouts_only = _model(device, trace_self_correction=False)
+    assert readouts_only.trace_operator_read_out is not None
+    assert readouts_only.trace_drive_read_out is not None
+
+    placement_only = _model(
+        device, trace_self_correction=False, trace_readouts=False
+    )
+
+    with torch.no_grad():
+        for arm in (corr_only, readouts_only, placement_only):
+            out = arm(domain)
+            for name in _OUTPUT_RANKS:
+                assert torch.isfinite(out.point_data[name]).all(), name
+
+
+def test_trace_factorial_correction_switch_changes_own_panel_values(device):
+    """With identical parameters (no read-outs on either side, same seed),
+    toggling ONLY the jump correction changes the decoded trace values --
+    the switch is live, not cosmetic."""
+    domain = _domain(device)
+    corr_on = _model(device, trace_readouts=False)
+    corr_off = _model(
+        device, trace_self_correction=False, trace_readouts=False
+    )
+    state_on = corr_on.state_dict()
+    state_off = corr_off.state_dict()
+    assert set(state_on) == set(state_off)
+    for key in state_on:
+        assert torch.equal(state_on[key], state_off[key]), key
+    with torch.no_grad():
+        out_on = corr_on(domain)
+        out_off = corr_off(domain)
+    assert any(
+        not torch.equal(out_on.point_data[name], out_off.point_data[name])
+        for name in _OUTPUT_RANKS
+    )
+
+
+def test_trace_factorial_switch_validation():
+    """Non-default switches without trace_of are rejected loudly."""
+    with pytest.raises(ValueError, match="trace_self_correction/trace_readouts"):
+        _model("cpu", trace_of=None, trace_self_correction=False)
+    with pytest.raises(ValueError, match="trace_self_correction/trace_readouts"):
+        _model("cpu", trace_of=None, trace_readouts=False)
