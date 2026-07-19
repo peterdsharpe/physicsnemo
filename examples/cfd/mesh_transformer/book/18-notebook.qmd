@@ -4319,3 +4319,23 @@ program's stated priority (Decision 4: generalization first) both
 point to B-primary with a small A-side (parsimony consolidation +
 attribution experiments). Today's wave is built accordingly; the
 A/B allocation beyond that is Peter's call.
+
+**Re-ceiling hypothesis REFUTED (correcting this morning's entry).**
+Bracket probes: single cases complete cleanly at Re≈150 (9 min),
+≈350 (6 min), ≈800 (24 min), and — the decisive one — Re∈[1000,1500]
+in 27 min with Newton converging in 4 iterations and zero rejected
+attempts. The steady family is healthy through at least Re 1500; my
+shrinking-basin story was wrong. The band failure's surviving
+explanation is a **memory-throttle crawl**: the mid-Re solves carry
+~2× the workspace of the low-Re bands, eight workers pinned the
+sandbox exactly at its MemoryHigh=28G reclaim threshold (observed
+26.6 GB), and cgroup reclaim throttling reduced throughput to ~zero
+while CPU kept accumulating — the same "busy but produces nothing"
+signature as the cluster OOM loop, one level softer. Fix-and-test
+relaunched: 4 workers, OMP=4, MemoryHigh=30G, and a 30-min
+PROGRESS heartbeat (entries + scope memory) that the local script
+should have had from the start. If entries flow at ~4/hour the
+mechanism is confirmed; if they still stall, the next suspect is
+the band's specific seed-4242 early case indices. re1000's
+[1000,5000] upper half remains uncosted — a Re≈3500 probe rides
+along before that band is committed.
