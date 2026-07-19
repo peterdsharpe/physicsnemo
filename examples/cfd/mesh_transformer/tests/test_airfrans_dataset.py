@@ -234,14 +234,24 @@ def test_query_subsampling_is_seeded_and_full_for_eval(case):
     assert torch.equal(full[1], torch.arange(N_QUERY))
 
 
-@pytest.mark.parametrize("arm", airfrans_train.ARM_NAMES)
+#: Arms whose query mesh is the volume task's (every arm except the trace
+#: arm, whose declared identity map requires the surface task -- covered by
+#: its own tests below).
+VOLUME_ARM_NAMES = tuple(
+    arm for arm in airfrans_train.ARM_NAMES if airfrans_train.arm_trace_of(arm) is None
+)
+
+
+@pytest.mark.parametrize("arm", VOLUME_ARM_NAMES)
 def test_each_arm_trains_one_step_on_the_synthetic_case(case, arm):
     """Forward + backward through the trainer's own arm wiring.
 
     ``build_arm`` is the trainer's constructor, so this covers the exact
     models the campaign trains: reference singpair configuration, the
     pseudo sector for ``mt_nl_pseudo``, and the far-field decay recipe for
-    ``mt_nl_decay`` (monopole deflation off).
+    ``mt_nl_decay`` (monopole deflation off).  The trace arm is excluded:
+    its declared identity map rejects the volume query set by contract
+    (pinned in the surface-task tests).
     """
 
     torch.manual_seed(0)
@@ -824,3 +834,273 @@ def test_globe_zscore_mean_predictor_floor(catalog):
     # Exact predictions elsewhere score exactly zero.
     assert record["globe_zscore_mse/u_x"] == pytest.approx(0.0, abs=1e-15)
     assert record["globe_zscore_mse/log_nut_ratio"] == pytest.approx(0.0, abs=1e-15)
+
+
+# ---------------------------------------------------------------------------
+# The surface companion task (T1, trace universality)
+# ---------------------------------------------------------------------------
+
+SURFACE_CASE = "airFoil2D_synth_surface"
+N_SURF_BOUNDARY = 16
+N_SURF_VOLUME = 8
+#: Boundary vertex j carries the known value cp(j) = j / N (analytic check);
+#: vertex 3 is NaN-masked, so panels 2 and 3 inherit NaN centroids.
+MASKED_SURFACE_VERTEX = 3
+
+
+def _surface_vertex_cp(j: np.ndarray) -> np.ndarray:
+    return np.asarray(j, dtype=np.float64) / N_SURF_BOUNDARY
+
+
+def _write_surface_case(directory) -> np.ndarray:
+    """A case satisfying the real catalog's vertex<->query bijection.
+
+    Query rows [0, N_SURF_BOUNDARY) are the boundary vertices in a fixed
+    PERMUTED order (the real catalog's surface rows are volume-mesh-ordered,
+    not boundary-ordered -- the bijection must not assume alignment), and
+    the remaining rows are off-surface volume points.  Returns the
+    permutation (query row k holds boundary vertex perm[k]).
+    """
+
+    rng = np.random.default_rng(20260710)
+    t_boundary = 2.0 * np.pi * np.arange(N_SURF_BOUNDARY) / N_SURF_BOUNDARY
+    boundary_points = _ellipse(t_boundary)
+    index = np.arange(N_SURF_BOUNDARY, dtype=np.int64)
+    boundary_cells = np.stack((index, np.roll(index, -1)), axis=-1)
+
+    perm = rng.permutation(N_SURF_BOUNDARY)
+    radii = 0.7 + 2.3 * rng.random(N_SURF_VOLUME)
+    angles = 2.0 * np.pi * rng.random(N_SURF_VOLUME)
+    volume = np.stack((0.5 + radii * np.cos(angles), radii * np.sin(angles)), axis=-1)
+    query_points = np.concatenate((boundary_points[perm], volume))
+    n_query = N_SURF_BOUNDARY + N_SURF_VOLUME
+
+    pressure_coefficient = np.empty(n_query)
+    pressure_coefficient[:N_SURF_BOUNDARY] = _surface_vertex_cp(perm)
+    pressure_coefficient[N_SURF_BOUNDARY:] = 0.4 * rng.standard_normal(N_SURF_VOLUME)
+    delta_velocity = 0.2 * rng.standard_normal((n_query, 2))
+    log_nut_ratio = np.abs(2.0 * rng.standard_normal(n_query))
+    cpt = pressure_coefficient + rng.random(n_query)
+
+    masked_row = int(np.nonzero(perm == MASKED_SURFACE_VERTEX)[0][0])
+    for field in (delta_velocity, pressure_coefficient, log_nut_ratio, cpt):
+        field[masked_row] = np.nan
+
+    is_surface = np.zeros(n_query, dtype=bool)
+    is_surface[:N_SURF_BOUNDARY] = True
+
+    np.savez(
+        directory / f"{SURFACE_CASE}.npz",
+        boundary_points=boundary_points.astype(np.float64),
+        boundary_cells=boundary_cells,
+        query_points=query_points.astype(np.float64),
+        delta_velocity=delta_velocity.astype(np.float32),
+        pressure_coefficient=pressure_coefficient.astype(np.float32),
+        log_nut_ratio=log_nut_ratio.astype(np.float32),
+        cpt=cpt.astype(np.float32),
+        is_surface=is_surface,
+        u_inf=np.asarray(U_INF, dtype=np.float64),
+        nu=np.float64(NU),
+        chord=np.float64(1.0),
+    )
+    return perm
+
+
+@pytest.fixture(scope="module")
+def surface_catalog(tmp_path_factory):
+    directory = tmp_path_factory.mktemp("airfrans_surface_catalog")
+    perm = _write_surface_case(directory)
+    manifest = {
+        "full_train": [SURFACE_CASE],
+        "full_test": [SURFACE_CASE],
+        "scarce_train": [SURFACE_CASE],
+        "reynolds_train": [SURFACE_CASE],
+        "reynolds_test": [SURFACE_CASE],
+        "aoa_train": [SURFACE_CASE],
+        "aoa_test": [SURFACE_CASE],
+    }
+    (directory / "manifest.json").write_text(json.dumps(manifest))
+    return directory, perm
+
+
+@pytest.fixture(scope="module")
+def surface_case(surface_catalog):
+    directory, _ = surface_catalog
+    return airfrans_dataset.load_case(directory, SURFACE_CASE)
+
+
+def test_surface_bijection_and_centroid_targets_analytic(surface_catalog, surface_case):
+    """(a) Bijection through the permutation; centroids and 1/2-averages exact."""
+
+    _, perm = surface_catalog
+    case = surface_case
+    rows = airfrans_dataset.surface_vertex_query_indices(case)
+    # rows[j] must be the query row holding boundary vertex j: perm[rows[j]] == j.
+    assert rows.shape == (N_SURF_BOUNDARY,)
+    assert np.array_equal(perm[rows.numpy()], np.arange(N_SURF_BOUNDARY))
+
+    domain = airfrans_dataset.surface_case_domain(case)
+    cells = case.boundary_cells
+    expected_centroids = 0.5 * (
+        case.boundary_points[cells[:, 0]] + case.boundary_points[cells[:, 1]]
+    )
+    assert torch.equal(domain.interior.points, expected_centroids)
+    assert domain.interior.n_points == N_SURF_BOUNDARY
+    assert set(domain.interior.point_data.keys()) == {"pressure_coefficient"}
+
+    target = domain.interior.point_data["pressure_coefficient"]
+    vertex_cp = torch.tensor(
+        _surface_vertex_cp(np.arange(N_SURF_BOUNDARY)), dtype=torch.float32
+    )
+    vertex_cp[MASKED_SURFACE_VERTEX] = math.nan
+    expected = 0.5 * (vertex_cp[cells[:, 0]] + vertex_cp[cells[:, 1]])
+    finite = torch.isfinite(expected)
+    assert torch.equal(torch.isfinite(target), finite)
+    assert torch.equal(target[finite], expected[finite])
+    # Exactly the two panels adjacent to the masked vertex inherit NaN.
+    nan_panels = set(torch.nonzero(~finite).squeeze(1).tolist())
+    adjacent = set(
+        torch.nonzero((cells == MASKED_SURFACE_VERTEX).any(dim=1)).squeeze(1).tolist()
+    )
+    assert nan_panels == adjacent and len(nan_panels) == 2
+    # Global data matches the volume build's.
+    volume_domain, _ = airfrans_dataset.case_domain(case)
+    for key, value in volume_domain.global_data.items():
+        assert torch.equal(domain.global_data[key], value), key
+
+
+def test_surface_bijection_rejects_non_coincident_catalogs(case):
+    """The original synthetic case's surface points are NOT vertices: loud error."""
+
+    with pytest.raises(airfrans_dataset.AirFRANSCatalogError):
+        airfrans_dataset.surface_vertex_query_indices(case)
+
+
+def test_trace_arm_trains_one_step_on_the_surface_task(surface_case):
+    """(b) Forward + backward of the trace arm on the surface domain."""
+
+    torch.manual_seed(0)
+    model = airfrans_train.build_arm("mt_nl_members_trace")
+    assert model.trace_of == "airfoil"
+    domain = airfrans_dataset.surface_case_domain(surface_case)
+    targets = {
+        "pressure_coefficient": domain.interior.point_data["pressure_coefficient"]
+    }
+    predictions = airfrans_train._predictions(model, domain)
+    prediction = predictions["pressure_coefficient"]
+    assert prediction.shape == targets["pressure_coefficient"].shape
+    assert bool(torch.isfinite(prediction).all())
+    loss = airfrans_train.masked_huber_loss(predictions, targets)
+    assert bool(torch.isfinite(loss))
+    loss.backward()
+    grads = [p.grad for p in model.parameters() if p.grad is not None]
+    assert all(bool(torch.isfinite(g).all()) for g in grads)
+    assert any(bool(g.abs().sum() > 0) for g in grads)
+
+
+def test_surface_task_control_path_is_bitwise_plain_decode(surface_case):
+    """(c) The control arm sees nothing new: surface domain == hand-built domain."""
+
+    from physicsnemo.mesh import DomainMesh, Mesh
+
+    torch.manual_seed(1)
+    model = airfrans_train.build_arm("mt_nl_members")
+    domain = airfrans_dataset.surface_case_domain(surface_case)
+    hand_built = DomainMesh(
+        interior=Mesh(points=domain.interior.points.clone()),
+        boundaries={
+            "airfoil": Mesh(
+                points=surface_case.boundary_points,
+                cells=surface_case.boundary_cells,
+            )
+        },
+        global_data=dict(domain.global_data),
+    )
+    model.eval()
+    with torch.no_grad():
+        via_surface = airfrans_train._predictions(model, domain)
+        via_generic = {
+            name: model(hand_built).point_data[name]
+            for name in airfrans_train.OUTPUT_FIELD_RANKS
+        }
+    for name in airfrans_train.OUTPUT_FIELD_RANKS:
+        assert torch.equal(via_surface[name], via_generic[name]), name
+
+
+def test_trace_arm_rejects_volume_queries(surface_case, catalog, tmp_path):
+    """(d) Both guards: the model's decode count check and the driver's."""
+
+    torch.manual_seed(2)
+    model = airfrans_train.build_arm("mt_nl_members_trace")
+    volume_domain, _ = airfrans_dataset.case_domain(surface_case)
+    with pytest.raises(ValueError, match="cell centroids, index-aligned"):
+        airfrans_train._predictions(model, volume_domain)
+    with pytest.raises(ValueError, match="declares trace_of"):
+        airfrans_train.run_experiment(
+            catalog_dir=catalog,
+            task="scarce",
+            arm="mt_nl_members_trace",
+            epochs=0,
+            seed=0,
+            device="cpu",
+            output_dir=tmp_path,
+        )
+
+
+def test_surface_task_smoke_run_both_arms(surface_catalog, tmp_path):
+    """One-epoch surface-task runs of control and trace arms produce reports."""
+
+    directory, _ = surface_catalog
+    for arm in ("mt_nl_members", "mt_nl_members_trace"):
+        report = airfrans_train.run_experiment(
+            catalog_dir=directory,
+            task=airfrans_train.SURFACE_TASK,
+            arm=arm,
+            epochs=1,
+            seed=0,
+            device="cpu",
+            output_dir=tmp_path / arm,
+        )
+        assert report["task"] == airfrans_train.SURFACE_TASK
+        aggregate = report["splits"]["test"]
+        assert math.isfinite(aggregate["zscore_mse/p_surface"])
+        assert math.isfinite(aggregate["globe_zscore_mse/c_p_surface_only"])
+        assert math.isfinite(aggregate["mae/pressure_coefficient_surface"])
+        record = report["history"][-1]
+        assert "validation_pooled_train" in record
+        assert "p_surface" in record["validation_pooled_train"]
+
+
+def test_validation_carve_is_train_only_and_deterministic():
+    """Clean protocol (2026-07-19): validation ⊂ train, disjoint from test,
+    removed from training, and independent of the model seed."""
+    from airfrans_train import (
+        MAX_VALIDATION_CASES,
+        carve_validation,
+    )
+
+    train = [f"case_{i:03d}" for i in range(40)]
+    test = [f"test_{i:03d}" for i in range(20)]
+
+    remaining, validation = carve_validation(list(train))
+    assert len(validation) == MAX_VALIDATION_CASES
+    assert set(validation) <= set(train)
+    assert set(validation).isdisjoint(test)
+    assert set(remaining) | set(validation) == set(train)
+    assert set(remaining).isdisjoint(validation)
+    # original manifest order preserved for the surviving training cases
+    assert remaining == [c for c in train if c not in set(validation)]
+
+    # deterministic and model-seed independent: identical on repeat
+    import torch as _torch
+
+    _torch.manual_seed(1234)  # a "model seed" must not perturb the carve
+    remaining2, validation2 = carve_validation(list(train))
+    assert remaining2 == remaining and validation2 == validation
+
+    # tiny catalogs fall back loudly to validate-on-train (never test)
+    import pytest as _pytest
+
+    with _pytest.warns(UserWarning, match="too small to carve"):
+        tiny_train, tiny_val = carve_validation(train[: MAX_VALIDATION_CASES - 1])
+    assert tiny_train == tiny_val == train[: MAX_VALIDATION_CASES - 1]

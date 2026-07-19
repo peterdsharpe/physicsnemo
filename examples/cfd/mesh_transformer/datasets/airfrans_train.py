@@ -71,12 +71,21 @@ nonlinear, so drive-linearity is not declared):
   except the feature map: only the member MLP's input width differs, so
   parameter counts are nearly equal (both recorded in the reports).
   Falsifier: no improvement over ``mt_nl_members``.
+- ``mt_nl_members_trace`` -- ``mt_nl_members`` plus ``trace_of="airfoil"``
+  and nothing else (T1, trace universality): the declared boundary trace
+  turns the decode into the exterior-limit surface read (jump-relation
+  self-entries plus own-cell typed read-outs).  Runs ONLY on the
+  ``surface`` companion task, whose query mesh is the airfoil panels'
+  centroids (the declared identity map); ``mt_nl_members`` on the same
+  task is the control.  See ``design_notes["surface_task"]``.
 
 PROTOCOL (pre-registered; deviations would be protocol violations):
 
 - Tasks ``scarce`` (200 train) then ``full`` (800 train); the official
   ``reynolds`` / ``aoa`` extrapolation tasks are evaluated zero-shot from
   full-trained checkpoints via ``--eval-checkpoint`` / ``--eval-task``.
+  The ``surface`` companion task (T1) rides the scarce splits with
+  panel-centroid queries and the interpolated surface-C_p target.
 - Full airfoil boundary every step (no boundary downsampling); 4,096
   volume query points per iteration (GLOBE-matched), freshly drawn from a
   seeded generator.
@@ -88,9 +97,12 @@ PROTOCOL (pre-registered; deviations would be protocol violations):
   :mod:`dataset_train_ns` (AdamW at ``3e-4`` / weight decay ``1e-6``,
   gradient clipping at ``1.0``, reproducibly shuffled epochs, gradient
   accumulation over ``--batch-cases``, best-validation checkpoint restored
-  before the final evaluation).  Validation follows GLOBE: the task's test
-  list (``full_test`` for ``scarce``), capped at
-  :data:`MAX_VALIDATION_CASES` cases.
+  before the final evaluation).  Validation (clean protocol, 2026-07-19):
+  :data:`MAX_VALIDATION_CASES` cases carved deterministically from the
+  TRAINING split with the fixed :data:`VALIDATION_CARVE_SEED` (and removed
+  from training); the official test list is never consulted for selection.
+  (The pre-2026-07-19 protocol validated on the first test cases,
+  GLOBE-style -- refuted as a clean protocol by external review.)
 
 METRICS, two z-score conventions side by side (see the
 ``metrics_conventions`` design note): (i) ``zscore_mse/...``, the
@@ -165,6 +177,46 @@ FAMILY = "airfrans"
 TRAIN_TASKS = ("scarce", "full")
 MAX_VALIDATION_CASES = 8
 
+#: Fixed protocol seed for the train-side validation carve (clean protocol,
+#: 2026-07-19, external-review P0).  Deliberately independent of the model
+#: seed: every arm and every model seed trains against the SAME frozen
+#: train/validation partition, so checkpoint selection never sees the
+#: official test list.
+VALIDATION_CARVE_SEED = 20260719
+
+
+def carve_validation(
+    train_names: list[str],
+    n_validation: int = MAX_VALIDATION_CASES,
+    protocol_seed: int = VALIDATION_CARVE_SEED,
+) -> tuple[list[str], list[str]]:
+    """Deterministically split ``train_names`` into (train, validation).
+
+    The carve is a fixed-seed permutation: the first ``n_validation``
+    permuted cases become the validation list and are REMOVED from the
+    returned training list (which keeps its original manifest order).
+    The official test list plays no role here -- that is the point.
+    """
+    if n_validation >= len(train_names):
+        # Tiny catalogs (smoke tests, demos) cannot afford a carve: validate
+        # on the training cases themselves -- loud, and still never the
+        # official test list.  Real tasks (scarce train ~200) never hit this.
+        import warnings
+
+        warnings.warn(
+            f"training split ({len(train_names)} cases) too small to carve "
+            f"{n_validation} validation cases; validating on the training "
+            "cases themselves (test list still untouched)",
+            stacklevel=2,
+        )
+        return list(train_names), list(train_names)
+    order = torch.randperm(
+        len(train_names), generator=torch.Generator().manual_seed(protocol_seed)
+    ).tolist()
+    validation = [train_names[i] for i in order[:n_validation]]
+    remaining = [train_names[i] for i in sorted(order[n_validation:])]
+    return remaining, validation
+
 OUTPUT_FIELD_RANKS: dict[str, int] = {
     "delta_velocity": 1,
     "pressure_coefficient": 0,
@@ -195,7 +247,20 @@ ARM_NAMES: tuple[str, ...] = (
     "mt_nl_members_log",
     "mt_nl_members_wide",
     "mt_nl_members_log_pseudo",
+    "mt_nl_members_trace",
 )
+
+#: The surface companion task (T1, trace universality): queries are the
+#: airfoil panel centroids (the whole-mesh ``trace_of`` identity map), the
+#: single target is vertex-to-centroid interpolated surface C_p, and the
+#: splits ride the scarce task's.  See ``design_notes["surface_task"]``.
+SURFACE_TASK = "surface"
+
+
+def arm_trace_of(arm: str) -> str | None:
+    """The boundary an arm declares as its trace, or None (most arms)."""
+
+    return _ARM_KWARGS[arm].get("trace_of")
 
 #: Arm-specific model kwargs on top of the shared reference construction.
 #: The two H4 arms (book/07-airfrans.qmd) differ from ``mt_nl`` only by the
@@ -260,6 +325,19 @@ _ARM_KWARGS: dict[str, dict] = {
         "kernel_mlp_members": 8,
         "kernel_log_radial_features": True,
         "drive_pseudo_dim": 8,
+    },
+    # T1 (trace universality): mt_nl_members plus the declared boundary
+    # trace and nothing else.  trace_of="airfoil" licenses the exterior
+    # jump-relation self-entries (+1/2 own-panel double layer) and the
+    # own-cell typed read-outs, and declares the query mesh to BE the
+    # airfoil panels, index-aligned -- so this arm runs ONLY on the
+    # surface companion task (the volume tasks' mixed query sets violate
+    # the identity map, enforced loudly by run_experiment and by the
+    # model's decode count check).  mt_nl_members on the same surface
+    # task is the pre-registered control.
+    "mt_nl_members_trace": {
+        "kernel_mlp_members": 8,
+        "trace_of": "airfoil",
     },
 }
 
@@ -451,12 +529,36 @@ _DESIGN_NOTES = {
         "width differs, parameter counts nearly equal, both recorded.  "
         "Falsifier: no improvement over mt_nl_members"
     ),
+    "surface_task": (
+        "task 'surface' (T1, trace universality) is the surface-only "
+        "companion mirroring the DrivAerML surface setting: queries are the "
+        "airfoil panel CENTROIDS, one per boundary cell in cell order -- "
+        "exactly the whole-query-mesh identity map that trace_of='airfoil' "
+        "declares -- and the single target is surface C_p interpolated "
+        "vertex->centroid as the 1/2-average of the panel's endpoint values "
+        "(midpoint rule, second-order in the ~1.2e-3-chord panel length), "
+        "via the exact vertex<->query bijection (surface query points "
+        "coincide BITWISE with boundary vertices on the v1 catalog; "
+        "measured max distance 0, n_surface == n_boundary).  NaN-masked "
+        "vertices propagate NaN to both adjacent centroids and are "
+        "excluded as usual.  Splits ride the scarce task (train = "
+        "scarce_train, validation/test = full_test); the pooled_train "
+        "normalization constants are the SAME volume-split constants as "
+        "the mixed task's, so zscore_mse/p_surface is unit-compatible "
+        "with the mixed arms' p_surface column.  The recorded schedule's "
+        "queries_per_step is the CLI value while the actual per-step "
+        "query count is the case's panel count (~1k) -- identical across "
+        "both arms of the comparison, so the LR protocol is matched.  "
+        "mt_nl_members_trace vs mt_nl_members on this task is the "
+        "pre-registered T1 comparison; the trace arm refuses the volume "
+        "tasks loudly (the declared identity map cannot hold there)"
+    ),
     "validation_protocol": (
-        "GLOBE-matched: the scarce task defines no test list of its own and "
-        "is validated/evaluated against full_test; validation for model "
-        "selection uses the first MAX_VALIDATION_CASES cases of the task's "
-        "test list at full query sets (GLOBE validates on the same list "
-        "every epoch -- mirrored for budget parity, and disclosed)"
+        "CLEAN (2026-07-19): MAX_VALIDATION_CASES cases carved from the "
+        "TRAINING split by a fixed protocol seed (VALIDATION_CARVE_SEED), "
+        "removed from training; model selection never sees the official "
+        "test list.  Supersedes the GLOBE-matched test-derived validation "
+        "(external-review P0: that made test numbers development-set)"
     ),
     "loss": (
         "Huber (delta=1) summed over the three target fields with per-field "
@@ -912,6 +1014,96 @@ def _headline_score(aggregate: dict[str, float]) -> float:
     return sum(values) / len(values)
 
 
+def _surface_case_metrics(
+    case: AirFRANSCase,
+    cp_true: torch.Tensor,
+    cp_pred: torch.Tensor,
+    normalization: dict,
+) -> dict:
+    """One case's surface-task metric record (centroid C_p only).
+
+    Both conventions of the mixed task, restricted to surface pressure:
+    ``zscore_mse/p_surface`` normalizes the raw pressure error
+    (``C_p * q_inf``) by the POOLED_TRAIN std of ``p`` -- the same volume-
+    split constant the mixed task uses, so the two tasks' p_surface columns
+    share units -- and ``globe_zscore_mse/c_p_surface_only`` is the
+    REFERENCE_PERSAMPLE convention (per-sample unbiased std of the true
+    centroid C_p, skipped as ``None`` when not > 0).  Float64 accumulation.
+    """
+
+    true64, pred64 = cp_true.double(), cp_pred.double()
+    valid = torch.isfinite(true64)
+    record: dict = {
+        "case": case.name,
+        "u_inf": [float(case.u_inf[0]), float(case.u_inf[1])],
+        "u_inf_magnitude": case.u_inf_magnitude,
+        "n_valid": int(valid.sum()),
+        "n_surface_valid": int(valid.sum()),
+    }
+    if bool(valid.any()):
+        error = pred64[valid] - true64[valid]
+        std_p = normalization["fields"]["p"]["std"]
+        record["zscore_mse/p_surface"] = float(
+            (error * case.dynamic_pressure / std_p).square().mean()
+        )
+        record["mae/pressure_coefficient_surface"] = float(error.abs().mean())
+    else:
+        record["zscore_mse/p_surface"] = None
+        record["mae/pressure_coefficient_surface"] = None
+    true_valid = true64[valid]
+    globe: float | None = None
+    if true_valid.numel() >= 2:
+        true_std = true_valid.std()  # unbiased, the benchmark's default
+        if float(true_std) > 0:
+            globe = float(
+                ((pred64[valid] - true_valid) / true_std).square().mean()
+            )
+    record["globe_zscore_mse/c_p_surface_only"] = globe
+    return record
+
+
+@torch.no_grad()
+def _surface_evaluate_cases(
+    model: nn.Module,
+    bank: AirFRANSCaseBank,
+    names: list[str],
+    normalization: dict,
+) -> tuple[dict[str, float], list[dict]]:
+    """Surface-task aggregate and per-case metrics (full centroid sets)."""
+
+    model.eval()
+    per_case: list[dict] = []
+    sums: dict[str, list[float]] = {}
+    for name in names:
+        case = bank.case(name)
+        domain = airfrans_dataset.surface_case_domain(case)
+        cp_true = domain.interior.point_data["pressure_coefficient"]
+        cp_pred = _predictions(model, domain)["pressure_coefficient"]
+        record = _surface_case_metrics(case, cp_true, cp_pred, normalization)
+        per_case.append(record)
+        for key, value in record.items():
+            if key in _METADATA_KEYS or value is None:
+                continue
+            sums.setdefault(key, []).append(value)
+    aggregate: dict[str, float] = {}
+    for key, values in sums.items():
+        if key.startswith("globe_zscore_mse/"):
+            # The benchmark's scalar-accumulator reduction (skips counted).
+            aggregate[key] = sum(values) / len(names)
+        else:
+            aggregate[key] = sum(values) / len(values)
+    return aggregate, per_case
+
+
+def _surface_headline_score(aggregate: dict[str, float]) -> float:
+    """The surface task's selection scalar: pooled p_surface z-score MSE."""
+
+    value = aggregate.get("zscore_mse/p_surface")
+    if value is None:
+        raise RuntimeError("no surface headline metric available for validation")
+    return value
+
+
 def _catalog_provenance(catalog_dir: Path, manifest: dict) -> dict:
     preprocess_manifest = catalog_dir / "preprocess_manifest.json"
     return {
@@ -979,8 +1171,19 @@ def run_experiment(
     nothing in an epoch consumes global RNG.
     """
 
-    if task not in TRAIN_TASKS:
-        raise ValueError(f"training task must be one of {TRAIN_TASKS}, got {task!r}")
+    if task not in TRAIN_TASKS + (SURFACE_TASK,):
+        raise ValueError(
+            f"training task must be one of {TRAIN_TASKS + (SURFACE_TASK,)}, "
+            f"got {task!r}"
+        )
+    surface = task == SURFACE_TASK
+    if arm in ARM_NAMES and arm_trace_of(arm) is not None and not surface:
+        raise ValueError(
+            f"arm {arm!r} declares trace_of={arm_trace_of(arm)!r}: its query "
+            "mesh must BE that boundary's panels (the declared identity map), "
+            f"which only the {SURFACE_TASK!r} task provides; the volume "
+            "tasks' mixed query sets violate the declaration"
+        )
     if epochs < 0:
         raise ValueError("epochs must be nonnegative")
     if batch_cases < 1:
@@ -997,9 +1200,19 @@ def run_experiment(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest = airfrans_dataset.load_manifest(catalog_dir)
-    train_names = airfrans_dataset.split_case_names(manifest, task, "train")
-    test_names = airfrans_dataset.split_case_names(manifest, task, "test")
-    validation_names = test_names[:MAX_VALIDATION_CASES]
+    # The surface task rides the scarce splits (train = scarce_train,
+    # validation/test = full_test) so T1 is stated on the scarce protocol.
+    split_task = "scarce" if surface else task
+    train_names = airfrans_dataset.split_case_names(manifest, split_task, "train")
+    test_names = airfrans_dataset.split_case_names(manifest, split_task, "test")
+    # CLEAN VALIDATION PROTOCOL (2026-07-19, external-review P0): validation
+    # is carved from the TRAINING split.  The previous protocol
+    # (``validation_names = test_names[:MAX_VALIDATION_CASES]``, disclosed as
+    # GLOBE-matched) selected best checkpoints on members of the official
+    # test list, making every reported test number a development-set number.
+    # The held-out cases are removed from training; ``test_names`` is
+    # untouched and still evaluated exactly once by the final-eval path.
+    train_names, validation_names = carve_validation(train_names)
 
     torch.manual_seed(seed)
     device_t = torch.device(device)
@@ -1008,15 +1221,29 @@ def run_experiment(
     bank = AirFRANSCaseBank(catalog_dir, device=device_t, cache=cache)
     normalization = compute_normalization(bank, train_names)
 
-    def validation_metrics() -> tuple[float, dict]:
-        """Selection scalar (pooled headline mean) plus the full aggregate."""
+    evaluate_split = _surface_evaluate_cases if surface else _evaluate_cases
+    headline_score = _surface_headline_score if surface else _headline_score
 
-        aggregate, _ = _evaluate_cases(model, bank, validation_names, normalization)
-        return _headline_score(aggregate), aggregate
+    def validation_metrics() -> tuple[float, dict]:
+        """Selection scalar (pooled headline) plus the full aggregate."""
+
+        aggregate, _ = evaluate_split(model, bank, validation_names, normalization)
+        return headline_score(aggregate), aggregate
 
     def convention_blocks(aggregate: dict) -> dict[str, dict]:
         """Both conventions' headline metrics, for the per-epoch JSON line."""
 
+        if surface:
+            return {
+                "validation_pooled_train": {
+                    "p_surface": aggregate.get("zscore_mse/p_surface")
+                },
+                "validation_reference_persample": {
+                    "c_p_surface_only": aggregate.get(
+                        "globe_zscore_mse/c_p_surface_only"
+                    )
+                },
+            }
         return {
             "validation_pooled_train": {
                 key.split("/", 1)[1]: aggregate.get(key) for key in HEADLINE_METRICS
@@ -1070,12 +1297,25 @@ def run_experiment(
                 optimizer.zero_grad(set_to_none=True)
                 for position in batch:
                     case = bank.case(train_names[position])
-                    domain, _ = case_domain(
-                        case, n_queries=queries_per_step, generator=query_generator
-                    )
-                    targets = {
-                        key: domain.interior.point_data[key] for key in TARGET_FIELDS
-                    }
+                    if surface:
+                        # Full centroid set every step: the trace contract's
+                        # identity map forbids query subsampling, and the
+                        # ~1k-panel set is cheap.  The query generator is
+                        # untouched (state still checkpointed for parity).
+                        domain = airfrans_dataset.surface_case_domain(case)
+                        targets = {
+                            "pressure_coefficient": domain.interior.point_data[
+                                "pressure_coefficient"
+                            ]
+                        }
+                    else:
+                        domain, _ = case_domain(
+                            case, n_queries=queries_per_step, generator=query_generator
+                        )
+                        targets = {
+                            key: domain.interior.point_data[key]
+                            for key in TARGET_FIELDS
+                        }
                     loss = masked_huber_loss(_predictions(model, domain), targets)
                     (loss / len(batch)).backward()
                     losses.append(float(loss.detach().cpu()))
@@ -1129,7 +1369,7 @@ def run_experiment(
     else:
         best_val, _ = validation_metrics()
 
-    aggregate, per_case = _evaluate_cases(model, bank, test_names, normalization)
+    aggregate, per_case = evaluate_split(model, bank, test_names, normalization)
 
     checkpoint_name = f"{arm}_{task}_seed{seed}.pt"
     torch.save(
@@ -1212,6 +1452,13 @@ def evaluate_checkpoint(
             f"expected {FAMILY!r}"
         )
     arm = payload["arm"]
+    if arm in ARM_NAMES and arm_trace_of(arm) is not None:
+        raise ValueError(
+            f"arm {arm!r} declares trace_of={arm_trace_of(arm)!r}; the "
+            "zero-shot volume-task evaluation decodes mixed query sets, "
+            "which the declared identity map forbids -- the surface task's "
+            "own test-split readout is written by run_experiment"
+        )
     model = build_arm(arm)
     model.load_state_dict(payload["state_dict"])
     model = model.to(device_t)
@@ -1259,7 +1506,9 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--task", choices=TRAIN_TASKS, default="scarce")
+    parser.add_argument(
+        "--task", choices=TRAIN_TASKS + (SURFACE_TASK,), default="scarce"
+    )
     parser.add_argument("--arm", choices=ARM_NAMES)
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--seed", type=int, default=17)
@@ -1349,6 +1598,11 @@ def main() -> None:
             cache=not args.no_cache,
         )
     summary_split = next(iter(report["splits"]))
+    headline_keys = (
+        ("zscore_mse/p_surface", "globe_zscore_mse/c_p_surface_only")
+        if report.get("task") == SURFACE_TASK
+        else HEADLINE_METRICS
+    )
     print(
         json.dumps(
             {
@@ -1356,7 +1610,7 @@ def main() -> None:
                 "split": summary_split,
                 "headline": {
                     key: report["splits"][summary_split].get(key)
-                    for key in HEADLINE_METRICS
+                    for key in headline_keys
                 },
             }
         )
