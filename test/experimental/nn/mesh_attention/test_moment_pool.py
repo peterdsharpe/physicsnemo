@@ -61,6 +61,7 @@ def _model(
     device: torch.device | str,
     *,
     per_boundary_moment_pool: bool = True,
+    per_boundary_moment_pool_balanced: bool = False,
     field_mode: str = "linear",
     query_decoder: str = "moment",
     dtype: torch.dtype = torch.float64,
@@ -75,6 +76,7 @@ def _model(
         field_mode=field_mode,
         query_decoder=query_decoder,
         per_boundary_moment_pool=per_boundary_moment_pool,
+        per_boundary_moment_pool_balanced=per_boundary_moment_pool_balanced,
         operator_scalar_dim=5,
         operator_vector_dim=3,
         drive_scalar_dim=6,
@@ -514,3 +516,56 @@ def test_segment_validation_errors(device):
     )
     with pytest.raises(ValueError, match="n_moment_segments=0"):
         block.build_source_moments(mesh, state, field, moment_segments=good_segments)
+
+
+def test_balanced_pool_requires_pool(device):
+    """The balanced flag without the per-boundary pool is rejected."""
+    with pytest.raises(ValueError, match="requires"):
+        _model(
+            device,
+            per_boundary_moment_pool=False,
+            per_boundary_moment_pool_balanced=True,
+        )
+
+
+def test_balanced_pool_zero_gain_reweights_and_reparameterizes(device):
+    """The balanced pool (external-review arm) at zero gains weights each
+    boundary equally (differing from the plain sum when boundary measures
+    differ), and setting the gains to ln(A_s) - ln(mean A) cancels the
+    offset exactly -- the balanced arm is a reparameterized initialization
+    of the same hypothesis class, not a different operator."""
+    balanced = _model(device, per_boundary_moment_pool_balanced=True)
+    plain = _model(device, per_boundary_moment_pool=False)
+    domain = _domain(device)
+
+    measures = torch.stack(
+        [
+            domain.boundaries[name].cell_areas.sum()
+            for name in balanced.boundary_names
+        ]
+    )
+    assert not torch.allclose(measures, measures.mean().expand_as(measures)), (
+        "fixture boundaries must have unequal measures for this test to "
+        "discriminate"
+    )
+
+    with torch.no_grad():
+        out_balanced = balanced(domain)
+        out_plain = plain(domain)
+    assert any(
+        not torch.allclose(
+            out_balanced.point_data[name], out_plain.point_data[name]
+        )
+        for name in _OUTPUT_RANKS
+    ), "balanced pool at zero gains must differ from the plain sum"
+
+    _set_gains(balanced, (measures.log() - measures.mean().log()).tolist())
+    with torch.no_grad():
+        out_cancelled = balanced(domain)
+    for name in _OUTPUT_RANKS:
+        torch.testing.assert_close(
+            out_cancelled.point_data[name],
+            out_plain.point_data[name],
+            rtol=1.0e-9,
+            atol=1.0e-11,
+        )

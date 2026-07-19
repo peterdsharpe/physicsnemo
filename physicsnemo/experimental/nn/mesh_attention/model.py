@@ -641,6 +641,14 @@ class MeshTransformer(Module):
         Maximum entities passed through a typed attention projection at once.
         Chunking changes temporary memory, not the moment operator. ``None``
         disables projection chunking.
+    per_boundary_moment_pool_balanced : bool, default=False
+        With ``per_boundary_moment_pool=True``, offset each boundary's
+        moment-pool log-gain by ln(mean boundary measure) - ln(boundary
+        measure) per sample, so at initialization every boundary
+        contributes equally instead of by raw measure (the external-review
+        "balanced" arm; a reparameterized initialization, not a smaller
+        hypothesis class -- the gains can learn back the plain sum).
+        Requires the per-boundary pool.
     per_boundary_moment_pool : bool, default=False
         Compute every encoder attention moment per declared boundary and
         combine the per-boundary moments through learned, dimensionless
@@ -890,6 +898,7 @@ class MeshTransformer(Module):
         query_chunk_size: int = 65536,
         attention_chunk_size: int | None = 65536,
         per_boundary_moment_pool: bool = False,
+        per_boundary_moment_pool_balanced: bool = False,
         trace_of: str | None = None,
         trace_self_correction: bool = True,
         trace_readouts: bool = True,
@@ -905,6 +914,18 @@ class MeshTransformer(Module):
             raise TypeError(
                 "per_boundary_moment_pool must be a bool, got "
                 f"{per_boundary_moment_pool!r}"
+            )
+        if not isinstance(per_boundary_moment_pool_balanced, bool):
+            raise TypeError(
+                "per_boundary_moment_pool_balanced must be a bool, got "
+                f"{per_boundary_moment_pool_balanced!r}"
+            )
+        if per_boundary_moment_pool_balanced and not per_boundary_moment_pool:
+            raise ValueError(
+                "per_boundary_moment_pool_balanced=True requires "
+                "per_boundary_moment_pool=True: the balance offsets the "
+                "per-boundary moment-pool log-gains (external-review "
+                "balanced arm)"
             )
         if not isinstance(boundary_field_ranks, dict):
             raise TypeError("boundary_field_ranks must be a dict")
@@ -1266,6 +1287,7 @@ class MeshTransformer(Module):
         self.attention_chunk_size = attention_chunk_size
         self.boundary_names = tuple(boundary_names)
         self.per_boundary_moment_pool = per_boundary_moment_pool
+        self.per_boundary_moment_pool_balanced = per_boundary_moment_pool_balanced
         self.trace_of = trace_of
         self.trace_self_correction = trace_self_correction
         self.trace_readouts = trace_readouts
@@ -1385,6 +1407,7 @@ class MeshTransformer(Module):
                     vector_rank=vector_rank,
                     entity_chunk_size=attention_chunk_size,
                     n_moment_segments=n_moment_segments,
+                    moment_pool_balanced=per_boundary_moment_pool_balanced,
                 )
                 for _ in range(operator_layers)
             ]
@@ -1449,6 +1472,7 @@ class MeshTransformer(Module):
             entity_chunk_size=attention_chunk_size,
             field_pseudo_dim=drive_pseudo_dim,
             n_moment_segments=n_moment_segments,
+            moment_pool_balanced=per_boundary_moment_pool_balanced,
         )
         self.drive_blocks = nn.ModuleList(
             [block_type(**block_kwargs) for _ in range(drive_layers)]

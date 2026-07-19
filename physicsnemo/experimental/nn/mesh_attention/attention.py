@@ -79,7 +79,7 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-from jaxtyping import Float
+from jaxtyping import Bool, Float, Int
 
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.integration import (
@@ -119,6 +119,7 @@ class ScalarVectorState:
     pseudos: Float[torch.Tensor, "n pseudo_channels"] | None = None
 
     def __post_init__(self) -> None:
+        """Materialize an omitted pseudo sector as a zero-width tensor."""
         if self.pseudos is None:
             object.__setattr__(
                 self,
@@ -128,13 +129,18 @@ class ScalarVectorState:
 
     @property
     def n_entities(self) -> int:
+        """Number of entities ``N`` (rows) carried by every sector."""
         return self.scalars.shape[0]
 
     @property
     def n_spatial_dims(self) -> int:
+        """Spatial dimension ``D`` of the vector sector."""
         return self.vectors.shape[-1]
 
     def validate(self, *, label: str = "state") -> None:
+        """Raise ``ValueError`` unless all sectors have consistent shapes,
+        entity counts, devices, and dtypes.  ``label`` names the offending
+        state in error messages."""
         if self.scalars.ndim != 2:
             raise ValueError(
                 f"{label}.scalars must have shape (N, C), got "
@@ -181,6 +187,7 @@ class ScalarVectorState:
         device: torch.device | str,
         dtype: torch.dtype,
     ) -> "ScalarVectorState":
+        """Construct an all-zeros state with the given sector widths."""
         return cls(
             scalars=torch.zeros(
                 n_entities, scalar_channels, device=device, dtype=dtype
@@ -198,6 +205,8 @@ class ScalarVectorState:
         )
 
     def cat(self, other: "ScalarVectorState") -> "ScalarVectorState":
+        """Concatenate two states channel-wise (same entities, more channels
+        per sector); entity counts and spatial dims must match."""
         if self.n_entities != other.n_entities:
             raise ValueError("Cannot concatenate states with different entity counts")
         if self.n_spatial_dims != other.n_spatial_dims:
@@ -208,7 +217,11 @@ class ScalarVectorState:
             torch.cat((self.pseudos, other.pseudos), dim=-1),
         )
 
-    def slice(self, item: slice | torch.Tensor) -> "ScalarVectorState":
+    def slice(
+        self, item: slice | Int[torch.Tensor, " m"] | Bool[torch.Tensor, " n"]
+    ) -> "ScalarVectorState":
+        """Index all sectors along the entity axis with the same ``item``
+        (a slice, integer index tensor, or boolean mask)."""
         return ScalarVectorState(
             self.scalars[item], self.vectors[item], self.pseudos[item]
         )
@@ -216,8 +229,16 @@ class ScalarVectorState:
 
 @dataclass(frozen=True)
 class TypedQK:
-    scalars: torch.Tensor  # (N, H, R_s)
-    vectors: torch.Tensor  # (N, H, R_v, D)
+    r"""Projected per-head query or key features, one sector per parity.
+
+    ``scalars`` carries the rotation-invariant (``0e``) rank channels and
+    ``vectors`` the polar-vector (``1o``) rank channels; the typed attention
+    score contracts each sector only against its like-typed partner, which is
+    what keeps the score itself invariant.
+    """
+
+    scalars: Float[torch.Tensor, "n heads scalar_rank"]
+    vectors: Float[torch.Tensor, "n heads vector_rank spatial_dims"]
 
 
 @dataclass(frozen=True)
@@ -232,8 +253,8 @@ class TypedValues:
     maps that never mix the two parities -- at read-out.
     """
 
-    scalars: torch.Tensor  # (N, H, F_s + F_p)
-    vectors: torch.Tensor  # (N, H, F_v, D)
+    scalars: Float[torch.Tensor, "n heads value_scalars"]
+    vectors: Float[torch.Tensor, "n heads value_vectors spatial_dims"]
 
 
 @dataclass(frozen=True)
@@ -244,13 +265,54 @@ class AttentionMoments:
     followed by pseudoscalar value features (see :class:`TypedValues`).
     """
 
-    scalar_key_scalar_value: torch.Tensor  # (H, R_s, F_s + F_p)
-    vector_key_scalar_value: torch.Tensor  # (H, R_v, D, F_s + F_p)
-    scalar_key_vector_value: torch.Tensor  # (H, R_s, F_v, D)
-    vector_key_vector_value: torch.Tensor  # (H, R_v, D, F_v, D)
+    scalar_key_scalar_value: Float[torch.Tensor, "heads scalar_rank value_scalars"]
+    vector_key_scalar_value: Float[
+        torch.Tensor, "heads vector_rank spatial_dims value_scalars"
+    ]
+    scalar_key_vector_value: Float[
+        torch.Tensor, "heads scalar_rank value_vectors spatial_dims"
+    ]
+    vector_key_vector_value: Float[
+        torch.Tensor, "heads vector_rank spatial_dims value_vectors spatial_dims"
+    ]
 
 
-def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
+def _mix_channels(
+    weight: Float[torch.Tensor, "channels_out channels_in"],
+    tensor: Float[torch.Tensor, "n channels_in *trailing"],
+) -> Float[torch.Tensor, "n channels_out *trailing"]:
+    """``einsum("oc,nc...->no...", weight, tensor)`` as one GEMM.
+
+    The einsum form lowers to a batch-``n`` bmm of tiny ``(O,C)@(C,·)``
+    items, which cuBLAS decomposes into one gemv launch per entity --
+    measured at ~10^5 launches per training step at mesh scale (the
+    dominant kernel count in every arm; 2026-07-11 decode profile).
+    Flattening the trailing axes into the GEMM M-dimension performs the
+    SAME contraction over ``c`` (algebraically identical; the per-output
+    accumulation runs inside one cuBLAS GEMM instead of one gemv per
+    entity) in a single launch.  The transpose copy this costs is one
+    bandwidth pass -- negligible against the launch storm it removes.
+    """
+    n = tensor.shape[0]
+    trailing = tensor.shape[2:]
+    if tensor.numel() == 0 or weight.numel() == 0:
+        # Degenerate channel sets: the reshape below cannot infer a
+        # zero-element trailing block; the einsum reference is free at
+        # this size and keeps the exact output semantics.
+        return torch.einsum("oc,nc...->no...", weight, tensor)
+    flat = tensor.reshape(n, tensor.shape[1], -1)  # (N, C, T)
+    columns = flat.transpose(1, 2).reshape(-1, flat.shape[1])  # (N*T, C)
+    mixed = columns @ weight.transpose(0, 1)  # (N*T, O)
+    return (
+        mixed.reshape(n, -1, weight.shape[0])
+        .transpose(1, 2)
+        .reshape(n, weight.shape[0], *trailing)
+    )
+
+
+def _gram_invariants(
+    vectors: Float[torch.Tensor, "n channels spatial_dims"],
+) -> Float[torch.Tensor, "n gram_channels"]:
     """Return the upper triangle of each per-entity vector Gram matrix.
 
     This is the ``1o x 1o -> 0e`` Clebsch-Gordan contraction (up to a fixed
@@ -267,7 +329,9 @@ def _gram_invariants(vectors: torch.Tensor) -> torch.Tensor:
     return gram[:, rows, cols]
 
 
-def _pseudo_pair_invariants(pseudos: torch.Tensor) -> torch.Tensor:
+def _pseudo_pair_invariants(
+    pseudos: Float[torch.Tensor, "n channels"],
+) -> Float[torch.Tensor, "n pair_channels"]:
     """Return the upper triangle (with diagonal) of per-entity ``p_i p_j``.
 
     This is the ``0o x 0o -> 0e`` product: each entry is even under
@@ -281,7 +345,9 @@ def _pseudo_pair_invariants(pseudos: torch.Tensor) -> torch.Tensor:
     return outer[:, rows, cols]
 
 
-def _require_planar(vectors: torch.Tensor, *, operation: str) -> None:
+def _require_planar(
+    vectors: Float[torch.Tensor, "n channels spatial_dims"], *, operation: str
+) -> None:
     """Reject non-2D inputs to the parity-odd planar products."""
     if vectors.shape[-1] != 2:
         raise ValueError(
@@ -292,7 +358,10 @@ def _require_planar(vectors: torch.Tensor, *, operation: str) -> None:
         )
 
 
-def _pair_wedges(first: torch.Tensor, second: torch.Tensor) -> torch.Tensor:
+def _pair_wedges(
+    first: Float[torch.Tensor, "n channels_1 2"],
+    second: Float[torch.Tensor, "n channels_2 2"],
+) -> Float[torch.Tensor, "n channels_1 channels_2"]:
     r"""All pairwise 2D wedges ``first_i ∧ second_j`` per entity.
 
     ``first`` is ``(N, C_1, 2)`` and ``second`` is ``(N, C_2, 2)``; the result
@@ -308,7 +377,9 @@ def _pair_wedges(first: torch.Tensor, second: torch.Tensor) -> torch.Tensor:
     )
 
 
-def _wedge_invariants(vectors: torch.Tensor) -> torch.Tensor:
+def _wedge_invariants(
+    vectors: Float[torch.Tensor, "n channels 2"],
+) -> Float[torch.Tensor, "n wedge_channels"]:
     r"""Strict-upper-triangle wedges ``v_i ∧ v_j`` (``i < j``) per entity.
 
     The pseudoscalar (``0o``) companion of :func:`_gram_invariants`: the
@@ -325,7 +396,9 @@ def _wedge_invariants(vectors: torch.Tensor) -> torch.Tensor:
     return wedges[:, rows, cols]
 
 
-def _vector_perp(vectors: torch.Tensor) -> torch.Tensor:
+def _vector_perp(
+    vectors: Float[torch.Tensor, "n channels 2"],
+) -> Float[torch.Tensor, "n channels 2"]:
     r"""Rotate each 2D vector by ``+90``: ``v = (v_x, v_y) -> (-v_y, v_x)``.
 
     ``v^\perp`` transforms as an *axial* vector (``R v^\perp`` times
@@ -368,6 +441,12 @@ class TypedProjection(nn.Module):
         pseudo_in: int = 0,
         pseudo_out: int = 0,
     ) -> None:
+        """Build the per-sector maps for the given channel widths.
+
+        ``scalar_bias`` gates the bias on the scalar path only (vector and
+        pseudo paths are structurally bias-free); ``include_vector_invariants``
+        gates every quadratic lift as described in the class docstring.
+        """
         super().__init__()
         if pseudo_in < 0 or pseudo_out < 0:
             raise ValueError("pseudo channel counts must be non-negative")
@@ -419,6 +498,9 @@ class TypedProjection(nn.Module):
             self.register_parameter("pseudo_weight", None)
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        """Project ``state`` to the configured output widths, sector by
+        sector, without mixing parities (see the class docstring for the
+        exact maps applied to each sector)."""
         if state.pseudos.shape[1] != self.pseudo_in:
             raise ValueError(
                 f"state has {state.pseudos.shape[1]} pseudoscalar channels; "
@@ -435,7 +517,7 @@ class TypedProjection(nn.Module):
         else:
             scalars = None
         if self.vector_out:
-            vectors = torch.einsum("oc,ncd->nod", self.vector_weight, state.vectors)
+            vectors = _mix_channels(self.vector_weight, state.vectors)
         else:
             vectors = state.vectors.new_empty(state.n_entities, 0, state.n_spatial_dims)
         if self.pseudo_out:
@@ -449,7 +531,9 @@ class TypedProjection(nn.Module):
                 if len(pseudo_parts) == 1
                 else torch.cat(pseudo_parts, dim=-1)
             )
-            pseudos = torch.einsum("of,nf->no", self.pseudo_weight, pseudo_features)
+            # Plain matrix product; einsum routed this through the batched
+            # path on some backends -- keep it an explicit single GEMM.
+            pseudos = pseudo_features @ self.pseudo_weight.transpose(0, 1)
         else:
             pseudos = state.scalars.new_empty(state.n_entities, 0)
         if scalars is None:
@@ -517,6 +601,9 @@ class MeshAttention(nn.Module):
         out_pseudo_dim: int = 0,
         pseudo_value_dim: int = 0,
     ) -> None:
+        """Configure head count, per-sector query/key/value/output widths,
+        attention ranks, and the memory knobs (``accumulation_dtype``,
+        ``entity_chunk_size``); see the class docstring for semantics."""
         super().__init__()
         if heads < 1:
             raise ValueError("heads must be positive")
@@ -641,6 +728,8 @@ class MeshAttention(nn.Module):
         pseudo_dim: int,
         label: str,
     ) -> None:
+        """Validate ``state`` and check each sector's channel width against
+        the projection's declared input widths."""
         state.validate(label=label)
         if state.scalars.shape[1] != scalar_dim:
             raise ValueError(
@@ -659,6 +748,11 @@ class MeshAttention(nn.Module):
             )
 
     def project_queries(self, state: ScalarVectorState) -> TypedQK:
+        """Project a query state to per-head typed rank channels.
+
+        The :math:`1/\\sqrt{R_s + D R_v}` score scale is folded into the
+        query side once, so key projections and moments stay unscaled.
+        """
         self._validate_projection_state(
             state,
             scalar_dim=self.query_scalar_dim,
@@ -677,6 +771,8 @@ class MeshAttention(nn.Module):
         )
 
     def project_keys(self, state: ScalarVectorState) -> TypedQK:
+        """Project a source state to per-head typed key rank channels
+        (unscaled; the score scale lives on the query side)."""
         self._validate_projection_state(
             state,
             scalar_dim=self.key_scalar_dim,
@@ -692,6 +788,9 @@ class MeshAttention(nn.Module):
         )
 
     def project_values(self, state: ScalarVectorState) -> TypedValues:
+        """Project a source state to per-head typed value features; pseudo
+        value channels are packed after the scalar features (they share the
+        invariant-value moment machinery; see the class docstring)."""
         self._validate_projection_state(
             state,
             scalar_dim=self.value_scalar_dim,
@@ -724,7 +823,8 @@ class MeshAttention(nn.Module):
         key_state: ScalarVectorState,
         value_state: ScalarVectorState,
         segments: Sequence[slice] | None = None,
-        segment_log_gain: torch.Tensor | None = None,
+        segment_log_gain: Float[torch.Tensor, "n_segments heads"] | None = None,
+        segment_measure_balance: bool = False,
     ) -> AttentionMoments:
         r"""Project and quadrature-integrate keys and values once.
 
@@ -749,6 +849,18 @@ class MeshAttention(nn.Module):
         sum exactly (up to floating-point summation order).  The gain is a
         pure number per (segment, head): similarity covariance, parity
         typing, and drive-linearity of the moments are unchanged.
+
+        ``segment_measure_balance=True`` (external-review balanced arm)
+        shifts each segment's effective log-gain by
+        :math:`\ln\bar A - \ln A_s` (:math:`\bar A` the mean segment
+        measure of the sample), so at zero gains every segment contributes
+        its measure-AVERAGED moment scaled by the common :math:`\bar A` --
+        equal weight per boundary instead of raw measure dominance.  The
+        offset is a per-sample dimensionless measure ratio (similarity
+        covariance unchanged), and the learned gains can recover the plain
+        sum (:math:`g_s = \ln A_s - \ln\bar A`), so the balanced arm is a
+        reparameterized initialization, not a smaller hypothesis class.
+        Default ``False`` is bitwise the historical pool.
         """
         if source_mesh.n_cells != key_state.n_entities:
             raise ValueError("source Mesh cell count must match key state entity count")
@@ -764,9 +876,19 @@ class MeshAttention(nn.Module):
                 "the segmented moment pool is defined by both the source "
                 "partition and its per-segment log-gains"
             )
+        if segment_measure_balance and segments is None:
+            raise ValueError(
+                "segment_measure_balance requires segments: the balance is "
+                "an offset on the per-segment log-gains"
+            )
         if segments is not None:
             return self._build_segmented_moments(
-                source_mesh, key_state, value_state, segments, segment_log_gain
+                source_mesh,
+                key_state,
+                value_state,
+                segments,
+                segment_log_gain,
+                measure_balance=segment_measure_balance,
             )
 
         # Attention heads are aligned groups, not axes to outer-product with
@@ -775,8 +897,9 @@ class MeshAttention(nn.Module):
         def _moments_from_projected(
             keys: TypedQK,
             values: TypedValues,
-            weights: torch.Tensor | None,
+            weights: Float[torch.Tensor, " n"] | None,
         ) -> AttentionMoments:
+            """Integrate one (possibly chunk-sliced) projected source set."""
             # Cartesian components are independently varying finite-rank
             # features in the signed kernel. Flatten them next to the scalar
             # features so all four typed key/value moments share one weighted
@@ -882,7 +1005,8 @@ class MeshAttention(nn.Module):
         key_state: ScalarVectorState,
         value_state: ScalarVectorState,
         segments: Sequence[slice],
-        segment_log_gain: torch.Tensor,
+        segment_log_gain: Float[torch.Tensor, "n_segments heads"],
+        measure_balance: bool = False,
     ) -> AttentionMoments:
         r"""Combine per-segment moments with dimensionless per-head gains.
 
@@ -928,6 +1052,19 @@ class MeshAttention(nn.Module):
                 "source cell exactly once"
             )
 
+        if measure_balance:
+            # Balanced pool: offset each segment's log-gain by
+            # ln(mean measure) - ln(segment measure), computed per sample
+            # from the Mesh quadrature measure (a dimensionless ratio, so
+            # similarity covariance is untouched; see build_moments).
+            areas = source_mesh.cell_areas
+            segment_measure = torch.stack(
+                [areas[segment].sum() for segment in segments]
+            )
+            log_offset = segment_measure.mean().log() - segment_measure.log()
+            segment_log_gain = segment_log_gain + log_offset.to(
+                segment_log_gain.dtype
+            )[:, None]
         combined: list[torch.Tensor] | None = None
         for index, segment in enumerate(segments):
             part = self.build_moments(
@@ -1036,8 +1173,8 @@ class MeshAttention(nn.Module):
 
     def _typed_read_out(
         self,
-        scalar_heads: torch.Tensor,
-        vector_heads: torch.Tensor,
+        scalar_heads: Float[torch.Tensor, "n heads value_scalars"],
+        vector_heads: Float[torch.Tensor, "n heads value_vectors spatial_dims"],
         query_state: ScalarVectorState,
         output_dtype: torch.dtype,
     ) -> ScalarVectorState:
@@ -1093,8 +1230,13 @@ class MeshAttention(nn.Module):
         key_state: ScalarVectorState,
         value_state: ScalarVectorState,
         segments: Sequence[slice] | None = None,
-        segment_log_gain: torch.Tensor | None = None,
+        segment_log_gain: Float[torch.Tensor, "n_segments heads"] | None = None,
+        segment_measure_balance: bool = False,
     ) -> ScalarVectorState:
+        """Full attention pass: :meth:`build_moments` over the source, then
+        :meth:`evaluate_moments` at every query entity.  ``segments`` /
+        ``segment_log_gain`` enable the per-segment moment pool (see
+        :meth:`build_moments`)."""
         return self.evaluate_moments(
             query_state,
             self.build_moments(
@@ -1103,6 +1245,7 @@ class MeshAttention(nn.Module):
                 value_state,
                 segments=segments,
                 segment_log_gain=segment_log_gain,
+                segment_measure_balance=segment_measure_balance,
             ),
         )
 

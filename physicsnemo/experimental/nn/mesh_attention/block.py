@@ -33,6 +33,7 @@ from collections.abc import Sequence
 
 import torch
 import torch.nn as nn
+from jaxtyping import Float
 
 from physicsnemo.mesh import Mesh
 
@@ -42,6 +43,7 @@ from .attention import (
     ScalarVectorState,
     TypedProjection,
     _gram_invariants,
+    _mix_channels,
     _pair_wedges,
     _pseudo_pair_invariants,
     _vector_perp,
@@ -73,6 +75,22 @@ def _add(left: ScalarVectorState, right: ScalarVectorState) -> ScalarVectorState
     )
 
 
+def _apply_coefficients(
+    coefficients: Float[torch.Tensor, "n channels_out basis"],
+    basis: Float[torch.Tensor, "n basis spatial_dims"],
+) -> Float[torch.Tensor, "n channels_out spatial_dims"]:
+    """``einsum("nog,ngd->nod", coefficients, basis)`` without per-item gemv.
+
+    The per-entity coefficient matrices are data-dependent, so this
+    contraction cannot fold into one shared GEMM -- but as an einsum/bmm
+    it decomposes into one tiny gemv launch per entity (the encoder
+    launch storm; 2026-07-11 decode profile).  With ``g`` at geometry-
+    basis size (single digits) and ``d`` spatial, a broadcast multiply
+    plus a ``g``-axis sum computes the same sums in two big kernels.
+    """
+    return (coefficients.unsqueeze(-1) * basis[:, None, :, :]).sum(dim=2)
+
+
 class TypedRMSNorm(nn.Module):
     r"""O(D)-equivariant normalization for a nonlinear geometry state.
 
@@ -86,12 +104,15 @@ class TypedRMSNorm(nn.Module):
     """
 
     def __init__(self, scalar_dim: int, vector_dim: int, eps: float = 1.0e-8) -> None:
+        """Allocate per-channel gain parameters for the given sector widths."""
         super().__init__()
         self.eps = eps
         self.scalar_weight = nn.Parameter(torch.ones(scalar_dim))
         self.vector_weight = nn.Parameter(torch.ones(vector_dim))
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        """RMS-normalize each sector equivariantly (see class docstring);
+        rejects states carrying a pseudoscalar sector."""
         if state.pseudos.shape[-1]:
             raise ValueError(
                 "TypedRMSNorm is a geometry-stream module and the geometry "
@@ -131,6 +152,7 @@ class StateLayerScale(nn.Module):
         *,
         pseudo_dim: int = 0,
     ) -> None:
+        """Allocate per-channel residual scales initialized to ``init``."""
         super().__init__()
         self.scalar_scale = nn.Parameter(torch.full((scalar_dim,), init))
         self.vector_scale = nn.Parameter(torch.full((vector_dim,), init))
@@ -140,6 +162,7 @@ class StateLayerScale(nn.Module):
             self.register_parameter("pseudo_scale", None)
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        """Scale every channel of every sector by its learned coefficient."""
         scalars = state.scalars * self.scalar_scale
         # The zero-width passthrough still tracks the scalars' (possibly
         # autocast-promoted) dtype so the state stays internally consistent.
@@ -165,6 +188,8 @@ class GeometryFeedForward(nn.Module):
         *,
         hidden_ratio: int = 2,
     ) -> None:
+        """Build the typed input/output projections and the scalar-to-vector
+        gate at ``hidden_ratio`` times the state widths."""
         super().__init__()
         hidden_scalar = max(hidden_ratio * scalar_dim, 1)
         hidden_vector = max(hidden_ratio * vector_dim, vector_dim)
@@ -187,6 +212,8 @@ class GeometryFeedForward(nn.Module):
         )
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        """Apply the equivariant MLP: typed lift, SiLU on scalars, an
+        invariant sigmoid gate on vector channels, typed read-out."""
         hidden = self.input(state)
         scalars = torch.nn.functional.silu(hidden.scalars)
         if hidden.vectors.shape[1]:
@@ -333,6 +360,10 @@ class GeometryConditionedLinear(nn.Module):
         out_pseudo_dim: int = 0,
         bounded_gate_invariants: bool = False,
     ) -> None:
+        """Allocate the Clebsch-Gordan branch maps that exist for the given
+        sector widths (each branch parameter is created only when its input
+        and output widths are positive, keeping narrower configurations'
+        state dicts unchanged) and the zero-initialized invariant gates."""
         super().__init__()
         if field_pseudo_dim < 0 or out_pseudo_dim < 0:
             raise ValueError("pseudoscalar channel counts must be non-negative")
@@ -477,7 +508,9 @@ class GeometryConditionedLinear(nn.Module):
             nn.init.zeros_(self.pseudo_gate.weight)
             nn.init.zeros_(self.pseudo_gate.bias)
 
-    def _geometry_invariants(self, geometry: ScalarVectorState) -> torch.Tensor:
+    def _geometry_invariants(
+        self, geometry: ScalarVectorState
+    ) -> Float[torch.Tensor, "n geometry_invariants"]:
         """Invariants fed to the sigmoid gates (never to the linear branches).
 
         With ``bounded_gate_invariants`` every entry is compactified into
@@ -502,6 +535,9 @@ class GeometryConditionedLinear(nn.Module):
         geometry: ScalarVectorState,
         field: ScalarVectorState,
     ) -> ScalarVectorState:
+        """Evaluate every existing branch and gate; exactly linear in
+        ``field`` at fixed ``geometry`` (see the class docstring for the
+        branch-by-branch decomposition)."""
         if geometry.n_entities != field.n_entities:
             raise ValueError("geometry and field entity counts must match")
         if geometry.n_spatial_dims != field.n_spatial_dims:
@@ -565,7 +601,7 @@ class GeometryConditionedLinear(nn.Module):
             vector_terms: list[torch.Tensor] = []
             if self.vector_from_vector is not None:
                 vector_terms.append(
-                    torch.einsum("of,nfd->nod", self.vector_from_vector, field.vectors)
+                    _mix_channels(self.vector_from_vector, field.vectors)
                 )
             if self.vector_from_vector_dots is not None:
                 dots = torch.einsum(
@@ -576,18 +612,14 @@ class GeometryConditionedLinear(nn.Module):
                     self.out_vector_dim,
                     self.geometry_vector_dim,
                 )
-                vector_terms.append(
-                    torch.einsum("nog,ngd->nod", coefficients, geometry.vectors)
-                )
+                vector_terms.append(_apply_coefficients(coefficients, geometry.vectors))
             if self.vector_from_scalar is not None:
                 coefficients = self.vector_from_scalar(field.scalars).reshape(
                     field.n_entities,
                     self.out_vector_dim,
                     self.geometry_vector_dim,
                 )
-                vector_terms.append(
-                    torch.einsum("nog,ngd->nod", coefficients, geometry.vectors)
-                )
+                vector_terms.append(_apply_coefficients(coefficients, geometry.vectors))
             if self.vector_from_pseudo is not None:
                 # Rotation product: the perpendicular of a polar vector is
                 # axial, and its pairing with exactly one pseudoscalar
@@ -598,11 +630,7 @@ class GeometryConditionedLinear(nn.Module):
                     self.geometry_vector_dim,
                 )
                 vector_terms.append(
-                    torch.einsum(
-                        "nog,ngd->nod",
-                        coefficients,
-                        _vector_perp(geometry.vectors),
-                    )
+                    _apply_coefficients(coefficients, _vector_perp(geometry.vectors))
                 )
             if self.vector_gate is None:
                 raise RuntimeError("vector gate missing for vector output")
@@ -624,8 +652,9 @@ class GeometryConditionedLinear(nn.Module):
         if self.out_pseudo_dim:
             pseudo_terms: list[torch.Tensor] = []
             if self.pseudo_from_pseudo is not None:
+                # Plain matrix product; keep it an explicit single GEMM.
                 pseudo_terms.append(
-                    torch.einsum("op,np->no", self.pseudo_from_pseudo, field.pseudos)
+                    field.pseudos @ self.pseudo_from_pseudo.transpose(0, 1)
                 )
             if self.pseudo_from_vector_wedges is not None:
                 wedges = _pair_wedges(field.vectors, geometry.vectors).flatten(1)
@@ -674,6 +703,8 @@ class ZeroPreservingFeedForward(nn.Module):
         *,
         field_pseudo_dim: int = 0,
     ) -> None:
+        """Build the lift/gate/project sandwich: two geometry-conditioned
+        linear maps around invariant sigmoid gates (all zero-preserving)."""
         super().__init__()
         self.field_pseudo_dim = field_pseudo_dim
         self.lift = GeometryConditionedLinear(
@@ -716,6 +747,9 @@ class ZeroPreservingFeedForward(nn.Module):
         geometry: ScalarVectorState,
         field: ScalarVectorState,
     ) -> ScalarVectorState:
+        """Lift the field, gate every sector by mixed geometry+field
+        invariants, and project back; output vanishes exactly at zero
+        field (each term carries at least one factor of the field)."""
         hidden = self.lift(geometry, field)
         invariant_parts = [
             geometry.scalars,
@@ -834,6 +868,9 @@ class QuadraticFieldReadIn(nn.Module):
         factor_vector_dim: int | None = None,
         layer_scale: float = 1.0e-2,
     ) -> None:
+        """Build the two exactly-linear factor maps, the bilinear product
+        branches over ``{0e, 0o, 1o}``, the field-blind operator gates,
+        and the layer scale (see the class docstring for the law)."""
         super().__init__()
         if field_scalar_dim < 1:
             raise ValueError("field_scalar_dim must be positive")
@@ -863,6 +900,8 @@ class QuadraticFieldReadIn(nn.Module):
         # projections with every quadratic invariant lift disabled, so each
         # factor is EXACTLY linear and homogeneous in the field.
         def _factor() -> TypedProjection:
+            """One bias-free, invariant-lift-free (hence exactly field-linear
+            and homogeneous) typed factor projection."""
             return TypedProjection(
                 field_scalar_dim,
                 field_vector_dim,
@@ -965,6 +1004,9 @@ class QuadraticFieldReadIn(nn.Module):
         geometry: ScalarVectorState,
         field: ScalarVectorState,
     ) -> ScalarVectorState:
+        """Emit ``field + scale * gate(op) * B(L2 field, L3 field)`` — the
+        declared degree-2 composition; exactly quadratic in the drive when
+        ``field`` is drive-linear (see the class docstring)."""
         if geometry.n_entities != field.n_entities:
             raise ValueError("geometry and field entity counts must match")
         if field.scalars.shape[1] != self.field_scalar_dim:
@@ -1018,7 +1060,7 @@ class QuadraticFieldReadIn(nn.Module):
                     n, self.field_vector_dim, self.factor_vector_dim
                 )
                 basis = _vector_perp(vector_source) if perp else vector_source
-                vector_terms.append(torch.einsum("nog,ngd->nod", coefficients, basis))
+                vector_terms.append(_apply_coefficients(coefficients, basis))
             if vector_terms:
                 vectors = vector_terms[0]
                 for term in vector_terms[1:]:
@@ -1097,9 +1139,30 @@ def _init_moment_segment_gain(
         module.register_parameter("moment_segment_log_gain", None)
 
 
+def _init_moment_pool_balance(
+    module: nn.Module, moment_pool_balanced: bool, n_moment_segments: int
+) -> None:
+    """Validate and store the balanced-pool flag (external-review balanced
+    arm). ``True`` offsets each segment's log-gain by ln(mean measure) -
+    ln(segment measure) at pool time (see ``MeshAttention.build_moments``);
+    it requires the per-segment pool to exist. Default ``False`` is bitwise
+    the historical pool."""
+    if not isinstance(moment_pool_balanced, bool):
+        raise ValueError(
+            f"moment_pool_balanced must be a bool, got {moment_pool_balanced!r}"
+        )
+    if moment_pool_balanced and not n_moment_segments:
+        raise ValueError(
+            "moment_pool_balanced=True requires n_moment_segments > 0: the "
+            "measure balance offsets the per-segment moment-pool log-gains, "
+            "so without segments there is nothing to balance"
+        )
+    module.moment_pool_balanced = moment_pool_balanced
+
+
 def _moment_segment_gain(
     module: nn.Module, moment_segments: Sequence[slice] | None
-) -> torch.Tensor | None:
+) -> Float[torch.Tensor, "n_segments heads"] | None:
     """Resolve the log-gain for a forward call, rejecting mismatched use."""
     if moment_segments is None:
         return None
@@ -1135,7 +1198,10 @@ class MeshOperatorBlock(nn.Module):
         layer_scale: float = 1.0e-2,
         entity_chunk_size: int | None = 65536,
         n_moment_segments: int = 0,
+        moment_pool_balanced: bool = False,
     ) -> None:
+        """Assemble the pre-norm self-attention + feed-forward residual pair
+        (both residuals layer-scaled) at the given state widths."""
         super().__init__()
         self.attention_norm = TypedRMSNorm(scalar_dim, vector_dim)
         self.attention = MeshAttention(
@@ -1165,6 +1231,7 @@ class MeshOperatorBlock(nn.Module):
             scalar_dim, vector_dim, init=layer_scale
         )
         _init_moment_segment_gain(self, n_moment_segments, heads)
+        _init_moment_pool_balance(self, moment_pool_balanced, n_moment_segments)
 
     def forward(
         self,
@@ -1172,6 +1239,8 @@ class MeshOperatorBlock(nn.Module):
         state: ScalarVectorState,
         moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
+        """One residual step of global typed self-attention over the source
+        mesh, then one residual typed feed-forward step."""
         normalized = self.attention_norm(state)
         state = _add(
             state,
@@ -1183,6 +1252,7 @@ class MeshOperatorBlock(nn.Module):
                     normalized,
                     segments=moment_segments,
                     segment_log_gain=_moment_segment_gain(self, moment_segments),
+                    segment_measure_balance=self.moment_pool_balanced,
                 )
             ),
         )
@@ -1203,6 +1273,7 @@ class PointwiseGeometryBlock(nn.Module):
         hidden_ratio: int = 2,
         layer_scale: float = 1.0e-2,
     ) -> None:
+        """Assemble the norm → feed-forward → layer-scale residual unit."""
         super().__init__()
         self.norm = TypedRMSNorm(scalar_dim, vector_dim)
         self.feed_forward = GeometryFeedForward(
@@ -1211,6 +1282,7 @@ class PointwiseGeometryBlock(nn.Module):
         self.scale = StateLayerScale(scalar_dim, vector_dim, init=layer_scale)
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
+        """One residual pointwise equivariant feed-forward step."""
         return _add(
             state,
             self.scale(self.feed_forward(self.norm(state))),
@@ -1243,7 +1315,11 @@ class LinearMeshFieldBlock(nn.Module):
         entity_chunk_size: int | None = 65536,
         field_pseudo_dim: int = 0,
         n_moment_segments: int = 0,
+        moment_pool_balanced: bool = False,
     ) -> None:
+        """Assemble the superposition-preserving unit: geometry-keyed
+        attention with strictly field-linear values, a geometry-conditioned
+        pointwise map, and layer scales (all bias-free on field paths)."""
         super().__init__()
         self.field_scalar_dim = field_scalar_dim
         self.field_vector_dim = field_vector_dim
@@ -1297,6 +1373,7 @@ class LinearMeshFieldBlock(nn.Module):
             pseudo_dim=field_pseudo_dim,
         )
         _init_moment_segment_gain(self, n_moment_segments, heads)
+        _init_moment_pool_balance(self, moment_pool_balanced, n_moment_segments)
 
     def build_source_moments(
         self,
@@ -1312,6 +1389,7 @@ class LinearMeshFieldBlock(nn.Module):
             source_field,
             segments=moment_segments,
             segment_log_gain=_moment_segment_gain(self, moment_segments),
+            segment_measure_balance=self.moment_pool_balanced,
         )
 
     def evaluate_cross(
@@ -1339,6 +1417,8 @@ class LinearMeshFieldBlock(nn.Module):
         query_field: ScalarVectorState | None = None,
         moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
+        """Source-to-query pass: :meth:`build_source_moments` then
+        :meth:`evaluate_cross` (fused convenience form)."""
         return self.evaluate_cross(
             query_geometry,
             self.build_source_moments(
@@ -1357,6 +1437,7 @@ class LinearMeshFieldBlock(nn.Module):
         field: ScalarVectorState,
         moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
+        """Self-interaction form of :meth:`cross` (source = query set)."""
         return self.cross(
             source_mesh,
             geometry,
@@ -1392,7 +1473,12 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         entity_chunk_size: int | None = 65536,
         field_pseudo_dim: int = 0,
         n_moment_segments: int = 0,
+        moment_pool_balanced: bool = False,
     ) -> None:
+        """Assemble the content-dependent unit: attention keyed on the
+        concatenated geometry+field state (values field-only, so zero field
+        gives a zero message), a zero-preserving pointwise map, and layer
+        scales."""
         super().__init__()
         self.field_scalar_dim = field_scalar_dim
         self.field_vector_dim = field_vector_dim
@@ -1447,6 +1533,7 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
             pseudo_dim=field_pseudo_dim,
         )
         _init_moment_segment_gain(self, n_moment_segments, heads)
+        _init_moment_pool_balance(self, moment_pool_balanced, n_moment_segments)
 
     def build_source_moments(
         self,
@@ -1462,6 +1549,7 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
             source_field,
             segments=moment_segments,
             segment_log_gain=_moment_segment_gain(self, moment_segments),
+            segment_measure_balance=self.moment_pool_balanced,
         )
 
     def evaluate_cross(
@@ -1502,6 +1590,8 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         query_field: ScalarVectorState | None = None,
         moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
+        """Source-to-query pass: :meth:`build_source_moments` then
+        :meth:`evaluate_cross` (fused convenience form)."""
         return self.evaluate_cross(
             query_geometry,
             self.build_source_moments(
@@ -1520,6 +1610,7 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         field: ScalarVectorState,
         moment_segments: Sequence[slice] | None = None,
     ) -> ScalarVectorState:
+        """Self-interaction form of :meth:`cross` (source = query set)."""
         return self.cross(
             source_mesh,
             geometry,
