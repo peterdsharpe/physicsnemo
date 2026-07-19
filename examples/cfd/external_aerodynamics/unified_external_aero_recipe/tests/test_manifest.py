@@ -481,3 +481,22 @@ class TestManifestValDataset:
         assert not any(getattr(t, "stochastic", False) for t in val_ds.transforms)
         ### ...but the deterministic CenterMesh transform is still present.
         assert any(type(t).__name__ == "CenterMesh" for t in val_ds.transforms)
+
+
+class TestMultiDatasetManifestGuard:
+    """Multi-dataset manifest mode must fail loudly, not mis-sample
+    (external-review audit finding: per-dataset indices were silently
+    overwritten so only the last dataset's survived)."""
+
+    def test_single_manifest_dataset_passes(self):
+        from datasets import _require_single_manifest_dataset
+
+        _require_single_manifest_dataset(True, 1)
+        _require_single_manifest_dataset(False, 3)  # directory mode: any count
+
+    def test_multi_dataset_manifest_raises(self):
+        import pytest
+        from datasets import _require_single_manifest_dataset
+
+        with pytest.raises(NotImplementedError, match="mis-sample"):
+            _require_single_manifest_dataset(True, 2)

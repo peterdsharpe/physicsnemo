@@ -582,6 +582,30 @@ def _resolve_manifest_indices_from_spec(
     return train_indices, val_indices
 
 
+def _require_single_manifest_dataset(
+    using_manifests: bool, n_datasets: int
+) -> None:
+    """Reject multi-dataset manifest mode loudly (external-review audit).
+
+    The manifest index sets are resolved per dataset but stored once, so a
+    second dataset (manifest or directory) under manifest mode would
+    silently mis-align the sampler indices against the combined dataset --
+    the old behavior overwrote the first dataset's train/val indices with
+    the last's. Until offset-adjusted index concatenation is implemented
+    (needed for the DrivAerML+SHIFT fine-tune track), manifest mode
+    requires exactly one dataset.
+    """
+    if using_manifests and n_datasets > 1:
+        raise NotImplementedError(
+            "multi-dataset manifest mode is not implemented: manifest "
+            "train/val indices are resolved per dataset but applied to the "
+            "combined dataset, so extra_datasets would silently mis-sample "
+            "(previously: only the LAST dataset's indices survived). Use a "
+            "single manifest dataset, or directory mode for multi-dataset "
+            "training."
+        )
+
+
 def _build_manifest_val_dataset(
     ds_yaml: DictConfig,
     *,
@@ -888,9 +912,6 @@ def build_dataloaders(
                 pin_memory=pin_memory,
             )
             train_datasets.append(dataset)
-            ### NOTE: this overwrites any prior manifest dataset's indices
-            ### (and the val dataset below); see the docstring's
-            ### multi-dataset limitation note.
             manifest_train_indices, manifest_val_indices = (
                 _resolve_manifest_indices_from_spec(dataset.reader, manifest_spec)
             )
@@ -930,6 +951,8 @@ def build_dataloaders(
                     pin_memory=pin_memory,
                 )
             )
+
+    _require_single_manifest_dataset(using_manifests, len(train_datasets))
 
     if not train_datasets:
         raise RuntimeError(
