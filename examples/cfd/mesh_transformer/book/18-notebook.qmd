@@ -4135,3 +4135,187 @@ flagship control band per @sec-nb-review.
 **E1 bands (local, PARDISO):** v2-re1 DONE (501 entries, 3.9h),
 v2-re10 DONE (501, 6.2h — higher Re, slower Newton, as expected);
 re100 running, re1000 queued. Rsync to clusters once all four land.
+
+## 2026-07-18 (night) — KERNEL FACTORIAL VERDICT: the falsifier fires; the industrial causal claim is demoted {#sec-nb-factorial-verdict-industrial}
+
+Finals (flagship rung, 1-node 500ep, ONLY the member dictionary
+varied, 3 seeds each; control = flagship's existing 3 seeds):
+
+| arm | members | s42 | s43 | s44 | mean |
+|---|---|---|---|---|---|
+| flagship (control) | 2 exact + 8 MLP | 0.0138 | 0.0140 | 0.0156 | 0.01447 |
+| exactonly | 2 exact, 0 params | 0.01435 | 0.01384 | 0.01555 | 0.01458 |
+| mlponly | 8 MLP, no exact | 0.01532 | 0.01506 | 0.01667 | 0.01568 |
+
+**Pre-registered reading (@sec-nb-review): the falsifier fires.**
+mlponly/flagship = 1.084× — far from the ≥1.25× the thesis
+predicted, and the seed bands overlap (mlponly s43 0.01506 <
+flagship s44 0.0156). Per the pre-registered consequence, the
+industrial causal claim is DEMOTED: at the flagship rung the
+in-distribution gains are carried by the rest of the architecture
+(trace mode, typed attention/moments, capacity), and the model is
+honestly described as *boundary-integral-inspired*. Exact-kernel
+causation stands only where it was proven — the synthetic program.
+The external reviewer's skepticism on this point was substantially
+correct.
+
+**What survives, precisely:** (a) exactonly beats mlponly on every
+paired seed (~7% each; means 0.01458 vs 0.01568) — at equal
+non-member parameters, two closed-form ZERO-parameter members
+outperform eight learned ones; and (b) exactonly ≈ flagship
+(0.01458 vs 0.01447): given the exact members, the eight learned
+members add nothing at this rung. The exact dictionary is the more
+parameter-efficient member family — a real but modest structural
+advantage, not the engine of the industrial result. Parsimony
+corollary worth acting on: the flagship's MLP members are now
+evidence-orphaned at this rung; exactonly is the simpler
+equal-performance config.
+
+**The surviving branch of the thesis, pre-registered as a rider
+(launching now):** the exact-kernel bet was always double-barreled —
+accuracy AND generalization. Zero-shot OOD evals of all six
+factorial checkpoints on the S1/S2 never-seen splits (eval-only,
+corrected metric). *Prediction:* mlponly's WSS OOD ratio exceeds
+exactonly's by a resolvable margin (exact far-field structure should
+matter more off-distribution than on). *Falsifier:* equal ratios ⇒
+exact structure buys neither ID accuracy nor OOD robustness at
+industrial scale ⇒ the demotion is total, and #55's far-field design
+should not assume exact-kernel primacy.
+
+**5-seed seal inputs complete:** extension finals — MT s45/s46
+own-val 0.01488/0.01505; GeoT s45/s46 0.002488/0.002492. Deep evals
+for all four launching now; the S1 differential verdict seals (or
+demotes) at the morning session.
+
+## 2026-07-19 — OOD rider verdict: the demotion is total; GeoT seal complete; the Re-ceiling anomaly {#sec-nb-rider-verdict}
+
+**Factorial OOD rider (pre-registered @sec-nb-factorial-verdict-industrial):
+the falsifier fires here too.** Zero-shot corrected-metric WSS ratios,
+3 seeds each: mlponly S1 1.11–1.12× / S2 1.11–1.14×; exactonly S1
+1.11–1.12× / S2 1.12–1.13× — indistinguishable. Exact singular
+structure buys neither in-distribution accuracy nor zero-shot OOD
+robustness at the industrial rung; per pre-registration the
+exact-kernel demotion is TOTAL there. What remains is exactly two
+things, both real and both modest: parameter-efficiency (two
+0-parameter members ≈ eight learned ones, ~7% better) and the same
+~7% edge carried into absolute OOD errors (0.79 vs 0.85 — an
+accuracy offset, not a robustness slope). #55's separable-far-field
+design should NOT assume exact-kernel primacy; its case now rests on
+O(N) cost alone.
+
+**5-seed differential seal, GeoT side complete:** s45/s46 deep S1
+WSS ratios 1.126/1.131 → five GeoT seeds span **1.126–1.136**, all
+above the pre-registered 1.11 line. MT-side s45/s46 evals initially
+crashed on a run-id naming mismatch (extension lanes wrote
+single-tag run ids; the deep-eval script expected the original
+wave's doubled tag — fixed script `mt_ood_deepeval_ext.sbatch`,
+relaunched); MT seal closes when they land. The five MT training
+finals are in (own-val 0.0149–0.0156 incl. extensions).
+
+**E1 anomaly — the practical steady ceiling is far below my Re-5000
+estimate.** v2-re100 ([100,1000]) produced ZERO cases in 26h locally
+under PARDISO (re10 [10,100]: 501 cases in 6.2h): workers computed
+15h+ CPU each without completing one case; generation 1 died
+silently at ~11h. The v1 family never exceeded Re 200 — the upper
+v2 bands are extrapolations beyond any generated regime, and
+Newton + viscosity-continuation apparently grinds (shrinking basin,
+attempt churn) somewhere in Re ≈ 200–1000. Confession attached: my
+local band script carried NO progress heartbeat — the exact
+"live log is not progress" failure mode, one week after writing the
+rule — so 26 zero-output hours went unnoticed until this session's
+full look. Killed; **bracket probes running** (single cases at
+Re≈150 / ≈350 / ≈800, 2h caps): the ceiling they find decides the
+E1 band redesign (likely re100 → [100,~300]; [1000,5000] dropped as
+outside the steady family — consistent with, but much tighter than,
+the solver-validity argument in the 2026-07-17 band discussion).
+
+## 2026-07-19 — PROGRAM CHECK-IN #2 (self-contained) {#sec-nb-checkin-2}
+
+**What this program is.** We are building MeshTransformer, a neural
+surrogate that maps boundary conditions on a mesh directly to PDE
+solutions. The design bet was boundary-integral structure — exact
+singular kernels, declared equivariances, typed boundary conditions,
+an exact trace/jump treatment — with two goals: (i) competitive
+accuracy on standard benchmarks, and (ii) genuine geometric
+generalization, which is the industrially decisive axis and the
+program's stated priority.
+
+**Where each thread stands, with numbers.**
+
+1. *Synthetic suites (Laplace, screened Laplace, steady N-S on
+   generated geometries).* Mature and honest; this is where the
+   exact-kernel mechanisms were proven, with controlled ablations
+   and exact contracts. Unchanged and solid.
+2. *DrivAerML (3D automotive, the hard industrial benchmark).*
+   Eleven days took validation error 0.1019 → 0.00583 (17.5×), with
+   a measured parameter frontier (error ≈ 0.0125·P^−0.33 over six
+   rungs) that we deliberately stopped at 9.6M parameters after it
+   bent. Gap to the strongest baseline (GeoTransolver) at matched
+   parameters: **2.34×, measured**. Attribution is now honest: the
+   gains came from the trace treatment (2.03× at introduction),
+   capacity scaling, and training protocol — **NOT from the exact
+   kernels**. The pre-registered factorial refuted exact-kernel
+   causation at this scale (removing all exact structure costs ~8%;
+   OOD robustness identical), so industrially this is a
+   "boundary-integral-inspired" transformer whose exact members are
+   a parameter-efficient member dictionary, nothing more. The
+   external review predicted exactly this and forced the test.
+3. *Generalization (the north star).* We built DrivAerML's first
+   OOD protocol (design-parameter extremes, exclusion retraining).
+   After fixing a direction-blind metric bug that had flattered
+   everyone's wall-shear numbers: zero-shot degradation is ~1.12×
+   for both architectures; at the deep S1 extremes there is a
+   consistent differential in our favor — MT 1.07–1.09× vs GeoT
+   1.126–1.136× (GeoT side now 5 seeds; MT side sealing today).
+   It is within-family, ratio-based, and small; the absolute errors
+   still favor GeoT ~2.6×. The decisive test — cross-family
+   transfer — has not been run.
+4. *AirFRANS (2D airfoil).* Contaminated protocol (validation was
+   carved from the official test set; architecture selection saw
+   test results). All comparative claims there are development-set
+   numbers until the clean rerun. GLOBE remains 16–30× ahead on
+   surface pressure regardless.
+5. *Performance.* Decode sped up 7.2×/14.2× (bitwise-preserving);
+   chunk-free decode validated accuracy-neutral; Barnes–Hut demoted
+   to a memory fallback by measurement; full-resolution inference
+   ~20 min/sample dense. The O(N) separable far-field (#55) is the
+   open lever, but its exact-kernel rationale weakened with the
+   factorial — its case now rests on cost alone.
+6. *Process.* One week of external review + enforced hygiene found
+   and fixed: the metric bug, the AirFRANS protocol defect, two
+   silent zero-output compute pathologies (a clear-and-restart wall
+   loop; an OOM respawn loop), an aarch64 solver fallback worth
+   ~70× per case, and an ssh-triggered semaphore purge. Every one
+   is now a codified rule. The E1 Reynolds-band suite hit a genuine
+   science wall: the steady-cavity family stops producing solutions
+   in practical time somewhere in Re 200–1000 (bracket probes
+   running); the upper bands need redesign around the measured
+   ceiling.
+
+**Odds, honestly assigned.**
+
+- ID parity with GeoT-class at ≤10M params on DrivAerML: **~15%**
+  (frontier bent; member structure refuted as the lever; would need
+  an attention/moment-level architectural find).
+- Within 1.5× of GeoT at ≤2× its params: **~40%**.
+- Demonstrable within-family generalization advantage (5-seed,
+  corrected metric): **~70%** (sealing today).
+- Cross-family transfer advantage (the industrially persuasive
+  version): **~35%** — untested; the deep-S1 signal and typed-BC
+  design are the only evidence either way.
+- AirFRANS headline claims surviving the clean protocol: **~60%**
+  (the AoA/parity mechanism was ablation-proven; magnitudes will
+  likely shrink).
+
+**The strategic tension the next block decides.** With exact-kernel
+causation refuted industrially and the frontier bent, the program
+must choose: **(A)** chase in-distribution parity through
+architecture redesign — high risk, on the incumbent's home turf —
+or **(B)** commit to the generalization identity: cross-family OOD
+(train DrivAerML → evaluate a different vehicle family), typed-BC
+transfer, where our only differential evidence lives, accepting a
+persistent ID deficit against larger baselines. The evidence and the
+program's stated priority (Decision 4: generalization first) both
+point to B-primary with a small A-side (parsimony consolidation +
+attribution experiments). Today's wave is built accordingly; the
+A/B allocation beyond that is Peter's call.

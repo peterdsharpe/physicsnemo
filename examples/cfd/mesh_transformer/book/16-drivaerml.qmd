@@ -15,9 +15,14 @@ Since that snapshot, both former PENDING items landed: the
 frontier below is complete and the scaling ladder closed) and the
 incumbent-on-OOD-splits differential evaluation (no differential at
 zero-shot depth; a consistent differential at deep-S1 under the
-corrected vector metric — pending a 5-seed seal). PENDING now: the
-kernel factorial (exact-only / MLP-only vs flagship, in flight) and
-the 5-seed differential extension.
+corrected vector metric — pending a 5-seed seal). Since that update the
+kernel factorial also landed, and its pre-registered falsifier
+FIRED: removing every exact singular member costs only ~8% at the
+flagship rung, so the industrial in-distribution gains are NOT
+attributable to the exact kernels (verdict below; the
+synthetic-program causation stands unchanged). PENDING now: the
+5-seed differential extension and the factorial's zero-shot OOD
+rider.
 :::
 
 ## The dataset, and what makes our variant special
@@ -376,13 +381,48 @@ would degrade ≥1.5× was wrong. **At deep extremes a consistent
 differential appeared** (@sec-nb-deep-differential): the OOD
 section's paired exclusion-retrain comparison separates the
 architectures on S1 with non-overlapping seed ranges — details
-where the OOD evidence lives, below. One further attribution
-question from the external review runs alongside: the **kernel
-factorial** (exact-singular-only and learned-members-only arms
-against the flagship at identical parameters, 3 seeds each,
-@sec-nb-review) — in flight at this writing, with exact-only
-tracking ~8% ahead of MLP-only at matched epoch ~210; no verdict
-until finals land against the flagship control band.
+where the OOD evidence lives, below.
+
+### The kernel factorial: the attribution verdict {#sec-drivaerml-factorial}
+
+The external review's sharpest question was the one the industrial
+program had skipped: is the exact boundary-integral structure — the
+thesis mechanism — actually what carries the DrivAerML result? The
+pre-registered test (@sec-nb-review,
+@sec-nb-factorial-verdict-industrial): at the flagship rung, vary
+ONLY the member dictionary, 1-node 500-epoch protocol, 3 seeds per
+arm, against the flagship's own 3-seed control.
+
+| arm | member dictionary | finals (3 seeds) | mean |
+|---|---|---|---|
+| flagship (control) | 2 exact + 8 learned | 0.0138 / 0.0140 / 0.0156 | 0.0145 |
+| exact-only | 2 exact (0 params) | 0.0144 / 0.0138 / 0.0156 | 0.0146 |
+| MLP-only | 8 learned, no exact | 0.0153 / 0.0151 / 0.0167 | 0.0157 |
+
+**The pre-registered falsifier fired.** The prediction was
+MLP-only ≥ 1.25× the flagship; the measurement is 1.084×, with
+overlapping seed bands. At this rung the in-distribution result is
+carried by the rest of the architecture — the trace formulation,
+typed attention and moments, and capacity — and the honest
+description of the industrial model is **boundary-integral-inspired**.
+Exact-kernel *causation* is established only where it was proven:
+the synthetic program, whose ladders and margins stand unchanged.
+The external review forced this test, and its skepticism was
+substantially correct.
+
+What survives is precise and worth having: exact-only beats
+MLP-only on **every paired seed** (~7% each) — two closed-form,
+zero-parameter members outperform eight learned ones at equal
+non-member parameters — and exact-only is indistinguishable from
+the flagship itself (0.0146 vs 0.0145), which makes the flagship's
+eight learned members **evidence-orphaned at this rung**: the
+simpler exact-only configuration is a parsimony candidate for the
+default. One barrel of the thesis remains untested by this ID-only
+verdict: the **zero-shot OOD rider** is in flight (all six
+factorial checkpoints on the never-seen S1/S2 splits, corrected
+metric; prediction: MLP-only degrades more off-distribution;
+falsifier: equal ratios ⇒ the demotion is total). Its outcome is
+not presupposed here.
 
 ### Generalization: the OOD protocol and its verdict
 
