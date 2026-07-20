@@ -4576,3 +4576,51 @@ arm at LR/2 trains but poorly (0.0359). The reviewer's structural
 point — zero-init pooling gains reproduce raw measure dominance —
 is now empirically tied to a hard failure mode, not just a
 weighting concern. Science verdict at finals.
+
+## 2026-07-20 (evening) — balanced pooling stabilizes the all-boundary arm; fleet pre-registration; record corrections {#sec-nb-allbc-launch}
+
+**A science observation arrived before the experiment proper:**
+the all-boundary arm at flagship capacity DIVERGES at epoch 44
+(train loss 2.7e17) at the family-standard LR — the 5-boundary
+source set's measure imbalance inflates the attention-moment scale,
+the same stability class as the ×4-width LR wall. Two fixes tested
+as canaries: halving LR (raw arm trains, ep105 val 0.036), or
+**balancing the per-boundary pool** — a per-sample measure offset
+(effective log-gain g_s + ln Ā − ln A_s, dimensionless ratio,
+similarity covariance untouched) so zero-init gains weight
+boundaries equally instead of by raw area. **The balanced arm
+trains at FULL standard LR** (ep105 val 0.017, ~2× better than the
+LR-halved raw arm at matched epoch). The reviewer's structural
+concern about measure dominance is thus tied to a hard
+optimization failure, and the balance mechanism is itself the cure.
+Implementation is a reparameterization, not a smaller hypothesis
+class (identity test to 1e-9; gains can learn back the plain sum);
+defaults bitwise, 540 tests.
+
+**Record correction:** my ops note in @sec-nb-b22-verdict blamed
+the canary death on watchdog grace — WRONG. The fork's post-mortem:
+zero watchdog lines, first log write at boot+2:49, 43 healthy
+epochs, divergence at ep44, then idle to the 4h wall's SIGTERM.
+The watchdog is exonerated; the killer was the instability above.
+
+**Fleet pre-registration (finals ~19h):** balanced ×3 seeds at
+3.0e-3 (primary), raw ×3 at 1.5e-3 (imbalance comparison), vehicle
+-only flagship 3-seed as control — with the LR covariate stated
+up front: the control ran the default schedule, so NO arm is
+perfectly LR-matched to it; the within-allbc balanced-vs-raw
+contrast is the clean pair. *Predictions:* (1) balanced-allbc lands
+at or below the vehicle-only control globally (extra boundary
+context neutral-to-helpful); (2) the H-ground effect, if real,
+appears as band-localized improvement (underbody / near-ground /
+wake — tooling to be built before finals) rather than global
+aggregate. *Falsifier:* no band-localized improvement over
+vehicle-only at 3 seeds ⇒ the all-boundary hypothesis is dead at
+this protocol — a real null this time, not an underpowered one.
+
+**Also closed:** multi-dataset manifest bug (#61a) — guarded
+rejection (NotImplementedError on manifest mode with >1 dataset;
+mis-alignment affects even manifest+directory mixes; single-dataset
+path verified inert; 29 regression tests). Commits 0520f294,
+ac19c76a. Upstream merge landed separately (f9bea495) and brings
+#1746's relative-L2 loss — candidate resolution for the misnamed
+rmse (#61b).
