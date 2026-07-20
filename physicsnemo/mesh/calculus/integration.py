@@ -38,13 +38,24 @@ arithmetic mean of vertex values:
     = \sum_c |\sigma_c| \cdot \frac{1}{n_v} \sum_{v \in c} f(v)
 
 This is exact for P1 fields and second-order accurate for smooth fields.
+
+**Measure weights.**  All integrators use the effective cell measure
+``cell_areas * measure_weights`` rather than the bare geometric areas (see
+:mod:`physicsnemo.mesh.calculus.measure`); e.g. for cell-subsampled meshes
+carrying Horvitz-Thompson weights, the integral is an unbiased estimate of
+the corresponding full-mesh integral.  For meshes without recorded weights
+this reduces exactly to the geometric measure.
 """
 
 import math
+import warnings
 from typing import TYPE_CHECKING, Literal
 
 import torch
 from jaxtyping import Float
+
+from physicsnemo.core.warnings import LegacyFeatureWarning
+from physicsnemo.mesh.calculus.measure import cell_measures
 
 if TYPE_CHECKING:
     from physicsnemo.mesh.mesh import Mesh
@@ -156,10 +167,10 @@ def _integrate_cell_data(
                 f"n_cells ({mesh.n_cells})."
             )
 
-    cell_areas = mesh.cell_areas  # (n_cells,)
+    measures = cell_measures(mesh)  # (n_cells,)
 
-    ### Reshape cell_areas for broadcasting with arbitrary trailing dims
-    weights = cell_areas.reshape(-1, *([1] * (field.ndim - 1)))
+    ### Reshape for broadcasting with arbitrary trailing dims
+    weights = measures.reshape(-1, *([1] * (field.ndim - 1)))
 
     return _sum_with_nan_policy(
         field * weights,
@@ -213,7 +224,7 @@ def _integrate_point_data(
                 f"n_points ({mesh.n_points})."
             )
 
-    cell_areas = mesh.cell_areas  # (n_cells,)
+    measures = cell_measures(mesh)  # (n_cells,)
 
     ### Gather vertex values for each cell: (n_cells, n_verts_per_cell, ...)
     cell_vertex_values = field[mesh.cells]
@@ -221,8 +232,8 @@ def _integrate_point_data(
     ### Mean over vertices within each cell: (n_cells, ...)
     cell_means = cell_vertex_values.mean(dim=1)
 
-    ### Weight by cell area and sum
-    weights = cell_areas.reshape(-1, *([1] * (cell_means.ndim - 1)))
+    ### Weight by effective cell measure and sum
+    weights = measures.reshape(-1, *([1] * (cell_means.ndim - 1)))
     return _sum_with_nan_policy(
         cell_means * weights,
         dim=0,
@@ -306,6 +317,54 @@ def integrate(
             raise ValueError(f"Invalid {data_source=!r}. Must be 'cells' or 'points'.")
 
 
+def integrate_cell_data(
+    mesh: "Mesh",
+    field: Float[torch.Tensor, "n_cells ..."],
+    *,
+    nan_policy: NanPolicy = "omit",
+) -> Float[torch.Tensor, " ..."]:
+    r"""Deprecated compatibility wrapper for cell-centered integration.
+
+    Use :func:`integrate` with ``data_source="cells"`` instead.
+    """
+    warnings.warn(
+        "`integrate_cell_data` is deprecated and will be removed in a future "
+        "release. Use `integrate(mesh, field, data_source='cells')` instead.",
+        LegacyFeatureWarning,
+        stacklevel=2,
+    )
+    return integrate(
+        mesh,
+        field,
+        data_source="cells",
+        nan_policy=nan_policy,
+    )
+
+
+def integrate_point_data(
+    mesh: "Mesh",
+    field: Float[torch.Tensor, "n_points ..."],
+    *,
+    nan_policy: NanPolicy = "omit",
+) -> Float[torch.Tensor, " ..."]:
+    r"""Deprecated compatibility wrapper for point-centered integration.
+
+    Use :func:`integrate` with ``data_source="points"`` instead.
+    """
+    warnings.warn(
+        "`integrate_point_data` is deprecated and will be removed in a future "
+        "release. Use `integrate(mesh, field, data_source='points')` instead.",
+        LegacyFeatureWarning,
+        stacklevel=2,
+    )
+    return integrate(
+        mesh,
+        field,
+        data_source="points",
+        nan_policy=nan_policy,
+    )
+
+
 def _integrate_weighted_moment(
     left: torch.Tensor,
     right: torch.Tensor,
@@ -315,7 +374,45 @@ def _integrate_weighted_moment(
     accumulation_dtype: torch.dtype | None,
     nan_policy: NanPolicy,
 ) -> torch.Tensor:
-    """Core weighted grouped moment used by Mesh and streamed operators."""
+    r"""Core weighted grouped moment used by Mesh and streamed operators.
+
+    Computes :math:`\sum_i w_i \, a_i \otimes b_i` over the leading entity
+    axis, where an optional block of aligned (group) dimensions immediately
+    after the entity axis appears once in the output instead of
+    participating in the outer product.
+
+    Parameters
+    ----------
+    left, right : torch.Tensor
+        Field values shaped ``(n_entities, *aligned_shape, *event_shape)``.
+        The leading axis indexes integration entities (e.g. cells).  The
+        ``aligned_dims`` axes after it must match between the two tensors;
+        the remaining trailing (event) axes may differ.
+    weights : torch.Tensor
+        Quadrature weights shaped ``(n_entities,)`` (e.g. cell measures).
+        Callers integrating over a possibly-subsampled mesh should pass the
+        effective measure ``cell_areas * measure_weights`` (what
+        :func:`integrate_moment` does via
+        :func:`physicsnemo.mesh.calculus.measure.cell_measures`), not
+        the bare geometric areas.
+    aligned_dims : int
+        Number of dimensions immediately after the entity axis treated as
+        aligned batch/group axes shared by ``left`` and ``right``.
+    accumulation_dtype : torch.dtype or None
+        Minimum dtype for the weighted matrix product.  The compute dtype
+        is the promotion of ``left``, ``right``, ``weights``, and this
+        dtype; ``None`` applies ordinary input promotion with no
+        additional precision floor.
+    nan_policy : {"omit", "propagate"}
+        ``"omit"`` zeroes NaN entries in ``left`` and ``right`` before the
+        product; ``"propagate"`` leaves them untouched.
+
+    Returns
+    -------
+    torch.Tensor
+        Moment with shape ``aligned_shape + left_event_shape +
+        right_event_shape`` in the promoted compute dtype.
+    """
     if not torch.compiler.is_compiling():
         if left.ndim < 1 or right.ndim < 1 or weights.ndim != 1:
             raise ValueError("left, right, and weights must have a leading entity axis")
@@ -406,7 +503,10 @@ def integrate_moment(
     .. math::
         M = \sum_c |\sigma_c|\, a_c \otimes b_c,
 
-    where ``a`` is ``left`` and ``b`` is ``right``. By default the result has
+    where ``a`` is ``left``, ``b`` is ``right``, and :math:`|\sigma_c|` is
+    the cell's effective measure (its geometric area times any
+    recorded measure weight; see :mod:`physicsnemo.mesh.calculus.measure`). By
+    default the result has
     shape ``left.shape[1:] + right.shape[1:]``. ``aligned_dims`` may designate
     a common leading subset of the trailing dimensions as independent groups;
     those axes appear only once in the output rather than participating in the
@@ -429,8 +529,8 @@ def integrate_moment(
         match exactly.
     accumulation_dtype : torch.dtype or None, default torch.float32
         Minimum dtype used by the weighted matrix product. The actual compute
-        dtype is the promotion of both inputs, cell areas, and this dtype, so
-        the default accumulates reduced-precision inputs in at least FP32
+        dtype is the promotion of both inputs, the cell measures, and
+        this dtype, so the default accumulates reduced-precision inputs in at least FP32
         without downcasting FP64 inputs. Pass ``None`` to use ordinary input
         promotion with no additional precision floor, or ``torch.float64`` to
         request at least FP64 accumulation.
@@ -471,6 +571,9 @@ def integrate_moment(
     left_tensor = _resolve_field(mesh, left, "cells")
     right_tensor = _resolve_field(mesh, right, "cells")
 
+    ### Only mesh-coupling checks live here; everything expressible on the
+    ### bare tensors (aligned dims, dtypes, device agreement) is validated
+    ### once in `_integrate_weighted_moment`.
     if not torch.compiler.is_compiling():
         for name, tensor in (("left", left_tensor), ("right", right_tensor)):
             if tensor.ndim < 1 or tensor.shape[0] != mesh.n_cells:
@@ -484,37 +587,11 @@ def integrate_moment(
                     f"{name} field and mesh must be on the same device, got "
                     f"{tensor.device} and {mesh.points.device}."
                 )
-        if left_tensor.device != right_tensor.device:
-            raise ValueError(
-                "left and right fields must be on the same device, got "
-                f"{left_tensor.device} and {right_tensor.device}."
-            )
-        if accumulation_dtype is not None and not (
-            accumulation_dtype.is_floating_point or accumulation_dtype.is_complex
-        ):
-            raise TypeError(
-                "accumulation_dtype must be a floating-point or complex dtype, "
-                f"got {accumulation_dtype}."
-            )
-        if isinstance(aligned_dims, bool) or not isinstance(aligned_dims, int):
-            raise TypeError(f"aligned_dims must be an integer, got {aligned_dims!r}.")
-        max_aligned = min(left_tensor.ndim, right_tensor.ndim) - 1
-        if aligned_dims < 0 or aligned_dims > max_aligned:
-            raise ValueError(
-                f"aligned_dims must be between 0 and {max_aligned}, got {aligned_dims}."
-            )
-        left_aligned = left_tensor.shape[1 : 1 + aligned_dims]
-        right_aligned = right_tensor.shape[1 : 1 + aligned_dims]
-        if left_aligned != right_aligned:
-            raise ValueError(
-                "Aligned field dimensions must match, got "
-                f"{tuple(left_aligned)} and {tuple(right_aligned)}."
-            )
 
     return _integrate_weighted_moment(
         left_tensor,
         right_tensor,
-        mesh.cell_areas,
+        cell_measures(mesh),
         aligned_dims=aligned_dims,
         accumulation_dtype=accumulation_dtype,
         nan_policy=nan_policy,
@@ -622,7 +699,7 @@ def integrate_flux(
             )
 
     cell_normals = mesh.cell_normals  # (n_cells, n_spatial_dims)
-    cell_areas = mesh.cell_areas  # (n_cells,)
+    measures = cell_measures(mesh)  # (n_cells,)
 
     ### Resolve per-cell vector field
     match data_source:
@@ -635,7 +712,7 @@ def integrate_flux(
 
     f_dot_n = (cell_field * cell_normals).sum(dim=-1)  # (n_cells,)
     return _sum_with_nan_policy(
-        f_dot_n * cell_areas,
+        f_dot_n * measures,
         dim=0,
         nan_policy=nan_policy,
     )
