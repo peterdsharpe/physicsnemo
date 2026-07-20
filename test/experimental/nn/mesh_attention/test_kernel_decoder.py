@@ -644,18 +644,47 @@ def test_decoder_mode_and_cache_mismatches_are_rejected(device):
 # ---------------------------------------------------------------------------
 
 
-def test_kernel_query_set_independence_is_bitwise(device):
-    """Decoded values must not depend on which other queries are requested.
+def _force_reference_member_mlp(model) -> None:
+    """Bind the member MLP linears to the test-internal reference arbiter.
 
-    Every query row is contracted with batch-shape-independent reductions,
-    so in float64 this holds bitwise at both the decoder-message and full
-    decode level, not merely to a tolerance.  ``query_chunk_size=1`` makes
-    the full-decode claim principled rather than lucky: the learned query
-    blocks use ordinary GEMMs, whose per-row rounding may change with the
-    batch shape, so decode is compared per-row (the same discipline as the
+    The bitwise per-channel contraction is no longer reachable from any
+    model configuration (demotion ratified 2026-07-13); tests that pin the
+    end-to-end bitwise discipline opt into it here, per instance, exactly
+    as a chunk-sensitivity debugging session would.
+    """
+    from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+        _RowStableLinear,
+    )
+
+    member_mlp = model.kernel_decoder.member_mlp
+    if member_mlp is None:
+        return
+    for module in member_mlp.modules():
+        if isinstance(module, _RowStableLinear):
+            module.forward = module.reference_forward
+
+
+def test_kernel_query_set_independence_is_bitwise(device):
+    """Reference mode: decode must be bitwise query-set independent.
+
+    Under the split contract (2026-07-12, demotion 2026-07-13) the bitwise
+    guarantee for the LEARNED member MLPs lives only in the test-internal
+    reference arbiter (``_RowStableLinear.reference_forward``); this test
+    pins that arbiter end to end via ``_force_reference_member_mlp``.  The default-GEMM
+    tolerance guarantee and the closed-forms-stay-bitwise guarantee are
+    pinned separately below.  ``query_chunk_size=1`` makes the full-decode
+    claim principled rather than lucky: the learned query blocks use
+    ordinary GEMMs, whose per-row rounding may change with the batch
+    shape, so decode is compared per-row (the same discipline as the
     chunk-1/2 models in ``test_model_contracts``).
     """
-    model = _disk_model("kernel", device, seed=61, query_chunk_size=1)
+    model = _disk_model(
+        "kernel",
+        device,
+        seed=61,
+        query_chunk_size=1,
+    )
+    _force_reference_member_mlp(model)
     angles = 0.173 + 2.0 * torch.pi * torch.arange(64, dtype=torch.float64) / 64.0
     queries = 0.61 * torch.stack((torch.cos(angles), torch.sin(angles)), dim=-1)
     queries = queries.to(device)
@@ -680,6 +709,85 @@ def test_kernel_query_set_independence_is_bitwise(device):
     torch.testing.assert_close(
         partial.point_data["potential"], full[subset], rtol=0.0, atol=0.0
     )
+
+
+def test_kernel_query_set_independence_default_mode_tolerance(device):
+    """Default (GEMM) mode: query-set independence holds to fp-reorder scale.
+
+    Split contract (2026-07-12): learned member MLPs use plain GEMMs whose
+    per-row rounding may change with the batch shape.  Measured on this
+    configuration the subset-vs-full deviation is at the 1e-15 relative
+    scale in float64; the bound below is ~10x that observed scale.
+    """
+    model = _disk_model("kernel", device, seed=61, query_chunk_size=1)
+    angles = 0.173 + 2.0 * torch.pi * torch.arange(64, dtype=torch.float64) / 64.0
+    queries = 0.61 * torch.stack((torch.cos(angles), torch.sin(angles)), dim=-1)
+    queries = queries.to(device)
+    generator = torch.Generator().manual_seed(62)
+    values = torch.randn(24, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(24, queries, values)
+    subset = torch.tensor([13, 2, 40, 5], device=device)
+
+    with torch.no_grad():
+        encoded = model.encode(domain)
+        message_full = model.kernel_decoder(queries, encoded.kernel_cache)
+        message_subset = model.kernel_decoder(queries[subset], encoded.kernel_cache)
+
+    torch.testing.assert_close(
+        message_subset.scalars,
+        message_full.scalars[subset],
+        rtol=1.0e-13,
+        atol=1.0e-14,
+    )
+    torch.testing.assert_close(
+        message_subset.vectors,
+        message_full.vectors[subset],
+        rtol=1.0e-13,
+        atol=1.0e-14,
+    )
+
+
+def test_closed_form_members_stay_bitwise_query_set_independent(device):
+    """Closed forms keep the BITWISE side of the split contract.
+
+    With ``mlp_members=0`` the kernel dictionary is exactly the closed
+    forms (plus polynomials); no learned GEMM touches the pair axis, so
+    subset-vs-full must agree to the bit in the default mode too.
+    """
+    model = _disk_model("kernel", device, seed=61, kernel_mlp_members=0)
+    angles = 0.173 + 2.0 * torch.pi * torch.arange(64, dtype=torch.float64) / 64.0
+    queries = 0.61 * torch.stack((torch.cos(angles), torch.sin(angles)), dim=-1)
+    queries = queries.to(device)
+    generator = torch.Generator().manual_seed(62)
+    values = torch.randn(24, generator=generator, dtype=torch.float64).to(device)
+    domain = _disk_domain(24, queries, values)
+    subset = torch.tensor([13, 2, 40, 5], device=device)
+
+    with torch.no_grad():
+        encoded = model.encode(domain)
+        message_full = model.kernel_decoder(queries, encoded.kernel_cache)
+        message_subset = model.kernel_decoder(queries[subset], encoded.kernel_cache)
+
+    torch.testing.assert_close(
+        message_subset.scalars, message_full.scalars[subset], rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        message_subset.vectors, message_full.vectors[subset], rtol=0.0, atol=0.0
+    )
+
+
+def test_row_stable_linear_gemm_matches_reference_loop(device):
+    """The default GEMM path equals the reference loop to fp64 roundoff."""
+    from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
+        _RowStableLinear,
+    )
+
+    torch.manual_seed(7)
+    layer = _RowStableLinear(22, 48).to(device=device, dtype=torch.float64)
+    features = torch.randn(512, 96, 22, dtype=torch.float64, device=device)
+    reference = layer.reference_forward(features)
+    gemm = layer(features)
+    torch.testing.assert_close(gemm, reference, rtol=1.0e-14, atol=1.0e-15)
 
 
 def test_decode_reuses_cached_kernel_source_state(device, monkeypatch):
@@ -2281,7 +2389,17 @@ def test_auxiliary_scale_arm_constructs_trains_and_stays_row_stable(device):
     nonzero-width parameter receives a finite gradient through the
     lambda-scaled path, and bitwise query-subset independence survives.
     """
-    model = _aux_scale_model(device, seed=361, query_chunk_size=1)
+    # Reference arbiter (test-internal): this regression guard's purpose is "the auxiliary-
+    # scale feature does not break row stability", which under the split
+    # contract (2026-07-12) is pinned in the bitwise reference mode; the
+    # default-GEMM tolerance guarantee is pinned separately by
+    # test_kernel_query_set_independence_default_mode_tolerance.
+    model = _aux_scale_model(
+        device,
+        seed=361,
+        query_chunk_size=1,
+    )
+    _force_reference_member_mlp(model)
     decoder = model.kernel_decoder
     assert decoder.auxiliary_scale is True
     assert decoder.n_members == 1 + 3 + decoder.mlp_members

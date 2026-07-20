@@ -324,25 +324,110 @@ def case_domain(
         permutation = torch.randperm(n_total, generator=generator)
         indices = permutation[:n_queries].to(case.query_points.device)
 
-    dtype = case.query_points.dtype
-    device = case.query_points.device
     boundary = Mesh(points=case.boundary_points, cells=case.boundary_cells)
     interior = Mesh(
         points=case.query_points[indices],
         point_data={key: value[indices] for key, value in case.targets.items()},
     )
+    domain = DomainMesh(
+        interior=interior,
+        boundaries={"airfoil": boundary},
+        global_data=_case_global_data(case),
+    )
+    return domain, indices
+
+
+def _case_global_data(case: AirFRANSCase) -> dict[str, torch.Tensor]:
+    """The case's global drive/operator data (shared by both query builds)."""
+
+    dtype = case.query_points.dtype
+    device = case.query_points.device
     direction = case.u_inf / torch.linalg.vector_norm(case.u_inf)
-    global_data = {
+    return {
         "freestream_direction": direction.to(device=device, dtype=dtype),
         "log_reynolds": torch.tensor(case.log_reynolds, device=device, dtype=dtype),
         "viscous_scale": torch.tensor(case.viscous_scale, device=device, dtype=dtype),
     }
-    domain = DomainMesh(
+
+
+def surface_vertex_query_indices(case: AirFRANSCase) -> torch.Tensor:
+    """Query-row index of each boundary vertex (exact-coincidence bijection).
+
+    Real AirFRANS catalogs carry every airfoil-surface volume-mesh node as a
+    query row, and those nodes ARE the boundary polyline's vertices (measured
+    on the v1 catalog: ``n_surface == n_boundary_points`` with bitwise
+    point coincidence, max distance exactly 0).  Returns a ``(n_boundary,)``
+    ``torch.long`` tensor whose element ``j`` is the query row whose point
+    equals ``boundary_points[j]`` bitwise.  The match is exact by
+    construction -- both arrays are cast from the same float64 sources --
+    so no nearest-neighbor tolerance is involved; any failure of the
+    bijection (a missing vertex, a duplicate match, or a count mismatch)
+    raises :class:`AirFRANSCatalogError` loudly rather than guessing.
+    """
+
+    surface_rows = torch.nonzero(case.is_surface, as_tuple=False).squeeze(1)
+    boundary = case.boundary_points.detach().cpu().numpy()
+    queries = case.query_points[surface_rows].detach().cpu().numpy()
+    if surface_rows.numel() != boundary.shape[0]:
+        raise AirFRANSCatalogError(
+            f"case {case.name!r}: the surface task requires the vertex<->query "
+            f"bijection, but {int(surface_rows.numel())} surface query rows != "
+            f"{boundary.shape[0]} boundary vertices"
+        )
+    by_bytes = {queries[i].tobytes(): int(surface_rows[i]) for i in range(len(queries))}
+    if len(by_bytes) != len(queries):
+        raise AirFRANSCatalogError(
+            f"case {case.name!r}: duplicate surface query points break the "
+            "vertex<->query bijection"
+        )
+    rows = []
+    for j in range(boundary.shape[0]):
+        row = by_bytes.get(boundary[j].tobytes())
+        if row is None:
+            raise AirFRANSCatalogError(
+                f"case {case.name!r}: boundary vertex {j} has no bitwise-"
+                "coincident surface query row; the catalog does not satisfy "
+                "the surface task's exact vertex<->query contract"
+            )
+        rows.append(row)
+    return torch.tensor(rows, dtype=torch.int64, device=case.query_points.device)
+
+
+def surface_case_domain(case: AirFRANSCase) -> DomainMesh:
+    r"""Panel-centroid surface companion domain (the trace-mode task).
+
+    The query mesh is the airfoil panels' **centroids**, one per boundary
+    cell in cell order -- exactly the whole-mesh identity map that
+    ``trace_of="airfoil"`` declares (query ``i`` is cell ``i``), so both the
+    trace arm and its control decode the same query set.  The single target
+    is the surface pressure coefficient interpolated vertex-to-centroid as
+    the :math:`\tfrac12`-average of the panel's two endpoint values (via the
+    exact vertex<->query bijection of
+    :func:`surface_vertex_query_indices`); the midpoint rule is
+    second-order in the panel length (~1.2e-3 chord on the v1 catalog), and
+    a NaN-masked vertex propagates NaN to both adjacent centroids (the
+    consumers' NaN-row exclusion then drops them, unchanged).  Full panel
+    set every call -- the protocol declares no boundary downsampling, and
+    the trace contract forbids subsampling by construction.
+    """
+
+    vertex_rows = surface_vertex_query_indices(case)
+    cells = case.boundary_cells
+    centroids = 0.5 * (
+        case.boundary_points[cells[:, 0]] + case.boundary_points[cells[:, 1]]
+    )
+    vertex_cp = case.targets["pressure_coefficient"][vertex_rows]
+    centroid_cp = 0.5 * (vertex_cp[cells[:, 0]] + vertex_cp[cells[:, 1]])
+    boundary = Mesh(points=case.boundary_points, cells=cells)
+    interior = Mesh(
+        points=centroids,
+        point_data={"pressure_coefficient": centroid_cp},
+    )
+    return DomainMesh(
         interior=interior,
         boundaries={"airfoil": boundary},
-        global_data=global_data,
+        global_data=_case_global_data(case),
     )
-    return domain, indices
 
 
 def point_segment_distances(
@@ -405,4 +490,6 @@ __all__ = [
     "load_manifest",
     "point_segment_distances",
     "split_case_names",
+    "surface_case_domain",
+    "surface_vertex_query_indices",
 ]

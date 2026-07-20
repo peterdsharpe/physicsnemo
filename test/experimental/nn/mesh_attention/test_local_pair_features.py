@@ -203,9 +203,7 @@ def _domain(
 
 
 @pytest.mark.parametrize("n_manifold_dims", [1, 2])
-def test_subtended_angle_scale_invariant_and_dimension_generic(
-    device, n_manifold_dims
-):
+def test_subtended_angle_scale_invariant_and_dimension_generic(device, n_manifold_dims):
     """theta is invariant under uniform coordinate scaling in 2D and 3D.
 
     Scaling coordinates by ``s`` scales squared distances by ``s**2`` and
@@ -215,12 +213,12 @@ def test_subtended_angle_scale_invariant_and_dimension_generic(
     distance.
     """
     generator = torch.Generator(device="cpu").manual_seed(11)
-    squared = (
-        torch.rand(7, 9, generator=generator, dtype=torch.float64) + 0.05
-    ).to(device)
-    measures = (
-        torch.rand(9, generator=generator, dtype=torch.float64) + 0.05
-    ).to(device)
+    squared = (torch.rand(7, 9, generator=generator, dtype=torch.float64) + 0.05).to(
+        device
+    )
+    measures = (torch.rand(9, generator=generator, dtype=torch.float64) + 0.05).to(
+        device
+    )
     theta = subtended_angle(squared, measures, n_manifold_dims)
     for s in (0.037, 1.0, 260.0):
         scaled = subtended_angle(
@@ -264,9 +262,7 @@ def test_knob_off_is_bitwise_default(device):
     off_state = explicit_off.state_dict()
     assert base_state.keys() == off_state.keys()
     for key in base_state:
-        torch.testing.assert_close(
-            off_state[key], base_state[key], rtol=0.0, atol=0.0
-        )
+        torch.testing.assert_close(off_state[key], base_state[key], rtol=0.0, atol=0.0)
 
     domain = _domain(device)
     with torch.no_grad():
@@ -338,9 +334,7 @@ def _white_box_block(model, domain):
     encoded = model.encode(domain)
     cache = encoded.kernel_cache
     n_trace = encoded.trace_slice.stop - encoded.trace_slice.start
-    queries = (
-        encoded.query_mesh.points - encoded.center
-    ) / encoded.reference_length
+    queries = (encoded.query_mesh.points - encoded.center) / encoded.reference_length
     features = PairInvariantFeatures.compute(
         queries,
         cache.centroids,
@@ -376,9 +370,7 @@ def test_near_only_support_is_exactly_compact(device):
         block, trace_start = _white_box_block(model, _domain(device))
     assert block.shape[-1] == 5
     n_queries = block.shape[0]
-    self_mask = torch.zeros(
-        block.shape[:2], dtype=torch.bool, device=block.device
-    )
+    self_mask = torch.zeros(block.shape[:2], dtype=torch.bool, device=block.device)
     rows = torch.arange(n_queries)
     self_mask[rows, trace_start + rows] = True
     off_diagonal = block[~self_mask]
@@ -416,9 +408,7 @@ def test_global_control_carries_exactly_the_pooled_scalars(device):
         encoded = model.encode(domain)
         cache = encoded.kernel_cache
         measure = cache.weights
-        pooled = (measure[:, None] * cache.local_scalars).sum(
-            dim=0
-        ) / measure.sum()
+        pooled = (measure[:, None] * cache.local_scalars).sum(dim=0) / measure.sum()
     torch.testing.assert_close(
         block[..., 0], pooled[0].expand_as(block[..., 0]), rtol=1.0e-12, atol=0.0
     )
@@ -435,9 +425,7 @@ def test_global_control_carries_exactly_the_pooled_scalars(device):
 
 @pytest.mark.parametrize("mode", ["windowed", "near_only"])
 @pytest.mark.parametrize("reflection", [False, True])
-def test_similarity_and_parity_equivariance_with_probe_on(
-    device, mode, reflection
-):
+def test_similarity_and_parity_equivariance_with_probe_on(device, mode, reflection):
     model = _model(device, kernel_local_pair_features=mode)
 
     transform = _orthogonal(device, reflection=reflection)

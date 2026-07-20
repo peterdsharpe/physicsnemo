@@ -221,9 +221,7 @@ def test_bounded_gate_knob_default_is_bitwise_noop(device):
         other_state = other.state_dict()
         assert list(reference_state) == list(other_state)
         for name, expected in reference_state.items():
-            torch.testing.assert_close(
-                other_state[name], expected, rtol=0.0, atol=0.0
-            )
+            torch.testing.assert_close(other_state[name], expected, rtol=0.0, atol=0.0)
 
     geometry = _state(7, 3, 2, device, seed=31)
     field = _state(7, 2, 2, device, seed=32)

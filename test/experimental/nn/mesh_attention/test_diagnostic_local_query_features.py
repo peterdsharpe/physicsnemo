@@ -205,9 +205,7 @@ def test_knob_off_is_bitwise_default(device):
     off_state = explicit_off.state_dict()
     assert base_state.keys() == off_state.keys()
     for key in base_state:
-        torch.testing.assert_close(
-            off_state[key], base_state[key], rtol=0.0, atol=0.0
-        )
+        torch.testing.assert_close(off_state[key], base_state[key], rtol=0.0, atol=0.0)
 
     domain = _domain(device)
     with torch.no_grad():
