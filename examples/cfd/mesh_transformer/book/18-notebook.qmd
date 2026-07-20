@@ -4535,3 +4535,44 @@ sweep gains an array exemption. The allbc canary was SIGTERM'd at
 13:28 — consistent with the vehicle-tuned watchdog grace being too
 short for the 5-boundary arm's first step; relaunching with
 extended grace via the fork.
+
+## 2026-07-20 — TRACE FACTORIAL VERDICT: the dominant mechanism, and its two halves are substitutes {#sec-nb-trace-factorial-verdict}
+
+The full 2×2 at flagship capacity (1-node 500ep, 3 seeds/arm):
+
+| arm | jump corr | trace readouts | finals | mean |
+|---|---|---|---|---|
+| notrace | – | – | 0.05251/0.05241/0.06038 | **0.0551** |
+| tracecorr | ✓ | – | 0.01476/0.01533/0.01607 | 0.01539 |
+| tracereadouts | – | ✓ | 0.01494/0.01505/0.01622 | 0.01540 |
+| flagship | ✓ | ✓ | 0.0138/0.0140/0.0156 | 0.01447 |
+
+**Verdicts (pre-registered arms, review P1 item 3):**
+
+1. **Trace is THE dominant industrial mechanism: 3.8× at flagship
+   capacity** — it GREW from the 2.03× measured pre-ladder. My
+   stated worry that it would compress at scale like the kernel
+   members was wrong in the opposite direction: mechanisms scale
+   individually, not uniformly. The honest mechanism ranking at
+   flagship now reads: trace 3.8× ≫ capacity (the frontier) ≫
+   members ≈ 0–8% ≈ nothing.
+2. **The two trace sub-mechanisms are near-perfect substitutes**:
+   correction-only and readouts-only land within 0.1% of each other,
+   each recovering ~96% of the log-gap; both together add ~6%.
+   Mechanistic reading: what the model fundamentally needs is a
+   channel carrying boundary self-identification ("this query IS the
+   boundary at its own panel") — the exact jump constant and the
+   learned readouts both deliver it, and once either does, the
+   other is largely redundant. Design implication for #55 and any
+   future variant: preserve at least one such channel; the exact
+   correction is the principled zero-parameter choice.
+3. Both mechanisms stay ON in the default (the +6% is free at
+   inference).
+
+**allbc canary readings (fork-managed, ep~105):** the
+balanced-pooling arm trains STABLY at full LR where the raw
+all-boundary arm diverged at ep44 (val 0.0170 at ep105); the raw
+arm at LR/2 trains but poorly (0.0359). The reviewer's structural
+point — zero-init pooling gains reproduce raw measure dominance —
+is now empirically tied to a hard failure mode, not just a
+weighting concern. Science verdict at finals.
