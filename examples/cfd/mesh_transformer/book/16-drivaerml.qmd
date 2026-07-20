@@ -16,13 +16,19 @@ frontier below is complete and the scaling ladder closed) and the
 incumbent-on-OOD-splits differential evaluation (no differential at
 zero-shot depth; a consistent differential at deep-S1 under the
 corrected vector metric — pending a 5-seed seal). Since that update the
-kernel factorial also landed, and its pre-registered falsifier
-FIRED: removing every exact singular member costs only ~8% at the
-flagship rung, so the industrial in-distribution gains are NOT
-attributable to the exact kernels (verdict below; the
-synthetic-program causation stands unchanged). PENDING now: the
-5-seed differential extension and the factorial's zero-shot OOD
-rider.
+attribution campaign completed end to end: the kernel factorial's
+pre-registered falsifier FIRED twice (removing every exact singular
+member costs only ~8% in-distribution AND nothing in zero-shot OOD
+robustness — the exact-kernel demotion is total at this rung, with
+the synthetic-program causation standing unchanged); the trace
+factorial found the actual dominant mechanism (3.8× at flagship
+capacity, its two sub-mechanisms near-perfect substitutes); the
+batch 2×2 identified gradient noise, not update count, as the
+small-batch mechanism; and the 5-seed differential extension SEALED
+the deep-S1 WSS differential (disjoint 5-vs-5) while demoting the
+pressure differential to suggestive. PENDING now: the AirFRANS
+clean-protocol ranking, the cross-family transfer pilot, and the
+all-boundary redo.
 :::
 
 ## The dataset, and what makes our variant special
@@ -139,6 +145,10 @@ REFUTED — measured 2.03×** (0.1019 → 0.0503) — but trace is the only
 intervention that ever broke the 0.10 plateau, and the corrected arm
 then plateaus again at ~0.049. The floor moved, and stopped: the
 signature of the *next* representational ceiling, owned by H-C.
+(The 2.03× is trace's effect at the small pre-ladder configuration;
+the completed factorial later measured **3.8× at flagship
+capacity** — mechanisms scale individually, and this one grew.
+@sec-drivaerml-trace-factorial.)
 
 ### The capacity ladder, post-trace (T2)
 
@@ -179,6 +189,19 @@ The windfall's converse later closed the multi-node question
 against its 1-node twin — the effective-batch penalty does not
 shrink with model scale. Multi-node buys wall-clock for inference
 and production retrains; ladder rungs stay 1-node.
+
+The mechanism itself was then isolated by the pre-registered 2×2
+(@sec-nb-b22-verdict): a 16-GPU arm run for 2000 epochs — matching
+the 1-node arm's optimizer-update count — finals at 0.0212
+(2 seeds), against 0.0221 for the 500-epoch 16-GPU arm and 0.0140
+for 1-node. Quadrupling the updates at large batch recovers only
+~11% of the small-batch advantage: **the effective-batch effect is
+the gradient noise (small-batch regularization) itself, not
+optimizer-step count.** Held equal within the 16-GPU column:
+configuration, learning rate, schedule shape, and data; the
+1-node column's schedule differs by its queries-per-step scaling,
+by design of the original comparison — the clean isolation is the
+16-GPU column, and it is decisive.
 
 ### The ledger
 
@@ -417,12 +440,62 @@ non-member parameters — and exact-only is indistinguishable from
 the flagship itself (0.0146 vs 0.0145), which makes the flagship's
 eight learned members **evidence-orphaned at this rung**: the
 simpler exact-only configuration is a parsimony candidate for the
-default. One barrel of the thesis remains untested by this ID-only
-verdict: the **zero-shot OOD rider** is in flight (all six
-factorial checkpoints on the never-seen S1/S2 splits, corrected
-metric; prediction: MLP-only degrades more off-distribution;
-falsifier: equal ratios ⇒ the demotion is total). Its outcome is
-not presupposed here.
+default. The thesis's second barrel then fired the same way: the
+**zero-shot OOD rider** (all six factorial checkpoints on the
+never-seen S1/S2 splits, corrected vector metric,
+@sec-nb-rider-verdict) measured *indistinguishable* degradation
+ratios — MLP-only 1.11–1.14×, exact-only 1.11–1.13× — refuting the
+prediction that exact far-field structure would matter more
+off-distribution. **The exact-kernel demotion at this rung is
+total**: neither in-distribution accuracy nor OOD robustness. The
+exact dictionary's ~7% absolute edge does carry into OOD errors
+(an accuracy offset, not a robustness slope), and one exploratory
+counterpoint is on record: at the 9.6M ×2L8 rung, removing the
+learned members costs ~9% (0.00635 vs 0.00583) — single seed
+against a known ±12% rung spread, so the default configuration
+keeps its members and the parsimony swap is not adopted.
+
+### The trace factorial: the dominant mechanism, decomposed {#sec-drivaerml-trace-factorial}
+
+If the exact kernels do not carry the industrial result, what does?
+The trace factorial answers with the program's cleanest attribution
+(@sec-nb-trace-factorial-verdict; pre-registered as review item 3's
+decomposition, with the no-trace control added mid-campaign when
+the kernel factorial demonstrated that effect sizes measured at
+small configurations need not survive scale). Same protocol
+discipline as every arm above: 1-node, 500 epochs, 3 seeds,
+flagship capacity, one mechanism toggled at a time.
+
+| arm | jump correction | trace readouts | finals (3 seeds) | mean |
+|---|---|---|---|---|
+| no-trace | – | – | 0.0525 / 0.0524 / 0.0604 | 0.0551 |
+| correction-only | ✓ | – | 0.0148 / 0.0153 / 0.0161 | 0.0154 |
+| readouts-only | – | ✓ | 0.0149 / 0.0151 / 0.0162 | 0.0154 |
+| flagship (both) | ✓ | ✓ | 0.0138 / 0.0140 / 0.0156 | 0.0145 |
+
+Two findings, both structural:
+
+1. **Trace is the dominant mechanism of the industrial program:
+   3.8× at flagship capacity.** It *grew* from the 2.03× measured at
+   the small pre-ladder configuration — the mirror image of the
+   kernel members, whose effect compressed to noise at the same
+   rung. Mechanisms scale individually; measuring each at the
+   operating configuration is the only honest attribution. The
+   ranking at flagship now reads: trace 3.8× ≫ capacity (the
+   frontier's 2.4× from 0.6M→9.6M) ≫ member dictionary (0–8%).
+2. **The two trace sub-mechanisms are near-perfect substitutes.**
+   Correction-only and readouts-only land within 0.1% of each other,
+   each recovering ~96% of the log-gap; enabling both adds a final
+   ~6%. The mechanistic reading: the load-bearing information is
+   *boundary self-identification* — a channel telling the decoder
+   that a query point IS the boundary at its own panel. The exact
+   exterior jump constant (+½, zero parameters, licensed by the
+   jump relation) and the learned own-cell readouts each deliver
+   that bit; once either does, the other is largely redundant. The
+   default keeps both (the 6% is free at inference); any future
+   variant — including the separable far-field decode — must
+   preserve at least one such channel, and the exact correction is
+   the principled zero-parameter choice.
 
 ### Generalization: the OOD protocol and its verdict
 
