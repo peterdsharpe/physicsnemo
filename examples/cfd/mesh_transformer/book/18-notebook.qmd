@@ -4484,3 +4484,54 @@ three-seed set closes: pre-registered expectation from the check-in
 any given claim: the clean single-shot test flips its ranking. The
 stall root-cause was ops, not science (the fork's acceptance watcher
 was killed mid-wait; canary itself had passed).
+
+## 2026-07-19 (night) — b22 VERDICT: it's gradient noise, not update count; given-trace decomposition; AirFRANS clean first-read {#sec-nb-b22-verdict}
+
+**Batch 2×2 verdict (pre-registered @sec-nb-review item 4).** The
+16-GPU × 2000-epoch arm (update count matched to 1-node × 500)
+finals: 0.02142 / 0.02105 (2 seeds). The square:
+
+| | 500 ep | 2000 ep (matched updates) |
+|---|---|---|
+| 1-node (108 steps/ep) | **0.0140** | — |
+| 16-GPU (27 steps/ep) | 0.0221 | 0.0212 |
+
+Quadrupling the update count at large batch recovers only ~11% of
+the small-batch advantage. **The mechanism is the gradient noise /
+small-batch regularization itself, not optimizer-step count.**
+Held equal within the 16-GPU column: config, LR, schedule shape,
+data. Caveat stated: the 1-node column's schedule differs by its
+qps-scaling (by design of the original comparison); the clean
+isolation is the 16-GPU column, and it is decisive. The
+effective-batch penalty is now a mechanism, not an observation —
+and multi-node training remains for inference/production only.
+
+**Given-trace decomposition (3 seeds each; full 2×2 awaits notrace
+finals):** correction-only mean 0.01539 {0.01476, 0.01533, 0.01607};
+readouts-only mean 0.01540 {0.01494, 0.01505, 0.01622}; both-on
+(flagship) mean 0.01447. The two trace mechanisms are near-perfect
+SUBSTITUTES — either alone lands within 0.1% of the other — and
+combining them buys a further ~6%. Total trace effect at flagship
+capacity = tomorrow's notrace finals.
+
+**AirFRANS clean-protocol first-read (12/12 lanes complete, frozen
+partition):** members_log — the chapter's recommended arm — is
+TIGHT and healthy across seeds (u_x 0.0145/0.0145/0.0159, p_surface
+≈0.007): its numbers sit inside the old dev-set range, so the
+surface-pressure story (still ~18× behind GLOBE, as already
+conceded) and the V4 velocity rung look protocol-robust. The
+members arm shows one outlier seed (s17 u_x 0.0657 vs 0.020/0.024).
+**The pseudo arm's surface pressure collapsed to zscore ≈ 1.0–1.5
+(mean-predictor level) on all three seeds** — the AoA-extrapolation
+windfall claim cannot stand on this arm's clean ID showing; and the
+AoA claim itself needs the extrapolation eval (evalx) rerun on the
+CLEAN checkpoints before any survival verdict — registered as
+#59's remaining leg. Full ranking table vs baselines = chapter-15
+fork with old-vs-clean side-by-side.
+
+**Ops notes:** the twin sweep flagged two job ARRAYS (array tasks
+share a name, write distinct logs — not a singleton race); the
+sweep gains an array exemption. The allbc canary was SIGTERM'd at
+13:28 — consistent with the vehicle-tuned watchdog grace being too
+short for the 5-boundary arm's first step; relaunching with
+extended grace via the fork.
