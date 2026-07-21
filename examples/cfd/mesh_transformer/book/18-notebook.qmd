@@ -4683,3 +4683,27 @@ post-canary waiter died again with GeoT's numbers on disk for 14h —
 fleet taken over directly: flagship ×3 + x2L8 in one packed 4-GPU
 eval job). The pre-registered analysis runs when its tables land,
 WSS-conversion fairness question first.
+
+## 2026-07-21 (evening) — the steady ceiling MEASURED: Re ≈ 5000; re1000 band redesigned per pre-registration {#sec-nb-re-ceiling-final}
+
+The v2-re1000 band failed exactly as the E1 pre-registration
+anticipated ("the top band may substantially fail the convergence
+gates — itself a reportable steady-solver limit"): the train slice
+[1000,5000] generated ~332 cases cleanly, then case 350 in the
+UNSEEN slice (5000,7500] failed all 8 resampled attempts — Newton
+backtracking stalls at Re 5123–7268 (residuals stuck at 1e-4–1e-3),
+including two failures in the verification re-solve. **The measured
+practical steady ceiling for this family at h=0.0105 is ≈ Re 5000.**
+This closes the ceiling saga with three layers now cleanly
+separated: (1) the 26-hour zero-output cluster runs were the
+aarch64-SuperLU fallback; (2) the local 8-worker stall was cgroup
+memory throttling; (3) the REAL physics limit is ~Re 5000 —
+consistent with the single-case probes (healthy at 1500) and with
+the original solver-validity argument. The generator's fail-fast +
+partial-deletion behavior did its job (no silent selection bias).
+
+**Redesign (within the pre-registration's contingency):** re1000
+regenerates as train [1000,4000], unseen (4000,5000] — the same
+regime axis, capped under the measured wall. Relaunched locally.
+The chapter's accuracy-vs-Re curve gains its honest endpoint
+annotation: "steady labels end here."
