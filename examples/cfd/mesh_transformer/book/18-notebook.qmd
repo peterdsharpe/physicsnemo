@@ -4624,3 +4624,41 @@ path verified inert; 29 regression tests). Commits 0520f294,
 ac19c76a. Upstream merge landed separately (f9bea495) and brings
 #1746's relative-L2 loss — candidate resolution for the misnamed
 rmse (#61b).
+
+## 2026-07-20 (night) — allbc mid-training instability: the balance is a partial cure; cross-family first number {#sec-nb-allbc-instability}
+
+**The all-boundary stability story sharpened overnight, against my
+morning read.** Four of six fleet lanes — balanced AND raw, at
+3.0e-3 AND 1.5e-3, seeds 43 AND 44 — blew up at nearly the same
+epoch (~221–224; train losses to 1e23), each then spewing ~20k
+divergence lines (the staleness watchdog is blind to a chatty NaN
+storm) and chain-restarting FROM SCRATCH — a resume-rediverge
+Sisyphus loop. Both s42 lanes, meanwhile, sailed past ep320
+(balanced 0.0147 at ep321 — flagship-level!). Revised verdict on
+the mechanism: **balanced pooling cures the ep44 measure-dominance
+divergence but does NOT confer robust mid-training stability** —
+at flagship+5-boundary the high-LR mid-schedule region (~ep220) is
+marginally stable for both arms, seed-dependently. Actions: all
+four looping chains killed; a **divergence guard** added to the
+launch script (train loss > 1e3 → cancel own chain — the missing
+sibling of the staleness watchdog); seeds 43/44 relaunched for both
+arms at **7.5e-4** (7-link chains). Pre-registered: if the 7.5e-4
+lanes ALSO die at ~ep220, the instability is structural rather than
+LR-bounded, itself a finding. The verdict table will carry per-lane
+LR columns as declared.
+
+**Cross-family pilot, first number (canary, GeoT anchor, 20 SHIFT
+cases, frozen pipeline):** pressure_l2 0.677 (vs 0.061 own-family →
+transfer ratio ~11×), wss_l2 123.5 (vs 0.28 → ~440×). Pressure
+reads as "severely degraded but signal-bearing" — the expected
+texture of hard zero-shot transfer. **WSS at 123 rel-L2 is flagged,
+not interpreted**: a scale that far off suggests the frozen
+DrivAerML WSS normalization (std 0.00313) or a units convention
+(dynamic vs kinematic stress) may not carry to SHIFT's fields — the
+fork was tasked to surface exactly such fairness-of-conversion
+calls, and NO verdict is read until the MT tables land and the
+shared-vs-model-specific nature of the distortion is established.
+The pre-registered analysis compares models under the SAME frozen
+pipeline either way, but a conversion artifact that interacts with
+each model's normalization differently would void fairness — check
+first.
