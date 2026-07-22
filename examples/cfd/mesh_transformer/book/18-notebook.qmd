@@ -4852,3 +4852,50 @@ global 0.167/0.705) — exactly where the H-ground hypothesis says
 boundary context should help. Staged eval job runs all six allbc
 arms + three vehicle-only controls; SUBMITS ONLY after the ab3
 finals land (the script takes latest checkpoints).
+
+## 2026-07-22 (afternoon) — intrinsic gauge calibrated on TRAIN: C = 26.4766; acceptance gates pre-registered {#sec-nb-gauge-calib}
+
+The cross-family repair (@sec-nb-crossfam-verdict localized the
+zero-shot divergence to the fixed `reference_length: 8.0` via the
+gauge dose-response) is now calibrated. The intrinsic gauge is
+
+    reference_length = C · r_RMS(sample),
+
+r_RMS the measure-weighted RMS radius of the sample's boundary about
+its measure-weighted centroid (translation/rotation-invariant,
+similarity-COVARIANT, Horvitz-Thompson subsample-robust; transform +
+tests in commit 17381332, module `src/intrinsic_gauge.py`). C is
+calibrated ONCE on the DrivAerML TRAIN split — never re-fit per
+evaluation set — as C = 8.0/mean(r_RMS), so DrivAerML reproduces its
+historical operating point and other families land at the same
+*relative* one.
+
+**Calibration record (AGA job 285486, 484 train samples, resolution
+10k, artifact `studies/intrinsic_gauge_calibration.json`):** r_RMS =
+0.30215 ± 0.0089 (min 0.2798, max 0.3265), giving **C = 26.476593**.
+Per-sample DrivAerML gauges land in [7.41, 8.64] — a ±3.5% spread
+around 8.0, entirely inside the measured stable zone (≥ 6).
+
+**Acceptance gates, declared before any acceptance number exists
+(job 285531, paired 4-lane eval on id_reference, current code, same
+node):**
+
+1. *DrivAer preservation:* flagship-s42 with the intrinsic gauge
+   must land within **2% relative** of flagship-s42 with the fixed
+   gauge on `pressure_l2` and `wss_l2` (paired fixed-gauge control
+   re-run in the same job — the Jul-14 baseline predates the metric
+   correction). Prediction: passes; the checkpoint has only ever
+   seen ~8.0 and the intrinsic values differ from 8.0 by ≤ 8%,
+   within training-set gauge tolerance. Falsifier: > 2% drift means
+   the model is more gauge-sensitive than the dose-response implied,
+   and intrinsic-gauge *retraining* (not drop-in) becomes the path.
+2. *Inertness control:* GeoT (no `reference_length_key`) with the
+   intrinsic dataset must reproduce its fixed-dataset numbers to
+   rtol 1e-4 — the transform must touch nothing else in the
+   pipeline. Falsifier: any drift = the variant yaml changed
+   something besides the gauge (RNG order, field layout) and the
+   whole comparison is contaminated.
+
+Both gates pass → pre-register transfer-v2 (zero-shot SHIFT-SUV with
+the intrinsic gauge; realistic goal is "MT transfers comparably to
+GeoT," not "MT wins") before any SHIFT number is computed.
