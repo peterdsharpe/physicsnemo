@@ -4942,3 +4942,60 @@ intrinsic-retrained MT vs GeoT through the identical frozen
 pipeline; realistic goal is "MT transfers comparably," not "MT
 wins" — GeoT's 0.677/123.5 structured zero-shot output is the bar
 that MT's divergence failed at @sec-nb-crossfam-verdict.
+
+## 2026-07-22 (afternoon) — TRANSFER-V2 PRE-REGISTRATION: intrinsic-retrained MT, zero-shot SHIFT-SUV {#sec-nb-transfer-v2-prereg}
+
+Written while the intrinsic retrains are at epochs 1–6 of 500 — no
+checkpoint exists, no SHIFT number for any intrinsic-trained model
+exists. Everything below is frozen before results.
+
+**The test.** Zero-shot cross-family transfer, second attempt.
+Train: DrivAerML train split, flagship architecture, intrinsic gauge
+(`drivaer_ml_surface_intrinsic`, C = 26.476593), 3 seeds (42/43/44),
+protocol otherwise identical to t2 (500 epochs, 1 node, lr 3.0e-3).
+Eval: SHIFT-SUV estate pilot `eval_pilot` split through the frozen
+pipeline via `shift_suv_surface_intrinsic.yaml` — identical to the
+v1 SHIFT config except the gauge transform; **C is the
+DrivAerML-train constant, never re-fit on SHIFT**. Comparator: GeoT
+(`t2_geotransolver_surface`), which ignores the gauge, so its v1
+zero-shot numbers stand (pressure_l2 0.677, wss_l2 123.5;
+inertness verified at @sec-nb-gauge-accept-verdict). Metrics:
+corrected direction-sensitive `pressure_l2` and `wss_l2`; forces
+summaries recorded but secondary.
+
+**Pre-declared gates, in order:**
+
+0. *In-family sanity (gate for running the test at all):*
+   intrinsic-retrained id_reference within the fixed-gauge t2
+   flagship 3-seed band on pressure_l2 and wss_l2 (band from the
+   same harness, current code). Materially worse (> ~10% beyond
+   band edge) ⇒ the intrinsic gauge costs in-family accuracy;
+   report that as the finding and reassess before any SHIFT eval.
+1. *Structural transfer (the v1 falsifier, re-armed):* all 3 seeds
+   produce finite, structured SHIFT output — pressure_l2 < 1.0
+   (GeoT-magnitude, not 8e4–1e15). ANY seed diverging ⇒ the fixed
+   gauge was not the whole cross-family mechanism; the residual
+   driver (U_inf covariate, geometry-feature shift, wss norm std)
+   becomes the object of study. Prediction: pass, p ≈ 0.75 — the
+   dose-response was clean and monotone, but it was measured on a
+   fixed-gauge checkpoint and eval-time-only; training-time
+   behavior is genuinely untested.
+2. *Comparable transfer (the program question):* seed-median
+   pressure_l2 ≤ 2× GeoT (≤ 1.354) = transfers comparably;
+   ≤ 0.677 = at par or better. Prediction: comparable p ≈ 0.45,
+   at-par p ≈ 0.15 — MT's inductive bias is the boundary integral
+   representation, and whether that transfers better or worse than
+   GeoT's geometry attention across vehicle family is exactly the
+   coin-flip this experiment is for.
+3. *WSS is secondary/descriptive:* GeoT's own 123.5 says vector-WSS
+   zero-shot is junk for everyone here; we report it, we do not
+   gate on it.
+
+**What is NOT allowed after results:** re-fitting C on SHIFT,
+re-picking the comparison seed, swapping the metric for a variant
+that flatters, or promoting WSS to a headline if it happens to look
+good. Deviations get logged as exploratory.
+
+Eval configs are committed before finals land; the eval job reuses
+`mt_crossfam_eval.sbatch` with the intrinsic dataset and the three
+retrained run_ids.
