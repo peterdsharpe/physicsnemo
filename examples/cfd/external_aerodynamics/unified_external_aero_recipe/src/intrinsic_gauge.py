@@ -63,7 +63,18 @@ import torch
 from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import cell_measures
+try:
+    # Post-#1770 layout: Horvitz-Thompson-aware effective measures
+    # (geometric measure x composed subsampling weights).
+    from physicsnemo.mesh.calculus.measure import cell_measures
+except (ModuleNotFoundError, ImportError):  # pragma: no cover - pre-merge trees
+
+    def cell_measures(mesh):
+        """Pre-#1770 fallback: bare geometric measure. Under uniform
+        subsampling the unweighted statistic has the same expectation as
+        the HT-weighted one, so calibration and evaluation remain
+        consistent across tree versions."""
+        return mesh.cell_areas
 
 __all__ = ["ComputeIntrinsicReferenceLength", "measure_weighted_rms_radius"]
 
