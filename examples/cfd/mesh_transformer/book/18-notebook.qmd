@@ -4707,3 +4707,50 @@ regenerates as train [1000,4000], unseen (4000,5000] — the same
 regime axis, capped under the measured wall. Relaunched locally.
 The chapter's accuracy-vs-Re curve gains its honest endpoint
 annotation: "steady labels end here."
+
+## 2026-07-22 — CROSS-FAMILY VERDICT: the falsifier fires maximally — MT does not transfer zero-shot {#sec-nb-crossfam-verdict}
+
+The pre-registered decisive test (@sec-nb-crossfam-prereg) returned
+the worst branch. DrivAerML-trained checkpoints, zero-shot on 20
+SHIFT-SUV cases, frozen pipeline, corrected metric:
+
+| model | SHIFT pressure_l2 | SHIFT wss_l2 | own-family id (press/wss) |
+|---|---|---|---|
+| GeoT anchor | 0.677 | 123.5 | 0.061 / 0.280 |
+| MT flagship s42 | 1.3e15 | 6.4e17 | 0.167 / 0.705 |
+| MT flagship s43 | 8.1e4 | 5.1e7 | 0.169 / 0.710 |
+| MT flagship s44 | 4.1e13 | 2.8e14 | 0.180 / 0.737 |
+| MT x2L8 | NaN | NaN | 0.107 / 0.479 |
+
+**GeoT degrades ~11× on pressure and stays structured. MeshTransformer
+diverges to non-physical output on every checkpoint — it does not
+transfer at all.** The pre-registered falsifier ("GeoT transfers
+equal or better") fires beyond its own scale: **the generalization
+identity fails its decisive zero-shot test.** Facts that make this
+solid: all four MT checkpoints (two capacities, three seeds) explode
+while GeoT is finite through the IDENTICAL frozen pipeline; the
+fork's fairness audit (L_ref equal, pressure/WSS conventions
+verified, U_inf a shared mild covariate) plus GeoT's sane numbers
+rule out a data-poisoning artifact; the fresh x2L8 own-family
+denominator (0.107/0.479) confirms healthy checkpoints.
+
+**Scope and the open mechanism question (pre-registered
+diagnostic, exploratory label):** 20-case pilot, one family pair,
+zero-shot only. The failure texture (1e4→1e15→NaN across seeds) is
+the signature of an internal magnitude blow-up, and the prime
+suspect is the **declared reference_length gauge** — the exact
+design flaw the external review flagged ("physical scaling
+equivariance is not presently guaranteed for the flagship"), with a
+previously measured overflow dose-response in the drive stream.
+*Diagnostic launching now:* gauge scan on one checkpoint (s42),
+SHIFT pilot, reference_length ∈ {16, 48} vs the 8.0 control.
+*If* some gauge restores finite structured output ⇒ the failure
+localizes to the fixed-gauge protocol (repairable: intrinsic gauge,
+then re-run the frozen test as transfer-v2 — the architecture story
+partially rehabilitates). *If not* ⇒ the brittleness is deeper than
+the gauge, and the within-family differential (@sec-nb-seal-verdict)
+is the strongest generalization claim this architecture gets.
+**Check-in odds revised now, ahead of the diagnostic:**
+cross-family transfer advantage 35% → ~10%; the sealed within-family
+WSS differential stands unaffected as measured, but its
+industrial upgrade path is broken at zero-shot.
