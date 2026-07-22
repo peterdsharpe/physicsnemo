@@ -65,6 +65,7 @@ if _SRC_DIR not in sys.path:
 ### after the sys.path insertion above (hence the E402 suppressions). The
 ### side-effect `import`s also register datapipe components.
 import domain_transforms  # noqa: F401, E402  (registers SetDomainGlobalField, BoundaryMeshToDomainMesh)
+import intrinsic_gauge  # noqa: F401, E402  (registers ComputeIntrinsicReferenceLength)
 import merge_global_data  # noqa: F401, E402  (registers MeshReaderWithGlobalData)
 import nondim  # noqa: F401, E402  (registers NonDimensionalizeByMetadata)
 import sdf  # noqa: F401, E402  (registers ComputeSDFFromBoundary, DropBoundary)
