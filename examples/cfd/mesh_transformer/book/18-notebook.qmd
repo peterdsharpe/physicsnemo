@@ -4899,3 +4899,46 @@ node):**
 Both gates pass → pre-register transfer-v2 (zero-shot SHIFT-SUV with
 the intrinsic gauge; realistic goal is "MT transfers comparably to
 GeoT," not "MT wins") before any SHIFT number is computed.
+
+## 2026-07-22 (afternoon) — acceptance VERDICT: inertness passes, drop-in FAILS the 2% gate; retraining path taken {#sec-nb-gauge-accept-verdict}
+
+The pre-registered acceptance evals (@sec-nb-gauge-calib, job
+285531, paired 4-lane on id_reference, current code) returned:
+
+| lane | pressure_l2 | wss_l2 |
+|---|---|---|
+| flagship s42, fixed 8.0 | 0.167163 | 0.705265 |
+| flagship s42, intrinsic | 0.178731 | 0.728916 |
+| GeoT, fixed dataset | 0.061000 | 0.279863 |
+| GeoT, intrinsic dataset | 0.061000 | 0.279863 |
+
+**Gate 2 (inertness) PASSES** — GeoT digits identical across dataset
+variants; the yaml changes nothing but the gauge. **Gate 1
+(preservation) FAILS as pre-registered**: pressure +6.9%, WSS +3.4%,
+both past the 2% bar. Since mean(C·r_RMS) = 8.0 on train by
+construction, the drift is driven by the ±3.5% per-sample gauge
+*spread*, not an offset — the fixed-gauge checkpoint is more
+sensitive to gauge perturbation than the coarse dose-response
+(healthy ≥ 6) implied. Honest note: 6.9% is sensitivity, not
+catastrophe; but the falsifier was written in advance and it fired.
+
+Consequence (also pre-declared): the intrinsic gauge is **not a
+drop-in** for existing checkpoints; the confirmatory path is
+**retraining under the intrinsic gauge**. Canary launched: flagship
+seed 42 on `drivaer_ml_surface_intrinsic` (protocol otherwise
+identical to t2: 500 epochs, 1 node, lr 3.0e-3, run_id
+`t2_mesh_transformer_surface_flagship_intrinsic_seed42_lr3.0e-3`,
+chain 285536–285541). Seeds 43/44 follow only after the canary
+shows healthy epochs. The sanity bar for the retrain, declared now:
+id_reference within seed-band of the fixed-gauge t2 flagship arms
+(the gauge spread is information the model can absorb in training;
+if intrinsic-trained val is materially worse, the intrinsic gauge
+costs in-family accuracy and the transfer question changes shape).
+
+Transfer-v2 will be pre-registered in full (splits, metrics,
+predictions, falsifiers) before any SHIFT-SUV number for the
+retrained checkpoint is computed: zero-shot SHIFT-SUV estate pilot,
+intrinsic-retrained MT vs GeoT through the identical frozen
+pipeline; realistic goal is "MT transfers comparably," not "MT
+wins" — GeoT's 0.677/123.5 structured zero-shot output is the bar
+that MT's divergence failed at @sec-nb-crossfam-verdict.
