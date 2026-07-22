@@ -37,8 +37,13 @@ PY=$REPO/.venv/bin/python
 run_lane() {
   local BAND="$1" SEED="$2" GPU="$3"
   local TAG="${BAND}_s${SEED}"
+  if /bin/ls "$OUT/$TAG"/*.json > /dev/null 2>&1; then
+    echo "=== LANE $TAG SKIP (report exists) ==="
+    return 0
+  fi
   echo "=== LANE $TAG gpu=$GPU start $(date -Is) ==="
-  CUDA_VISIBLE_DEVICES="$GPU" "$PY" -u dataset_train_ns.py \
+  # timeout ~3.7x the v1-era 810 s pace: one hung lane must not eat the job
+  CUDA_VISIBLE_DEVICES="$GPU" timeout 3000 "$PY" -u dataset_train_ns.py \
       --dataset "$CAT/$BAND" --model mt_singpair_nl_pseudo \
       --epochs 15 --seed "$SEED" \
       --output-dir "$OUT/$TAG" \
@@ -71,12 +76,19 @@ for B in v1 v2-re1 v2-re10 v2-re100; do for S in 17 29 43; do
   LANES+=("$B $S")
 done; done
 i=0
+PIDS=()
 for L in "${LANES[@]}"; do
   set -- $L
   run_lane "$1" "$2" $((i % 4)) &
+  PIDS+=($!)
   i=$((i+1))
-  [ $((i % 4)) -eq 0 ] && wait
+  if [ $((i % 4)) -eq 0 ]; then
+    # wait on the wave PIDS explicitly -- a bare `wait` also waits on the
+    # never-exiting heartbeat subshell (job 5539610 froze exactly there)
+    for P in "${PIDS[@]}"; do wait "$P"; done
+    PIDS=()
+  fi
 done
-wait
+for P in "${PIDS[@]}"; do wait "$P"; done
 kill $HB 2>/dev/null
 echo "ALL_LANES_DONE $(date -Is) total_reports=$(/bin/ls $OUT/*/*.json 2>/dev/null | wc -l)"
