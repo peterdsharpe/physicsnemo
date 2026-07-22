@@ -4784,3 +4784,38 @@ framings, all true at once:
    realistic goal is "MT transfers comparably," not "MT wins."
    Odds update: cross-family advantage stays ~10–15%; "MT transfers
    at all, post-repair" now likely (~75%).
+
+## 2026-07-22 — E1 first curve: accuracy vs Re is U-SHAPED, not monotone; noise floor negligible {#sec-nb-e1-curve}
+
+All 12 band-training reports landed (mt_singpair_nl_pseudo, v1
+protocol frozen, 3 seeds/band; artifacts output/e1_bands/ on HSG).
+Combined relative-L2:
+
+| band | Re | eval_id (3-seed) | unseen_Re | noise floor |
+|---|---|---|---|---|
+| v2-re1 | [1,10] | 0.312 (0.275–0.349) | 0.344 | 0.00020 |
+| v2-re10 | [10,100] | 0.257 (0.239–0.276) | 0.375 | 0.00021 |
+| v1 | [10,200] | 0.230 (0.219–0.239) | 0.358 | 0.00024 |
+| v2-re100 | [100,1000] | 0.348 (0.320–0.401) | 0.369 | 0.00038 |
+
+**Verdicts vs the E1 pre-registration:**
+
+1. "The label-noise floor rises with Re" — CONFIRMED (2× from re1
+   to re100) **and irrelevant**: it sits three orders below model
+   error everywhere. The labels are not the limiter; the honest
+   curve annotation is "floor drawn, nowhere binding."
+2. "Accuracy degrades with Re" — **REFUTED as stated: the curve is
+   U-shaped.** The middle decades (re10/v1, ~0.23–0.26) are easiest;
+   BOTH the near-Stokes band (re1, 0.312) and the advective band
+   (re100, 0.348) are harder. Confound stated before anyone loves a
+   physics story: the arm and protocol (iteration 17) were tuned on
+   v1's Re [10,200] — the U may partly measure fixed-protocol
+   regime sensitivity rather than intrinsic task difficulty. The
+   chapter presents it as such; disentangling would need per-band
+   protocol re-tuning (registered, not commissioned).
+3. Within-band Re-extrapolation penalties (unseen/id): 1.10× (re1),
+   1.46× (re10), 1.56× (v1), 1.06× (re100) — not directly
+   comparable across bands (unseen slices differ in relative
+   distance); reported per-band, no cross-band claim.
+4. re1000's point joins when the local regeneration (capped under
+   the measured Re≈5000 ceiling) completes (~161/501).
