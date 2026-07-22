@@ -4819,3 +4819,36 @@ Combined relative-L2:
    distance); reported per-band, no cross-band claim.
 4. re1000's point joins when the local regeneration (capped under
    the measured Re≈5000 ceiling) completes (~161/501).
+
+## 2026-07-22 (evening) — band tooling ready (partition pre-registered); metric-description correction {#sec-nb-band-tooling}
+
+**Metric-description CORRECTION (semantics, not results).** The
+corrected-metric `wss_l2` is the *pointwise-mean relative vector
+error* — mean over cells of per-cell ‖Δτ‖/‖τ‖ — NOT the Frobenius
+joint L2 that @sec-nb-corrected-zeroshot's prose claimed (the
+recipe's `_relative_l2` reduces per-cell over components first).
+Both statistics are direction-sensitive and agree exactly on the
+adversarial test used to validate the fix, which is why the error
+in my description went unnoticed. Every comparison in the record
+used this same statistic on both models on both sides, so **every
+reported ratio, the 5-seed sealed differential, and the
+cross-family verdict stand as measured**; the pointwise-mean
+variant up-weights low-|τ| (near-separation) cells, which is a
+defensible — arguably preferable — weighting for WSS. Frobenius
+variants remain derivable offline from saved predictions. Credit:
+the band-tooling fork's reconciliation asserts surfaced it.
+
+**Three-way band tooling ready (commit 92868d5b), partition
+constants fixed BEFORE any three-way number exists:** five disjoint
+exhaustive vehicle-surface regions from true geometry only
+(underbody front/mid/rear at z_frac<0.18 split at streamwise
+thirds; rear_face at x_frac≥0.88; upper_body remainder), rotation-
+robust via U_inf_dir projection. Validation: global numbers
+reproduce the fleet tables digit-for-digit; region-to-global
+reconciliation is an assert (rtol 1e-5), passed on all 36 cases.
+Discriminating power confirmed on flagship s42: the wake-anchoring
+rear face is the worst region on both fields (p 0.325, wss 0.964 vs
+global 0.167/0.705) — exactly where the H-ground hypothesis says
+boundary context should help. Staged eval job runs all six allbc
+arms + three vehicle-only controls; SUBMITS ONLY after the ab3
+finals land (the script takes latest checkpoints).
