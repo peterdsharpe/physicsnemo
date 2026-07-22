@@ -65,6 +65,8 @@ def main() -> None:
                 # The val loader iterates infer_split; point it at TRAIN.
                 "infer_split=train",
                 "sampling_resolution=10000",
+                # Runs on CPU-only nodes; pinned host memory needs CUDA.
+                "dataloader.pin_memory=false",
             ],
         )
     _train_loader, val_loader, _norm, _info = build_dataloaders(cfg)
