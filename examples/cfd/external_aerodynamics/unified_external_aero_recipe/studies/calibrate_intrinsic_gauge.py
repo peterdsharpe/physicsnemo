@@ -31,6 +31,7 @@ Run from the recipe root:
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -40,11 +41,18 @@ sys.path.insert(0, str(RECIPE_ROOT / "src"))
 import torch  # noqa: E402
 from hydra import compose, initialize_config_dir  # noqa: E402
 
+from physicsnemo.distributed import DistributedManager  # noqa: E402
+
 from datasets import build_dataloaders  # noqa: E402
 from intrinsic_gauge import measure_weighted_rms_radius  # noqa: E402
 
 
 def main() -> None:
+    # Single-process job: SLURM launcher vars would steer DistributedManager
+    # into multi-process initialization on a 1-task CPU allocation.
+    for key in [k for k in os.environ if k.startswith(("SLURM_", "PMI_", "PMIX_"))]:
+        del os.environ[key]
+    DistributedManager.initialize()
     with initialize_config_dir(
         config_dir=str(RECIPE_ROOT / "conf"), version_base=None
     ):
