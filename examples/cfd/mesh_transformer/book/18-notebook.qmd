@@ -6068,3 +6068,60 @@ remains its own problem. **The highest-value experiment in the program
 is now a coverage ladder** — train and evaluate at 10k / 50k / 200k
 sources — because all three threads predict it moves, and it is the one
 variable nobody has swept.
+
+## 2026-07-25 — PRE-REGISTRATION H-CC: did the model learn a COVERAGE-SPECIFIC compensation? {#sec-nb-hcc-prereg}
+
+Written before the sweep runs. The cheapest decisive test available for
+the estimation thread, and it is inference-only.
+
+**The observation that motivates it.** At DrivAerML production coverage
+(0.11%) an *exactly-evaluated* boundary integral with exact singular
+kernels carries ~42% relative sampling error
+(@sec-nb-subtraction-replication). The trained flagship's actual
+`pressure_l2` at that same coverage is **0.167 — better than the exact
+estimator it is supposedly approximating.** A model cannot beat the
+quadrature it is built on by approximating it better. It can only be
+doing something else: fitting learned coefficients that absorb the
+*systematic part* of the sampling error at the coverage it was trained
+at.
+
+**H-CC.** The trained model's accuracy is partly a compensation tuned to
+its training coverage, not a coverage-independent operator.
+
+**The test.** Take one well-characterised fixed-gauge checkpoint
+(flagship s42, whose 10k value is known to six digits: 0.167163) and
+evaluate it unchanged on `id_reference` at
+`sampling_resolution` ∈ {2500, 5000, 10000, 20000, 40000} — coverage
+0.028% → 0.45%. Nothing else varies.
+
+**Pre-declared readings, both informative:**
+
+- **Compensation (H-CC true):** error is minimised at or near 10k and
+  **degrades as resolution increases**. A U-shape, or any rise beyond
+  10k, is the signature. This would mean the resolution-transfer
+  failure is not a bug to fix downstream but a direct consequence of
+  training at one coverage, and it would make coverage a *first-class
+  protocol variable* rather than a convenience knob.
+- **Convergence (H-CC false):** error decreases monotonically with
+  resolution, converging toward a floor. The model would then be a
+  genuine operator whose remaining error is capacity, and the
+  full-resolution failure (rel $L^2 \sim 100$ at 50k) would need a
+  different explanation entirely.
+
+*Prediction: compensation, p ≈ 0.65.* The reasoning is the arithmetic
+above — 0.167 measured against a 42% pure-numerics floor is hard to
+explain without a fitted correction — but it is genuinely uncertain,
+because the learned coefficients are also free to implement real
+variance reduction that would survive a coverage change.
+
+**Falsifier for the whole estimation thread:** monotone improvement
+with resolution would mean sampling noise is not what limits this model,
+and H-DI / H-MS / the subtraction result would all drop to
+housekeeping.
+
+Confound stated in advance: in trace mode the query set *is* the source
+set, so resolution changes both the operator's sampling and the set of
+points scored. The metric is a per-point relative $L^2$ over whatever
+points are scored, so this is a fair comparison of the same physical
+field at different sampling — but it is not a fixed-query-set
+comparison, and no claim will be made as if it were.
