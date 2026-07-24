@@ -5972,3 +5972,99 @@ detonating it, even though they do not by themselves fix coverage.
    than a win against GeoTransolver.
 3. Only then revisit coverage, which is now cleanly isolated as its own
    problem with no weighting-shaped solutions left.
+
+## 2026-07-24 (night) — REPLICATION of the forked branch's singularity-subtraction result: mechanism CONFIRMED, magnitudes CORRECTED ~4-10x down {#sec-nb-subtraction-replication}
+
+A forked research branch proposed that the trace-query boundary integral
+is *noise-dominated* at the coverage the protocol trains at, and that
+classical BEM singularity subtraction — repurposed as a variance-
+reduction device for a subsampled operator — fixes it. Source:
+`idea.md`. Because the claim would reframe four of the program's
+headline results, it was replicated from scratch before being adopted:
+own van Oosterom--Strackee implementation, own sphere, own sampling.
+Artifacts `studies/gauge_diagnostics/verify_subtraction*.py`,
+`verify_snr.py`.
+
+### Confirmed exactly
+
+**The kernel.** Signed solid angles sum to $4\pi$ at an interior point
+(to 10 digits) and $-3.4\times10^{-16}$ at an exterior point. The
+identity the fix rests on is real.
+
+**The cancellation structure at a trace query.** Own-panel term
+$-6.2832 = -2\pi$; principal value over all other panels
+$+6.2832 = +2\pi$; total $\sim 10^{-6}$ of either. The physical answer
+really is a small residual of two large, nearly-cancelling terms —
+second-kind Fredholm structure, exactly as the theory chapter says, and
+a genuine numerical trap under sampling.
+
+**The falsifier behaves as theory demands.** Variance reduction is
+monotone in density smoothness and disappears for white noise — which
+is the strongest evidence that the mechanism is understood rather than
+curve-fit, and it is the fork's own test design. Replicated:
+
+| density | std reduction (mine) | (fork) |
+|---|--:|--:|
+| linear | 1.58× | 6.6× |
+| quadratic | 1.90× | 6.2× |
+| osc degree-6 | 1.20× | 3.3× |
+| osc degree-16 | 1.04× | 2.9× |
+| white noise | 0.79× | 1.1× |
+
+### Corrected — the magnitudes do not replicate
+
+| quantity | fork | replication |
+|---|--:|--:|
+| SNR at 0.11% coverage | 0.65 | **2.36** |
+| relative error at 0.11% | 385% | **42%** |
+| std reduction, smooth density | 6.4× | **~1.6×** |
+| implied variance reduction | ~41× | **~2.6×** |
+| reduction's coverage dependence | grows (6.4 → 7.5×) | flat (1.58 / 1.55 / 1.61) |
+
+Two probable causes, both identified by reproducing the discrepancy on
+purpose. First, **sampling the own panel**: my first attempt drew the
+query's own panel into the subsample, and the plain estimator then
+suffers rare $-2\pi\sigma_x$ catastrophes that subtraction removes
+exactly — that version reports 237× for a quadratic density and 92× for
+*white noise*, i.e. the falsifier inverts. Trace mode always retains the
+own panel exactly, so including it in the sampled set is not the
+production configuration. Second, **signal size**: the fork's quoted
+physical answer is 0.0905 against my 2.304 for a generic smooth
+density, and SNR is linear in that. A near-cancelling query/density
+choice makes the estimator look ~25× worse than a typical one.
+
+### What survives, and it is still worth having
+
+- **The estimator really is bad at production coverage: 42% relative
+  error from sampling alone**, before any learning. That is a serious
+  and independently-confirmed finding, and it agrees with
+  @sec-nb-hdi-verdict from a completely different direction.
+- **Subtraction is a genuine, zero-parameter improvement** — SNR
+  2.36 → 3.63 at 0.11% coverage, consistently, with the correct
+  falsifier behaviour. It is free, it composes with everything, and it
+  needs only $\sigma(x)$, which trace mode already computes.
+- **But it is a ~1.6× improvement, not a transformation.** The fork's
+  "accuracy of 4.5% coverage obtained at 0.11%" does not survive:
+  2.6× variance is ~2.6× effective sample count, i.e. 0.11% → ~0.3%
+  coverage-equivalent.
+- **The grand unification is weakened, not dead.** SNR 2.36 is
+  signal-dominated, so "the factorial measured a noise floor" is too
+  strong as stated. But 42% sampling error is easily enough to muddy a
+  comparison between exact and learned kernel members, so the
+  hypothesis that the kernel factorial was run in a regime where
+  neither arm could compute the integral remains live and worth a
+  direct test — at increased coverage, which is now the obvious
+  experiment.
+
+### How it composes with this session's findings
+
+Three independent results now say the same thing from three directions:
+the operator is estimated from too sparse a sample, and the failures
+attributed to architecture are substantially failures of estimation.
+They are complementary, not competing: measure normalisation
+(@sec-nb-hms-verdict) makes HT weights *usable*; subtraction reduces
+*variance*; neither touches *coverage bias* (@sec-nb-hdi-verdict), which
+remains its own problem. **The highest-value experiment in the program
+is now a coverage ladder** — train and evaluate at 10k / 50k / 200k
+sources — because all three threads predict it moves, and it is the one
+variable nobody has swept.
