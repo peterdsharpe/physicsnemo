@@ -5249,3 +5249,230 @@ transfer-v2 notebook entries). The intrinsic dataset configs
 (`drivaer_ml_surface_intrinsic.yaml`, `shift_suv_surface_intrinsic.yaml`)
 are committed locally AND synced to AGA. No experiments are currently
 running (verified empty queues on AGA and DFW at handoff time).
+
+## 2026-07-24 — PRE-REGISTRATION: the measure-weight strip (H-MW) and the gauge-conditioning ladder (H-GC) {#sec-nb-prereg-0724}
+
+Written before either diagnostic runs. Two threads open together
+because they share one suspected root: **the model's activation
+magnitudes are set entirely by input scale**, since the drive stream is
+deliberately norm-free (zero-preservation forbids the normalization
+that would otherwise tame it). The cross-family divergence
+(@sec-nb-crossfam-verdict) is that mechanism firing on out-of-family
+geometry. Both hypotheses below ask whether the same mechanism is
+firing in two places we have *not* attributed to it.
+
+### H-MW: the model strips Horvitz--Thompson measure weights
+
+Established by inspection today, not hypothesis: `MeshTransformer`
+builds its geometry meshes with
+`with_data(point_data={}, cell_data={}, global_data={})`, which
+discards `MEASURE_WEIGHTS_KEY` along with the physical fields. So the
+effective measures upstreamed by #1770 never reach the model — every
+`integrate_moment` call inside `attention.py` sees a mesh with no
+recorded weights and reduces to bare `cell_areas`. Verified on a
+weighted toy mesh: `cell_measures` 440.0 before the strip, 0.5 after.
+
+For the *gauge* this is provably harmless: a uniform HT factor cancels
+between numerator and denominator of both weighted means (measured
+bitwise-identical). The question is whether the factor is uniform in
+production.
+
+- **H-MW-1 (uniformity).** In the vehicle-only pipeline the subsample
+  is a single uniform cap, so the HT factor is one constant and
+  nothing anywhere is affected. *Prediction: confirmed.*
+- **H-MW-2 (the all-boundary arm is different).** The all-BC pipeline
+  caps each boundary independently — the vehicle at
+  `sampling_resolution`, the 722-cell auxiliaries passed through
+  complete, `slip` capped or not depending on resolution. If the
+  per-boundary inclusion ratios differ, then the HT weights the model
+  discards would have been **non-uniform across the merged boundary**,
+  and the model is currently integrating a mis-weighted mixture of
+  vehicle and tunnel. *Prediction: ratios differ by ≥2× at production
+  resolution.* Falsifier: all boundaries land at the same ratio, in
+  which case H-MW is a latent correctness issue with no live instance
+  and drops to low priority.
+- **H-MW-3 (the connection worth having).** The all-BC arm is exactly
+  the arm that diverged mid-training and needed *balanced per-boundary
+  pooling* plus a 4× learning-rate reduction as a partial cure
+  (@sec-nb-allbc-instability). If H-MW-2 holds, balanced pooling may
+  be treating the symptom of a stripped quadrature weight rather than
+  a property of the physics. *This is a hypothesis, not a claim* — the
+  discriminating experiment is an allbc arm with HT weights propagated
+  into the model, against the balanced-pooling arm at matched
+  protocol. Registered, not yet commissioned; it is gated on H-MW-2.
+
+### H-GC: is the intrinsic-gauge seed instability a variance effect?
+
+The anomaly (@sec-drivaerml-crossfamily): under the intrinsic gauge,
+seed 44 trained to a 2.3× worse basin (0.03539 vs 0.01389/0.01452)
+where the fixed-gauge seeds were tight (0.01383/0.01404/0.01561). The
+intrinsic gauge's only difference from the fixed one is that
+$L_{\mathrm{ref}}$ now varies per sample over $[7.41, 8.64]$ — a
+±3.5% spread about the same mean.
+
+Mechanism under test: $L$ enters as
+$(x - c)/L$, so every downstream magnitude depends on the ratio
+(geometry extent)/(gauge). A per-sample gauge makes that ratio vary
+sample to sample; if the model sits near a stability edge, some
+initializations fall off it.
+
+**The cheap gate, run before any GPU-day is spent.** Measure
+drive-stream activation magnitude at initialization as a function of
+$L$ on realistic DrivAerML-like geometry, and take the local
+log-log sensitivity $s = \mathrm{d}\log\lVert a\rVert /
+\mathrm{d}\log L$ at $L \approx 8$. A ±3.5% gauge spread then produces
+roughly a $3.5\,|s|$ percent spread in activation magnitude.
+
+*Prediction (pre-registered): $|s|$ is modest — between 1 and 4 —
+giving ≤15% magnitude spread, which is **not** enough on its own to
+explain a 2.3× difference in converged loss. I therefore predict the
+pure-variance explanation is REFUTED at initialization, and that the
+anomaly is better explained by learning-rate marginality or by an
+ordinary (if unlucky) seed effect.*
+
+**Falsifier for that prediction:** $|s| > 8$ (i.e. ≳28% magnitude
+spread from the gauge spread alone) would make variance a live
+mechanism and promote the full training ladder.
+
+Whichever way the gate falls, the training ladder that discriminates
+the three rival explanations is pre-registered now so no arm can be
+chosen after seeing a result — flagship capacity, 1 node, 500 epochs,
+DrivAerML intrinsic, one variable per arm:
+
+| arm | tests |
+|---|---|
+| s44 replicate, lr 3.0e-3 | is the anomaly even reproducible? |
+| s44, lr 1.5e-3 | learning-rate marginality |
+| spread ×2 about the same mean, 3 seeds | variance, directly |
+| seeds 45/46, lr 3.0e-3 | base rate of the anomaly |
+
+Pre-declared reads: the replicate rejoining the band ⇒ one-off, report
+and stop. lr 1.5e-3 rejoining while the replicate does not ⇒
+LR-marginality. Spread ×2 destabilizing ≥2 of 3 seeds while the fixed
+gauge does not ⇒ variance confirmed. These are parallel, not a chain:
+each arm is informative whatever the others do.
+
+**Scope note.** Both threads bear on the same design question — whether
+a norm-free drive stream is affordable. Zero-preservation requires the
+map to be bias-free and (in linear mode) exactly linear in the drive,
+which forbids ordinary normalization. Whether some *degree-preserving*
+normalization exists that keeps the contract while removing the scale
+sensitivity is the architectural question behind all of this, and it is
+not yet a hypothesis — it is the reason these two are worth measuring
+first.
+
+## 2026-07-24 — VERDICTS: H-GC refuted by sign flip; H-MW confirmed but nearly inert; a real discretization-invariance gap found {#sec-nb-verdict-0724}
+
+Both pre-registered hypotheses (@sec-nb-prereg-0724) fell to cheap
+local diagnostics, in one case against my own framing. Recorded in the
+order they were run. Artifacts: `/tmp/hgc_gate.py`,
+`/tmp/hgc_variance.py`, `/tmp/hmw_test.py`, `/tmp/hmw_resolution.py`,
+`/tmp/hmw_causation.py` (single-machine, CPU, minutes).
+
+### H-GC: REFUTED — and my hypothesis had the sign backwards
+
+The gate measured drive-stream magnitude against the declared gauge at
+flagship configuration on DrivAerML-like geometry. Local log-log
+sensitivity across the real gauge span $[7.41, 8.64]$:
+**$s = -0.064$**, so a ±3.5% gauge spread moves drive magnitude by
+**~0.2%**. Pre-registered prediction was $|s| \in [1,4]$ ⇒ refute
+variance; measured $|s|$ is *another order of magnitude smaller* than
+the low end. Direction of the prediction right, magnitude wrong by
+$>15\times$ — recorded because the prediction was written down.
+
+Worse for the hypothesis: it was **backwards**. The ±3.5% gauge spread
+is not variance *added* to the inputs — it is the spread that
+*cancels* the geometry's own size variation, which is the definition
+of a similarity-covariant gauge. Measured directly on a population
+with DrivAerML's size statistics (r_RMS CV 2.6%):
+
+| gauge | cross-sample CV of drive magnitude |
+|---|--:|
+| fixed 8.0 | 0.1671% |
+| intrinsic $C\,r_{\mathrm{RMS}}$ | **0.0005%** |
+
+The intrinsic gauge reduces cross-sample input-scale spread by
+**~300×**. It is a conditioning *improvement*. It therefore cannot
+explain seed 44's 2.3× basin through added input variance, and the
+pre-registered "spread ×2" arm is withdrawn as unmotivated rather than
+run — its premise is refuted.
+
+**Consequence for priorities (stated plainly because it reverses a
+decision).** I argued to Peter that the s44 anomaly was "the more
+interesting object" than the transfer result, on the theory that it
+was a statement about architectural conditioning. That theory is dead:
+the gauge conditions *better*. The surviving explanations for s44 are
+ordinary optimization variance, learning-rate marginality, or loss of
+absolute-size information (the intrinsic gauge normalizes size away,
+and on a single-vehicle morph family size correlates with the design
+parameters). None of those outranks the pre-registered transfer test.
+**Transfer-v2 goes first**; the s44 discriminators (replicate, lr/2)
+ride along cheaply because they are two runs, not because the thread
+earned priority.
+
+### H-MW: confirmed non-uniform, but the model is invariant to the part that would have mattered
+
+- **H-MW-1 CONFIRMED.** Vehicle-only pipeline applies one uniform cap;
+  the HT factor is a single constant.
+- **H-MW-2 CONFIRMED.** The all-boundary pipeline caps per boundary,
+  and the recorded weights are genuinely non-uniform — at test
+  resolution 3000: vehicle **20×**, all four auxiliaries **1×** (at
+  production ratios, 8.8M → 10k, the vehicle factor is ~880×). The
+  model discards all of them at
+  `with_data(point_data={}, cell_data={}, global_data={})`.
+- **H-MW-3 largely REFUTED as a mechanism.** The decisive control:
+  scale the whole geometry (hence every cell measure by $s^2$) with the
+  declared gauge scaled to match, so the nondimensional shape is
+  identical and only measure magnitude moves. Drift across a 16×
+  measure change: **0.000%, exactly**. The model is *invariant to a
+  uniform measure rescale* — the scale-equivariance contract doing its
+  job. Since a single boundary's HT weight *is* a uniform factor,
+  **restoring it cannot change any single-boundary result.** The strip
+  is live only where the factors differ across merged boundaries, i.e.
+  the all-BC arm alone; and even there the corrected vehicle share
+  (0.0027% of total quadrature measure) remains dominated by the
+  tunnel (slip 64%, ground 24%), so HT correction is *not* the cure for
+  the all-BC imbalance that balanced pooling addresses. Honest scope
+  correction: I raised this to Peter as "the all-BC arm's quadrature
+  has been wrong in a way #1770 was designed to catch." True, and it
+  should be fixed — but its blast radius is far smaller than that
+  framing implied.
+
+### The finding that actually survived: subsampling breaks discretization invariance
+
+Chasing H-MW turned up a cleaner and more important gap. On **one
+fixed sphere** sampled at increasing source counts (the geometry never
+changes — only how many of its panels the model sees):
+
+| n sources | $\sum$ cell_areas (what the model integrates) | $\sum$ cell_measures (HT-corrected) |
+|---|--:|--:|
+| 500 | 0.3069 | 12.569 |
+| 2000 | 1.2300 | 12.595 |
+| 8000 | 4.8993 | 12.542 |
+
+The bare quadrature measure scales **linearly with source count** while
+the HT-corrected measure is invariant at $4\pi$. The model's *output*
+does not scale linearly — its normalization layers absorb most of it —
+but it still drifts **12.4% across a 16× resolution change on identical
+geometry**, and the drift is monotone.
+
+Because the model is exactly invariant to uniform measure rescaling
+(above), this drift is **not** a weighting bug. It is
+quadrature *coverage*: a random subset of panels covers a random subset
+of the surface, and the layer-potential integral over that subset is a
+genuinely different (noisier, biased-low-coverage) approximation of the
+boundary integral. That is a real violation of the discretization
+invariance the program claims as a required property, it is measured
+here for the first time, and it is the most plausible mechanism yet for
+the known **source-count/resolution transfer failure** (relative $L^2$
+~100 at 50k sources / 17.7M queries, @sec-future) — which is currently
+filed as "blocked on research" with no named mechanism.
+
+Registered as the next hypothesis, not yet run: **H-DI** — the
+resolution drift is coverage-driven, so it should scale like the
+subsample fraction and vanish as coverage → 1, and it should be
+*repairable by importance-weighting the retained panels* (HT weights
+are exactly that correction, but they are absorbed as uniform; what is
+needed is the non-uniform version, or a coverage-consistent
+quadrature). Falsifier: drift persists at matched coverage under
+different panel subsets.
