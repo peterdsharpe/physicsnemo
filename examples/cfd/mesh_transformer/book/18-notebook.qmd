@@ -5883,3 +5883,92 @@ bitwise query independence.
   "one mechanism behind three failures" to "a real but separate defect
   in measure handling", and the cross-family and resolution threads
   stay independent.
+
+## 2026-07-24 (evening) — H-MS VERDICT: a missing required invariance, found and fixed exactly; the unification is DEMOTED by its own falsifier {#sec-nb-hms-verdict}
+
+Both pre-registered predictions returned, and they split cleanly.
+Artifact `studies/gauge_diagnostics/hms_test.py`.
+
+### P1 CONFIRMED — measure-scale invariance is missing, and normalisation restores it exactly
+
+Uniform measure rescale at fixed geometry, baseline vs normalised
+weights $\hat\omega_j = \omega_j/\sum_i\omega_i$:
+
+| $k$ | baseline drift | normalised drift |
+|---:|---:|---:|
+| 16 | 44.99% | $0.0$ |
+| **880** | **6.9 × 10⁷ %** | **2.9 × 10⁻⁵ %** |
+
+The architecture is missing an invariance it needs. The program states
+four required properties after GLOBE — spatial equivariance,
+discretization invariance, units invariance, global interaction — and
+has strong evidence for the first, fourth, and for the *length* half of
+units invariance (the gauge, $3\times10^{-7}$). There is no
+corresponding invariance in the **measure**, and the failure is not
+subtle: at the quadrature rescale the correct statistical estimator
+actually requires, the model's output leaves the physical range
+entirely. Normalising the weights restores it to roundoff, and by
+construction rather than by training.
+
+### P2 REFUTED — normalisation does not touch the subsampling bias
+
+Error against the full-coverage operator, each weighting compared to
+its *own* full-coverage reference:
+
+| coverage | baseline | normalised |
+|---:|---:|---:|
+| 1.6% | 36.4% | 39.9% |
+| 6.2% | 33.5% | 37.0% |
+| 25.0% | 26.4% | 29.6% |
+
+The pre-registered bar was a ≥2× reduction at 1.6% coverage; measured
+0.91×, i.e. marginally *worse*. **P3 fires: the unification is
+demoted.** H-MS is not one mechanism behind three failures.
+
+What it is instead, stated precisely:
+
+- **Claims 1 and 2 survive and are strengthened.** Cross-family
+  divergence and the gauge dose-response are both *measure-magnitude*
+  phenomena, and the $k$-ladder gives them a mechanism they did not
+  have. Nondimensional area scales as $L^{-2}$, so the measured
+  recovery 8 → 16 → 48 is a 4× then 36× reduction in total measure —
+  exactly the direction and rough magnitude the ladder predicts. The
+  gauge was never the cause; it was the *lever* that happened to move
+  the measure.
+- **Claim 3 is refuted.** The subsampling bias is untouched by
+  weighting, which independently confirms @sec-nb-hdi-verdict's
+  completeness reading by a second route. Two different interventions
+  (uniform HT factor, full normalisation) both fail to move it. The
+  coverage problem is about *which panels exist*, and no reweighting
+  scheme will fix it.
+
+### What this is worth
+
+The negative half is as useful as the positive: it stops a plausible
+and wrong unification before it reached a chapter, and it retires
+reweighting as a candidate repair for resolution transfer.
+
+The positive half is a genuine architectural finding. A missing
+invariance, measured; an exact repair that is a one-line reweighting;
+and — the part that matters most — the repair makes Horvitz--Thompson
+weights **usable**. Today they are catastrophic ($k=880 \Rightarrow
+7\times10^4$); under normalisation they are inert, which means correct
+subsample statistics can finally be carried through the model without
+detonating it, even though they do not by themselves fix coverage.
+
+**Registered next, in order.**
+
+1. Implement measure normalisation as an opt-in model knob
+   (`measure_normalization=True`), with the total measure re-entering as
+   one dimensionless global scalar $A/L^{d-1}$ so no information is
+   destroyed. Contract tests first: zero-drive, exact drive linearity,
+   equivariance, bitwise query independence — all four should survive
+   *by construction*, and a test that says otherwise is the finding.
+2. Pre-register the training test that matters: does an
+   arm trained with normalised measures transfer cross-family better
+   than the intrinsic-gauge arm? H-MS claims 1--2 predict yes; the
+   honest prior is that it removes a divergence mode rather than buying
+   accuracy, so the bar should be *structural* (finite, $<1.0$) rather
+   than a win against GeoTransolver.
+3. Only then revisit coverage, which is now cleanly isolated as its own
+   problem with no weighting-shaped solutions left.
