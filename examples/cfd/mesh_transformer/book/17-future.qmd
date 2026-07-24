@@ -78,12 +78,19 @@ including one live bug found (and confirmed) during figure generation.
   $\sim$5$\times$ better), and on the first multi-field suite the
   parity and nonlinearity mechanisms *compose* (@sec-fluid-suites,
   @sec-pseudo-extension, @sec-euler-bernoulli).
-- **The scale gauge is intrinsic, and equivariance is unconditional.**
-  The reference length is derived from the geometry (radius of
-  gyration), accuracy-neutral at three seeds, with the convention-drift
-  demonstration on record: a 3$\times$ corrupted external gauge costs
-  the explicit-key model 4.64$\times$ while the intrinsic model is
-  bitwise immune (@sec-intrinsic-gauge).
+- **The scale gauge is intrinsic *by default*, and equivariance is
+  unconditional on that path.** The reference length is derived from
+  the geometry (radius of gyration), accuracy-neutral at three seeds,
+  with the convention-drift demonstration on record: a 3$\times$
+  corrupted external gauge costs the explicit-key model 4.64$\times$
+  while the intrinsic model is bitwise immune
+  (@sec-intrinsic-gauge). **Scoped honestly since 2026-07-22:** the
+  industrial campaign ran on the *explicit override* with a
+  hard-coded constant, and paid for it — every fixed-gauge checkpoint
+  diverged on cross-family zero-shot transfer. The default's guarantee
+  was never wrong; it was simply not the path in production. Repair
+  built, calibrated, and pre-registered
+  (@sec-drivaerml-crossfamily).
 - **One full-width head.** Heads at fixed score capacity are
   bookkeeping; the single full-width head won decisively on 2D Laplace
   and confirmed non-inferior on all 13 suite-split cells cross-suite,
@@ -267,9 +274,26 @@ including one live bug found (and confirmed) during figure generation.
   extension thinned the 3-seed estimate honestly). The pressure
   differential DEMOTED to suggestive (ranges touch at 5 seeds). S2
   and zero-shot depth show no differential for either model.
-  Cross-family transfer — the stronger test — is pre-registered and
-  in build (@sec-nb-crossfamily-prereg: DrivAerML-trained
-  checkpoints evaluated zero-shot on SHIFT-SUV).
+- **Cross-family transfer: the falsifier fired maximally, and the
+  mechanism is a protocol flaw** (@sec-drivaerml-crossfamily,
+  @sec-nb-crossfam-verdict). The stronger test — DrivAerML-trained
+  checkpoints evaluated zero-shot on the SHIFT-SUV family — returned
+  its worst branch: every MeshTransformer checkpoint (two capacities,
+  three seeds) diverged to non-physical output while the incumbent
+  stayed structured at 0.677 through the identical frozen pipeline.
+  **The generalization identity failed its decisive zero-shot test as
+  deployed.** A clean monotone dose-response localizes the failure to
+  the fixed declared scale gauge, not to the architecture; the
+  intrinsic-gauge repair is calibrated ($C = 26.4766$, fit once on
+  train), its inertness control passes, its drop-in gate failed as
+  pre-registered, and three retrains under the repaired gauge are
+  complete. **Transfer-v2 is pre-registered and unrun**
+  (@sec-nb-transfer-v2-prereg). Odds moved with the evidence:
+  cross-family *advantage* 35% → ~10–15%; "transfers at all,
+  post-repair" ~75%. One open anomaly rides on it — the intrinsic
+  gauge made training seed-dependent in a way the fixed gauge did not
+  (seed 44 at 2.3× the others' basin), which is a statement about
+  conditioning, not about one dataset pair.
 - **True (full-mesh) OOD drag coefficients: blocked on research, not
   wiring.** The OOD verdict's drag numbers are subsample-integrated
   pseudo-coefficients; the upstream force/moment ground truth is
@@ -298,7 +322,27 @@ architectural claims, (b) component-level evals, and (c) simplification
 as the chief lens, plus one fair-ground comparison against the
 strongest mainstream baseline. Most of its original directions have
 since completed; their outcomes live in the ledger above and their
-numbers in @sec-benchmarks. What remains live:
+numbers in @sec-benchmarks.
+
+**Item zero, ahead of the list below: finish the cross-family
+question.** It is not one more agenda entry, because it is the only
+open item that can invalidate the program's stated identity. The
+sequence is fixed and pre-registered
+(@sec-nb-transfer-v2-prereg): gate 0 (do the intrinsic-retrained
+checkpoints hold their in-family accuracy?), then transfer-v2's
+structural and comparability gates. Two outcomes are both
+informative and neither is a tuning exercise — if the repaired model
+transfers comparably, the architecture story rehabilitates and the
+industrial identity has evidence; if it still diverges, the
+brittleness is deeper than the gauge and the within-family
+differential (@sec-nb-seal-verdict) is the strongest generalization
+claim this architecture gets. Riding on the same thread: the
+seed-dependent training instability the intrinsic gauge introduced,
+which is worth a discriminating experiment in its own right (a
+half-learning-rate retrain of the divergent seed) because it
+concerns conditioning rather than one dataset pair.
+
+What else remains live:
 
 1. **Solver-labeled Euler and RANS suites** — the next ledge: fields no
    longer analytically manufactured, the FEM catalog of
@@ -430,14 +474,6 @@ only after the incident, and a loose analytic bound in a rejection sampler
 fails *silently* as an infinite loop rather than loudly as an error —
 per-surface empirical bounds are the robust default.
 
-**Dead and orphaned code.** *Closed as stale, 2026-07-07 (review
-execution): the code evolved past all three findings.* The `icosphere()`
-dead assignment is already gone from the source; `_STAR_MODES_OOD` gained
-its consumer when the 3D study driver (`laplace3d_study.py`) landed; and
-`solid_angle_influence` is now consumed at six sites in that driver and
-covered by `test_laplace3d_study.py` (the solid-angle oracle arm runs
-through the study end-to-end). Verified in-source, not from memory.
-
 **Duplication: the panel-influence math exists four times.** The
 subtended-angle singular integral and the entire-order antiderivatives are
 implemented in `layer_potential.py` (`double_layer_influence`),
@@ -457,32 +493,6 @@ surface is actively moving (log-radial features, auxiliary scales, and the
 member sweep landed or are in flight this week), which is exactly the
 instability the deferral condition names.*
 
-**Evidence-orphaned defaults.** *Closed 2026-07-07 (review execution).*
-`HarmonicPanelBIE` now defaults to the pruning-proved configuration
-(`regular_orders=0`, `shared_relaxation=True`; @sec-pruning showed it
-lossless to four decimals and better than the 13-parameter original), and
-every named arm in `train.py` pins its full historical configuration
-explicitly so the archive's arm names keep building exactly what they
-always built (55 affected example tests green). `SelfConsistentPairKernel`
-carries an explicit FROZEN LADDER RECORD warning in its class docstring —
-its refuted-configuration flags are labeled as the executable falsification
-record, not recommendations, and the module is maintenance-frozen.
-
-**Dead work in the dense hot loop** *(found while
-profiling the scale study, @sec-scale)*. `PairInvariantFeatures` computed
-unconditionally inside the dense $O(N_qN_s)$ decode even when the
-dictionary had no smooth members to consume its output — roughly ten
-dead floats per pair on the flagship singular-only and singpair arms.
-*Closed 2026-07-07 (review execution): conditional skip landed; a
-regression test pins that the invariants are never computed on
-smooth-member-free dictionaries and still computed on every
-member-carrying one, with the existing singular-only/singpair bitwise
-contract tests passing unchanged across the change (behavioral
-invisibility). Measured effect: $\approx$7% of singpair decode wall-clock
-(upper-bounded via the cheapest forced consumer; CPU fp64,
-$S{=}2048 \times Q{=}8192$) — modest, as the ten-floats-per-pair
-arithmetic predicted against the exact members' closed forms.*
-
 **A latent contract bug, found by de-biasing the test data** *(found
 during the intrinsic-gauge work, @sec-intrinsic-gauge)*. The
 pair-invariant einsum took a CUDA batched-GEMM path with 1-ulp drift
@@ -492,12 +502,20 @@ $L = 1$ data. Found and fixed; the general lesson is the test-data
 bias, not the einsum: a contract test whose fixtures all sit at a
 special value of an input is a contract test with a hole in it.
 
-**Two reference numbers, two banks.** The reference `MeshTransformer` row is
-0.458 on the 64-case reference bank and 0.425 on the 32-case finalist bank.
-Both are correct, both appear in the README, and they are one careless
-citation apart from contradicting each other. *Closed 2026-07-07 (review
-execution): both README tables now carry an explicit bank-disambiguation
-note naming the other number and its bank; citations should name the bank.*
+**Closed during review execution (2026-07-07), kept as one line each.**
+Three findings evaporated on re-reading the source — the `icosphere()`
+dead assignment, orphaned `_STAR_MODES_OOD`, and unconsumed
+`solid_angle_influence` — the code had already grown their consumers.
+Three were fixed: `HarmonicPanelBIE` now defaults to the pruning-proved
+configuration with every archived arm pinning its historical settings
+explicitly (@sec-pruning); `PairInvariantFeatures` no longer computes
+$\approx$ten dead floats per pair inside the dense decode when the
+dictionary has no smooth member to consume them ($\approx$7% of singpair
+decode wall-clock, behaviorally invisible by bitwise test); and the two
+reference `MeshTransformer` numbers that differ only by bank (0.458 on
+the 64-case reference bank, 0.425 on the 32-case finalist bank) now
+carry explicit bank-disambiguation notes wherever they appear —
+**citations should always name the bank.**
 
 **Upstream gap worth contributing.** `torch.special.modified_bessel_k0/k1`
 lack autograd derivatives; the iteration-3 custom `Function`s with analytic
@@ -537,8 +555,13 @@ reading is corrected in the checked-in artifact (the val-vs-eval gap is
 rotational-Euler family is disk-only at three seeds (the star
 generalization is declared future work, and its exact-label
 certification is the family's boundary of validity;
-@sec-euler-rotational); and the
+@sec-euler-rotational); the
 training histories, checkpoints, and the mode-response comparison behind
 @fig-kernel, @fig-convergence, and @sec-kernel-decoder are
-single-machine `/tmp` artifacts. The checked-in JSONs under `results/`
-are the durable record.
+single-machine `/tmp` artifacts; and the cross-family transfer evidence
+(@sec-drivaerml-crossfamily) is **one family pair, one 20-case pilot,
+zero-shot only** — the verdict against the fixed-gauge protocol is
+frozen-protocol and stands, the gauge dose-response that explains it is
+test-set-touching and exploratory, and no post-repair transfer number
+exists yet. The checked-in JSONs under `results/` are the durable
+record.

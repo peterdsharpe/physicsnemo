@@ -79,6 +79,24 @@ In words:
    architecture (evidence: @sec-intrinsic-gauge). After this step,
    nothing downstream ever sees an absolute position or an absolute
    scale.
+
+   ::: {.callout-warning title="Using the override safely"}
+   The guarantee above is a property of the **default path**. The
+   override reintroduces exactly the failure mode the default
+   removes, and the industrial campaign measured the cost: a
+   hard-coded constant gauge made every DrivAerML-trained checkpoint
+   diverge on zero-shot transfer to a different vehicle family
+   (@sec-drivaerml-crossfamily). The rule this bought:
+
+   > **If you must override, override with a similarity-covariant
+   > functional of the input geometry — never a constant.**
+
+   A declared chord or diameter that arrives *per sample*, scaling
+   with the geometry, is fine and is what the knob is for. A number
+   pinned in a config file is not a length; it is one dataset's
+   absolute size wearing a length's units, and the model has no way
+   to tell the difference.
+   :::
 2. **Lift.** Each cell's geometry and labels become a vector of latent
    *scalar channels* and a set of latent *vector channels* (next section
    explains the distinction and why we keep it).

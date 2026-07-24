@@ -1,0 +1,240 @@
+{
+  "_README": [
+    "Cross-family zero-shot transfer (DrivAerML -> SHIFT-SUV) and the",
+    "intrinsic-gauge repair.  Transcribed from the dated lab-notebook",
+    "entries listed in `provenance` below; those entries remain the",
+    "authoritative record and this file is the machine-readable copy the",
+    "book's figure cells read.",
+    "",
+    "READ THE `status` FIELD ON EVERY BLOCK.  `frozen_protocol` blocks come",
+    "from pre-registered tests run before their numbers existed.",
+    "`exploratory` blocks are test-set-touching diagnostics and CANNOT",
+    "support a claim -- they exist to localize a mechanism, not to score it.",
+    "`pre_registration` blocks are predictions frozen before any",
+    "corresponding measurement."
+  ],
+  "provenance": {
+    "notebook_entries": [
+      "sec-nb-crossfamily-prereg",
+      "sec-nb-crossfam-verdict",
+      "sec-nb-gauge-calib",
+      "sec-nb-gauge-accept-verdict",
+      "sec-nb-transfer-v2-prereg",
+      "sec-nb-handoff-0724"
+    ],
+    "cluster": "AGA (GB300)",
+    "metric": "corrected direction-sensitive relative L2 (see #1854)",
+    "eval_split": "SHIFT-SUV estate pilot `eval_pilot`, 20 cases",
+    "note": [
+      "All MeshTransformer and GeoTransolver rows below ran through the",
+      "IDENTICAL frozen inference pipeline; the fork's fairness audit",
+      "verified L_ref equality and the pressure/WSS sign conventions."
+    ]
+  },
+
+  "v1_zero_shot": {
+    "status": "frozen_protocol",
+    "description": [
+      "The pre-registered decisive generalization test, run with the",
+      "historical fixed gauge `reference_length: 8.0` baked into the",
+      "DrivAerML dataset config.  The pre-registered falsifier was",
+      "'GeoTransolver transfers equal or better'; it fired beyond its own",
+      "scale."
+    ],
+    "gauge": "fixed 8.0",
+    "n_cases": 20,
+    "rows": {
+      "geotransolver_anchor": {
+        "shift_pressure_l2": 0.677,
+        "shift_wss_l2": 123.5,
+        "own_family_id_pressure_l2": 0.061,
+        "own_family_id_wss_l2": 0.280
+      },
+      "mt_flagship_seed42": {
+        "shift_pressure_l2": 1.3e15,
+        "shift_wss_l2": 6.4e17,
+        "own_family_id_pressure_l2": 0.167,
+        "own_family_id_wss_l2": 0.705
+      },
+      "mt_flagship_seed43": {
+        "shift_pressure_l2": 8.1e4,
+        "shift_wss_l2": 5.1e7,
+        "own_family_id_pressure_l2": 0.169,
+        "own_family_id_wss_l2": 0.710
+      },
+      "mt_flagship_seed44": {
+        "shift_pressure_l2": 4.1e13,
+        "shift_wss_l2": 2.8e14,
+        "own_family_id_pressure_l2": 0.180,
+        "own_family_id_wss_l2": 0.737
+      },
+      "mt_x2L8": {
+        "shift_pressure_l2": null,
+        "shift_wss_l2": null,
+        "nonfinite": "NaN",
+        "own_family_id_pressure_l2": 0.107,
+        "own_family_id_wss_l2": 0.479
+      }
+    },
+    "verdict": [
+      "GeoTransolver degrades ~11x on pressure and stays structured.",
+      "Every MeshTransformer checkpoint -- two capacities, three seeds --",
+      "diverges to non-physical output.  The model as shipped does not",
+      "transfer across vehicle family."
+    ]
+  },
+
+  "gauge_dose_response": {
+    "status": "exploratory",
+    "exploratory_reason": [
+      "This scan varied the gauge while looking at the held-out SHIFT",
+      "pilot.  It localizes the mechanism; it cannot rehabilitate a",
+      "transfer claim.  That is what transfer-v2 is for."
+    ],
+    "checkpoint": "mt_flagship_seed42 (fixed-gauge training)",
+    "eval": "SHIFT-SUV eval_pilot, 20 cases",
+    "points": [
+      {"reference_length": 8.0, "shift_pressure_l2": 1.3e15, "note": "the frozen protocol's divergence"},
+      {"reference_length": 16.0, "shift_pressure_l2": 5.12, "note": "finite, structured"},
+      {"reference_length": 48.0, "shift_pressure_l2": 1.71, "note": "monotone improving"}
+    ],
+    "geotransolver_reference": 0.677,
+    "verdict": [
+      "Clean, monotone dose-response localizes the cross-family failure to",
+      "the FIXED declared gauge overflowing the norm-free drive stream on",
+      "out-of-family geometry statistics.  Even the best exploratory gauge",
+      "(1.71) remains ~2.5x worse than GeoTransolver's frozen-protocol",
+      "transfer (0.677)."
+    ]
+  },
+
+  "intrinsic_gauge_calibration": {
+    "status": "frozen_protocol",
+    "description": [
+      "reference_length = C * r_RMS(sample), with r_RMS the",
+      "measure-weighted RMS boundary radius about the measure-weighted",
+      "centroid.  C is calibrated ONCE on the DrivAerML TRAIN split as",
+      "8.0 / mean(r_RMS), so DrivAerML reproduces its historical operating",
+      "point and any other family lands at the same RELATIVE point.",
+      "C is never re-fit per evaluation set."
+    ],
+    "job": "AGA 285486",
+    "n_train_samples": 484,
+    "sampling_resolution": 10000,
+    "r_rms_mean": 0.3021536821,
+    "r_rms_std": 0.0089,
+    "r_rms_min": 0.2798,
+    "r_rms_max": 0.3265,
+    "scale_constant_C": 26.476592786355283,
+    "resulting_drivaerml_gauge_range": [7.41, 8.64],
+    "measured_stable_zone_lower_bound": 6.0,
+    "artifact": "unified_external_aero_recipe/studies/intrinsic_gauge_calibration.json"
+  },
+
+  "acceptance_gates": {
+    "status": "frozen_protocol",
+    "description": "Gates declared at sec-nb-gauge-calib BEFORE any acceptance number existed.",
+    "job": "AGA 285531 (paired 4-lane, id_reference, same node, current code)",
+    "lanes": {
+      "flagship_s42_fixed": {"pressure_l2": 0.167163, "wss_l2": 0.705265},
+      "flagship_s42_intrinsic": {"pressure_l2": 0.178731, "wss_l2": 0.728916},
+      "geotransolver_fixed_dataset": {"pressure_l2": 0.061000, "wss_l2": 0.279863},
+      "geotransolver_intrinsic_dataset": {"pressure_l2": 0.061000, "wss_l2": 0.279863}
+    },
+    "gate_1_drivaer_preservation": {
+      "bar": "within 2% relative on pressure_l2 and wss_l2",
+      "measured_pressure_drift_pct": 6.9,
+      "measured_wss_drift_pct": 3.4,
+      "outcome": "FAIL",
+      "consequence": [
+        "Pre-declared: the intrinsic gauge is NOT a drop-in for existing",
+        "checkpoints; the confirmatory path is retraining under it.",
+        "Since mean(C * r_RMS) = 8.0 on train by construction, the drift is",
+        "driven by the +/-3.5% per-sample gauge SPREAD, not an offset."
+      ]
+    },
+    "gate_2_inertness": {
+      "bar": "GeoTransolver (which declares no reference_length_key) must reproduce its fixed-dataset numbers to rtol 1e-4",
+      "outcome": "PASS",
+      "note": "Digits identical across dataset variants -- the yaml changes nothing but the gauge."
+    }
+  },
+
+  "intrinsic_retrain": {
+    "status": "frozen_protocol",
+    "description": [
+      "Flagship architecture retrained under the intrinsic gauge, protocol",
+      "otherwise identical to t2 (500 epochs, 1 node, lr 3.0e-3)."
+    ],
+    "training_val_final": {
+      "intrinsic_seed42": 0.01389,
+      "intrinsic_seed43": 0.01452,
+      "intrinsic_seed44": 0.03539
+    },
+    "fixed_gauge_comparator_training_val_final": {
+      "fixed_seed42": 0.01383,
+      "fixed_seed43": 0.01404,
+      "fixed_seed44": 0.01561
+    },
+    "anomaly": {
+      "summary": "Seed 44 trained to a 2.3x worse basin under the intrinsic gauge.",
+      "why_it_matters": [
+        "The FIXED-gauge seeds were tight (0.01383 / 0.01404 / 0.01561), so",
+        "this is not the usual unlucky-seed tail: the intrinsic gauge",
+        "introduced seed-dependent training instability the fixed gauge did",
+        "not have.  The divergence guard (train loss > 1e3) would not catch",
+        "a 2.3x soft regression."
+      ],
+      "open": true
+    }
+  },
+
+  "gate_0_comparator_band": {
+    "status": "frozen_protocol",
+    "description": [
+      "Fixed-gauge flagship 3-seed band on the DrivAerML id_reference",
+      "split, from the same harness and current code.  Transfer-v2's",
+      "gate 0 asks whether the intrinsic-retrained checkpoints land in it."
+    ],
+    "split": "id_reference",
+    "seeds": {
+      "fixed_seed42": {"pressure_l2": 0.16716, "wss_l2": 0.70527},
+      "fixed_seed43": {"pressure_l2": 0.16914, "wss_l2": 0.71037},
+      "fixed_seed44": {"pressure_l2": 0.17958, "wss_l2": 0.73656}
+    },
+    "band": {
+      "pressure_l2": [0.16716, 0.17958],
+      "wss_l2": [0.70527, 0.73656]
+    }
+  },
+
+  "transfer_v2_pre_registration": {
+    "status": "pre_registration",
+    "frozen_at": "2026-07-22, while the intrinsic retrains were at epochs 1-6 of 500",
+    "gates": {
+      "gate_0_in_family_sanity": {
+        "bar": "intrinsic-retrained id_reference within the fixed-gauge 3-seed band",
+        "on_failure": "report that the intrinsic gauge costs in-family accuracy; reassess before any SHIFT eval"
+      },
+      "gate_1_structural_transfer": {
+        "bar": "all 3 seeds finite and structured, pressure_l2 < 1.0",
+        "predicted_probability": 0.75,
+        "on_failure": "the fixed gauge was not the whole cross-family mechanism"
+      },
+      "gate_2_comparable_transfer": {
+        "comparable_bar": 1.354,
+        "comparable_bar_basis": "2x GeoTransolver's 0.677",
+        "at_par_bar": 0.677,
+        "predicted_probability_comparable": 0.45,
+        "predicted_probability_at_par": 0.15
+      },
+      "wss": "secondary/descriptive only -- GeoTransolver's own zero-shot WSS is 123.5, junk for everyone on this split"
+    },
+    "forbidden_after_results": [
+      "re-fitting C on SHIFT",
+      "re-picking the comparison seed",
+      "swapping the metric for a variant that flatters",
+      "promoting WSS to a headline"
+    ]
+  }
+}

@@ -26,8 +26,16 @@ capacity, its two sub-mechanisms near-perfect substitutes); the
 batch 2×2 identified gradient noise, not update count, as the
 small-batch mechanism; and the 5-seed differential extension SEALED
 the deep-S1 WSS differential (disjoint 5-vs-5) while demoting the
-pressure differential to suggestive. PENDING now: the AirFRANS
-clean-protocol ranking, the cross-family transfer pilot, and the
+pressure differential to suggestive.
+
+Since that update the chapter's sharpest result landed, and it went
+against us: the **cross-family zero-shot test fired its falsifier
+maximally** — the model as shipped does not transfer to a different
+vehicle family at all (@sec-drivaerml-crossfamily). The mechanism is
+localized to a repairable protocol flaw (a fixed declared scale
+gauge), the repair is built and calibrated, and the confirmatory
+re-run is pre-registered and awaiting its first gate. PENDING now:
+transfer-v2's gate 0, the AirFRANS clean-protocol ranking, and the
 all-boundary redo.
 :::
 
@@ -365,8 +373,104 @@ $\text{val} \approx 0.0125 \cdot P_{\mathrm{M}}^{-0.33}$, rms
 log-residual 0.052 — globally still a line, but with an honest
 wrinkle at the top: the newest doubling's local slope flattened to
 0.27 (×2→×2L4 was 0.42), a **mild bend at the 9.6M rung**
-(@sec-nb-x2l8-verdict). Placing the incumbent's matched-protocol
-anchor (0.00249 at ≈9.5M params) on that curve:
+(@sec-nb-x2l8-verdict).
+
+```{python}
+#| label: fig-scalelaw
+#| fig-cap: >
+#|   The parameter frontier on a fixed protocol (1 node, 500 epochs,
+#|   LR-stable rungs only). Six rungs fit val = 0.0125 * P_M^-0.33 with
+#|   rms log-residual 0.052. The x4 rung (hollow) is EXCLUDED from the
+#|   fit: it froze at initialization at the shared learning rate and
+#|   trains only at LR/4, where it finishes worse than x2 despite 4x the
+#|   parameters -- pure width bending under a muP-style LR-proportional-
+#|   to-1/width constraint. The incumbent's matched-protocol anchor sits
+#|   2.34x below the curve at essentially the same budget; the dashed
+#|   extension shows how far pure scaling would have to go to reach it,
+#|   and the shaded fan is the difference between the global slope
+#|   (0.33) and the flatter local slope of the newest doubling (0.27).
+#|   The +/-12% band on the x2 rung is the measured 4-run seed spread and
+#|   applies to every single-seed rung.
+import matplotlib.pyplot as plt
+import numpy as np
+
+### Rungs: (label, params in millions, val, LR-stable?)
+rungs = [
+    ("flagship", 0.6, 0.0140, True),
+    ("L4", 1.2, 0.0120, True),
+    ("L8", 2.4, 0.0102, True),
+    ("×2", 2.4, 0.00979, True),
+    ("×2L4", 4.8, 0.00702, True),
+    ("×2L8", 9.6, 0.005828, True),
+    ("×4", 9.6, 0.0123, False),
+]
+stable = [(p, v) for _, p, v, ok in rungs if ok]
+params = np.array([p for p, _ in stable])
+vals = np.array([v for _, v in stable])
+
+### The chapter's pre-registered fit.
+amplitude, slope = 0.0125, -0.33
+local_slope = -0.27
+incumbent_params, incumbent_val = 9.5, 0.00249
+
+fig, ax = plt.subplots(figsize=(6.8, 4.0))
+grid = np.logspace(np.log10(0.5), np.log10(400), 200)
+ax.plot(grid, amplitude * grid**slope, color="#2a78d6", lw=1.6,
+        label="fit  $0.0125\\,P_\\mathrm{M}^{-0.33}$", zorder=2)
+
+### How far pure scaling must go, under global vs local slope.
+anchor_p, anchor_v = 9.6, 0.005828
+far = grid[grid >= anchor_p]
+ax.fill_between(far,
+                anchor_v * (far / anchor_p) ** slope,
+                anchor_v * (far / anchor_p) ** local_slope,
+                color="#2a78d6", alpha=0.10, lw=0, zorder=1)
+ax.plot(far, anchor_v * (far / anchor_p) ** local_slope, color="#2a78d6",
+        lw=1.2, ls=":", zorder=2)
+
+### Seed spread measured on the x2 rung, carried by every single-seed rung.
+ax.errorbar(params, vals, yerr=vals * 0.12, fmt="none", ecolor="#898781",
+            elinewidth=1.0, capsize=3, alpha=0.7, zorder=3)
+ax.plot(params, vals, "o", ms=8, color="#2a78d6", mec="white", mew=1.2,
+        zorder=4, label="LR-stable rungs (fitted)")
+ax.plot(9.6, 0.0123, "o", ms=9, mfc="none", mec="#e34948", mew=1.8, zorder=4,
+        label="×4 rung — LR-constrained, excluded")
+ax.plot(incumbent_params, incumbent_val, "*", ms=17, color="#1baf7a",
+        mec="white", mew=1.0, zorder=5, label="incumbent (matched protocol)")
+
+for label, p, v, ok in rungs:
+    offset = (7, 5) if label != "×2" else (7, -13)
+    ax.annotate(label, (p, v), textcoords="offset points", xytext=offset,
+                fontsize=8, color="#52514e")
+
+### The measured matched-parameter gap.
+ax.annotate("", xy=(9.6, incumbent_val), xytext=(9.6, 0.005828),
+            arrowprops=dict(arrowstyle="<->", color="#0b0b0b", lw=1.2))
+ax.text(10.6, 0.0037, "2.34×\nmeasured", fontsize=8.5, color="#0b0b0b")
+ax.axvline(134, color="#898781", lw=1.0, ls="--")
+ax.text(120, 0.0205, "parity by pure scaling\n~134M (global slope)\n~230M (local slope) ",
+        fontsize=7.5, color="#898781", va="top", ha="right")
+
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.45, 420)
+ax.set_ylim(0.0018, 0.022)
+ax.set_yticks([0.002, 0.005, 0.01, 0.02],
+              ["0.002", "0.005", "0.010", "0.020"])
+ax.minorticks_off()
+ax.set_xlabel("trainable parameters (millions)")
+ax.set_ylabel("DrivAerML validation relative $L^2$")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+ax.set_axisbelow(True)
+ax.legend(fontsize=8, loc="lower left", frameon=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Placing the incumbent's matched-protocol anchor (0.00249 at ≈9.5M
+params) on that curve:
 
 - At the incumbent's own budget the gap is now **measured, not
   extrapolated: 0.005828 at 9.6M — a 2.34× gap at matched
@@ -497,6 +601,76 @@ Two findings, both structural:
    preserve at least one such channel, and the exact correction is
    the principled zero-parameter choice.
 
+The two factorials together give the chapter its causal summary, and
+it is worth seeing on one axis — because the ordering is the opposite
+of what the program's thesis predicted.
+
+```{python}
+#| label: fig-attribution
+#| fig-cap: >
+#|   Industrial mechanism attribution, every factor measured at the SAME
+#|   flagship operating point by a 3-seed pre-registered factorial that
+#|   toggles one mechanism at a time. The trace formulation dominates;
+#|   capacity is second; the exact singular dictionary -- the program's
+#|   thesis mechanism -- contributes 0-8%. Hollow markers show where two
+#|   mechanisms were measured at the SMALL pre-ladder configuration: the
+#|   trace effect GREW with capacity (2.03x to 3.8x) while the member
+#|   dictionary COMPRESSED to noise. Effect sizes are properties of an
+#|   operating point, not of a mechanism. Values from this chapter's
+#|   factorial tables; the synthetic-program causation (@sec-benchmarks)
+#|   is unaffected -- there the exact members were varied on problems
+#|   whose exact kernels are the right ones.
+import matplotlib.pyplot as plt
+
+### Flagship-capacity factorials, 3 seeds each (tables above).
+no_trace, flagship = 0.0551, 0.0145        # trace factorial
+mlp_only = 0.0157                          # kernel factorial
+small_plain, small_trace = 0.1019, 0.0503  # pre-ladder trace anchors
+small_plain_m, small_members = 0.1019, 0.0999
+frontier_lo, frontier_hi = 0.0140, 0.005828  # 0.6M -> 9.6M rungs
+
+mechanisms = [
+    ("trace formulation\n(jump + self-identification)", no_trace / flagship,
+     small_plain / small_trace, "#2a78d6"),
+    ("capacity\n(0.6M → 9.6M params)", frontier_lo / frontier_hi, None, "#eda100"),
+    ("exact singular dictionary\n(the thesis mechanism)", mlp_only / flagship,
+     small_plain_m / small_members, "#e34948"),
+]
+
+fig, ax = plt.subplots(figsize=(7.0, 3.0))
+for i, (label, factor, small, color) in enumerate(mechanisms):
+    y = len(mechanisms) - 1 - i
+    ax.plot([1.0, factor], [y, y], color=color, lw=7, solid_capstyle="butt",
+            alpha=0.85, zorder=2)
+    ax.plot(factor, y, "o", ms=10, color=color, mec="white", mew=1.2, zorder=4)
+    ax.annotate(f"{factor:.2f}×", (factor, y), textcoords="offset points",
+                xytext=(12, -3), fontsize=9.5, color="#52514e", fontweight="bold")
+    if small is not None:
+        ax.plot(small, y, "o", ms=9, mfc="none", mec=color, mew=1.8, zorder=5)
+        ax.annotate(f"{small:.2f}× at small config", (small, y),
+                    textcoords="offset points", xytext=(0, 11),
+                    fontsize=7.5, color="#898781", ha="center")
+
+ax.axvline(1.0, color="#0b0b0b", lw=1.0)
+ax.text(1.02, 2.42, "no effect", fontsize=7.5, color="#0b0b0b")
+ax.set_xscale("log")
+ax.set_xlim(0.93, 5.4)
+ax.set_xticks([1, 1.5, 2, 3, 4, 5], ["1×", "1.5×", "2×", "3×", "4×", "5×"])
+ax.minorticks_off()  # log minor labels otherwise leak past the explicit ticks
+ax.set_ylim(-0.6, 2.75)
+ax.set_yticks(range(len(mechanisms)),
+              [m[0] for m in reversed(mechanisms)], fontsize=8.5)
+ax.set_xlabel("validation-error factor gained (log scale)")
+ax.grid(axis="x", color="#e1e0d9", lw=0.8)
+ax.grid(axis="y", visible=False)
+ax.set_axisbelow(True)
+for spine in ("top", "right", "left"):
+    ax.spines[spine].set_visible(False)
+ax.tick_params(axis="y", length=0)
+fig.tight_layout()
+plt.show()
+```
+
 ### Generalization: the OOD protocol and its verdict
 
 This is the program's north-star axis — a surrogate that only
@@ -602,8 +776,303 @@ aerodynamic regime shifts (wake topology, ground effect), but not
 novel vehicle topologies. Within that stated scope: **geometry
 generalization on the industrial benchmark holds at ~3% (pressure)
 and ~8% (vector WSS, S1 only) degradation — boundary and deep, both
-protocols, three seeds each — and, at deep-S1, measurably better
-than the incumbent's on both fields, pending the 5-seed seal.**
+protocols — and, at deep-S1, measurably better than the incumbent's
+on vector WSS at five seeds per side (disjoint ranges, exact
+rank-sum $p \approx 0.008$). On pressure the five-seed extension
+demoted the differential to *suggestive*: the ranges touch, the
+means still order in our favour. One field sealed, one field
+softened — that is what the extension bought, in both directions.**
+
+And one boundary this whole section does not cross: every split above
+is drawn from the DrivAer family's own design-of-experiments. The
+next section leaves the family, and the result is categorically
+different.
+
+### Cross-family transfer: the decisive test, and the gauge it broke on {#sec-drivaerml-crossfamily}
+
+Everything in the section above is *within-family* generalization:
+the extremes are parameter-space extrapolation inside the DrivAer
+notchback family. The program's stated identity — generalization
+first — needs the harder version, and we pre-registered it
+(@sec-nb-crossfamily-prereg): take DrivAerML-trained checkpoints and
+evaluate them, with no retraining and no re-fitting of anything, on
+**SHIFT-SUV** — a different vehicle family entirely. Same frozen
+inference pipeline for every model, corrected vector metric, 20-case
+estate pilot. The pre-registered falsifier was blunt: *if
+GeoTransolver transfers equal or better, the generalization identity
+fails its decisive test.*
+
+**It fired beyond its own scale** (@sec-nb-crossfam-verdict).
+
+| model | SHIFT pressure $L^2$ | SHIFT wss $L^2$ | own-family ID (p / wss) |
+|---|--:|--:|--:|
+| GeoTransolver anchor | **0.677** | 123.5 | 0.061 / 0.280 |
+| MT flagship s42 | 1.3 × 10¹⁵ | 6.4 × 10¹⁷ | 0.167 / 0.705 |
+| MT flagship s43 | 8.1 × 10⁴ | 5.1 × 10⁷ | 0.169 / 0.710 |
+| MT flagship s44 | 4.1 × 10¹³ | 2.8 × 10¹⁴ | 0.180 / 0.737 |
+| MT ×2L8 | NaN | NaN | 0.107 / 0.479 |
+
+: Zero-shot cross-family transfer under the frozen (fixed-gauge)
+protocol. The incumbent degrades ~11× on pressure and stays
+structured; every MeshTransformer checkpoint — two capacities, three
+seeds — diverges to non-physical output. {#tbl-crossfamily}
+
+The result is solid in the way that matters: all four of our
+checkpoints explode while the incumbent stays finite *through the
+identical pipeline*, the fork's fairness audit verified
+$L_{\mathrm{ref}}$ equality and the pressure/WSS sign conventions,
+and the fresh ×2L8 own-family denominator (0.107 / 0.479) confirms
+the checkpoints themselves are healthy. This is not a data artifact.
+It is our model failing.
+
+#### Localizing the mechanism
+
+The failure *texture* — 10⁴ → 10¹³ → 10¹⁵ → NaN across seeds — is the
+signature of an internal magnitude blow-up rather than a wrong-answer
+regime, which points at the one number in the industrial pipeline
+that is neither learned nor derived: the declared scale gauge. The
+DrivAerML dataset config hard-codes `reference_length: 8.0`, chosen
+years-equivalent ago to put the *wind tunnel* at a sane nondimensional
+size (@sec-nb-drivaer-smoke). A constant with units of length,
+calibrated to one family's absolute dimensions, is exactly the kind of
+input the architecture's own gauge design exists to abolish
+(@sec-intrinsic-gauge) — and the industrial arms took the licensed
+override instead.
+
+A single-checkpoint scan confirms it, cleanly and monotonically:
+
+```{python}
+#| label: fig-crossfamily
+#| fig-cap: >
+#|   Left: zero-shot cross-family transfer under the frozen protocol
+#|   (fixed gauge 8.0). Every MeshTransformer checkpoint leaves the
+#|   physical range by 5-16 orders of magnitude; the incumbent stays
+#|   structured at 0.677. The shaded band is the models' own-family
+#|   in-distribution error, i.e. where a transferring model would
+#|   land. Right: the gauge dose-response on ONE checkpoint (flagship
+#|   s42) with only the declared reference length varied. It is clean
+#|   and monotone, which localizes the failure to the fixed gauge --
+#|   but it is a test-set-touching scan and is therefore EXPLORATORY
+#|   (hatched): it can name a mechanism, it cannot score a repair.
+#|   Data: results/crossfamily_transfer_2026-07-22.json.
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+archive = json.load(
+    open(Path("..") / "results" / "crossfamily_transfer_2026-07-22.json")
+)
+v1 = archive["v1_zero_shot"]["rows"]
+dose = archive["gauge_dose_response"]
+
+fig, (ax_l, ax_r) = plt.subplots(
+    1, 2, figsize=(7.8, 3.9), gridspec_kw={"width_ratios": [1.25, 1.0]}
+)
+BOTTOM = 1e-2
+
+### --- left: the frozen-protocol verdict -------------------------------
+labels = ["GeoT\nanchor", "MT\ns42", "MT\ns43", "MT\ns44", "MT\n×2L8"]
+keys = ["geotransolver_anchor", "mt_flagship_seed42", "mt_flagship_seed43",
+        "mt_flagship_seed44", "mt_x2L8"]
+values = [v1[k]["shift_pressure_l2"] for k in keys]
+colors = ["#1baf7a"] + ["#e34948"] * 4
+
+### The band a transferring model would land in: own-family ID errors.
+id_lo = min(v1[k]["own_family_id_pressure_l2"] for k in keys)
+id_hi = max(v1[k]["own_family_id_pressure_l2"] for k in keys)
+ax_l.axhspan(id_lo, id_hi, color="#2a78d6", alpha=0.13, lw=0, zorder=0)
+
+top = 1e17
+for i, (value, color) in enumerate(zip(values, colors)):
+    if value is None:  # the NaN row -- unplottable on a log axis
+        ax_l.annotate("", xy=(i, top), xytext=(i, 3e14),
+                      arrowprops=dict(arrowstyle="-|>", color=color, lw=2.2))
+        ax_l.text(i, top * 2.2, "NaN", ha="center", fontsize=9,
+                  color=color, fontweight="bold")
+    else:
+        ax_l.plot([i, i], [BOTTOM, value], color=color, lw=13,
+                  solid_capstyle="butt", alpha=0.9, zorder=2)
+        if value < 1:
+            text = f"{value:.3f}"
+        else:  # mantissa x 10^exp -- 8.1e4 must not round to 10^5
+            exponent = int(np.floor(np.log10(value)))
+            text = f"{value / 10**exponent:.0f}$\\times$10$^{{{exponent}}}$"
+        ax_l.text(i, value * 3.0, text, ha="center", fontsize=8.5,
+                  color=color, fontweight="bold")
+
+ax_l.axhline(1.0, color="#0b0b0b", lw=1.1, ls="--", zorder=3)
+ax_l.text(2.5, 2.2, "physical range", fontsize=7.5, color="#0b0b0b", ha="center")
+### Label the band in the one column with no bar (x2L8 is the NaN row).
+ax_l.annotate("own-family ID error\n(where a transferring model lands)",
+              xy=(4.35, id_hi), xytext=(4.45, 60),
+              fontsize=7.5, color="#2a5fa8", ha="right", va="center",
+              arrowprops=dict(arrowstyle="-", color="#2a5fa8", lw=0.8,
+                              shrinkB=2))
+ax_l.set_yscale("log")
+ax_l.set_ylim(BOTTOM, 3e19)
+ax_l.set_xlim(-0.55, 4.55)
+ax_l.set_xticks(range(5), labels, fontsize=8.5)
+ax_l.set_ylabel("zero-shot SHIFT pressure rel. $L^2$")
+ax_l.set_title("frozen protocol (fixed gauge 8.0)", fontsize=9.5, pad=9)
+
+### --- right: the exploratory dose-response ----------------------------
+gauges = [p["reference_length"] for p in dose["points"]]
+errors = [p["shift_pressure_l2"] for p in dose["points"]]
+ax_r.plot(gauges, errors, "-", lw=2.0, color="#8352c9", zorder=3)
+ax_r.plot(gauges, errors, "o", ms=9, color="#8352c9", mec="white", mew=1.2,
+          zorder=4)
+for gauge, error, dy in zip(gauges, errors, (-16, 12, 12)):
+    ax_r.annotate(f"{error:.3g}", (gauge, error), textcoords="offset points",
+                  xytext=(0, dy), ha="center", fontsize=8.5, color="#6b45a8",
+                  fontweight="bold")
+ax_r.axhline(dose["geotransolver_reference"], color="#1baf7a", lw=1.5, ls="--",
+             zorder=2)
+ax_r.text(6.4, dose["geotransolver_reference"] * 0.42, "GeoT 0.677",
+          fontsize=8, color="#1baf7a", ha="left", va="center",
+          fontweight="bold")
+ax_r.set_yscale("log")
+ax_r.set_xscale("log")
+ax_r.set_xticks(gauges, [str(int(g)) for g in gauges])
+ax_r.set_xlim(6, 78)
+ax_r.set_ylim(2e-1, 3e17)
+ax_r.set_xlabel("declared reference_length")
+ax_r.set_title("gauge scan, one checkpoint", fontsize=9.5, pad=9)
+### A badge, not a hatch: mark it non-scoring without wrecking legibility.
+ax_r.patch.set_facecolor("#faf8f2")
+ax_r.text(0.97, 0.955, "EXPLORATORY — cannot score a claim",
+          transform=ax_r.transAxes, fontsize=7.5, color="#8a6d1a",
+          ha="right", va="top",
+          bbox=dict(boxstyle="round,pad=0.32", fc="#fff8e8", ec="#8a6d1a",
+                    lw=0.8))
+
+for ax in (ax_l, ax_r):
+    ax.grid(axis="y", color="#e1e0d9", lw=0.8)
+    ax.grid(axis="x", visible=False)
+    ax.set_axisbelow(True)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+Gauge 8 → 1.3 × 10¹⁵; gauge 16 → 5.12 (finite, structured); gauge 48
+→ 1.71. Three framings are all true at once, and the chapter keeps
+all three:
+
+1. **The frozen-protocol verdict stands as measured.** The model as
+   shipped does not transfer. The falsifier fired legitimately
+   against the deployed protocol, and no diagnostic run afterwards
+   un-fires it.
+2. **The mechanism is a repairable protocol flaw, not deep
+   architectural brittleness.** With a sane gauge the *same weights*
+   produce structured cross-family predictions.
+3. **The scan is test-set-touching and therefore exploratory.** No
+   rehabilitated transfer claim may rest on it. Noted for calibration
+   only: even the best exploratory gauge (1.71) is still ~2.5× worse
+   than the incumbent's frozen-protocol transfer, so the realistic
+   goal of a repaired re-run is "transfers comparably," not "wins."
+
+#### The repair: an intrinsic gauge, calibrated once
+
+The architecture already derives its gauge intrinsically by default —
+the measure-weighted RMS boundary radius of @sec-forward-pass. What
+the industrial pipeline needed was not a new mechanism but a way to
+use that mechanism *while preserving the operating point every
+existing checkpoint was trained at.* The repair
+(@sec-nb-gauge-calib) is one dataset transform:
+
+$$
+L_{\mathrm{ref}}(\text{sample}) \;=\; C \cdot r_{\mathrm{RMS}}(\text{sample}),
+\qquad
+C \;=\; \frac{8.0}{\operatorname{mean}_{\text{train}} r_{\mathrm{RMS}}},
+$$
+
+with $r_{\mathrm{RMS}}$ the sample's own measure-weighted RMS radius
+about its measure-weighted centroid — translation- and
+rotation-invariant, similarity-*covariant*, and Horvitz–Thompson
+subsample-robust. $C$ is calibrated **once on the DrivAerML training
+split** and never re-fit: 484 samples give
+$r_{\mathrm{RMS}} = 0.30215 \pm 0.0089$ and hence
+$C = 26.476593$, putting DrivAerML's per-sample gauges in
+$[7.41, 8.64]$ — a ±3.5% spread around the historical 8.0, well
+inside the measured stable zone. Any other family now lands at the
+same *relative* operating point instead of inheriting DrivAerML's
+absolute size.
+
+Two acceptance gates were declared before either number existed
+(@sec-nb-gauge-accept-verdict), and they split:
+
+| lane (id_reference) | pressure $L^2$ | wss $L^2$ |
+|---|--:|--:|
+| flagship s42, fixed 8.0 | 0.167163 | 0.705265 |
+| flagship s42, intrinsic | 0.178731 | 0.728916 |
+| GeoTransolver, fixed dataset | 0.061000 | 0.279863 |
+| GeoTransolver, intrinsic dataset | 0.061000 | 0.279863 |
+
+: The paired acceptance evaluation. {#tbl-gauge-acceptance}
+
+**Gate 2 (inertness) passes** — GeoTransolver declares no
+`reference_length_key`, so it should be blind to the change, and its
+digits are *identical* across dataset variants. That is the control
+that makes the whole comparison interpretable: the variant YAML
+changes the gauge and nothing else. **Gate 1 (drop-in preservation)
+fails as pre-registered**: +6.9% pressure, +3.4% WSS against a 2%
+bar. Since $\operatorname{mean}(C \cdot r_{\mathrm{RMS}}) = 8.0$ on
+train by construction, the drift comes from the per-sample
+*spread*, not an offset — the fixed-gauge checkpoint is more
+gauge-sensitive than the coarse dose-response suggested. 6.9% is
+sensitivity, not catastrophe; but the falsifier was written in
+advance and it fired, so the pre-declared consequence stands: **the
+intrinsic gauge is not a drop-in, and the confirmatory path is
+retraining under it.**
+
+#### Where this stands, and one anomaly worth more than the result
+
+Three intrinsic-gauge retrains have finished (500 epochs, 1 node,
+protocol otherwise identical to t2). Transfer-v2 is fully
+pre-registered — gates, predictions, and the explicit list of
+forbidden post-hoc moves — at @sec-nb-transfer-v2-prereg, and no
+SHIFT-SUV number for any intrinsic-trained checkpoint exists yet.
+The declared bars: all three seeds finite with pressure $L^2 < 1.0$
+(structural, predicted $p \approx 0.75$), then seed-median
+$\le 1.354$ for "transfers comparably" ($p \approx 0.45$) or
+$\le 0.677$ for at-par ($p \approx 0.15$).
+
+Before any of that, gate 0 asks the boring question — did the
+retrained models stay as good in-family? — and the training curves
+already flag something:
+
+| seed | intrinsic-gauge training val | fixed-gauge training val |
+|---|--:|--:|
+| 42 | 0.01389 | 0.01383 |
+| 43 | 0.01452 | 0.01404 |
+| 44 | **0.03539** | 0.01561 |
+
+: Intrinsic retrains against their fixed-gauge twins.
+{#tbl-intrinsic-retrain}
+
+Seeds 42 and 43 reproduce their twins almost exactly. **Seed 44
+landed in a 2.3× worse basin.** The tempting reading — "seed 44 is
+just unlucky" — is available for most of this program's tables, but
+not this one: under the fixed gauge the three seeds were tight
+(0.01383 / 0.01404 / 0.01561). So the honest statement is that
+**the intrinsic gauge introduced seed-dependent training instability
+that the fixed gauge did not have**, and the divergence guard (train
+loss > 10³) is not built to catch a soft 2.3× regression. Two
+hypotheses stand: the per-sample gauge adds input-scale variance
+that interacts badly with some initializations, or the gauge spread
+widens learning-rate sensitivity until 3.0 × 10⁻³ is marginal. A
+retrain of seed 44 at half the learning rate discriminates them
+cheaply.
+
+This is recorded here rather than smoothed away because it is the
+more interesting object. A transfer result is one number about one
+pair of datasets; a gauge that makes training seed-dependent is a
+statement about the architecture's conditioning, and it would apply
+to *every* future deployment that adopts the intrinsic gauge — which,
+after this section, is all of them.
 
 ### Decode efficiency: the 14× repricing
 

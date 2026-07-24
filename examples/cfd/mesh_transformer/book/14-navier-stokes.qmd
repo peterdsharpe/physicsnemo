@@ -334,15 +334,176 @@ plt.show()
 
 ## Variations
 
-::: {.callout-note title="The wide-Reynolds sweep — generation in flight"}
-The suite's headline variation — accuracy versus Reynolds across
-$\mathrm{Re} \in [1, 5000]$, four log-banded v2 catalogs generated
-under v1's exact verification protocol, with the noise floor drawn
-beside the model error — is experiment E1 of the dataset-chapters
-thread (pre-registered at the notebook's dataset-chapters entry). Its
-cells land here when the catalogs and per-band training arms complete;
-a heavily gate-rejected top band would itself be reported as a
-measured steady-solver limit.
+### The wide-Reynolds sweep (E1): the curve is U-shaped {#sec-ns-e1}
+
+The suite's headline variation — accuracy versus Reynolds, with the
+label-noise floor drawn beside the model error — was pre-registered
+as experiment E1 with two predictions. All twelve band-training
+reports have landed (three log-banded v2 catalogs generated under
+v1's exact verification protocol, plus v1 itself; three seeds per
+band, protocol frozen at iteration 17; cluster artifacts
+`output/e1_bands/` on HSG, @sec-nb-e1-curve). One prediction was
+confirmed and made irrelevant; the other was **refuted**.
+
+```{python}
+#| label: fig-e1-reynolds
+#| fig-cap: >
+#|   Accuracy versus Reynolds number on the steady cavity family. Each
+#|   band is an independently trained 3-seed arm under one frozen
+#|   protocol; horizontal bars show each band's Reynolds extent (the
+#|   re10 and v1 bands genuinely overlap), vertical bars the seed
+#|   range. The pre-registered prediction was monotone degradation with
+#|   Re; the measured curve is U-SHAPED -- the middle decades are
+#|   easiest and BOTH the near-Stokes and advective ends are harder.
+#|   The measured label-noise floor (gray) rises 2x across the sweep,
+#|   exactly as predicted, and is irrelevant: it sits three orders of
+#|   magnitude below the model error everywhere, so the labels never
+#|   limit anything. The shaded region is the measured steady-solver
+#|   ceiling -- Newton stops converging in practical time somewhere
+#|   around Re 4200-5000, which is why the sweep stops where it does.
+#|   Provenance: cluster artifacts output/e1_bands/ (HSG); values
+#|   transcribed from the notebook verdict entry.
+import matplotlib.pyplot as plt
+import numpy as np
+
+### band, Re extent, eval_id 3-seed (median, lo, hi), unseen_Re, floor
+bands = [
+    ("v2-re1",   (1, 10),     0.312, 0.275, 0.349, 0.344, 0.00020),
+    ("v2-re10",  (10, 100),   0.257, 0.239, 0.276, 0.375, 0.00021),
+    ("v1",       (10, 200),   0.230, 0.219, 0.239, 0.358, 0.00024),
+    ("v2-re100", (100, 1000), 0.348, 0.320, 0.401, 0.369, 0.00038),
+]
+centers = [np.sqrt(lo * hi) for _, (lo, hi), *_ in bands]
+median = np.array([b[2] for b in bands])
+lo_err = median - np.array([b[3] for b in bands])
+hi_err = np.array([b[4] for b in bands]) - median
+unseen = [b[5] for b in bands]
+floor = [b[6] for b in bands]
+
+### Split axes: the U-shape lives in a 0.2-0.4 window, the floor three
+### decades below.  One shared log-Re axis, two honest y windows.
+fig, (ax, ax_floor) = plt.subplots(
+    2, 1, figsize=(6.9, 4.6), sharex=True,
+    gridspec_kw={"height_ratios": [3.1, 1.0], "hspace": 0.12},
+)
+
+### The solver ceiling: why the sweep stops.
+for axis in (ax, ax_floor):
+    axis.axvspan(4200, 20000, color="#e34948", alpha=0.07, lw=0)
+ax.text(4550, 0.412, "steady-solver\nceiling (measured)", fontsize=7.5,
+        color="#a83a39", va="top")
+
+### Band extents as horizontal bars -- re10 and v1 overlap, honestly shown.
+for (label, (lo, hi), med, *_), center in zip(bands, centers):
+    ax.plot([lo, hi], [med, med], color="#2a78d6", lw=1.0, alpha=0.45,
+            solid_capstyle="butt", zorder=2)
+
+ax.plot(centers, median, "-", color="#2a78d6", lw=1.8, alpha=0.6, zorder=3)
+ax.errorbar(centers, median, yerr=[lo_err, hi_err], fmt="o", ms=8,
+            color="#2a78d6", ecolor="#2a78d6", elinewidth=1.4, capsize=4,
+            mec="white", mew=1.2, zorder=4, label="in-band eval (3 seeds)")
+ax.plot(centers, unseen, "s", ms=6.5, mfc="none", mec="#eda100", mew=1.6,
+        zorder=4, label="unseen-Re extrapolation")
+
+### Band labels dodge their neighbours: v1 sits almost on top of re10,
+### and re100's marker collides with its unseen-Re square.
+label_offsets = {"v1": (16, -15), "v2-re10": (-18, 12), "v2-re100": (-34, 6)}
+for (label, *_), center, med in zip(bands, centers, median):
+    dx, dy = label_offsets.get(label, (0, 14))
+    ax.annotate(label, (center, med), textcoords="offset points",
+                xytext=(dx, dy), ha="center", fontsize=8, color="#52514e")
+
+### The refutation, stated compactly -- the U itself is now self-evident.
+ax.text(1.05, 0.424, "predicted:  monotone degradation with Re\n"
+                     "measured:   U-shaped",
+        fontsize=8.5, color="#2a5fa8", va="top", ha="left", linespacing=1.5)
+
+ax.set_ylim(0.20, 0.45)
+ax.set_ylabel("relative $L^2$\n(combined fields)")
+ax.legend(fontsize=8, loc="lower center", frameon=False, ncols=2,
+          bbox_to_anchor=(0.5, 1.01))
+
+### Lower panel: the floor, on its own decade window.
+ax_floor.plot(centers, floor, "-o", color="#898781", lw=1.5, ms=5, zorder=3)
+ax_floor.set_ylim(1.2e-4, 9e-4)
+ax_floor.set_yscale("log")
+ax_floor.set_yticks([2e-4, 4e-4, 8e-4], ["2e-4", "4e-4", "8e-4"])
+ax_floor.minorticks_off()
+ax_floor.set_ylabel("noise floor")
+ax_floor.text(1.15, 5.8e-4,
+              "measured label-noise floor: rises 2× as predicted,\n"
+              "and sits ~3 orders below the model error — never binding",
+              fontsize=7.5, color="#52514e", va="top")
+
+ax_floor.set_xscale("log")
+ax_floor.set_xlim(0.8, 12000)
+ax_floor.set_xlabel("Reynolds number")
+for axis in (ax, ax_floor):
+    axis.grid(True, color="#e1e0d9", lw=0.8)
+    axis.set_axisbelow(True)
+    for spine in ("top", "right"):
+        axis.spines[spine].set_visible(False)
+plt.show()
+```
+
+| band | Re | eval_id (3-seed) | unseen_Re | noise floor |
+|---|---|---|---|---|
+| v2-re1 | [1, 10] | 0.312 (0.275–0.349) | 0.344 | 0.00020 |
+| v2-re10 | [10, 100] | 0.257 (0.239–0.276) | 0.375 | 0.00021 |
+| v1 | [10, 200] | 0.230 (0.219–0.239) | 0.358 | 0.00024 |
+| v2-re100 | [100, 1000] | 0.348 (0.320–0.401) | 0.369 | 0.00038 |
+
+: The E1 Reynolds bands. {#tbl-e1-bands}
+
+**Verdict 1 — "the label-noise floor rises with Re": CONFIRMED, and
+irrelevant.** The floor does rise, 2× from the near-Stokes band to
+the advective one. It also sits three orders of magnitude below the
+model error in every band. The honest annotation is *"floor drawn,
+nowhere binding"* — the labels are not what limits this suite, and
+the measurement's value is that it retires the question.
+
+**Verdict 2 — "accuracy degrades with Re": REFUTED as stated.** The
+curve is U-shaped. The middle decades (0.23–0.26) are easiest, and
+*both* ends are harder: the near-Stokes band reads 0.312 and the
+advective band 0.348. A monotone story would have been the
+comfortable one, and it is not what the data says.
+
+The confound is stated before anyone falls in love with a physics
+explanation: **the arm and protocol were tuned on v1's
+$\mathrm{Re} \in [10, 200]$** — the very middle of the sweep. So the
+U may be measuring *fixed-protocol regime sensitivity* rather than
+intrinsic task difficulty, and the two are not separable without
+per-band protocol re-tuning. That re-tuning is registered, not
+commissioned; under the program's no-protocol-tuning rule it would
+have to be run as an experiment about the protocol, not as a way to
+improve the numbers.
+
+Within-band Reynolds extrapolation penalties (unseen/in-band) come in
+at 1.10× (re1), 1.46× (re10), 1.56× (v1), 1.06× (re100). These are
+**not** comparable across bands — each band's unseen slice sits at a
+different relative distance from its training range — so they are
+reported per band with no cross-band claim attached.
+
+::: {.callout-note title="Where the sweep stops, and why that is a result"}
+The top band (re1000) is absent, and its absence is physics rather
+than infrastructure. Generation reached 450 cases and then a single
+unseen-split case drawing $\mathrm{Re} \in [4166, 4667]$ stalled the
+Newton solve on all eight retry attempts ("backtracking stalled at
+residual $\sim 10^{-3}$"). Every train-band case at
+$\mathrm{Re} \le 4000$ solved cleanly. Together with the bracket
+probes that measured the ceiling (@sec-nb-re-ceiling-final), the
+picture is a **soft band, not a hard wall**: stalls begin around
+$\mathrm{Re} \approx 4200$ and thicken toward 5000. That is the
+steady cavity family telling us where steady solutions stop being
+practically computable — a measured limit of the *benchmark*, which
+is worth reporting for exactly the reason the pre-registration said
+it would be.
+
+One engineering consequence, recorded because it cost a run: a single
+unsolvable case took down the whole worker pool
+(`pool.imap_unordered`), so per-case solve failures must be
+logged-and-skipped rather than raised. Generation is not fault
+tolerant until that lands.
 :::
 
 ## The full evidence {#sec-part-ns}

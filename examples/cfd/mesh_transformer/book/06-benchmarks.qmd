@@ -1253,7 +1253,42 @@ pair-invariant einsum took a CUDA batched-GEMM path with 1-ulp drift for
 any $L \neq 1$, masked until now by test data that always had $L = 1$.
 Found, fixed, and noted in the engineering review (@sec-future).
 
-*History: @sec-nb-iter24.*
+::: {.callout-important title="The override is a loaded gun, and the industrial campaign fired it"}
+Everything above is true *of the default*. It is not true of the
+**explicit override**, and the override is the path the DrivAerML
+campaign took — for a defensible reason at the time: the all-boundary
+arm feeds the model the wind tunnel as well as the car, and an
+intrinsic gauge computed over *all five* boundaries measures the
+tunnel, not the vehicle. So the industrial dataset configs declared a
+constant, `reference_length: 8.0`, sized to the tunnel.
+
+A constant with units of length is exactly the object this section
+says the architecture abolished. It encodes one family's absolute
+size, and it does not transform with the geometry — so for any
+geometry drawn from a *different* family, scale equivariance buys
+nothing, because the input the model nondimensionalizes by is no
+longer a function of the input at all.
+
+The cost was measured, and it was total: on zero-shot transfer to a
+different vehicle family, **every** fixed-gauge checkpoint diverged to
+non-physical output (relative $L^2$ of $10^4$–$10^{15}$, and NaN at
+the largest capacity) while a gauge-agnostic baseline stayed
+structured at 0.677. A monotone dose-response in the gauge alone
+localizes the failure to that constant. The full account, the repair
+(a per-sample intrinsic gauge calibrated once on the training split),
+and its pre-registered acceptance are @sec-drivaerml-crossfamily.
+
+The lesson generalizes past this program: **a contract that holds by
+default and is escapable by an override is only as strong as the
+discipline governing the override.** The override here was licensed,
+documented, and used for a good local reason — and it still silently
+withdrew the guarantee the rest of the architecture is built on. The
+repair is not to remove the override but to make the licensed use of
+it *derive* its value from the geometry too.
+:::
+
+*History: @sec-nb-iter24; the industrial failure and repair are
+@sec-nb-crossfam-verdict and @sec-nb-gauge-calib.*
 
 ## Where the generalization evidence lives {#sec-part-generalization}
 
