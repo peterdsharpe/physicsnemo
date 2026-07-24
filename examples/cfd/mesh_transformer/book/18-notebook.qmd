@@ -5476,3 +5476,103 @@ are exactly that correction, but they are absorbed as uniform; what is
 needed is the non-uniform version, or a coverage-consistent
 quadrature). Falsifier: drift persists at matched coverage under
 different panel subsets.
+
+## 2026-07-24 (later) — H-DI VERDICT: the contract HOLDS under refinement; subsampling is a biased operator, and the bias is a FAR-field effect {#sec-nb-hdi-verdict}
+
+The discretization-invariance gap of @sec-nb-verdict-0724 resolves into
+two different things that had been conflated, and my mechanism guess was
+wrong again — the second sign-flip of the day. Artifacts
+`studies/gauge_diagnostics/hdi_test.py`, `hdi_nearfield.py`.
+
+### The contract holds — under the test that actually tests it
+
+Giving the model "more sources" for the same sphere can mean two
+things, and only one of them is a resolution change:
+
+**Arm B — refinement** (icosphere subdivision; panels tile the surface,
+coverage always 100%). Query values at three fixed interior points:
+
+| subdiv | cells | $\sum$ area | drift vs coarsest |
+|---|--:|--:|--:|
+| 2 | 320 | 12.329 | — |
+| 3 | 1280 | 12.506 | 1.87% |
+| 4 | 5120 | 12.551 | 2.33% |
+| 5 | 20480 | 12.563 | 2.45% |
+
+Values converge monotonically ($-0.017126 \to -0.017109 \to -0.017105
+\to -0.017104$) with shrinking increments, alongside the area's
+convergence to $4\pi$. **This is textbook quadrature convergence: the
+discretization-invariance contract is satisfied.** Recorded because the
+program asserts this property and, as far as the notebook shows, had
+never measured it this way.
+
+**Arm A — random cell subsampling** (what `SubsampleMesh` does; coverage
+$= n/N$, panels have gaps):
+
+| n | coverage | $\sum$ area | drift |
+|---|--:|--:|--:|
+| 320 | 1.6% | 0.197 | — |
+| 1280 | 6.2% | 0.788 | 9.4% |
+| 5120 | 25.0% | 3.138 | 8.7% |
+| 20480 | 100% | 12.563 | 31.8% |
+
+Nothing converges until coverage does, and at 1.6% coverage the
+prediction is **3.2× wrong** against the full-coverage operator (it
+agrees exactly at 100%, as it must). **Random subsampling is not a
+resolution change — it is a different, systematically biased
+operator.** The relevant number for this program: DrivAerML subsamples
+10k cells from an 8.8M-cell vehicle, i.e. **0.11% coverage** — an order
+of magnitude sparser than the sparsest row above.
+
+### The mechanism: far-field, not near-field (prediction REFUTED)
+
+I predicted the bias would concentrate near the wall, on the reasoning
+that a layer potential's near field is carried by the closest panels and
+subsampling deletes them. **Measured, it is exactly inverted** —
+relative error against the full-coverage operator, by query depth:
+
+| gap to wall | 1.6% cov | 6.2% cov | 25% cov |
+|---|--:|--:|--:|
+| 1.000 (centre) | 222.0% | 204.2% | 161.1% |
+| 0.500 | 44.3% | 54.4% | 37.6% |
+| 0.100 | 4.1% | 12.8% | 6.5% |
+| 0.005 (at wall) | **0.3%** | 8.4% | 3.2% |
+
+The bias is a **completeness** effect, not a proximity one. Deep in the
+interior every panel contributes comparably and the value is a global
+accumulation — exactly the quantity that needs the whole surface (the
+closed-surface solid angle summing to $-1$ is the canonical case). Near
+a wall the value is dominated by whichever panels are locally retained,
+so it survives sparse sampling. This also explains why the uniform
+Horvitz--Thompson factor is inert here (@sec-nb-verdict-0724): the bias
+is in *which* panels are present, not in how they are scaled, and no
+reweighting reconstructs a missing global integral.
+
+### What this changes
+
+1. **The architecture is not at fault.** Discretization invariance holds
+   under refinement. The program can state that as measured.
+2. **The training protocol operates in a badly-biased regime.** At 0.11%
+   coverage the assembled operator is far from the full-resolution one.
+   Training and evaluation are mutually consistent (both 10k), so the
+   model learns a compensation *calibrated to one coverage* — which is
+   the most plausible account yet of the full-resolution inference
+   failure (relative $L^2 \sim 100$ at 50k sources, @sec-future), where
+   coverage moves 5× and the compensation no longer applies.
+3. **The surface task is the lucky one.** Trace-mode queries sit ON the
+   boundary, where the bias is smallest (0.3% at the wall vs 222% at the
+   centre). Interior/volume prediction at these coverages is the exposed
+   case, and the recipe has a volume task.
+4. **Two sign-flipped predictions in one day** (H-GC's variance, H-DI's
+   near-field) say my priors about this architecture's scale behaviour
+   are miscalibrated in a consistent direction: it normalises more, and
+   is more globally-coupled, than I keep assuming. Recorded as a
+   calibration note, not a result.
+
+**Registered next (not run):** coverage is a *protocol* variable nobody
+has swept. The experiment is a coverage ladder at fixed source count —
+train at 10k sources drawn from meshes decimated to different coverages,
+evaluate across coverages — to separate "the model needs more sources"
+from "the model needs a consistent coverage". Cheap, and it bears
+directly on whether full-resolution inference is reachable without
+retraining.
