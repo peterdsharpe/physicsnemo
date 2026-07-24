@@ -5632,3 +5632,161 @@ The base-rate arms are the ones that matter beyond this experiment. If
 1 seed in 3 diverges under the intrinsic gauge, that is a property of
 the gauge worth knowing before it becomes the default everywhere, and
 it would not have been visible from the transfer number at all.
+
+## 2026-07-24 (night) — H-SAT: the industrial boundary integral is NOISE-DOMINATED at production coverage, and singularity subtraction is the fix {#sec-nb-hsat}
+
+This is the largest single finding of the program since the trace
+mechanism, and it reframes the industrial attribution rather than adding
+to it. Everything below is **pure numerics — exact solid-angle kernel on
+a sphere, no learning, no training** — which is what makes it sharp:
+it bounds what *any* model of this class can do at the sampling rate the
+protocol uses. Artifacts `studies/gauge_diagnostics/hsat*.py`.
+Kernel validated: total solid angle from an interior point =
+12.5663706144 vs $4\pi$ = 12.5663706144.
+
+### The observation
+
+At a trace query — the DrivAerML surface task, query sitting on its own
+panel — the double layer decomposes as
+
+$$
+u(x) \;=\; \underbrace{\Omega_{\text{own}}\sigma(x)}_{\text{jump term}}
+\;+\; \underbrace{\textstyle\sum_{j \neq \text{own}} \Omega_j \sigma_j}_{\text{principal value}} .
+$$
+
+Measured on the sphere, these are $-6.415$ and $+6.325$. **The physical
+answer is their difference, $-0.0905$ — a 1.4% residual of two terms
+40× larger.** That is not a quirk of my test case; it is the second-kind
+Fredholm structure the program's own theory chapter is built on.
+
+Now subsample. Monte-Carlo noise scales with the *large* terms while the
+signal is the *small* difference. Horvitz–Thompson weighting keeps the
+estimator unbiased (verified: estimate means track truth), but the
+variance is brutal:
+
+| coverage | n | SNR | rel. err of $u$ |
+|---|--:|--:|--:|
+| **0.11%** (DrivAerML production) | 23 | **0.65** | **385%** |
+| 0.50% | 102 | 1.40 | 206% |
+| 2.00% | 410 | 2.78 | 113% |
+| 10.0% | 2048 | 6.02 | 51% |
+| 35.0% | 7168 | 13.06 | 23% |
+
+**At the coverage the industrial protocol actually uses, an exactly
+evaluated boundary integral with exact singular kernels has 385%
+relative error and carries less signal than noise.** DrivAerML samples
+10k cells from an 8.8M-cell vehicle: 0.11%.
+
+### What this would explain (hypothesis, not yet tested)
+
+Four separate results the program currently treats as independent become
+one mechanism, *if* this carries over to the learned model:
+
+1. **The exact-kernel demotion (0–8%).** Exactness of a *kernel* is
+   worth nothing when the *estimator* of the integral it sits in has
+   385% error. The kernel factorial compared exact against learned
+   members in a regime where neither can compute the integral — so it
+   measured the noise floor, not the mechanism.
+2. **Trace dominance (3.8×).** The own-panel term is the single piece
+   that is computed exactly and always retained. It is also the largest
+   term. Handing the model that number is handing it the only reliable
+   information available.
+3. **Why the two trace sub-mechanisms are near-perfect substitutes.**
+   Exact jump correction and learned own-cell readouts deliver *the same
+   one reliable number*. Once either supplies it, the other is redundant
+   — exactly as measured (~96% each, +6% together).
+4. **The 2.34× ID gap to GeoTransolver.** It never attempts the
+   cancellation; a learned soft-slice pooling is a smooth, low-variance
+   aggregate, statistically stable under subsampling. It is solving a
+   better-conditioned estimation problem, not a better-approximated one.
+
+If this holds, the program's central bet has not been refuted — **it has
+never been tested at a sampling rate where it could pay off.**
+
+### The constructive half: singularity subtraction as a control variate
+
+For a closed surface the total solid angle from a point on the exterior
+side is **zero, analytically**. So
+
+$$
+u(x) \;=\; \sigma(x)\underbrace{\textstyle\sum_j \Omega_j}_{=\,0\ \text{exactly}}
+\;+\; \sum_j \Omega_j\,\bigl(\sigma_j - \sigma(x)\bigr)
+\;=\; \sum_j \Omega_j\,\bigl(\sigma_j - \sigma(x)\bigr).
+$$
+
+The rewritten integrand is small *everywhere*: near the query $\Omega_j$
+is huge but $(\sigma_j - \sigma(x)) \to 0$; far away the difference is
+$O(1)$ but $\Omega_j$ is tiny. **The near-cancellation is removed
+algebraically instead of numerically.** This is classical BEM
+singularity subtraction; what is new is the claim that it is a
+*variance-reduction device for a subsampled operator*.
+
+Measured, trace configuration, identical kernel/samples/coverage — the
+only difference is the algebraic arrangement:
+
+| coverage | plain SNR | subtracted SNR | std reduction |
+|---|--:|--:|--:|
+| **0.11%** | 0.65 | **4.16** | **6.4×** |
+| 0.50% | 1.40 | 8.97 | 6.7× |
+| 2.00% | 2.78 | 18.50 | 7.1× |
+| 10.0% | 6.02 | 43.02 | 7.3× |
+| 35.0% | 13.06 | 93.49 | 7.5× |
+
+A 6.4× standard-deviation reduction is a **~41× variance reduction**,
+i.e. the accuracy of ~4.5% coverage obtained at 0.11% — and it crosses
+the estimator from noise-dominated (0.65) to signal-dominated (4.16).
+Zero parameters. It needs exactly one input: $\sigma(x)$, the query's own
+coefficient — **which trace mode already computes as the own-cell
+readout.** The mechanism the factorial found load-bearing is precisely
+the ingredient the fix requires.
+
+### The honest falsifier, run
+
+The gain depends on $(\sigma_j - \sigma(x))$ decaying near the query,
+i.e. on the density being smooth. A *learned* coefficient field need not
+be. Measured at production coverage:
+
+| density | std reduction |
+|---|--:|
+| linear | 6.6× |
+| quadratic | 6.2× |
+| degree-6 oscillatory | 3.3× |
+| degree-16 oscillatory | 2.9× |
+| smooth + 20% white noise | 3.7× |
+| pure white noise | **1.1×** |
+
+It degrades with roughness exactly as the theory says it must, and
+vanishes only for white noise — which is not a physical boundary
+density. Real surface densities on a car are far smoother than degree-16.
+That the falsifier behaves as predicted is itself evidence the mechanism
+is understood rather than fitted. Note also that plain SNR sits at
+$\approx 1$ for *every* density: the noise domination is a property of
+the sampling rate, not of my test function.
+
+### PRE-REGISTRATION: the confirmatory experiment
+
+Implement singularity subtraction in the kernel decoder (algebraic
+identity; exactly linear in the drive, equivariant, zero-preserving, zero
+new parameters) and **re-run the kernel factorial at flagship capacity,
+3 seeds, protocol otherwise identical to @sec-drivaerml-factorial.**
+
+Predictions, frozen now:
+
+- **P1.** Exact-only beats MLP-only by **more than the current ~7%** —
+  because the exact members' advantage is currently masked by estimator
+  noise. Falsifier: the gap stays within seed spread ⇒ the noise story
+  does not transfer to the learned model, and H-SAT is refuted as an
+  explanation of the demotion.
+- **P2.** The trace mechanism's measured advantage **shrinks** from
+  3.8×, because the own-panel term stops being the only reliable
+  information. Falsifier: trace dominance is unchanged.
+- **P3.** Absolute ID error improves at fixed capacity and fixed
+  coverage. Predicted modest — 10–30% — because the model has spent its
+  training compensating for the noise it will no longer see. A *large*
+  improvement would be a pleasant surprise, not the prediction.
+
+Confounds stated up front: the closed-surface identity requires a closed
+boundary (DrivAerML's vehicle and tunnel qualify; open boundaries need
+the general form with the computed total). The single-layer member has a
+different, non-zero analytic total and needs its own subtraction constant
+— that is derivable, not free.
