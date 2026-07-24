@@ -4999,3 +4999,253 @@ good. Deviations get logged as exploratory.
 Eval configs are committed before finals land; the eval job reuses
 `mt_crossfam_eval.sbatch` with the intrinsic dataset and the three
 retrained run_ids.
+
+## 2026-07-24 — SESSION HANDOFF (context-transfer to a fresh agent) {#sec-nb-handoff-0724}
+
+This entry is written for an agent who is picking up this program with
+**none of my working context**. It is deliberately plain and
+self-contained — no private shorthand. Read it top to bottom before
+touching anything. Paths are on the **AGA cluster** (`ssh aga1`)
+unless stated; the repo root there is
+`~/coreai_modulus_cae/users/psharpe/physicsnemo-mesh-transformer`
+(call it `$REPO`) and the recipe root is
+`$REPO/examples/cfd/external_aerodynamics/unified_external_aero_recipe`
+(call it `$RECIPE`). The local git checkout is
+`/home/psharpe/gh/physicsnemo` on branch `psharpe/mesh-transformer`.
+
+### What this program is (one paragraph)
+
+MeshTransformer is a neural surrogate that maps the geometry and
+boundary conditions of a PDE problem to the solution field on that
+boundary (e.g. pressure and wall shear stress on a car surface, given
+the shape and the freestream). The scientific question is not "can it
+fit one dataset" (it can) but **can it GENERALIZE** — across mesh
+resolutions, across Reynolds numbers, and above all across *geometry
+families* it was never trained on. The current frontier thread is a
+concrete instance of that: train on the DrivAerML car dataset, then
+predict — with no retraining — on a completely different vehicle
+family (SHIFT-SUV). That "zero-shot cross-family" test is the sharpest
+generalization probe we have.
+
+### THREAD 1 (the live frontier): cross-family transfer via an intrinsic length gauge
+
+**Background — why this exists.** The model nondimensionalizes space
+by a "reference length" gauge. Historically this was a hard-coded
+constant `reference_length: 8.0` baked into the DrivAerML dataset
+config. On 2026-07-22 the pre-registered zero-shot test (see
+`@sec-nb-crossfam-verdict`) fired its falsifier *maximally*: with the
+fixed gauge, every MeshTransformer checkpoint **diverged to
+non-physical output** on SHIFT-SUV (pressure relative-L2 blew up to
+8e4–1e15), while the GeoTransolver baseline stayed structured
+(0.677). A clean dose-response (gauge 8→1.3e15, 16→5.1, 48→1.7
+relative-L2) localized the failure to that constant: 8.0 encodes
+DrivAerML's absolute size, which is wrong for a different-sized
+vehicle family.
+
+**The fix under test.** Replace the constant with an *intrinsic*
+per-sample gauge: `reference_length = C · r_RMS(sample)`, where
+`r_RMS` is the sample's own measure-weighted RMS radius (a
+size measure that is translation/rotation invariant and scales
+correctly with the geometry), and `C` is a single constant calibrated
+**once on the DrivAerML training split** so DrivAerML reproduces its
+historical operating point (~8.0) and any other family lands at the
+same *relative* point. Code: `$RECIPE/src/intrinsic_gauge.py`
+(transform `ComputeIntrinsicReferenceLength`, committed 17381332 by
+Peter; has unit tests). **Calibrated value: C = 26.476592786355283**
+(from 484 train samples, r_RMS mean 0.30215 ± 0.0089; artifact
+`$RECIPE/studies/intrinsic_gauge_calibration.json`). Pre-registration
+of the whole plan is at `@sec-nb-gauge-calib`.
+
+**What has been decided already (do not re-litigate):**
+
+1. *Inertness control PASSED.* GeoTransolver (which ignores the gauge)
+   produces byte-identical metrics on the fixed vs intrinsic dataset
+   (pressure 0.061000, wss 0.279863 both) — proof the new dataset
+   config changes *nothing* except the gauge. See
+   `@sec-nb-gauge-accept-verdict`.
+2. *Drop-in FAILED as pre-registered.* Taking an existing
+   fixed-gauge checkpoint and just feeding it intrinsic gauges drifted
+   +6.9% pressure / +3.4% wss on in-family DrivAerML — past the 2%
+   bar. Conclusion (pre-declared): the intrinsic gauge is **not a
+   drop-in**; the model must be **retrained** under it.
+
+**What just finished (this is where you pick up).** Three intrinsic-
+gauge **retrains** completed to epoch 499/500 on AGA overnight
+2026-07-23. Checkpoints exist at
+`$RECIPE/runs/t2_mesh_transformer_surface_flagship_intrinsic_seed{42,43,44}_lr3.0e-3/checkpoints/checkpoint.0.491.pt`
+(plus `norm_stats.pt` in the same dir). Training-val finals:
+**s42 = 0.01389, s43 = 0.01452, s44 = 0.03539.**
+
+**⚠ ANOMALY TO CHASE (do not sand this off — it is the lead).**
+Seed 44 trained to a **2.3× worse** basin than s42/s43. This is NOT
+the usual "seed-44 is just unlucky" tail effect: the *fixed*-gauge
+flagship seeds were all tight (training-val s42 = 0.01383,
+s43 = 0.01404, **s44 = 0.01561**). So the intrinsic gauge introduced
+**seed-dependent training instability that the fixed gauge did not
+have.** Before trusting transfer-v2, pull the s44 intrinsic loss
+curve (`$REPO/output/drivaer_t2/mesh_transformer_surface_flagship_intrinsic_seed44_lr3.0e-3.log`)
+and look for a spike-and-partial-recovery; the divergence guard
+(train loss > 1e3) would NOT have caught a 2.3× soft regression.
+Hypotheses to hold in parallel: (a) the per-sample gauge adds
+input-scale variance that interacts badly with some seeds' init;
+(b) the gauge spread widens the effective LR sensitivity and 3.0e-3
+is now marginal for some seeds. A cheap discriminator: retrain s44 at
+lr 1.5e-3 and see if it rejoins the band.
+
+**NEXT ACTIONS for Thread 1, in order:**
+
+- **Gate 0 (in-family sanity — run this FIRST).** Evaluate the three
+  intrinsic checkpoints on the DrivAerML `id_reference` split and
+  compare to the fixed-gauge comparator band **pressure_l2 ∈
+  [0.16716, 0.17958], wss_l2 ∈ [0.70527, 0.73656]** (fixed s42/s43/s44
+  = 0.16716/0.70527, 0.16914/0.71037, 0.17958/0.73656). Mechanically:
+  copy `$REPO/mt_gauge_accept.sbatch`, change the four `run_one` lines
+  to use `model=mesh_transformer_surface_flagship`,
+  `run_id=t2_mesh_transformer_surface_flagship_intrinsic_seed{42,43,44}_lr3.0e-3`,
+  and `dataset=drivaer_ml_surface_intrinsic`, on `infer_split=id_reference`
+  against the `drivaerml_ood_shadow` dataset path. Pre-registered read:
+  s42/s43 should land in-band; **s44 may be out-of-band because of the
+  training anomaly above** — if so, report it, do not hide it, and
+  decide whether s44 needs a lr-lowered retrain before it can join the
+  transfer panel.
+- **Transfer-v2 (the actual experiment).** Fully pre-registered at
+  `@sec-nb-transfer-v2-prereg` — read that entry; the gates,
+  predictions, and forbidden post-hoc moves are all frozen there.
+  Zero-shot SHIFT-SUV with the intrinsic checkpoints, via
+  `$REPO/mt_crossfam_eval.sbatch` but pointed at
+  `dataset=…/shift_suv_surface_intrinsic` (committed, synced to AGA)
+  and the three intrinsic run_ids, `infer_split=eval_pilot`.
+  Gate 1 (structural): all 3 seeds finite, pressure_l2 < 1.0.
+  Gate 2 (comparable): seed-median pressure_l2 ≤ 2× GeoT's 0.677
+  (≤ 1.354). **Do not re-fit C on SHIFT** (that is the whole point).
+  WSS is descriptive only (GeoT's own zero-shot WSS is 123.5 — junk
+  for everyone on this split).
+
+### THREAD 2: all-boundary "H-ground" redo — finals landed, band verdict is the next click
+
+The hypothesis (task #63): giving the model the *ground plane and
+tunnel walls* as extra boundary inputs (not just the vehicle) should
+help most in the wake-anchored regions (underbody, rear face). Six
+training arms finished to ep499/500 overnight (all healthy, divergence
+guard never fired): balanced-pooling seeds s43 (val 0.02731), s44
+(0.02587); unbalanced-pooling s43 (0.03742), s44 (0.03790). (Seed 42
+of each was completed earlier — **verify s42 arms are present before
+the verdict**.) The verdict instrument is already written and staged:
+`$REPO/mt_allbc_threeway_eval.sbatch` — it evaluates all six allbc
+arms plus three vehicle-only controls on a **pre-registered 5-region
+surface partition** (underbody front/mid/rear, rear-face, upper-body;
+tooling validated digit-for-digit against fleet tables, reconciliation
+asserted to rtol 1e-5). **Submit it now** (finals have landed; the
+script loads latest checkpoints and does not gate on ep500). The
+pre-registered decision: the H-ground hypothesis lives only if the
+improvement is **band-localized** to the wake regions where boundary
+context should matter; a uniform or absent improvement kills it. On
+flagship s42 the rear face is already confirmed the worst region
+(pressure 0.325, wss 0.964 vs global 0.167/0.705), so the partition
+has discriminating power. Note (`@sec-nb-allbc-instability`): balanced
+per-boundary pooling was necessary — naive pooling diverged mid-
+training (ep220-224); the current arms run at lr 7.5e-4, not the
+flagship 3.0e-3, for exactly this reason.
+
+### THREAD 3: E1 Reynolds dataset (re1000 top point) — 450 cases salvaged, crashed on the physics ceiling
+
+Context: the E1 experiment measures accuracy vs Reynolds number and
+found a **U-shaped curve** (`@sec-nb-e1-curve`) and a **steady-solver
+ceiling at Re≈5000** where the Newton solver stops converging
+(`@sec-nb-re-ceiling-final`). The re1000 band (train [1000,4000],
+unseen (4000,5000]) is the top data point. It was generated on the
+**DFW cluster** (`ssh dfw1`; x86 — needed because the fast sparse
+solver pypardiso is x86-only) at
+`~/coreai_modulus_cae/users/psharpe/agents/2026-07-22-e1-re1000-dfw/repo/examples/cfd/mesh_transformer/datasets/ns_cavity_star/v2-re1000/`.
+
+**State: 450 `.npz` cases written, then the job crashed (EXIT_CODE=1).**
+The crash is **not an infrastructure bug** — it is the physics ceiling
+biting: case 369 (an unseen-split case) drew Reynolds values in
+4166–4667 and the Newton solve stalled on all 8 retry attempts
+("backtracking stalled at residual ~1e-3"). One unsolvable case took
+the whole worker pool down. The train-band cases (Re ≤ 4000) all
+solved fine; only the hard unseen tail stalls. **Salvage plan for the
+next agent:** make generation fault-tolerant — wrap the per-case solve
+so an individual failure is logged-and-skipped instead of crashing
+`pool.imap_unordered` (generate_datasets.py ~line 1134), then either
+re-run to top up the unseen band or accept fewer unseen cases and cap
+the unseen ceiling at ~4000. Then rsync the salvaged cases to **HSG**
+(where the E1 training arms run). This finding (stalls beginning
+~4200, consistent with the soft Re≈5000 ceiling) is itself worth a
+one-line note in the E1 chapter — the ceiling is a soft band, not a
+hard wall.
+
+### Other open threads (lower urgency)
+
+- **AirFRANS clean protocol (#59):** headline arms (seeds 17-19) are
+  frozen and clean, but the **AoA-extrapolation ("evalx") leg is
+  unrun** and the chapter-15 ranking comparison (old dev-set numbers
+  vs the clean 3-seed numbers) is not yet done.
+- **Scale-law fit (#56 area):** the no-chunk capacity ladder was meant
+  to close with a val-vs-parameters power-law fit placing GeoT's
+  parity point (0.00249) on the curve. Check whether the final rungs
+  (x4nc/x2L4nc/x2nc) landed; if so, the fit + figure is a clean
+  chapter close.
+- **Per-dataset chapters (#44), domain_transforms slimming (#46),
+  separable far-field (#55):** untouched; see the task list.
+
+### OPERATIONAL / TACIT KNOWLEDGE (the gotchas that cost me time)
+
+These are process facts, not research findings (per policy, infra does
+NOT go in the notebook as science — but a handoff is the right place
+to point at them). Most are also codified in the `hpc-resources` skill.
+
+- **Checkpoint path convention:** the recipe writes checkpoints to
+  `$RECIPE/runs/<run_id>/checkpoints/checkpoint.0.<N>.pt` (N ≈ epoch+1;
+  `save_interval=10`). `infer.py` resolves them from `run_id` alone.
+  There is **run-id sprawl** — the same fixed-gauge flagship exists
+  under `t2_…`, `t2mn_…` (multi-node), and bare prefixes from
+  different launch waves. When comparing, pin the exact run_id, don't
+  glob.
+- **`# @package _global_` MUST be line 1** of any hydra model config.
+  I once prepended a license header above it and hydra silently
+  dropped the packaging, breaking ~30 chain links with a cryptic
+  "input_type missing". If you generate configs programmatically,
+  assert line 1.
+- **Single-process jobs on CPU nodes** (like the gauge calibration)
+  need the SLURM launcher env stripped or `DistributedManager` tries
+  multi-process init and crashes; also set `dataloader.pin_memory=false`
+  (pinned host memory needs CUDA). Both fixes are already in
+  `$RECIPE/studies/calibrate_intrinsic_gauge.py`.
+- **pypardiso is x86-only.** On aarch64 (HSG/AGA) the NS generator
+  silently falls back to SuperLU (≥70× slower, ~10× memory) → looks
+  like an OOM storm an hour later. Always run NS generation on an x86
+  cluster (DFW/ORD/EOS/NRT) and **grep the boot log for
+  `linear_solver=pypardiso`** before trusting the job. A partially
+  failed `uv sync` can also drop pypardiso even on x86 — reinstall it
+  explicitly and verify the import.
+- **Wave-atomic code changes:** never edit/sync a source file that a
+  running training wave imports. That is why the intrinsic-gauge
+  transform lives in its own `intrinsic_gauge.py` with a one-line
+  import, rather than being added to `domain_transforms.py` (which the
+  running allbc chains consume — changing it would alter their
+  subsample RNG mid-run).
+- **Launch acceptance is default-deny:** a job is "accepted" only when
+  it is alive AND not erroring AND has produced a real completed unit
+  (first training-step line / first finished case). Tails and GPU-util
+  are not proof. When code has a silent fallback, also assert the
+  intended path from the boot banner.
+- **Zombie/twin sweep** (run at the top of every verdict session):
+  a RUNNING job with no advancing StdOut → scancel and verify the
+  successor boots; any single job *name* with >1 RUNNING instance is a
+  singleton race → kill the younger, EXCEPT job arrays (`NNNNN_3`),
+  which are legitimately multi-instance.
+- **Commits are Peter's alone:** author every commit as
+  `Peter Sharpe <peterdsharpe@gmail.com>`, **never** add an AI
+  co-author trailer. The lab notebook is append-mostly and holds
+  research provenance only; infrastructure lessons go in the
+  `hpc-resources` skill, not here.
+
+### Repo state at handoff
+
+All work through commit `af1ce229` is committed and clean (calibration
+record, both intrinsic dataset variants, gauge-calibration/acceptance/
+transfer-v2 notebook entries). The intrinsic dataset configs
+(`drivaer_ml_surface_intrinsic.yaml`, `shift_suv_surface_intrinsic.yaml`)
+are committed locally AND synced to AGA. No experiments are currently
+running (verified empty queues on AGA and DFW at handoff time).
