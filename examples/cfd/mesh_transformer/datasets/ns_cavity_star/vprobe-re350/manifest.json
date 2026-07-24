@@ -1,0 +1,114 @@
+{
+  "checksums": {
+    "case_00000.npz": "0a1aaa5d769e7bd94418374f2d8325a9cad2a8917f643078f0e045cc8d21c4d9"
+  },
+  "created": "2026-07-19",
+  "family": "ns_cavity_star",
+  "generator_settings": {
+    "base_seed": 777,
+    "drive_decay": 1.0,
+    "family": "ns_cavity_star",
+    "interior_margin": 0.12,
+    "max_attempts": 8,
+    "max_newton_iterations": 25,
+    "n_boundary": 64,
+    "n_fem_boundary": 1024,
+    "n_query_interior": 128,
+    "n_query_near": 32,
+    "near_band": [
+      0.02,
+      0.08
+    ],
+    "newton_tolerance": 1e-10,
+    "noise_floor_stride": 1,
+    "reynolds_range": [
+      300.0,
+      400.0
+    ],
+    "self_check_h_factor": 1.5,
+    "target_h": 0.0105,
+    "unseen_reynolds_range": [
+      400.0,
+      500.0
+    ],
+    "verify": true
+  },
+  "n_cases": 1,
+  "schema_version": 1,
+  "seeds": {
+    "base_seed": 777,
+    "case_seed_stride": 104729
+  },
+  "solver_settings": {
+    "element": "Taylor-Hood P2-P1 triangles",
+    "equation": "steady incompressible Navier-Stokes: -nu lap(u) + (u.grad)u + grad p = 0, div u = 0",
+    "linear_solver": "pypardiso",
+    "mesher": "physicsnemo.mesh.tessellation.fill_interior (PR #1800; constrained Delaunay + Ruppert refinement, 30 deg min angle, max_area = sqrt(3)/4 h^2)",
+    "n_fem_boundary": 1024,
+    "newton_tolerance": 1e-10,
+    "noise_floor_stride": 1,
+    "nonlinear_solver": "Newton with analytic Jacobian, Stokes initial guess, backtracking, viscosity continuation ladder 8-4-2-1",
+    "pressure_gauge": "zero mean pressure via Lagrange multiplier",
+    "reynolds_convention": "Re = U L / nu with peak drive speed U = 1 (normalized) and reference length L = 1, so nu = 1/Re; the loader exposes viscosity = 1/Re as the global operator scalar",
+    "self_check_h_factor": 1.5,
+    "solver": "fem_navier_stokes.solve_navier_stokes",
+    "target_h": 0.0105
+  },
+  "splits": {
+    "train": {
+      "params": {
+        "deformation_range": [
+          0.05,
+          0.35
+        ],
+        "drive_band": [
+          0,
+          2
+        ],
+        "drive_width_range": [
+          0.25,
+          0.5
+        ],
+        "geometry_modes": [
+          2,
+          3
+        ],
+        "reynolds_range": [
+          300.0,
+          400.0
+        ]
+      },
+      "start": 0,
+      "stop": 1
+    }
+  },
+  "verification": {
+    "train": {
+      "boundary_flux_max_abs": 9.353408559833983e-07,
+      "continuation_solves_total": 0,
+      "divergence_l2_normalized_max": 0.0010807455902505144,
+      "generation_seconds_mean": 321.2145248230081,
+      "label_noise_floor_pressure_cases": 1,
+      "label_noise_floor_pressure_max": 0.00013582186183800726,
+      "label_noise_floor_pressure_mean": 0.00013582186183800726,
+      "label_noise_floor_velocity_cases": 1,
+      "label_noise_floor_velocity_max": 1.453496759934531e-05,
+      "label_noise_floor_velocity_mean": 1.453496759934531e-05,
+      "max_snap_distance_max": 0.0,
+      "momentum_balance_error_max": 1.7085446376122568e-14,
+      "n_cases": 1,
+      "newton_iterations_max": 6,
+      "queries_snapped_total": 0,
+      "rejected_attempts_total": 0,
+      "relative_residual_max": 1.5672521637252648e-14,
+      "self_consistency_rel_l2_pressure_max": 0.0009202041018253322,
+      "self_consistency_rel_l2_pressure_mean": 0.0009202041018253322,
+      "self_consistency_rel_l2_velocity_max": 0.00039840080879287293,
+      "self_consistency_rel_l2_velocity_mean": 0.00039840080879287293
+    },
+    "wall_seconds_per_case": 321.22147789306473,
+    "wall_seconds_total": 321.22147789306473,
+    "workers": 1
+  },
+  "version": "vprobe-re350"
+}
