@@ -5790,3 +5790,96 @@ boundary (DrivAerML's vehicle and tunnel qualify; open boundaries need
 the general form with the computed total). The single-layer member has a
 different, non-zero analytic total and needs its own subtraction constant
 — that is derivable, not free.
+
+## 2026-07-24 (evening) — CORRECTION + H-MS pre-registration: the model is NOT measure-scale invariant, and that may be one mechanism behind three separate failures {#sec-nb-hms-prereg}
+
+### Correction to @sec-nb-verdict-0724 (my error, material)
+
+I claimed there that "the model is invariant to a uniform measure
+rescale to 0.000% across a 16× change", and concluded from it that
+restoring Horvitz--Thompson weights "cannot change any single-boundary
+result". **The test did not support the claim.** It scaled the geometry
+by $s$ *and* the declared gauge by $s$, which leaves the
+nondimensional geometry — and therefore the nondimensional cell
+measures — bitwise identical. That measures scale equivariance, which
+was already known to hold. It says nothing about measure sensitivity.
+
+Re-run correctly (geometry fixed, only the quadrature measure
+multiplied by $k$):
+
+| $k$ | drift |
+|---:|---:|
+| 2 | 2.97% |
+| 4 | 8.93% |
+| 16 | 44.99% |
+| 64 | 64.30% |
+| **880** | **6.9 × 10⁷ %** (output $\to 7.2\times10^4$) |
+
+$k = 880$ is not a hypothetical: it is the exact DrivAerML HT factor
+(8.8M cells → 10k subsample). **The model is strongly, and eventually
+catastrophically, sensitive to the absolute magnitude of the quadrature
+measure.** Both conclusions in the earlier entry that rest on the bad
+test are withdrawn: the strip is *not* inert, and naively restoring the
+HT weights would not fix anything — it would detonate the model.
+
+### H-MS: measure-scale sensitivity as a common mechanism
+
+The program's four required properties (GLOBE's introduction) include
+units invariance and discretization invariance. The model has *length*
+-scale invariance — the gauge handles it, measured to $3\times10^{-7}$.
+It appears to have no corresponding invariance in the **measure**: the
+moments $\sum_j \omega_j k_j v_j$ and the decode $\sum_j \omega_j
+\kappa(x,y_j) V_j$ are linear in $\omega$, and nothing downstream
+normalises that magnitude away.
+
+**H-MS (the unifying claim):** a single mechanism — sensitivity to the
+total nondimensional quadrature measure $\sum_j \omega_j$ — contributes
+to three failures currently filed as unrelated:
+
+1. **Cross-family zero-shot divergence** (@sec-nb-crossfam-verdict).
+   A different vehicle family at a fixed gauge presents a different
+   total nondimensional measure; the blow-up texture ($10^4$ →
+   $10^{15}$ → NaN) matches the $k$-ladder above.
+2. **The gauge dose-response** (8 → $10^{15}$, 16 → 5.1, 48 → 1.7).
+   Raising $L_{\mathrm{ref}}$ divides every nondimensional area by
+   $L^2$: gauge 48 vs 8 is a 36× measure reduction. The monotone
+   recovery is what H-MS predicts, and it was previously explained only
+   as "the gauge is wrong".
+3. **Subsampling bias / resolution transfer** (@sec-nb-hdi-verdict).
+   The mathematically correct estimator is HT, and HT is exactly the
+   $k$ multiplication the model cannot survive.
+
+**The proposed repair, stated before it is tested.** Split the
+quadrature into a *shape* and a *magnitude*:
+
+- attention and decode consume **normalised** measures
+  $\hat\omega_j = \omega_j / \sum_i \omega_i$, which are invariant to
+  any uniform rescale (hence to the HT factor, hence to coverage in
+  expectation), dimensionless, and leave the operator dependent on the
+  empirical *distribution* of sources — which is what a Monte-Carlo
+  estimate of a surface integral should depend on;
+- the total measure enters as **one dimensionless global scalar**
+  $A / L^{d-1}$, similarity-invariant by construction and exactly
+  HT-correctable, so information about "how much surface there is" is
+  preserved rather than discarded.
+
+Contracts this must not break, to be checked: zero-drive preservation
+(the reweighting is drive-independent), exact drive linearity (it is a
+fixed linear reweighting), equivariance (a ratio of scalars), and
+bitwise query independence.
+
+**Pre-registered predictions.**
+
+- P1: normalised weights make the model *exactly* invariant to uniform
+  measure rescale — drift $< 10^{-5}$ at every $k$ including 880.
+  (Near-certain; it is true by construction. Stated so a failure would
+  indicate an implementation error, not a refutation.)
+- P2: normalised weights **substantially reduce the subsampling bias**
+  of @sec-nb-hdi-verdict at fixed coverage — the 3.2× error at 1.6%
+  coverage falls by at least 2×. *Prediction: p ≈ 0.6.* This is the
+  real test and it can fail: the bias is a completeness effect, and
+  normalisation fixes the magnitude, not the missing panels.
+- P3 (falsifier for the unification): if P2 fails, H-MS is demoted from
+  "one mechanism behind three failures" to "a real but separate defect
+  in measure handling", and the cross-family and resolution threads
+  stay independent.
