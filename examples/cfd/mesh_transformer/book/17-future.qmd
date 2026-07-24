@@ -509,14 +509,17 @@ Resolved by extracting one reduction
 test pinning their agreement. Two details are deliberate rather than
 tidied away:
 
-- **The two callers pass different weights, and should.** The model
-  weights by bare `cell_areas`, the measure it uses for all of its
-  quadrature, so the gauge stays consistent with the operator it
-  normalizes. The dataset transform runs *after* subsampling and
-  weights by Horvitz–Thompson-composed measures, because its job is to
-  estimate the full-resolution statistic from a subsample. Unifying
-  the weights would silently change one of the two; the shared piece
-  is the reduction, not the measure.
+- **The two callers pass different weights, and for this statistic it
+  provably does not matter — yet.** The model weights by bare
+  `cell_areas`; the dataset transform weights by
+  Horvitz–Thompson-composed measures, because it estimates the
+  full-resolution statistic from a subsample. Measured rather than
+  asserted: a *uniform* HT factor (what ordinary random subsampling
+  composes) cancels exactly between the numerator and denominator of
+  both weighted means, so the two return **bitwise-identical** gauges.
+  They could diverge only under non-uniform inclusion probability. The
+  shared piece is therefore the reduction, not the measure — which
+  costs nothing now and stays correct if non-uniform sampling arrives.
 - **The float64 accumulation is defensive, not a repair.** Measured on
   realistic statistics (10k–50k cells, measures spanning $10^{-9}$ to
   $10^{-5}$), float32 already agrees to $\sim$10⁻⁸ relative — torch

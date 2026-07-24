@@ -27,21 +27,28 @@ the statistic is computed in two places that must never drift apart:
    DrivAerML cross-family repair takes (``ComputeIntrinsicReferenceLength``
    in the unified external-aero recipe).
 
-Those two paths deliberately supply **different weights**, and the
-difference is not a bug:
+Those two paths supply **different weights**:
 
 - the model weights by ``mesh.cell_areas``, the bare geometric measure it
-  uses for *all* of its quadrature, so the gauge is consistent with the
-  operator it normalizes;
+  uses for *all* of its quadrature.  It never sees anything else: the
+  geometry meshes it builds are stripped with ``with_data(cell_data={})``,
+  which discards the ``MEASURE_WEIGHTS_KEY`` entry that carries
+  Horvitz--Thompson inclusion weights, so ``cell_measures`` and
+  ``cell_areas`` coincide bitwise inside the model by construction;
 - a dataset transform running after subsampling weights by
-  ``cell_measures(mesh)`` — geometric measure times composed
-  Horvitz--Thompson inclusion weights — because its job is to estimate the
-  statistic of the *full-resolution* geometry from a subsample.
+  ``cell_measures(mesh)`` — geometric measure times composed HT weights —
+  because its job is to estimate the statistic of the *full-resolution*
+  geometry from a subsample.
 
-Sharing the reduction (and its float64 discipline and validation) while
-letting each caller pass its own weights is the point of this module.  Do
-not "unify" the two weight choices without a measurement: they answer
-different questions.
+For **this statistic** the distinction is weaker than it looks, and the
+honest version is worth stating because it bears on whether the two ever
+disagree: a *uniform* HT factor (what ordinary random subsampling
+composes) cancels exactly between numerator and denominator of both
+weighted means, so the two weightings return bitwise-identical gauges.
+They can differ only under *non-uniform* inclusion probability.  Sharing
+the reduction while letting each caller pass its own weights therefore
+costs nothing today and stays correct if non-uniform sampling ever
+arrives.
 
 .. note::
    Placement is deliberately in the *experimental* namespace.  The
