@@ -6125,3 +6125,78 @@ points scored. The metric is a per-point relative $L^2$ over whatever
 points are scored, so this is a fair comparison of the same physical
 field at different sampling — but it is not a fixed-query-set
 comparison, and no claim will be made as if it were.
+
+## 2026-07-25 — H-CC VERDICT: CONFIRMED at maximum strength — a sharp minimum exactly at the training resolution, and catastrophe above it {#sec-nb-hcc-verdict}
+
+One unchanged checkpoint (flagship s42, fixed gauge), `id_reference`,
+nothing varying but `sampling_resolution`. AGA job 293567, task dir
+`agents/2026-07-25-mt-coverage-sweep/`.
+
+| resolution | coverage | pressure_l2 | vs training resolution |
+|---:|---:|---:|---:|
+| 2 500 | 0.028% | 0.8966 | 5.4× worse |
+| 5 000 | 0.057% | 0.7998 | 4.8× worse |
+| **10 000** | **0.11%** | **0.167163** | **← trained here** |
+| 20 000 | 0.23% | 0.4106 | 2.5× worse |
+| 40 000 | 0.45% | **24 810.9** | **148 000× worse** |
+
+The 10k lane reproduces the historical 0.167163 to six digits, so the
+sweep is clean. **The error has a sharp minimum precisely at the
+training resolution and diverges above it.** The pre-registered
+"compensation" reading fires; the "convergence" reading is refuted
+about as hard as a prediction can be.
+
+This is not a mild protocol sensitivity. Doubling the source count
+costs 2.5×; quadrupling it destroys the model. And it settles the
+question the arithmetic raised: the flagship's 0.167 was never a better
+approximation to the boundary integral than the exact estimator's ~34%
+field-level sampling error at that coverage (@sec-nb-subtraction-
+replication, re-aggregated below) — it is a *fitted correction to one
+sampling rate*, which is why it evaporates the moment the rate changes.
+
+**Metric-aggregation correction, made in passing.** I previously
+compared the model's 0.167 to "42%" exact-estimator error. Both numbers
+were aggregated inconsistently. The recipe's `pressure_l2` for a scalar
+field is a *field-level* ratio of norms (`_relative_l2` sums over the
+whole point axis), so the correct analogue is RMS(error)/RMS(signal):
+**33.7% at 0.11% coverage**, not 42% (ratio-of-means) and not 83%
+(mean-of-per-point-ratios). The comparison stands qualitatively — 0.167
+model versus 0.337 exact-estimator noise — and the conclusion is
+unchanged, but the numbers are now on the same footing.
+
+### The mechanism is almost certainly the one measured this morning
+
+Raising resolution does not just add samples — with the
+Horvitz--Thompson weights stripped, $\sum_j \omega_j$ **grows linearly
+with source count** (@sec-nb-hdi-verdict measured exactly this: bare
+area 0.31 → 4.90 over a 16× count change while the HT-corrected total
+stayed at $4\pi$). And the model has **no invariance to the magnitude of
+the quadrature measure** (@sec-nb-hms-verdict: 45% drift at $k=16$,
+divergence at $k=880$).
+
+So 10k → 40k multiplies the total measure by 4× and pushes a *trained*
+model — whose coefficients were fitted at one measure magnitude — off
+its operating point. Two independently measured facts predict this
+sweep's shape, and neither was known when the resolution-transfer
+failure was filed as "blocked on research, not wiring".
+
+If that is right, the consequences are large and immediate:
+
+1. **The full-resolution inference failure has a named mechanism.**
+   Chapter 17's rel $L^2 \sim 100$ at 50k sources is this curve, one
+   step further along; I measured 24 810 at 40k on a different rung.
+2. **The fix already exists and is measured.** Measure normalisation
+   makes the operator exactly invariant to $\sum_j\omega_j$
+   ($2.9\times10^{-5}$% at $k=880$). A model trained under it should be
+   evaluable at *any* resolution.
+3. **Resolution transfer was never an architecture limit.** It is a
+   missing invariance — one of the four the program says a PDE surrogate
+   must have.
+
+**Immediate discriminating test (launched):** re-evaluate the *same*
+checkpoint at resolution 40 000 with the cell measures rescaled by
+$10000/40000$ so the total quadrature measure matches training. If
+measure magnitude is the mechanism, the 24 810 collapses toward the 10k
+value. If it does not, the divergence is about *which* panels are
+present and the coverage/completeness thread owns it instead.
+Pre-declared before running; falsifier is "no material collapse".
