@@ -1,0 +1,99 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# MeshTransformer template -- SURFACE recipes, all-typed-boundaries arm.
+# ---------------------------------------------------------------------------
+# The H-ground arm of the DrivAerML campaign: identical to
+# mesh_transformer_surface.yaml in every model hyperparameter, differing
+# ONLY in the declared boundary schema -- all five typed boundaries of the
+# curated DrivAerML .pdmsh layout (`vehicle`, the `no_slip` ground plane,
+# `slip` tunnel walls/ceiling, `inlet`, `outlet`), each geometry-only.  In
+# the MeshTransformer's schema, distinct boundary names ARE distinct BC
+# types (each gets its own one-hot channel in the encoder's operator
+# state), so this arm hands the model the actual posed boundary-value
+# problem rather than the vehicle shape alone.
+#
+# The model validates that the sample's boundary names match this schema
+# EXACTLY, so this template requires the drivaer_ml_surface_allbc dataset
+# (which reads the full DomainMesh instead of just boundaries/vehicle):
+#   python src/train.py model=mesh_transformer_surface_allbc \
+#       dataset=drivaer_ml_surface_allbc compile=false \
+#       'training.field_weights={pressure: 1.0, wss: 100.0}' \
+#       sampling_resolution=50000
+#
+# SCALE GAUGE: same explicit `reference_length` (constant 8.0 in the
+# pipeline's L_ref-nondimensionalized space = 40 m physical, the tunnel
+# scale) as the vehicle-only arm, so the geometric nondimensionalization
+# is bitwise identical across the two arms.  The tunnel-scale value is
+# LOAD-BEARING for this arm: its source set spans the full tunnel (~24
+# L_ref), and the model's norm-free zero-preserving drive stream overflows
+# float32 to NaN at initialization when sources sit far outside the
+# design operating point of RMS radius ~1 (measured dose-response: NaN at
+# gauge 1, ~1e24 at 2, healthy >= 6; the all-boundary intrinsic RMS is
+# ~8.5 L_ref).  The drive is the unit freestream direction `U_inf_dir`
+# for the same reason (raw ~39 m/s U_inf multiplies straight through the
+# drive stream's products).  See mesh_transformer_surface.yaml for the
+# full rationale and the capacity/kernel documentation (this file keeps
+# the two templates diffable field-for-field).
+input_type: mesh
+output_type: mesh
+
+forward_kwargs:
+  domain: ""                       # "" resolves to the DomainMesh sample itself
+
+model:
+  _target_: physicsnemo.experimental.nn.MeshTransformer
+  n_spatial_dims: 3
+  output_field_ranks:
+    pressure: 0                    # scalar (Cp at surface centroids)
+    wss: 1                         # vector (Cf at surface centroids)
+  boundary_field_ranks:
+    # All five typed boundaries, geometry-only. Distinct names = distinct
+    # BC types (per-boundary one-hot in the operator state).
+    vehicle: {operator: {}, drive: {}}
+    no_slip: {operator: {}, drive: {}}
+    slip: {operator: {}, drive: {}}
+    inlet: {operator: {}, drive: {}}
+    outlet: {operator: {}, drive: {}}
+  global_field_ranks:
+    operator: {}
+    drive:
+      U_inf_dir: 1                 # unit freestream direction, the rank-1 global drive
+  reference_length_key: reference_length  # constant 8.0 in L_ref units (see header)
+  field_mode: zero_preserving_nonlinear
+  query_decoder: kernel
+  # Two-member "singpair" kernel dictionary (reference configuration).
+  kernel_mlp_members: 0
+  kernel_include_polynomial_members: false
+  kernel_include_single_layer_member: true
+  kernel_monopole_free_single_layer: false
+  # MANDATORY at recipe scale for training memory (see the surface template).
+  kernel_checkpoint_query_chunks: true
+  # Reference capacity: one encoder layer, one full-width head.
+  operator_scalar_dim: 32
+  operator_vector_dim: 8
+  drive_scalar_dim: 48
+  drive_vector_dim: 12
+  operator_layers: 1
+  drive_layers: 1
+  query_layers: 1
+  heads: 1
+  scalar_rank: 48
+  vector_rank: 16
+  query_chunk_size: 65536
+  attention_chunk_size: 65536

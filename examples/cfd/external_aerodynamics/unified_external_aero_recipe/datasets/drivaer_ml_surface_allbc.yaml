@@ -1,0 +1,160 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# DrivaerML surface dataset -- ALL TYPED BOUNDARIES variant.
+#
+# The stock drivaer_ml_surface.yaml reads ONLY the vehicle boundary out of
+# each .pdmsh (pattern .../boundaries/vehicle), so the other four typed
+# boundaries in the BC-labeled curation (`no_slip` ground plane, `slip`
+# tunnel walls/ceiling, `inlet`, `outlet`) never enter the pipeline.  This
+# variant reads the full DomainMesh via DomainMeshReader and re-targets it
+# to the same SURFACE task via the recipe-local BoundaryMeshToDomainMesh:
+# interior becomes the vehicle's cell centroids carrying the pressure/wss
+# targets, the volume interior is discarded, and ALL five boundaries are
+# kept as typed geometry inputs for boundary-typed models (the
+# MeshTransformer all-BC arm).  Targets, non-dimensionalization,
+# normalization stats, and sampling deliberately mirror
+# drivaer_ml_surface.yaml so the vehicle-only vs all-boundaries comparison
+# differs only in the boundary set the model sees.
+#
+# ORDERING (performance-critical): the curated .pdmsh interior is a
+# ~165.8M-point volume cloud.  The reader caps it at read time
+# (subsample_n_points; contiguous block on the memmap), and the re-target
+# runs EARLY -- immediately after the cheap per-field renames -- so every
+# geometry-wide transform downstream (centering, non-dimensionalization,
+# normalization, augmentations) operates on surface-sized data only.
+# Because the re-target moves the targets into interior.point_data, the
+# field steps after it use `association: point_data` (the stock surface
+# yaml applies the identical formulas to the same values in cell_data
+# before its terminal MeshToDomainMesh; rename/nondim order is immaterial
+# since renaming is a pure key move).
+#
+# Transform semantics on a DomainMesh: transforms with a domain-aware
+# override apply once per domain (CenterMesh centers by the interior COM --
+# after the re-target that is the vehicle centroids, matching the stock
+# arm's vehicle-based centering -- and translates every mesh consistently;
+# NonDimensionalizeByMetadata reads domain-level global_data and scales
+# every mesh by the same L_ref; the augmentations sample one
+# rotation/translation per domain); the rest broadcast per-mesh with
+# missing fields skipped.
+#
+# Splits are controlled by manifest.json + train_split/val_split in the
+# training config, exactly as for the stock surface dataset.
+
+train_datadir: ${dataset_paths.drivaer_ml}
+
+pipeline:
+  reader:
+    # Recipe-local reader with TOPOLOGY-AWARE contiguous-block I/O caps:
+    # the cell cap applies to cell-carrying meshes (the boundaries) and
+    # the point cap to point clouds (the 165.8M-point volume interior)
+    # ONLY. Both caps are required -- without the point cap the full
+    # interior rides through pinning / device transfer / transforms (the
+    # measured 9x epoch slowdown). The stock DomainMeshReader applies
+    # BOTH caps to EVERY mesh, which starves the vehicle boundary: the
+    # cell cap compacts it to ~3 unique points per cell (shuffled
+    # on-disk cell order), then the point cap keeps only cells with all
+    # three vertices inside a contiguous point block, ~(1/3)^3 of them
+    # -- measured 378 of 10,000 vehicle cells on run_1, silently
+    # un-matching the two arms' source sets. Meshes smaller than their
+    # cap (the 722-2,888-cell auxiliary boundaries) pass through
+    # complete.
+    _target_: ${dp:TopologyAwareDomainMeshReader}
+    path: ${train_datadir}
+    pattern: "run_*/*.pdmsh"
+    subsample_n_cells: ${sampling_resolution}
+    subsample_n_points: ${sampling_resolution}
+  augmentations:
+    # Inserted after CenterMesh, i.e. after the re-target below: the wss
+    # target then lives in interior.point_data, so point_data vectors must
+    # rotate too (the stock surface yaml rotates cell_data instead because
+    # its targets are still cell-attached when its augmentation runs).
+    - _target_: ${dp:RandomRotateMesh}
+      axes: ["z"]
+      transform_point_data: true
+      transform_cell_data: true
+      transform_global_data: true
+    - _target_: ${dp:RandomTranslateMesh}
+      distribution:
+        _target_: torch.distributions.Uniform
+        low: [-1.0, -1.0, 0.0]
+        high: [1.0, 1.0, 0.0]
+  transforms:
+    - _target_: ${dp:DropMeshFields}
+      global_data: [TimeValue]
+    # Unit freestream direction as a NEW global leaf `U_inf_dir` (`U_inf`
+    # stays physical; see drivaer_ml_surface.yaml). The rank-1 drive of the
+    # MeshTransformer templates. Rotates with the geometry under the
+    # augmentation (transform_global_data: true).
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
+    # Canonical field names BEFORE the re-target so the auto-injected
+    # cell_data_targets (from the `targets:` block) match. Broadcasts over
+    # all sub-meshes; missing keys are skipped.
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        pMeanTrim: pressure
+        wallShearStressMeanTrim: wss
+    # Random per-epoch subsample on top of the reader's contiguous block,
+    # matching the stock surface pipeline's sampling distribution. Placed
+    # BEFORE the re-target so the interior (vehicle cell centroids) is
+    # derived from the same subsampled cell set as the vehicle boundary,
+    # for any reader-cap / resolution combination.
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: ${sampling_resolution}
+    # Re-target the loaded DomainMesh to the surface task while keeping
+    # every typed boundary: interior = vehicle cell centroids with the
+    # target fields moved into interior.point_data (auto-injected from the
+    # `targets:` block below); boundaries = all five, with targets stripped
+    # from `vehicle`; the volume interior is discarded. Runs EARLY so
+    # everything downstream is surface-sized.
+    - _target_: ${dp:BoundaryMeshToDomainMesh}
+      interior_points: cell_centroids
+      boundary_name: vehicle
+    # Centers by the interior (= vehicle centroids) mean and translates
+    # every boundary consistently -- a vehicle-based frame, like the stock
+    # surface arm (which centers by the vehicle's point mean).
+    - _target_: ${dp:CenterMesh}
+      use_area_weighting: false
+    # Same physics as the stock surface yaml (pressure -> Cp, stress -> Cf,
+    # geometry / L_ref for every mesh), applied at the targets' new home in
+    # interior.point_data.
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        pressure: pressure
+        wss: stress
+      association: point_data
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        wss: {type: vector, mean: [0.0, 0.0, 0.0], std: 0.00313}
+    # Constant scale gauge, IDENTICAL to drivaer_ml_surface.yaml (8.0 in
+    # L_ref units = 40 m physical, the tunnel-scale operating point; see
+    # the rationale there -- a vehicle-scale gauge overflows this arm's
+    # norm-free drive stream to NaN at initialization). The recipe-local
+    # SetDomainGlobalField writes at the DOMAIN level (the stock
+    # SetGlobalField's domain path only reaches sub-mesh global_data).
+    - _target_: ${dp:SetDomainGlobalField}
+      fields:
+        reference_length: 8.0
+
+# Single source of truth for prediction field names + types (identical to
+# drivaer_ml_surface.yaml). Read by the dataset builder (auto-injected into
+# BoundaryMeshToDomainMesh above) and the train loop (loss / metrics).
+targets:
+  pressure: scalar
+  wss: vector

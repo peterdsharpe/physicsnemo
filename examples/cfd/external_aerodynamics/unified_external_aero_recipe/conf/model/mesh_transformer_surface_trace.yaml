@@ -1,0 +1,128 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# MeshTransformer template -- SURFACE recipes, vehicle-only TRACE arm.
+# ---------------------------------------------------------------------------
+# The pre-registered acceptance arm of the declared BOUNDARY-TRACE MODE
+# (the GeoTransolver-gap verdict's constructive consequence; see the
+# mesh_transformer book, 18-notebook.qmd, entries @sec-nb-geot-gap and
+# @sec-nb-geot-gap-verdict).  This template is BITWISE the plain singpair
+# template (mesh_transformer_surface.yaml) plus exactly one declaration:
+#
+#   trace_of: vehicle
+#
+# which declares that the query mesh IS the vehicle boundary's cell
+# centroids, index-aligned (query i is cell i, in cell order) -- a
+# boundary->boundary task, not a boundary->interior map.  The declaration
+# licenses two exact structural changes:
+#
+#   1. SIDE-CORRECTED SELF-TERMS.  Surface queries sit exactly on the
+#      double layer's jump discontinuity; the closed form serves an
+#      accidental signed-zero branch (measured: the INTERIOR limit -1/2,
+#      while Cp/Cf are the exterior trace, +1/2 at +epsilon into the
+#      fluid).  Trace mode replaces every query's own-panel double-layer
+#      entry with the exact exterior one-sided limit +1/2 (the on-panel
+#      principal value of a flat panel vanishes identically; the single
+#      layer is continuous across the boundary and needs no correction).
+#   2. OWN-CELL TYPED READ-OUTS.  Each query receives typed projections
+#      of its own cell's post-attention encoded operator and drive states
+#      -- the information flow the interior contract rightly denies bare
+#      interior points, but a declared trace query legitimately owns.
+#
+# ALIGNMENT CONTRACT (verified by test_mesh_transformer_configs.py): the
+# drivaer_ml_surface pipeline's terminal `MeshToDomainMesh
+# (interior_points: cell_centroids)` builds interior.points as EXACTLY
+# boundaries.vehicle.cell_centroids in cell order (SubsampleMesh runs
+# before it, so the subsampled cells and their centroids stay paired),
+# and the recipe collate hands the DomainMesh through unmodified -- the
+# declared identity map holds bitwise end to end.  The model validates
+# the count loudly (query count must equal vehicle cell count); the
+# ORDER is this pipeline's pinned responsibility.
+#
+# TRACE SIDE: the declared side is the side the cell normals point
+# toward.  The model computes normals from the mesh winding; the curated
+# DrivAerML vehicle surfaces are wound with normals out of the body,
+# into the fluid -- the side where Cp and wall shear live.  (A wrong
+# orientation would serve the interior branch, i.e. exactly the defect
+# this mode exists to fix; the jump-relation tests in
+# test/experimental/nn/mesh_attention/test_trace_mode.py pin the
+# convention.)
+#
+# PRE-REGISTERED ACCEPTANCE (matched protocol against
+# mesh_transformer_surface -- same dataset, sampling, LR, schedule,
+# epochs, seeds; the two templates differ ONLY by trace_of, pinned by
+# test): trace-singpair beats plain singpair >= 5x on DrivAerML surface
+# val (the AirFRANS surface-vs-volume signature, 27-40x for
+# singpair-class arms, bounds the plausible gain).  FALSIFIER: no
+# improvement => the trace defect was cosmetic and H-C
+# (capacity/representational efficiency) owns the whole gap,
+# redirecting effort to the members/wide/hybrid capacity ladder.
+#
+# Everything below trace_of is documented in mesh_transformer_surface.yaml
+# (information diet, scale gauge, capacity, memory knob).
+#
+# Training knobs (suggested; matched to the plain singpair arm):
+#   python src/train.py model=mesh_transformer_surface_trace dataset=drivaer_ml_surface \
+#       compile=false 'training.field_weights={pressure: 1.0, wss: 100.0}' \
+#       sampling_resolution=50000
+input_type: mesh
+output_type: mesh
+
+forward_kwargs:
+  domain: ""                       # "" resolves to the DomainMesh sample itself
+
+model:
+  _target_: physicsnemo.experimental.nn.MeshTransformer
+  n_spatial_dims: 3
+  output_field_ranks:
+    pressure: 0                    # scalar (Cp at surface centroids)
+    wss: 1                         # vector (Cf at surface centroids)
+  boundary_field_ranks:
+    vehicle: {operator: {}, drive: {}}   # geometry-only boundary input
+  global_field_ranks:
+    operator: {}
+    drive:
+      U_inf_dir: 1                 # unit freestream direction, the rank-1 global drive
+  reference_length_key: reference_length  # constant 8.0 in L_ref units (see base arm)
+  field_mode: zero_preserving_nonlinear
+  query_decoder: kernel
+  # THE declared boundary-trace mode: queries ARE the vehicle's cell
+  # centroids (see header).  The single delta against the plain arm.
+  trace_of: vehicle
+  # Two-member "singpair" kernel dictionary (reference configuration).
+  kernel_mlp_members: 0
+  kernel_include_polynomial_members: false
+  kernel_include_single_layer_member: true
+  # A car in a tunnel is not a zero-net-flux exterior; the monopole
+  # deflation's physics license does not hold here.
+  kernel_monopole_free_single_layer: false
+  # MANDATORY at recipe scale for training memory (see base arm).
+  kernel_checkpoint_query_chunks: true
+  # Reference capacity: one encoder layer, one full-width head.
+  operator_scalar_dim: 32
+  operator_vector_dim: 8
+  drive_scalar_dim: 48
+  drive_vector_dim: 12
+  operator_layers: 1
+  drive_layers: 1
+  query_layers: 1
+  heads: 1
+  scalar_rank: 48
+  vector_rank: 16
+  query_chunk_size: 65536
+  attention_chunk_size: 65536

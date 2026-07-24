@@ -1,0 +1,119 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# MeshTransformer template -- SURFACE recipes, vehicle-only arm.
+# ---------------------------------------------------------------------------
+# The MeshTransformer is DomainMesh-native end-to-end: its forward()
+# signature is exactly `forward(domain: DomainMesh) -> Mesh`, so the
+# forward_kwargs map is the empty-path spec (`""` resolves to the sample
+# itself) and no adapter or wrapper exists.  Inputs (boundary geometry +
+# declared global fields) and query points (interior.points) are all read
+# off the DomainMesh by the model's declared schema; targets in
+# interior.point_data are stripped by the model before decoding, so the
+# recipe's DomainMesh passes through unmodified.
+#
+# INFORMATION DIET (the fair-comparison arm): boundaries.vehicle as
+# geometry only (schema `{operator: {}, drive: {}}` -- the model computes
+# its own cell normals and quadrature from the mesh; the dataset's
+# precomputed `normals` cell field is undeclared and therefore ignored),
+# plus the UNIT freestream direction `U_inf_dir` as the single rank-1
+# global drive.  The pipeline leaves `U_inf` itself in PHYSICAL units
+# (NonDimensionalizeByMetadata never touches global_data); the model's
+# contract requires nondimensional declared fields, and its
+# zero-preserving drive stream is norm-free, so a raw ~39 m/s drive
+# multiplies straight through the score/value products (measured on the
+# tunnel-shaped probe: O(1e9) initial predictions on this arm, float32
+# overflow to NaN on the all-boundary arm).  `U_inf_dir` is derived by the
+# dataset pipelines' ComputeFreestreamDirection step and rotates with the
+# geometry under augmentation; for DrivAerML the discarded magnitude is a
+# per-dataset constant, so no per-case information is lost.
+# `field_mode: zero_preserving_nonlinear` makes zero freestream map to
+# zero Cp/Cf by construction.
+#
+# SCALE GAUGE: `reference_length_key: reference_length` reads the constant
+# 8.0 injected by the dataset pipelines.  Positions are already
+# nondimensionalized by the per-case L_ref (=5 m), so 8.0 declares a
+# physical gauge of 40 m -- the tunnel scale, approximately the
+# measure-weighted RMS radius of the FULL DrivAerML boundary set, i.e. the
+# operating point the model's intrinsic gauge would choose for the
+# all-boundary arm (the model is designed around source RMS radius ~1).
+# The intrinsic gauge (the default `reference_length_key: null`) is
+# deliberately NOT used: it would differ wildly between this vehicle-only
+# arm (car RMS) and the all-boundary arm (tunnel RMS).  The explicit
+# constant keeps the two arms' geometric nondimensionalization bitwise
+# identical, and the tunnel-scale value is the one both arms tolerate:
+# measured dose-response on the all-BC arm is NaN at gauge 1, ~1e24 at 2,
+# healthy >= 6, while this arm's outputs are insensitive over gauges 4-16.
+#
+# CAPACITY: the program's reference configuration (the AirFRANS campaign's
+# `build_arm`): one encoder layer, one full-width attention head at ranks
+# 48/16 (score capacity matched to 4 heads x ranks 12/4), the two-member
+# "singpair" kernel dictionary (exact double-layer + exact single-layer,
+# no learned smooth members), zero-preserving nonlinear field mode.
+# `kernel_checkpoint_query_chunks: true` is REQUIRED at recipe scale
+# (50k-200k surface points): without it autograd retains every decode
+# chunk's dense O(chunk x N_src) activations and training memory grows as
+# the full O(N_q x N_s).  Gradients are bitwise identical either way.
+#
+# Training knobs (suggested; mirror GLOBE's mesh-native invocation):
+#   python src/train.py model=mesh_transformer_surface dataset=drivaer_ml_surface \
+#       compile=false 'training.field_weights={pressure: 1.0, wss: 100.0}' \
+#       sampling_resolution=50000
+input_type: mesh
+output_type: mesh
+
+forward_kwargs:
+  domain: ""                       # "" resolves to the DomainMesh sample itself
+
+model:
+  _target_: physicsnemo.experimental.nn.MeshTransformer
+  n_spatial_dims: 3
+  output_field_ranks:
+    pressure: 0                    # scalar (Cp at surface centroids)
+    wss: 1                         # vector (Cf at surface centroids)
+  boundary_field_ranks:
+    vehicle: {operator: {}, drive: {}}   # geometry-only boundary input
+  global_field_ranks:
+    operator: {}
+    drive:
+      U_inf_dir: 1                 # unit freestream direction, the rank-1 global drive
+  reference_length_key: reference_length  # constant 8.0 in L_ref units (see header)
+  field_mode: zero_preserving_nonlinear
+  query_decoder: kernel
+  # Two-member "singpair" kernel dictionary (reference configuration).
+  kernel_mlp_members: 8
+  kernel_include_polynomial_members: false
+  kernel_include_single_layer_member: true
+  # A car in a tunnel is not a zero-net-flux exterior; the monopole
+  # deflation's physics license does not hold here.
+  kernel_monopole_free_single_layer: false
+  # MANDATORY at recipe scale for training memory (see header).
+  kernel_checkpoint_query_chunks: true
+  # Reference capacity: one encoder layer, one full-width head.
+  operator_scalar_dim: 32
+  operator_vector_dim: 8
+  drive_scalar_dim: 48
+  drive_vector_dim: 12
+  operator_layers: 1
+  drive_layers: 1
+  query_layers: 1
+  heads: 1
+  scalar_rank: 48
+  vector_rank: 16
+  query_chunk_size: 65536
+  attention_chunk_size: 65536
