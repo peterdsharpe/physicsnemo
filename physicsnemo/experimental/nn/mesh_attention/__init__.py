@@ -30,6 +30,7 @@ from .block import (
     PointwiseGeometryBlock,
     QuadraticFieldReadIn,
 )
+from .gauge import measure_weighted_rms_radius
 from .kernel_decoder import (
     KernelBasisCrossDecoder,
     KernelDecoderCache,
@@ -57,6 +58,7 @@ __all__ = [
     "MeshAttention",
     "MeshOperatorBlock",
     "MeshTransformer",
+    "measure_weighted_rms_radius",
     "NonlinearZeroKernelBasisCrossDecoder",
     "NonlinearZeroMeshFieldBlock",
     "PairInvariantFeatures",

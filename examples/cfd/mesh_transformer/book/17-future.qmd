@@ -493,6 +493,49 @@ surface is actively moving (log-radial features, auxiliary scales, and the
 member sweep landed or are in flight this week), which is exactly the
 instability the deferral condition names.*
 
+**Duplication that mattered, now resolved: the scale gauge existed
+twice.** The cross-family repair (@sec-drivaerml-crossfamily) computes
+a per-sample gauge dataset-side and feeds it through the model's
+*explicit* override — which meant the measure-weighted RMS radius was
+implemented independently in two places: `MeshTransformer`'s built-in
+intrinsic gauge and the recipe's `ComputeIntrinsicReferenceLength`
+transform. Same formula, no shared code, and **no test comparing
+them** — a silent divergence would have corrupted precisely the
+comparison the transfer experiment rests on, since training and
+evaluation reach the gauge by different routes.
+
+Resolved by extracting one reduction
+(`mesh_attention.measure_weighted_rms_radius`) that both call, with a
+test pinning their agreement. Two details are deliberate rather than
+tidied away:
+
+- **The two callers pass different weights, and should.** The model
+  weights by bare `cell_areas`, the measure it uses for all of its
+  quadrature, so the gauge stays consistent with the operator it
+  normalizes. The dataset transform runs *after* subsampling and
+  weights by Horvitz–Thompson-composed measures, because its job is to
+  estimate the full-resolution statistic from a subsample. Unifying
+  the weights would silently change one of the two; the shared piece
+  is the reduction, not the measure.
+- **The float64 accumulation is defensive, not a repair.** Measured on
+  realistic statistics (10k–50k cells, measures spanning $10^{-9}$ to
+  $10^{-5}$), float32 already agrees to $\sim$10⁻⁸ relative — torch
+  reduces pairwise. The promotion makes the gauge a function of the
+  geometry rather than of the pipeline's dtype. It matters that this
+  was measured rather than assumed: had the change moved the gauge
+  materially, the calibration constant $C$ — fitted under the older
+  code, with three retrains already run against it — would have been
+  invalidated. It moves it by $\le 7\times10^{-8}$ relative, so $C$
+  and those runs stand.
+
+*Open, deferred deliberately:* the statistic is a pure mesh geometric
+quantity and would sit naturally in
+`physicsnemo.mesh.calculus.measure` beside `cell_measures`. It lives
+in the experimental namespace instead, because promoting a symbol into
+the released mesh module is a support commitment rather than a
+refactor — the same class of decision as the Bessel-derivative
+placement below, and Peter's to make.
+
 **A latent contract bug, found by de-biasing the test data** *(found
 during the intrinsic-gauge work, @sec-intrinsic-gauge)*. The
 pair-invariant einsum took a CUDA batched-GEMM path with 1-ulp drift

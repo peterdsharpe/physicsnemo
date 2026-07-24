@@ -82,27 +82,35 @@ __all__ = ["ComputeIntrinsicReferenceLength", "measure_weighted_rms_radius"]
 def measure_weighted_rms_radius(mesh: Mesh) -> torch.Tensor:
     r"""Measure-weighted RMS radius of *mesh* about its measure-weighted centroid.
 
-    .. math::
+    Thin wrapper over the model's own gauge reduction
+    (:func:`physicsnemo.experimental.nn.mesh_attention.measure_weighted_rms_radius`)
+    so this transform and :class:`MeshTransformer`'s built-in intrinsic gauge
+    can never drift apart in formula, float64 accumulation, or degenerate-
+    geometry validation.  ``test_matches_model_intrinsic_gauge`` pins the
+    agreement.
 
-       \bar c = \frac{\sum_i w_i c_i}{\sum_i w_i},\qquad
-       r_\mathrm{RMS} = \sqrt{\frac{\sum_i w_i \lVert c_i-\bar c\rVert^2}
-                                    {\sum_i w_i}}
-
-    with :math:`c_i` the cell centroids and :math:`w_i` the effective cell
-    measures (geometric measure times any composed Horvitz-Thompson
-    subsampling weights).
+    The one intentional difference is the **weights**: this transform runs
+    after ``SubsampleMesh`` and is estimating the statistic of the
+    full-resolution geometry, so it weights by ``cell_measures`` (geometric
+    measure times composed Horvitz-Thompson inclusion weights).  The model
+    weights by bare ``cell_areas``, its own quadrature measure, so its gauge
+    stays consistent with the operator it normalizes.  On a mesh carrying no
+    measure weights the two coincide bitwise.
 
     Returns
     -------
     torch.Tensor
         0-dim tensor in the mesh's coordinate units and dtype.
     """
-    weights = cell_measures(mesh)
-    centroids = mesh.cell_centroids
-    total = weights.sum()
-    center = (weights[:, None] * centroids).sum(dim=0) / total
-    r_squared = (weights * (centroids - center).square().sum(dim=-1)).sum() / total
-    return r_squared.sqrt()
+    ### Imported lazily: this module is loaded by the dataset pipeline for
+    ### every model on an intrinsic-gauge dataset, including ones that ignore
+    ### the gauge entirely, and there is no reason to drag the mesh_attention
+    ### stack (or its ExperimentalFeatureWarning) into those builds.
+    from physicsnemo.experimental.nn.mesh_attention import (
+        measure_weighted_rms_radius as model_gauge,
+    )
+
+    return model_gauge(cell_measures(mesh), mesh.cell_centroids)
 
 
 @register()

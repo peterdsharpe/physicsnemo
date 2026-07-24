@@ -56,6 +56,73 @@ def _plate_mesh(
     return Mesh(points=points, cells=cells)
 
 
+def test_matches_model_intrinsic_gauge():
+    """The transform and the model's built-in gauge are ONE implementation.
+
+    The cross-family repair works by computing a per-sample gauge dataset-side
+    and feeding it through the model's *explicit* ``reference_length_key``
+    override.  That means the same statistic is reachable by two routes, and a
+    silent divergence between them would corrupt the comparison the whole
+    transfer experiment rests on.  Both now call
+    ``mesh_attention.measure_weighted_rms_radius``; this pins it.
+
+    On a mesh with no recorded measure weights the two weightings
+    (``cell_measures`` vs the model's bare ``cell_areas``) coincide bitwise,
+    so equality here is exact rather than approximate.
+    """
+    from physicsnemo.experimental.nn.mesh_attention import (
+        measure_weighted_rms_radius as model_gauge,
+    )
+
+    mesh = _plate_mesh(a=2.0, b=1.0, n=20, offset=(3.0, -1.0, 0.5))
+
+    transform_value = measure_weighted_rms_radius(mesh)
+    model_value = model_gauge(mesh.cell_areas, mesh.cell_centroids)
+    assert torch.equal(transform_value, model_value)
+
+    ### And through the transform itself, with the calibration constant.
+    scale_constant = 26.476592786355283
+    written = ComputeIntrinsicReferenceLength(scale_constant=scale_constant)(mesh)
+    assert torch.allclose(
+        written.global_data["reference_length"],
+        scale_constant * model_value,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_gauge_is_dtype_independent_on_realistic_measures():
+    """The gauge must be a function of the geometry, not of its dtype.
+
+    The DrivAerML vehicle carries cell areas from ~2e-9 to ~7e-5 in a single
+    sample, and the gauge scales every length the model sees.  The shared
+    reduction promotes to float64 internally so a float32 pipeline and a
+    float64 one cannot disagree about the operating point.
+
+    Measured scope, stated so nobody over-reads this test: float32 input is
+    NOT badly wrong without the promotion (torch sums pairwise, so it lands
+    within ~1e-8..4e-8 relative on these statistics).  The promotion removes
+    dtype as a variable rather than repairing a large error -- which is why
+    the calibration constant fitted before it remains valid.
+    """
+    from physicsnemo.experimental.nn.mesh_attention import (
+        measure_weighted_rms_radius as model_gauge,
+    )
+
+    generator = torch.Generator().manual_seed(11)
+    n = 20_000
+    centroids64 = torch.rand(n, 3, dtype=torch.float64, generator=generator) * 5.0
+    ### Log-uniform measures spanning the real vehicle's decades.
+    exponents = torch.rand(n, dtype=torch.float64, generator=generator)
+    weights64 = 10.0 ** (-9.0 + 5.0 * exponents)
+
+    reference = model_gauge(weights64, centroids64)
+    from_float32 = model_gauge(
+        weights64.float(), centroids64.float(), torch.float64
+    )
+    assert from_float32 == pytest.approx(float(reference), rel=1e-6)
+
+
 def test_plate_rms_matches_closed_form():
     # Uniform plate [0,a]x[0,b]: r_RMS = sqrt((a^2 + b^2)/12).
     a, b = 2.0, 1.0

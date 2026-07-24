@@ -39,6 +39,7 @@ from physicsnemo.mesh import (
 )
 
 from .attention import AttentionMoments, ScalarVectorState, TypedProjection
+from .gauge import measure_weighted_rms_radius
 from .block import (
     GeometryConditionedLinear,
     LinearMeshFieldBlock,
@@ -1776,25 +1777,16 @@ class MeshTransformer(Module):
         depends only on the source boundary, never on query points, so the
         bitwise query-set-independence contracts are unaffected.  The
         computation is differentiable through the mesh geometry.
+
+        The reduction itself lives in :mod:`.gauge` so that dataset-side
+        transforms computing a per-sample gauge for the *explicit* override
+        path share one implementation with this one.  ``weights`` here is
+        the model's own quadrature measure (bare ``cell_areas``), which is
+        deliberately not the Horvitz--Thompson-weighted measure a
+        subsample-aware dataset transform uses -- see the :mod:`.gauge`
+        module docstring.
         """
-        weights64 = weights.double()
-        centroids64 = centroids.double()
-        total = weights64.sum()
-        center = torch.einsum("n,nd->d", weights64, centroids64) / total
-        radius_sq = (centroids64 - center).square().sum(dim=-1)
-        length = torch.sqrt(torch.einsum("n,n->", weights64, radius_sq) / total)
-        length = length.to(dtype)
-        if not torch.compiler.is_compiling() and (
-            not torch.isfinite(length).item() or length.item() <= 0.0
-        ):
-            raise ValueError(
-                "Intrinsic reference length (measure-weighted RMS boundary "
-                "radius) must be finite and positive; it vanishes when every "
-                "boundary cell centroid coincides with the boundary "
-                "centroid.  Supply reference_length_key to override the "
-                "intrinsic scale gauge for such degenerate geometries"
-            )
-        return length
+        return measure_weighted_rms_radius(weights, centroids, dtype)
 
     def _reference_length(
         self,
