@@ -6200,3 +6200,73 @@ measure magnitude is the mechanism, the 24 810 collapses toward the 10k
 value. If it does not, the divergence is about *which* panels are
 present and the coverage/completeness thread owns it instead.
 Pre-declared before running; falsifier is "no material collapse".
+
+## 2026-07-25 — MEASURE-MECHANISM TEST: falsifier FIRES; the gauge lever is confounded and the clean test is now an implementation task {#sec-nb-measmech-verdict}
+
+Pre-declared at @sec-nb-hcc-verdict: restore the training total measure
+at resolution 40 000 via $L = 16$ (nondim area $\sim 1/L^2$, measure
+$\sim$ source count, so $4\times$ the sources at $2\times$ the gauge
+matches exactly). Prediction: the 24 810 collapses toward 0.167.
+AGA job 293575.
+
+| lane | resolution | $L$ | pressure_l2 |
+|---|---:|---:|---:|
+| baseline | 10 000 | 8.0 | **0.167163** |
+| baseline | 40 000 | 8.0 | 24 810.9 |
+| measure-matched | 40 000 | **16.0** | **26.48** |
+| | 40 000 | 11.3 | 1.18 |
+| | 40 000 | 22.6 | 4.21 |
+| control | 10 000 | 16.0 | **1.376** |
+
+**The falsifier fires: no material collapse.** The measure-matching
+gauge leaves the error at 26.5 — 938× better than 24 810, but 158×
+worse than the 10k baseline it was supposed to recover. My prediction
+was wrong, for the fourth time today.
+
+**But the test cannot settle the hypothesis, and the control is why.**
+At the *training* resolution, changing the gauge alone from 8 to 16
+costs 8× (0.167 → 1.376). The lever is not clean: $L$ rescales
+coordinates as well as measures, and the coordinate half is by itself
+badly damaging. So this measures "measure-matching *via the gauge*
+does not fix the resolution catastrophe", which is weaker than
+"measure magnitude is not the mechanism". Stated as the former.
+
+Two further observations, both worth more than the failed prediction:
+
+1. **The 40k gauge response is non-monotone** — 1.18 at $L{=}11.3$,
+   26.48 at 16, 4.21 at 22.6. A smooth mechanism does not produce that.
+   Off its training resolution the model is in an erratic regime, not
+   on a dose-response curve, which is itself evidence that no
+   single-scalar rescaling is going to rescue it.
+2. **The model is far more gauge-sensitive than the record implies.**
+   The cross-family dose-response ("healthy $\ge 6$") and the drop-in
+   gate (±3.5% spread → 6.9%) both suggested mild sensitivity. Here a
+   2× gauge change at fixed resolution costs 8×. The earlier
+   SHIFT-SUV finding that raising the gauge *helped* (8 → 48:
+   $10^{15}$ → 1.71) should be reread accordingly: raising the gauge is
+   damaging everywhere, and on SHIFT it merely traded a catastrophe for
+   a smaller one.
+
+### Consequence: the clean experiment is now an implementation, not a sweep
+
+There is no configuration lever that varies the quadrature measure
+while holding the nondimensional coordinates fixed — which is exactly
+what `measure_normalization` would provide, since normalising
+$\omega_j / \sum_i \omega_i$ touches the measure and nothing else. The
+decisive test of the measure-magnitude hypothesis therefore *requires*
+the implementation, and until it exists the hypothesis stays open
+rather than confirmed.
+
+That also sharpens what the implementation is for. It was proposed as
+"a missing required invariance, fixed exactly" (@sec-nb-hms-verdict),
+which stands on its own contract-level evidence. Whether it *also*
+cures the resolution catastrophe is now a genuinely open, pre-registered
+question with a clean test attached — and the honest prior, after
+today, should be lower than I would have written this morning.
+
+**Next, in order:** (1) implement `measure_normalization` with the total
+measure re-entering as one dimensionless global scalar; (2) contract
+tests — zero-drive, exact drive linearity, equivariance, bitwise query
+independence — which should survive by construction; (3) re-run *this*
+resolution sweep under it, which is the clean test; (4) only then decide
+whether a training arm is warranted.
