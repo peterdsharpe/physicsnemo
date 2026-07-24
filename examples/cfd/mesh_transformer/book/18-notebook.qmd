@@ -5576,3 +5576,59 @@ evaluate across coverages — to separate "the model needs more sources"
 from "the model needs a consistent coverage". Cheap, and it bears
 directly on whether full-resolution inference is reachable without
 retraining.
+
+## 2026-07-24 — GATE 0 VERDICT: 2 of 3 intrinsic seeds pass; s44 fails hard; the gauge itself is exonerated {#sec-nb-gate0-verdict}
+
+Transfer-v2's gating question (@sec-nb-transfer-v2-prereg), run before
+any SHIFT-SUV number was computed. AGA job 293356, four lanes on one
+node, `id_reference` (36 samples), resolution 10000, job-local
+`dataset_paths.yaml`. Task dir
+`agents/2026-07-24-mt-transfer-v2-gate0/`.
+
+| lane | pressure_l2 | wss_l2 | verdict |
+|---|--:|--:|---|
+| pre-registered band | [0.16716, 0.17958] | [0.70527, 0.73656] | — |
+| intrinsic s42 | 0.170534 | 0.712239 | **in band** |
+| intrinsic s43 | 0.170059 | 0.716629 | **in band** |
+| intrinsic s44 | 0.304644 | 1.216006 | **OUT: +70% / +65% past the edge** |
+| fixed s42 (paired control) | 0.167163 | 0.705265 | reproduces 0.16716 / 0.70527 |
+
+**The paired control reproduces the historical numbers to six
+significant figures.** Harness drift is zero, so the comparison is
+clean and the band is the right yardstick.
+
+**Reading, and it is not the obvious one.** Gate 0 asked whether the
+intrinsic gauge *costs in-family accuracy*. On the evidence it does
+**not**: two of three seeds land inside a band built from
+fixed-gauge runs, and the one that fails does not fail a little — it
+fails by 70%, in a way no smooth "accuracy cost" would produce. The
+gauge is exonerated; what is indicted is **training stability under
+it**, in exactly one seed of three. That distinction matters because
+the pre-registered failure branch ("the intrinsic gauge costs in-family
+accuracy; reassess before any SHIFT eval") does not fire — the correct
+branch is the other one the pre-registration named: *s44 needs an
+lr-lowered retrain before it can join the transfer panel*.
+
+Note also that s44's eval numbers (0.3046 / 1.2160) track its training
+log's own final validation (wss_l2 1.2249) — the failure is in the
+trained weights, not the evaluation.
+
+**SHIFT-SUV remains untouched, deliberately.** Running gates 1--2 now on
+the two good seeds would mean looking at the held-out family with an
+incomplete panel and then adding a seed afterwards — the seed-median
+gate cannot be honestly computed from two seeds, and repairing the
+panel after seeing test numbers is precisely the post-hoc move the
+pre-registration forbids. The panel gets fixed first.
+
+**Launched (AGA, 3 chains × 6 links, 1 node each):**
+
+| arm | tests |
+|---|---|
+| seed 44 @ lr 1.5e-3 | panel repair **and** the LR-marginality discriminator that survived H-GC's refutation |
+| seed 45 @ lr 3.0e-3 | base rate — does a fresh seed also fail? |
+| seed 46 @ lr 3.0e-3 | base rate |
+
+The base-rate arms are the ones that matter beyond this experiment. If
+1 seed in 3 diverges under the intrinsic gauge, that is a property of
+the gauge worth knowing before it becomes the default everywhere, and
+it would not have been visible from the transfer number at all.
