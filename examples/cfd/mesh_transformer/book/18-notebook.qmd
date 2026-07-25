@@ -6589,3 +6589,78 @@ with a deliberate measure imbalance (small sphere beside a 6× wall):
 baseline drifts under a $k=880$ rescale, **normalised stays below
 10⁻⁹**. The whole pooled model is measure-scale invariant, not just the
 single-boundary path.
+
+## 2026-07-25 — intrinsic panel COMPLETE: the anomaly is one seed, and half the learning rate mostly (not fully) rescues it {#sec-nb-seedbaserate}
+
+All three follow-up arms reached epoch 499/500 with clean completion.
+Final training loss, against the two seeds that already passed gate 0
+(s42 = 0.01389, s43 = 0.01452) and the one that failed (s44 @ lr 3.0e-3
+= 0.03539):
+
+| seed | lr | final train loss | reading |
+|---|---|--:|---|
+| 42 | 3.0e-3 | 0.01389 | healthy |
+| 43 | 3.0e-3 | 0.01452 | healthy |
+| **44** | **3.0e-3** | **0.03539** | **failed** |
+| 44 | 1.5e-3 | **0.01830** | mostly rescued, not fully |
+| 45 | 3.0e-3 | 0.01409 | healthy |
+| 46 | 3.0e-3 | 0.01411 | healthy |
+
+**The base-rate question is answered: one seed in five.** Seeds 42, 43,
+45 and 46 all land in a tight band (0.0139–0.0145) at the standard
+learning rate. Only seed 44 diverges from it, and it does so by 2.4×.
+This is the measurement the transfer number alone would never have
+produced, and it matters more than the transfer number: it says the
+intrinsic gauge carries a **~20% per-seed risk of landing in a worse
+basin**, which is a property of the gauge worth knowing before it
+becomes a default anywhere.
+
+**Halving the learning rate mostly rescues seed 44** — 0.03539 →
+0.01830, recovering about three quarters of the log-gap — but does
+*not* restore it to the healthy band. So the LR-marginality hypothesis
+is **partially confirmed**: learning rate is implicated, but it is not
+the whole story, or lr/2 would have landed s44 at ~0.014 like everyone
+else. Something about seed 44's initialization interacts with the
+per-sample gauge in a way that a uniform LR reduction only partly
+undoes.
+
+Gate-0 evaluations for the three new checkpoints are running
+(`gate0b.sbatch`, same harness and pre-registered band as
+@sec-nb-gate0-verdict). The panel decision follows the pre-registration
+rather than convenience: seeds 42/43 are in band; whether the third
+panel slot is s44@lr1.5e-3 depends on whether it passes gate 0, and if
+it does not, that gets reported rather than quietly swapped for s45 —
+substituting a seed *after* seeing which ones behaved is exactly the
+post-hoc move the transfer-v2 pre-registration forbids.
+
+## 2026-07-25 — a launch-acceptance failure of my own, and the bug it hid {#sec-nb-covaug-crash}
+
+The coverage-augmentation arm (@sec-nb-hca-launch) **died 27 seconds
+after launch** and I did not notice for two hours, because I checked
+that it was alive (`R=1`) and never that it was *productive*. That is
+precisely the default-deny rule this program already codified — alive ≠
+healthy ≠ productive — and I applied two thirds of it.
+
+The crash:
+
+    RuntimeError: Expected a 'cpu' device type for generator but found 'cuda'
+
+The cause is mine and is a genuine integration trap worth recording.
+The recipe **injects a generator into every transform's `_generator`
+attribute** (the per-index RNG derivation). My `RandomCoverageSubsample`
+reused that injected generator for its own `torch.randint` count draw —
+but the injected generator lives on CUDA while `torch.randint` on a CPU
+shape rejects it. The transform worked in isolation and only failed
+inside the pipeline that supplies the generator.
+
+Fixed by separating the two draws: a private CPU `_count_generator` for
+the resolution choice, with the injected `_generator` passed through to
+`SubsampleMesh` for the subsample itself. Relaunched, and this time the
+acceptance check is on the **first observed training step**, not on the
+job being in state R.
+
+The general lesson, which is not really about generators: **a transform
+that reads state the framework injects cannot be validated standalone.**
+Its unit test passes; the integration is where the contract lives. Any
+future recipe-local transform should be smoke-tested through the actual
+dataset pipeline before a 14-hour arm is queued behind it.
