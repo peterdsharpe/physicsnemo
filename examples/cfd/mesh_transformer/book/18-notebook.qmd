@@ -6569,6 +6569,22 @@ This is the same class as the launch-acceptance rule already codified
 re-check, never a pass with a story attached. Here the ambiguity was
 "no data" and the watcher scored it as "done".
 
+**Second instance, opposite polarity (2026-07-25).** The six-arm watcher
+woke on `err=2` in the `quad` s42 arm. Also a false positive, but a
+*false alarm* rather than a false all-clear: the matches were the normal
+chain-link boundary — SLURM's 4-hour wall delivers SIGTERM, torchrun
+raises `SignalException: got signal: 15`, and the next link resumes from
+checkpoint. Verified benign: zero matches for
+`CUDA out of memory|NaN|DIVERGENCE-GUARD|WATCHDOG`, two signal-15
+tracebacks, one RUNNING instance, epoch still advancing.
+
+So a bare `grep -c Traceback` is wrong in a *chained* job by
+construction: every chain boundary produces one. The corrected test greps
+only for conditions that a resumable chain cannot produce on its own —
+OOM, NaN, and the job's own guard strings. Both watcher bugs share a
+root: **the wake predicate was written against the shape of the log
+rather than against the failure being watched for.**
+
 **Cluster state is unaffected.** Slurm jobs are independent of my
 connection; all five chains continue. Only observation is blocked, and
 the honest position until the VPN returns is that the arms' state is
