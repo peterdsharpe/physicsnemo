@@ -299,6 +299,162 @@ contracting refinement. Early elimination runs one seed; finalists run three
 seeds on a larger common bank. Oracles and external controls are reported
 through the same metrics but cannot become "candidates" by passing.
 
+## The four properties a PDE solver must have, measured {#sec-four-properties}
+
+GLOBE's introduction names four properties a discretization of a
+boundary-driven PDE must possess: **spatial equivariance**,
+**discretization invariance**, **units invariance** (via unitless
+encodings), and **global interaction**. This program inherited that
+framing and asserted all four. Two of them were asserted for a long
+time before anyone measured them in the form the words actually claim,
+and doing so (2026-07-24/25) found one genuine gap and closed it.
+The current honest scorecard:
+
+| property | status | evidence |
+|---|---|---|
+| spatial equivariance | **holds**, by construction | $3\times10^{-7}$ on trained models under rotation, reflection, translation, rescaling (@sec-intrinsic-gauge) |
+| global interaction | **holds**, by construction | all-to-all boundary coupling, no cutoffs (@sec-global-flow) |
+| units invariance — *length* | **holds** | the intrinsic gauge; a 3× corrupted external gauge costs the explicit-key model 4.64×, the intrinsic model is bitwise immune (@sec-intrinsic-gauge) |
+| units invariance — *measure* | **was missing; now fixed** | see below |
+| discretization invariance — *refinement* | **holds** | converges, below |
+| discretization invariance — *subsampling* | **fails, and cannot be reweighted away** | below |
+
+### Units invariance had a hole in the measure dimension
+
+Lengths are nondimensionalized by the gauge, and that half was solid.
+The **measure** — the quadrature weight each boundary cell carries —
+had no corresponding invariance. Holding the geometry fixed and scaling
+only the cell measures by $k$:
+
+| $k$ | baseline drift | with `measure_normalization` |
+|---:|---:|---:|
+| 2 | 2.97% | — |
+| 16 | 44.99% | $0.0$ |
+| 880 | **6.9 × 10⁷ %** | **2.9 × 10⁻⁵ %** |
+
+$k = 880$ is not hypothetical: it is the exact Horvitz--Thompson factor
+for the DrivAerML protocol (8.8M surface cells subsampled to 10k), i.e.
+the rescale the *statistically correct* estimator requires. The model
+could not survive its own correction.
+
+The repair is a one-line reweighting — the operator consumes
+$\hat\omega_j = \omega_j/\sum_i\omega_i$, so it depends on the source
+measure's *distribution* rather than its magnitude, with the magnitude
+re-entering as a dimensionless global scalar. It is implemented through
+the existing effective-measure machinery, is bitwise-inert when off,
+and all four program contracts survive **by construction** rather than
+by training: zero-drive exactly 0.0, drive linearity to rtol $10^{-11}$,
+equivariance to $10^{-9}$, bitwise query independence — on the
+single-boundary *and* pooled/balanced paths.
+
+### Discretization invariance means two different things, and the model does well at one
+
+"More sources for the same surface" is ambiguous, and the program had
+been conflating the two readings.
+
+```{python}
+#| label: fig-discretization
+#| fig-cap: >
+#|   Discretization invariance, both readings, on one fixed sphere. Blue:
+#|   REFINEMENT -- an icosphere at increasing subdivision, panels tiling
+#|   the surface, coverage always 100%. The operator converges (2.45% over
+#|   a 64x cell-count change, with shrinking increments), which is the
+#|   textbook test and the one the property names. Red: random cell
+#|   SUBSAMPLING, what the training pipeline actually does -- coverage
+#|   equals n/N, and nothing converges until coverage does. The two are
+#|   not the same experiment: subsampling is not a resolution change but a
+#|   different, systematically biased operator. The shaded band marks the
+#|   coverage DrivAerML trains at (0.11%: 10k cells of 8.8M), an order of
+#|   magnitude sparser than the sparsest point measured here. Data:
+#|   studies/gauge_diagnostics/hdi_test.py.
+import matplotlib.pyplot as plt
+
+### Arm B, refinement (coverage 100%), referenced to the CONVERGED limit --
+### the finest level -- which is what "converges" actually means.  Each
+### subdivision quadruples the cell count (h halves).
+refine_cells = [320, 1280, 5120]
+refine_err = [2.51, 0.59, 0.12]
+### Arm A, random subsampling of a fixed 20480-cell mesh.
+sub_cov = [1.6, 6.2, 25.0, 100.0]
+sub_err = [31.79, 22.4, 8.7, 0.0]   # vs the 100%-coverage operator
+
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(7.6, 3.5))
+
+ax_l.plot(refine_cells, refine_err, "o-", ms=8, lw=2, color="#2a78d6",
+          mec="white", mew=1.2, zorder=3)
+### Second-order reference: error ~ h^2 ~ 1/cells.
+ref = [refine_err[0] * (refine_cells[0] / c) for c in refine_cells]
+ax_l.plot(refine_cells, ref, "--", lw=1.2, color="#898781", zorder=2)
+ax_l.text(5200, 0.30, "$O(h^2)$", fontsize=9, color="#898781")
+ax_l.set_xscale("log"); ax_l.set_yscale("log")
+ax_l.set_xlabel("cells (surface fully tiled)")
+ax_l.set_ylabel("error vs the converged limit")
+ax_l.set_title("refinement — coverage 100%", fontsize=9.5, color="#2a5fa8")
+ax_l.set_ylim(0.06, 6)
+ax_l.set_yticks([0.1, 0.3, 1, 3], ["0.1%", "0.3%", "1%", "3%"])
+ax_l.text(360, 0.42, "converges at\nsecond order", fontsize=8,
+          color="#2a5fa8", va="top")
+
+ax_r.axvspan(0.02, 0.3, color="#e34948", alpha=0.10, lw=0)
+ax_r.text(0.115, 34, " DrivAerML\n trains here\n (0.11%)", fontsize=7.5,
+          color="#a83a39", va="top", ha="center")
+ax_r.plot(sub_cov, sub_err, "o-", ms=8, lw=2, color="#e34948",
+          mec="white", mew=1.2)
+ax_r.set_xscale("log")
+ax_r.set_xlim(0.05, 130)
+ax_r.set_ylim(-2, 40)
+ax_r.set_xlabel("coverage (% of panels retained)")
+ax_r.set_ylabel("error vs full-coverage operator")
+ax_r.set_title("random subsampling", fontsize=9.5, color="#a83a39")
+ax_r.yaxis.set_major_formatter(lambda v, _: f"{v:.0f}%")
+
+for ax in (ax_l, ax_r):
+    ax.grid(True, color="#e1e0d9", lw=0.8)
+    ax.set_axisbelow(True)
+    ax.minorticks_off()
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+**Under refinement the contract holds, at second order.** Referenced to
+the converged limit, the error falls 2.51% → 0.59% → 0.12% as each
+subdivision quadruples the cell count — at or slightly better than
+second order (the measured slope is $\approx h^{2.2}$), tracking
+the surface area's own convergence to $4\pi$. This is the test the
+property names, and as far as the notebook records it had never been run
+this way before.
+
+**Under random subsampling it does not, and no weighting fixes it.**
+Three independent interventions were measured and all failed: uniform
+Horvitz--Thompson reweighting (inert by construction once normalised),
+full measure normalisation (36.4% → 39.9%, i.e. slightly worse), and
+spatially stratified sampling (1.24× at 0.11% coverage, 1.40× at 0.45%,
+gone by 2%). The forked branch's singularity subtraction, replicated
+independently, gives a comparable ~1.6×
+(@sec-nb-subtraction-replication).
+
+The reason is that the bias is a **completeness** effect, not a
+weighting one — and it is distributed the opposite way to intuition.
+Relative error against the full-coverage operator, by query depth:
+**222% at the sphere centre versus 0.3% at the wall.** Deep-interior
+values are global accumulations that need the whole surface (the
+closed-surface solid angle summing to $-1$ is the canonical case);
+near-wall values are dominated by whichever panels are locally
+retained. No reweighting reconstructs a missing global integral.
+
+Two consequences the program should carry forward:
+
+1. **The surface task is the lucky configuration.** Trace-mode queries
+   sit exactly where the bias is smallest. Interior and volume
+   prediction at these coverages are the exposed cases.
+2. **There is no sampling-side rescue.** ~35% error at 0.11% coverage
+   is largely irreducible without more samples, which leaves two honest
+   options — train at higher coverage, or accept a coverage-specific
+   model — and the choice should be made deliberately rather than
+   discovered downstream (@sec-drivaerml).
+
 ## Part II — the declared contracts, and their walls {#sec-part-contracts}
 
 The program's central idea: physical structure enters as **declared,

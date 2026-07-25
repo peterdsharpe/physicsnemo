@@ -404,6 +404,18 @@ Each refusal is a falsifiable contract with a test attached, not a slogan:
 | Never respond to zero drive | homogeneous problems with no data have the zero solution | zero-drive eval, every field mode |
 | Never break superposition *in linear mode* | when the problem is linear, its law should be structural, not learned | drive-linearity contract eval |
 | Never point-sample a singular kernel | near-boundary accuracy | quadrature-vs-closed-form tests to ~1e-14 |
+| Never depend on the *magnitude* of the quadrature measure (opt-in) | units invariance in the measure dimension, not just the length dimension | measure-rescale test, $k$ to 880: $<10^{-9}$ (@sec-four-properties) |
+
+The last row is newer than the others and carries a caveat worth
+stating in the source-of-truth chapter: it is **opt-in**
+(`measure_normalization`, default off, bitwise-inert when off) because
+the reweighting changes the operator every existing checkpoint was
+trained under. With it off — which is every archived result in this
+book — the model is strongly sensitive to measure magnitude: 45% drift
+at a 16× rescale, and non-physical output at the 880× rescale the
+DrivAerML subsampling protocol's own statistics call for. Whether the
+default should flip is an empirical question with a training arm
+attached, not a matter of principle.
 
 ## Reference configuration {#sec-reference-config}
 
