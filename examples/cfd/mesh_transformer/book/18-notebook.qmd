@@ -7232,3 +7232,71 @@ footgun already on record here. Copying a 4.7 GB tree costs minutes;
 waiting costs hours. A related hazard was caught in flight: symlinking
 the new tree's venv to the sibling's would have let its `uv sync` mutate
 the environment three running arms were importing.
+
+## 2026-07-25 — H-DEG trace: my stage prediction is WRONG; the amplifier is the member MLP and Gram-invariant formation {#sec-nb-hdeg-trace}
+
+The pre-registered trace prediction (@sec-nb-hdeg) said the magnitude
+ratio under a family shift "must show the ratio *compounding through the
+drive blocks*, not jumping at the decode. A jump at the decode instead
+means a kernel/geometry singularity and H-DEG is wrong." Run, structurally
+(same random-init flagship, two boundaries whose statistics differ the way
+two vehicle families do; artifact
+`studies/gauge_diagnostics/trace_layers.py`):
+
+| stage | `zero_preserving_nonlinear` | `homogeneous` |
+|---|--:|--:|
+| operator lift / blocks | ~1.00 | ~1.00 |
+| drive lift | 1.04 | 0.96 |
+| **drive blocks** | **1.09** | 1.03 |
+| `kernel_decoder.member_mlp` | **1.70** | 1.77 |
+| `kernel_decoder.message_scale` | 1.33 | 0.75 |
+| `output_projection.scalar_from_vector_dots` | **2.36** | 0.98 |
+| **end-to-end output** | **1.349** | **0.995** |
+
+**The prediction fails, and the failure is informative.** The drive
+blocks barely move (1.09). Amplification concentrates in two places
+neither the hypothesis nor the falsifier named:
+
+1. **The learned smooth members** (`member_mlp`, 1.70). These are the
+   eight MLP members the kernel factorial already found
+   *evidence-orphaned* at flagship capacity — contributing 0–8% of
+   in-distribution accuracy (@sec-drivaerml-factorial). If they are also
+   the largest single amplifier under family shift, they are costing
+   robustness while earning nothing, which makes the parsimony swap the
+   factorial declined a live question again on new grounds.
+2. **Quadratic Gram-invariant formation** (`scalar_from_vector_dots`,
+   2.36). Vector-dot products *square* a ratio, and $1.5^2 \approx 2.25$
+   — this is not a learned effect at all but the arithmetic of forming
+   invariants from vectors. Every $1o \times 1o \to 0e$ contraction in
+   the stack does this.
+
+So the amplifier is distributed and partly *structural*: it is not one
+rogue nonlinearity but the accumulation of degree-raising operations,
+of which the multiplicative drive read-in is one contributor among
+several. That is a materially different picture from the one H-DEG
+proposed, and it is the third time this session that a mechanism I
+localised to one component turned out to be spread across the stack.
+
+**A property of the homogeneous mode that I did not claim and should
+have.** Its `member_mlp` ratio is *also* 1.77 — the upstream
+amplification happens identically — yet the end-to-end ratio is 0.995.
+The read-in therefore **absorbs amplification accumulated upstream**,
+not merely declines to add its own: renormalising the assembled query
+state discards whatever magnitude drift the decoder introduced, and
+multiplies back only the state's own scale. That is a stronger and more
+useful property than "degree exactly 1", because it bounds contributions
+from components the contract does not otherwise govern.
+
+**Scope, stated plainly.** Random init, synthetic geometry, a *mild*
+shift (end-to-end 1.35, not $10^{13}$), and `drive_layers=1` so there is
+little for the drive blocks to compound through in the first place. All
+four limit the inference: at large shifts the degree amplifier engages
+and the balance between these stages may change completely. This does
+not overturn the degree measurement (@sec-nb-hdeg: 5.9 rising to 8.1),
+which was measured directly on the drive response and stands.
+
+**Registered next:** repeat the trace (i) at shift magnitudes large
+enough to reach the $10^{3}$+ regime, (ii) on a *trained* checkpoint
+where the learned members carry fitted weights rather than initialisation,
+and (iii) with `kernel_mlp_members=0` to test the member-MLP attribution
+directly. Item (iii) is a config-only run and should go first.
