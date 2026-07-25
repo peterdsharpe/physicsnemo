@@ -6472,3 +6472,70 @@ Consequences, stated plainly:
   regardless of normalization, by denying the model a single sampling
   rate to overfit. That is cheap, orthogonal, and testable — registered
   as **H-CA**, not yet run.
+
+## 2026-07-25 — H-CA launched: coverage augmentation, as an arm separable from measure normalization {#sec-nb-hca-launch}
+
+Registered at @sec-nb-measnorm-caveat and now running. The hypothesis
+follows from that entry's finding: the resolution catastrophe lives in
+the **trained weights**, not the operator, so denying the model a single
+sampling rate during training may remove it — independently of any
+architectural change.
+
+**Implementation.** `RandomCoverageSubsample` (recipe-local, isolated
+tree): draw the subsample count per sample from
+$\{2500, 5000, 10000, 20000\}$. Placed *after* the pipeline's own
+`SubsampleMesh`, so it can only ever subsample further and never asks
+for cells the reader did not deliver; the Horvitz--Thompson weight
+composes through `SubsampleMesh` automatically, so measure bookkeeping
+stays correct at every drawn resolution.
+
+**Deliberately run with `measure_normalization` OFF.** The two
+interventions attack the same failure from different directions —
+architecture versus protocol — and confounding them would waste both
+arms. The current corner set against the existing t2 flagship s42
+control is: {control, measnorm, covaug}.
+
+### Two design errors caught before they cost anything
+
+Recorded because both are the kind that silently produce a
+publishable-looking but meaningless arm.
+
+1. **Singleton race.** The first link of the chain, plus a diagnostic
+   resubmission, both lacked `--dependency=singleton` — so two links
+   could run concurrently on the same `run_id`, writing the same
+   checkpoints and log. Torn down and rebuilt with every link after the
+   first dependency-gated; verified exactly one RUNNING instance per
+   chain name across all five live chains.
+2. **A coverage confound that would have inverted the reading.** The
+   base script pins `sampling_resolution=10000`. With the augmenter's
+   ceiling at 20000 that draw would have been a no-op, so the arm would
+   have trained at *lower* mean coverage than its control — and any
+   degradation would have been read as "augmentation hurts" when it
+   actually measured "less coverage hurts". Fixed by giving the covaug
+   arm its own script at `sampling_resolution=20000`, making the draw
+   genuinely $\{2500,5000,10000,20000\}$ with mean 9 375 ≈ the
+   control's 10 000.
+
+**Provenance fix.** The base script hardcodes `_intrinsic_` into the
+`run_id`, which is simply false for these arms (both use the *fixed*
+gauge). For covaug — minutes old — the run id was corrected to
+`_covaug_` and the stale directory removed. The measnorm arm is ~180
+epochs in and its run id is at least unambiguous (it contains
+`measnorm`), so it keeps its misleading `_intrinsic_` infix; **anyone
+reading `t2_mesh_transformer_surface_flagship_measnorm_intrinsic_seed42`
+should know it is a fixed-gauge run.** This is the run-id sprawl the
+handoff warned about, generated live.
+
+**Pre-registered reads** (evaluated by re-running the H-CC sweep on each
+arm):
+
+- H-CA works if the trained arm's error at 40k comes within **3×** of
+  its own 10k error, against the control's 148 000×. *p ≈ 0.5* — higher
+  than measure normalization's revised 0.35, because the mechanism
+  (don't let the model see one sampling rate) attacks the failure where
+  it was localised.
+- If **both** arms fix it, they are substitutes and the protocol fix is
+  preferred on parsimony — it costs no architecture.
+- If **neither** does, the compensation is not about sampling rate at
+  all and the next suspect is the normalization statistics
+  (`norm_stats.pt`), which are computed at one resolution and frozen.
