@@ -6414,3 +6414,61 @@ coverage** (uniform read 83% → 1096% → 479% before the fix, 35.1% →
 variance-reduction numbers. Any future estimator experiment on this
 suite should exclude the own panel and check monotonicity in coverage
 as a sanity gate.
+
+## 2026-07-25 — a caveat against my own P1: at random init, normalization changes subsampling behaviour barely at all {#sec-nb-measnorm-caveat}
+
+Ran the operator-level version of the H-CC sweep locally, expecting it to
+foreshadow the training arm: same random-init weights, subsample one
+sphere at increasing source counts, knob off vs on.
+
+| n sources | unnormalized $\lvert$out$\rvert$ | err vs full | normalized $\lvert$out$\rvert$ | err vs full |
+|---:|---:|---:|---:|---:|
+| 320 | 0.4945 | 8.97% | 0.4945 | 9.15% |
+| 1 280 | 0.5015 | 7.68% | 0.5015 | 7.87% |
+| 5 120 | 0.5100 | 6.11% | 0.5100 | 6.29% |
+| 20 480 | 0.5432 | — | 0.5443 | — |
+
+**The two arms are indistinguishable**, and — against my stated
+reasoning — the *unnormalized* output does not grow with source count
+either: 1.10× over a 16× change, where "the decode is a sum, so it
+scales with $n$" predicts ~16×.
+
+So the argument I gave for P1 ("unnormalized is a sum that diverges with
+$n$; normalized is a mean that converges") is **not what the operator
+does at initialization**. Something upstream — the typed RMS norm in the
+operator stream is the obvious candidate — already absorbs most of the
+magnitude before the decoder sees it.
+
+**Why this does not retract the H-MS result, and what it does retract.**
+The $k$-ladder (@sec-nb-hms-verdict) scaled measures at *fixed* geometry
+and *fixed* $n$, and measured 45% at $k{=}16$, divergence at $k{=}880$.
+That stands; it is a different perturbation from adding panels at new
+locations, whose contributions partially cancel across a closed surface.
+What this retracts is my *mechanistic story* for why normalization
+should cure the resolution catastrophe.
+
+**The sharper reading, and it changes the experiment's status.** At
+random init the unnormalized operator is already well-behaved under
+subsampling (9% at 1.6% coverage, converging). The trained flagship is
+**148 000× wrong** at 4× its training resolution. Those cannot both be
+properties of the operator: **the catastrophe lives in the trained
+weights, not in the architecture's quadrature.** The model has fitted
+coefficients that are hypersensitive to a sampling statistic that a
+random-init model barely notices.
+
+Consequences, stated plainly:
+
+- **P1's prior drops.** I wrote $p \approx 0.55$ from an arithmetic
+  argument that this measurement undercuts. Revised to $p \approx 0.35$:
+  normalization removes a magnitude sensitivity the *operator* has, but
+  the catastrophe is a *training* phenomenon, and there is no longer a
+  clean mechanism connecting the two.
+- **The training arm is now the only test**, not a confirmation of
+  something already indicated. That is a better reason to run it, not a
+  worse one — but the write-up must not present it as expected.
+- **A new and possibly better hypothesis:** if the catastrophe is
+  learned rather than structural, then *training-time coverage
+  augmentation* (varying `sampling_resolution` across steps) may cure it
+  regardless of normalization, by denying the model a single sampling
+  rate to overfit. That is cheap, orthogonal, and testable — registered
+  as **H-CA**, not yet run.
