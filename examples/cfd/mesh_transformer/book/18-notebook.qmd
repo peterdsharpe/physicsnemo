@@ -6334,3 +6334,83 @@ re-run the H-CC resolution sweep on it.
   the resolution failure belongs entirely to coverage/completeness, and
   `measure_normalization` reverts to "a required invariance, added" with
   no claim on resolution transfer.
+
+## 2026-07-25 (evening) — measure-normalization arm launched from an ISOLATED tree; sampling-side levers measured and found modest {#sec-nb-measnorm-launch}
+
+### Why the arm runs from its own checkout
+
+Two constraints collided. The three intrinsic-gauge seed arms are live
+and import the exact files `measure_normalization` touches, and each
+chain link re-imports on restart — so syncing would have split three
+14-hour runs across two code versions mid-wave. And the AGA tree is
+**pre-#1770**: it has no `physicsnemo/mesh/calculus/measure.py` at all,
+so the implementation could not have run there unmodified.
+
+The tempting shortcut — copy my local `physicsnemo/` wholesale — was
+rejected: my tree is ~40 commits ahead, so the treatment arm would have
+differed from its control by all of that drift, not by the declared
+knob. Instead the isolated tree is a byte copy of the *base* repo plus
+(a) one additive new file (`measure.py`, which nothing else imports)
+and (b) the minimal patch: one constructor argument, one normalization
+block, and the five quadrature reads switched to `cell_measures`.
+
+**Acceptance gate for the tree itself, declared before running:** with
+the knob **off**, the patched tree must reproduce the base repo's
+numbers exactly.
+
+| resolution | base repo | isolated tree, knob off |
+|---:|---:|---:|
+| 10 000 | 0.167163 | **0.167163** |
+| 40 000 | 24 810.885417 | **24 810.885417** |
+
+Both exact. The patch is inert when off and the platform is valid, so a
+difference in the treatment arm can be attributed to the knob and not
+to the tree. **Launched:** flagship + `measure_normalization`, fixed
+gauge, seed 42, lr 3.0e-3, 500 epochs, 6-link chain — deliberately the
+*fixed-gauge* configuration, because the resolution catastrophe this
+tests was measured on exactly that control.
+
+### Sampling-side levers: both real, both modest
+
+While the gate ran, the remaining question — coverage bias, which no
+reweighting touches — was probed from the sampling side. Pure numerics
+(exact solid-angle kernel), own panel retained exactly as trace mode
+does, error against the full-coverage operator:
+
+| coverage | uniform random | stratified | gain |
+|---:|---:|---:|---:|
+| 0.11% | 35.1% | 28.4% | 1.24× |
+| 0.45% | 14.8% | 10.5% | 1.40× |
+| 2.0% | 7.3% | 7.4% | 0.99× |
+
+Stratified sampling helps where it matters and vanishes by 2% coverage
+— the same shape, and the same modest size, as the fork's singularity
+subtraction (1.6×, @sec-nb-subtraction-replication). Two independent
+sampling-side interventions, both ~1.2–1.6×.
+
+**The negative result is the useful one.** Nothing on the sampling side
+recovers the missing coverage: 35% error at 0.11% is largely
+irreducible without more samples. Reweighting cannot fix it (measured
+twice), stratification barely dents it, subtraction barely dents it.
+That leaves exactly two honest options for the program, and they should
+be named as such rather than discovered later —
+
+1. **train at higher coverage**, accepting the cost, or
+2. **accept that the model is a coverage-specific regressor** and pin
+   inference to the training resolution forever.
+
+`measure_normalization` is orthogonal to both: it removes a *magnitude*
+failure that is catastrophic (148 000×) rather than a *coverage* failure
+that is ~35%. If P1 holds, option 2 stops being forced — the model
+would be evaluable at any resolution, with only the honest ~35%
+coverage penalty rather than divergence.
+
+**A methodological note, recorded because it bit twice today.** Both
+sampling experiments initially sampled the query's own panel, which
+trace mode always retains exactly. That injects rare $-2\pi\sigma_x$
+outliers and produces a diagnostic tell: **error that *rises* with
+coverage** (uniform read 83% → 1096% → 479% before the fix, 35.1% →
+14.8% → 7.3% after). It is the same error that inflated the fork's
+variance-reduction numbers. Any future estimator experiment on this
+suite should exclude the own panel and check monotonicity in coverage
+as a sanity gate.
