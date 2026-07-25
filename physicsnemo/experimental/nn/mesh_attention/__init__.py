@@ -24,6 +24,7 @@ from .attention import (
 )
 from .block import (
     GeometryConditionedLinear,
+    HomogeneousFieldReadIn,
     LinearMeshFieldBlock,
     MeshOperatorBlock,
     NonlinearZeroMeshFieldBlock,
@@ -51,6 +52,7 @@ __all__ = [
     "FieldMode",
     "FieldRoleRanks",
     "GeometryConditionedLinear",
+    "HomogeneousFieldReadIn",
     "KernelBasisCrossDecoder",
     "KernelDecoderCache",
     "LinearKernelBasisCrossDecoder",

@@ -47,6 +47,7 @@ from .block import (
     MeshOperatorBlock,
     NonlinearZeroMeshFieldBlock,
     PointwiseGeometryBlock,
+    HomogeneousFieldReadIn,
     QuadraticFieldReadIn,
 )
 from .kernel_decoder import (
@@ -55,7 +56,9 @@ from .kernel_decoder import (
     NonlinearZeroKernelBasisCrossDecoder,
 )
 
-FieldMode = Literal["linear", "zero_preserving_nonlinear", "quadratic"]
+FieldMode = Literal[
+    "linear", "zero_preserving_nonlinear", "quadratic", "homogeneous"
+]
 QueryDecoder = Literal["moment", "kernel"]
 #: A :data:`~physicsnemo.mesh.RankSpecDict` whose leaves may additionally be
 #: the string rank token ``"0o"``, declaring a 2D pseudoscalar field
@@ -947,10 +950,15 @@ class MeshTransformer(Module):
             raise TypeError(
                 "kernel_auxiliary_scale_key must be a non-empty string or None"
             )
-        if field_mode not in ("linear", "zero_preserving_nonlinear", "quadratic"):
+        if field_mode not in (
+            "linear",
+            "zero_preserving_nonlinear",
+            "quadratic",
+            "homogeneous",
+        ):
             raise ValueError(
                 "field_mode must be 'linear', 'zero_preserving_nonlinear', "
-                "or 'quadratic'"
+                "'quadratic', or 'homogeneous'"
             )
         if query_decoder not in ("moment", "kernel"):
             raise ValueError("query_decoder must be 'moment' or 'kernel'")
@@ -1079,7 +1087,11 @@ class MeshTransformer(Module):
         if query_layers is None:
             # The quadratic mode's query machinery is the linear machinery
             # (its degree is added by the read-in composition, not by depth).
-            query_layers = 1 if field_mode in ("linear", "quadratic") else 2
+            query_layers = (
+                1
+                if field_mode in ("linear", "quadratic", "homogeneous")
+                else 2
+            )
         _require_int("query_layers", query_layers, minimum=1)
         if scalar_rank + vector_rank == 0:
             raise ValueError("at least one attention rank must be positive")
@@ -1572,7 +1584,20 @@ class MeshTransformer(Module):
         # the (drive-linear) output projection.  None in the other modes:
         # the knob adds no parameters unless selected, so linear/nonlinear
         # state dicts are bitwise identical to the pre-extension model.
-        if field_mode == "quadratic":
+        if field_mode == "homogeneous":
+            # Declared degree EXACTLY one: the magnitude is factored out, a
+            # nonlinear typed map acts on the unit state, and the magnitude
+            # multiplies back.  Same placement and same rationale as the
+            # quadratic composition -- every stage above is drive-linear, so
+            # the declared law is provable rather than hoped for.
+            self.quadratic_read_in = HomogeneousFieldReadIn(
+                operator_scalar_dim,
+                operator_vector_dim,
+                drive_scalar_dim,
+                drive_vector_dim,
+                field_pseudo_dim=drive_pseudo_dim,
+            )
+        elif field_mode == "quadratic":
             self.quadratic_read_in = QuadraticFieldReadIn(
                 operator_scalar_dim,
                 operator_vector_dim,

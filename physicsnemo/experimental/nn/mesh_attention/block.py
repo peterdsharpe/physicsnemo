@@ -1176,6 +1176,157 @@ def _moment_segment_gain(
     return gain
 
 
+class HomogeneousFieldReadIn(nn.Module):
+    r"""Pointwise field composition of DECLARED drive degree exactly one.
+
+    The fourth field-mode class, extending the "one Python class per declared
+    drive-degree law" discipline.  Selected by
+    ``MeshTransformer(field_mode="homogeneous")``.  Given a field state
+    :math:`F` that is exactly linear (and zero-preserving) in the drive at
+    fixed geometry -- which this mode guarantees by routing the whole drive
+    path through the existing drive-linear machinery, exactly as the
+    quadratic mode does -- this module emits
+
+    .. math::
+
+       f(F) \;=\; \lVert F\rVert \; g\!\left(F / \lVert F\rVert\right),
+
+    with :math:`\lVert F\rVert` the O(:math:`D`)-invariant state magnitude
+    and :math:`g` a *nonlinear* typed map.
+
+    Why this exists.  The ``zero_preserving_nonlinear`` mode buys nonlinear
+    expressivity through multiplicative updates, at the price of an implicit
+    drive degree that is both large and *not constant* -- measured at
+    effective degree ~6 rising to ~8 with input magnitude on the industrial
+    configuration, and ~21 on the synthetic one.  A degree-:math:`d` map
+    turns an input-statistic ratio :math:`r` into :math:`r^{d}` at the
+    output, which is why out-of-family evaluation produced relative errors
+    of :math:`10^{3}`--:math:`10^{13}` rather than merely wrong answers.
+    This class keeps a nonlinearity while pinning the degree at exactly one:
+    a :math:`k\times` shift in drive statistics produces a :math:`k\times`
+    shift in output, never :math:`k^{8}`.
+
+    The three properties that make the factorization worth the class, all
+    holding *by construction* rather than by training:
+
+    - **Zero preservation is exact and unconditional.**  :math:`f(0)=0`
+      because the magnitude multiplies back, so :math:`g` may be an
+      unconstrained, *biased* map.  This is precisely what LayerNorm-style
+      normalization cannot offer -- it discards the magnitude, so
+      :math:`f(0)\neq 0` whenever the following map carries a bias -- and it
+      is why the boundedness benefit is available here without giving up the
+      homogeneous contract.
+    - **Internals are bounded.**  :math:`g` only ever sees unit-magnitude
+      states, whatever the input scale.  That is LayerNorm's actual benefit,
+      retained.
+    - **Degree is closed under composition.**  Unlike the quadratic law
+      (whose stacking would compose to degree :math:`2^{k}`, the escalation
+      :class:`QuadraticFieldReadIn` exists to forbid), degree one is a fixed
+      point, so this law is safe to stack.  It is still applied once, at the
+      query, for symmetry with the other declared-degree modes.
+
+    The declared contract, and its cost.  Degree-one homogeneity means
+    :math:`u(\lambda g) = \lambda\, u(g)`: amplitude nonlinearity is given
+    up, and additivity is *not* assumed, so this sits strictly between
+    ``linear`` (degree one and additive) and ``zero_preserving_nonlinear``
+    (unbounded degree).  It is the right declaration when the target's
+    dependence on drive amplitude is degree ~1 while its dependence on drive
+    *shape* is nonlinear -- e.g. nondimensional surface loads under a unit
+    freestream direction.  It is the wrong declaration when amplitude
+    nonlinearity is the physics, as on Liouville.
+
+    Parameters
+    ----------
+    geometry_scalar_dim, geometry_vector_dim : int
+        Channel counts of the query-side operator state.  Accepted for
+        interface symmetry with the other read-in classes; the geometry
+        conditioning of this mode already happened upstream, in the
+        (geometry-conditioned) drive blocks.
+    field_scalar_dim, field_vector_dim : int
+        Channel counts of the field state; the emitted state carries the
+        same typed channel counts.
+    field_pseudo_dim : int, optional
+        Pseudoscalar (``0o``, 2D-only) channel count.  Pseudos are gated by
+        parity-EVEN scalars so the sector's transformation law is preserved.
+    hidden_dim : int or None, optional
+        Width of the invariant hidden layer.  Defaults to
+        ``2 * field_scalar_dim``.
+    eps : float, optional
+        Magnitude floor.  Only guards the division; the multiplication back
+        by the true magnitude keeps :math:`f(0)=0` exact regardless.
+    """
+
+    def __init__(
+        self,
+        geometry_scalar_dim: int,
+        geometry_vector_dim: int,
+        field_scalar_dim: int,
+        field_vector_dim: int,
+        *,
+        field_pseudo_dim: int = 0,
+        hidden_dim: int | None = None,
+        eps: float = 1e-30,
+    ) -> None:
+        super().__init__()
+        self.field_scalar_dim = int(field_scalar_dim)
+        self.field_vector_dim = int(field_vector_dim)
+        self.field_pseudo_dim = int(field_pseudo_dim)
+        self.eps = float(eps)
+        ### Invariants of the UNIT state: its scalars, its per-channel vector
+        ### norms, and (parity-even) squared pseudos.  All O(D)-invariant, so
+        ### the nonlinearity below cannot leak a frame.
+        n_inv = self.field_scalar_dim + self.field_vector_dim + self.field_pseudo_dim
+        hidden = int(hidden_dim) if hidden_dim is not None else max(
+            2 * self.field_scalar_dim, 1
+        )
+        n_out = self.field_scalar_dim + self.field_vector_dim + self.field_pseudo_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(max(n_inv, 1), hidden),
+            nn.SiLU(),
+            nn.Linear(hidden, max(n_out, 1)),
+        )
+        ### Start as the identity map on the unit state: the mode begins
+        ### indistinguishable from the drive-linear machinery and the
+        ### nonlinearity is learned, matching the residual discipline used
+        ### by QuadraticFieldReadIn's layer_scale default.
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def forward(
+        self, operator: ScalarVectorState, field: ScalarVectorState
+    ) -> ScalarVectorState:
+        del operator  # conditioning already applied upstream; see docstring
+        s, v, p = field.scalars, field.vectors, field.pseudos
+        sq = s.square().sum(-1) + v.square().sum((-1, -2))
+        if p.shape[-1] > 0:
+            sq = sq + p.square().sum(-1)
+        magnitude = sq.clamp_min(0.0).sqrt()
+        inv_mag = 1.0 / (magnitude + self.eps)
+        us, uv = s * inv_mag[:, None], v * inv_mag[:, None, None]
+        up = p * inv_mag[:, None] if p.shape[-1] > 0 else p
+        ### Invariant features of the unit state (pseudos enter squared so the
+        ### features stay parity even).
+        feats = [us, uv.square().sum(-1)]
+        if self.field_pseudo_dim > 0:
+            feats.append(up.square())
+        delta = self.mlp(torch.cat(feats, dim=-1))
+        cs = self.field_scalar_dim
+        cv = self.field_vector_dim
+        out_s = us + delta[:, :cs]
+        out_v = uv * (1.0 + delta[:, cs : cs + cv])[:, :, None]
+        if self.field_pseudo_dim > 0:
+            out_p = up * (1.0 + delta[:, cs + cv :])
+        else:
+            out_p = up
+        ### Multiply the magnitude back: this is what makes f(0) = 0 exact
+        ### and the whole map degree-1 positively homogeneous.
+        return ScalarVectorState(
+            out_s * magnitude[:, None],
+            out_v * magnitude[:, None, None],
+            out_p * magnitude[:, None] if self.field_pseudo_dim > 0 else out_p,
+        )
+
+
 class MeshOperatorBlock(nn.Module):
     """Nonlinear global self-interaction block for operator geometry.
 
@@ -1622,6 +1773,7 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
 
 
 __all__ = [
+    "HomogeneousFieldReadIn",
     "GeometryConditionedLinear",
     "LinearMeshFieldBlock",
     "MeshOperatorBlock",
