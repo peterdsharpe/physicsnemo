@@ -6723,3 +6723,104 @@ change the underlying question, and nothing measured since 2026-07-22
 bears on whether the intrinsic gauge fixes cross-family transfer — the
 gauge work established only that it does not cost in-family accuracy
 for seeds that train successfully.
+
+## 2026-07-25 — TRANSFER-V2 VERDICT: gate 1 FAILS. The gauge was not the mechanism {#sec-nb-transferv2-verdict}
+
+The repair does not work. Zero-shot SHIFT-SUV, intrinsic-gauge
+retrained checkpoints, frozen pipeline, corrected metric:
+
+| arm | SHIFT pressure_l2 | |
+|---|--:|---|
+| GeoTransolver anchor (v1, unchanged) | **0.677** | the bar |
+| s42 | 5.97 × 10³ | panel |
+| s43 | 2.12 × 10¹⁰ | panel |
+| s45 | 1.90 × 10¹³ | panel |
+| s46 | 1.24 × 10⁷ | panel |
+| s44 @ lr 3.0e-3 | **18.2** | excluded from headline |
+| s44 @ lr 1.5e-3 | 2.33 × 10³ | excluded from headline |
+
+**Gate 1 (structural) FAILS.** The bar was *all panel seeds finite and
+pressure_l2 < 1.0*. Every seed is finite — a change from v1, which
+produced a NaN — and every seed is between 3 and 13 orders of magnitude
+past 1.0. Gate 2 is moot. The pre-registered prediction was p ≈ 0.75
+for a structural pass; it was wrong.
+
+**What this refutes.** @sec-nb-crossfam-verdict localised the
+cross-family divergence to the fixed `reference_length: 8.0` on the
+strength of a clean, monotone gauge dose-response, and called the
+mechanism "a repairable protocol flaw, not deep architectural
+brittleness". That reading is now **refuted by its own confirmatory
+test**. Retraining under a similarity-covariant, per-sample intrinsic
+gauge — the principled fix, calibrated once on train, never re-fit —
+leaves the model diverging on a different vehicle family. The gauge was
+a *lever that moved the magnitude*, not the cause. The honest
+restatement:
+
+> The MeshTransformer does not transfer across vehicle family, and the
+> declared scale gauge is not why.
+
+The three framings recorded on 2026-07-22 survive unequally: (1) the
+frozen-protocol verdict stands, as always; (2) **"repairable protocol
+flaw" is dead**; (3) the insistence that the dose-response was
+exploratory and could not support a rehabilitated claim was exactly
+right, and is the reason this is a clean refutation rather than a
+retraction of something already published.
+
+### The excluded seed is the best transferrer, and that is why it was reported
+
+Seed 44 — the one that failed gate 0 twice, the worst in-family model
+in the program — is **the best cross-family model by two orders of
+magnitude** (18.2 against a panel median of 1.1 × 10¹⁰). At lr 1.5e-3,
+where it trained *closer* to the healthy band, it transfers *worse*
+(2.3 × 10³).
+
+With n = 6 and a spread of thirteen orders of magnitude this is an
+observation, not a claim. But it is the observation the honesty measure
+in @sec-nb-gate0b was written to preserve: had seed 44 simply been
+dropped for failing gate 0, the single most suggestive datum in the
+experiment would have been discarded, and the discarding would have
+looked like good practice. **In-family fit and cross-family robustness
+may be in tension here** — which, if it survives a designed test, is a
+more interesting finding than the transfer number was ever going to be.
+
+Registered, not commissioned: an in-family-vs-cross-family scatter
+across every intrinsic checkpoint, with enough seeds to say whether the
+anti-correlation is real. It bears directly on the program's identity,
+because it would mean the training objective actively selects against
+the property the program most wants.
+
+### Where this leaves the program
+
+Three independent probes now say the same thing about the same object:
+
+- **resolution** — a sharp error minimum exactly at the training
+  sampling rate, 148 000× degradation at 4× it (@sec-nb-hcc-verdict);
+- **measure magnitude** — 45% drift at a 16× rescale, non-physical
+  output at the 880× rescale its own subsampling statistics require
+  (@sec-nb-hms-verdict);
+- **geometry family** — divergence under any gauge, fixed or intrinsic
+  (this entry).
+
+The unifying description is no longer speculative: **the trained model
+is a regressor fitted to a narrow operating point — one coverage, one
+gauge, one geometry family — and the exact-kernel structure does not
+protect it outside that point.** That is consistent with the industrial
+kernel factorial, which found the exact members contributing 0–8%
+(@sec-drivaerml-factorial): structure that is not load-bearing
+in-distribution cannot be expected to carry generalization either.
+
+**Odds, revised on evidence.** "MT transfers at all, post-repair" was
+~75% before this test; it is now **measured false at the structural
+gate**. Cross-family *advantage* over the incumbent: ~10–15% → **< 5%**.
+What survives untouched is the sealed within-family deep-S1 WSS
+differential (@sec-nb-seal-verdict), which remains this architecture's
+strongest generalization claim — and, on today's evidence, is likely to
+remain so.
+
+**The next question is no longer "which knob".** Two knobs have now
+been proposed as the mechanism and both have been refuted by their own
+pre-registered tests. The open question is whether *any* training
+protocol yields a model that leaves its operating point — which is
+precisely what the two in-flight arms (`measure_normalization`,
+`RandomCoverageSubsample`) test on the resolution axis, where the
+failure is cheapest to measure.
