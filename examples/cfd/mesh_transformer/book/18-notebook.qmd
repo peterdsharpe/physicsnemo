@@ -6664,3 +6664,62 @@ that reads state the framework injects cannot be validated standalone.**
 Its unit test passes; the integration is where the contract lives. Any
 future recipe-local transform should be smoke-tested through the actual
 dataset pipeline before a 14-hour arm is queued behind it.
+
+## 2026-07-25 — GATE 0b: four seeds in band, seed 44 out in BOTH variants; the panel rule, declared before any SHIFT number {#sec-nb-gate0b}
+
+| arm | pressure_l2 | wss_l2 | verdict |
+|---|--:|--:|---|
+| pre-registered band | [0.16716, 0.17958] | [0.70527, 0.73656] | — |
+| s42 | 0.170534 | 0.712239 | **in band** |
+| s43 | 0.170059 | 0.716629 | **in band** |
+| s44 @ lr 3.0e-3 | 0.304644 | 1.216006 | out: +70% / +65% |
+| **s44 @ lr 1.5e-3** | **0.205017** | **0.821872** | **out: +14% / +12%** |
+| s45 | 0.173430 | 0.712255 | **in band** |
+| s46 | 0.171892 | 0.712801 | **in band** |
+
+The fixed-gauge control re-ran at 0.167163 / 0.705265 — identical to
+both previous runs, so harness drift is zero for the third time.
+
+**The pre-registered remedy did not work.** @sec-nb-gate0-verdict named
+an lr-lowered retrain as the route by which seed 44 could join the
+panel. It closed most of the gap (+70% → +14%) and still misses the
+band. Seed 44 does not qualify, in either variant.
+
+### The panel rule, and why it is not a post-hoc swap
+
+The transfer-v2 pre-registration named seeds 42/43/44. Two facts now
+collide: seed 44 fails the gate that was explicitly declared as the
+gate on *fitness to enter the test*, and seeds 45/46 — created to
+answer the base-rate question, not to pad a panel — pass it
+comfortably.
+
+Swapping "44" for "45" because 44 looked bad would be precisely the
+forbidden move. So the rule is stated in the only form that does not
+depend on which seeds happened to behave, and is a direct reading of
+what gate 0 was for:
+
+> **The transfer-v2 panel is every intrinsic-gauge seed that passes
+> gate 0.** On the evidence above that is {42, 43, 45, 46} — four
+> seeds, not three.
+
+Two honesty measures attach to it, because excluding a failing seed is
+exactly how a panel gets quietly flattered:
+
+1. **Seed 44 is evaluated on SHIFT-SUV anyway**, in both variants, and
+   its numbers are reported beside the panel's. The exclusion is from
+   the *headline statistic*, not from the record — a reader who
+   disagrees with the rule can recompute the median including it.
+2. **The deviation from the literal pre-registration is logged here**,
+   before any SHIFT number for any intrinsic checkpoint exists. What
+   changed is the panel's membership rule; the gates themselves
+   (structural: all finite and pressure_l2 < 1.0; comparable:
+   seed-median ≤ 1.354; at-par ≤ 0.677) are untouched, as is the ban on
+   re-fitting C, swapping the metric, or promoting WSS.
+
+**Prediction, restated for a four-seed panel and unchanged in
+substance:** structural pass p ≈ 0.75, comparable p ≈ 0.45, at-par
+p ≈ 0.15. The larger panel makes the median more stable but does not
+change the underlying question, and nothing measured since 2026-07-22
+bears on whether the intrinsic gauge fixes cross-family transfer — the
+gauge work established only that it does not cost in-family accuracy
+for seeds that train successfully.
