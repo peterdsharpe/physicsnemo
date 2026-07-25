@@ -7361,3 +7361,102 @@ line without noticing when the trace produced a plausible-looking table.
 checkpoints — six arms are in flight and will supply them. No further
 random-init geometry-shift probing; the remaining local work should be
 confined to properties that are provably weight-independent.
+
+## 2026-07-25 — PRE-REGISTRATION: how the six-arm wave will be judged, written before any final number exists {#sec-nb-wave-prereg}
+
+Six arms are in flight against one failure (out-of-distribution
+divergence) via four interventions. That is exactly the configuration in
+which a comparison gets chosen *after* the numbers arrive — which metric,
+which resolution, which arm counts as "the" control, whether the headline
+is in-family or cross-family. Fixing it now, while every arm is at epoch
+34–153 of 500 and no final value exists for any of them.
+
+### The arms and their controls
+
+| arm | intervention | matched control |
+|---|---|---|
+| `quad` s42/s43 | drive degree $\le 2$ | `t2` flagship s42 (fixed gauge, nonlinear) |
+| `homog` s42/s43 | drive degree exactly 1 | same |
+| `mn2` s42 | measure normalisation, corrected decoder | same |
+| `covaug` s42 | per-sample coverage, **uncompiled** | same, with the compile confound stated |
+
+The control is the *existing* fixed-gauge flagship, whose in-family
+`pressure_l2` is 0.167163 and whose resolution curve is
+0.897 / 0.800 / 0.167163 / 0.411 / 24 811 at 2.5k–40k
+(@sec-drivaerml-coverage). All four arms trained on the same dataset,
+same protocol, same 500 epochs, so the comparison is within-protocol.
+
+### The three questions, in priority order, with bars
+
+**Q1 — does the intervention keep in-family accuracy?** `pressure_l2`
+on `id_reference` at the training resolution (10 000), the same harness
+that has now reproduced 0.167163 three times.
+
+- *Pass:* within 10% of the control (≤ 0.1839).
+- *Fail:* worse than that. A failure here is not fatal but it is a
+  **price**, and it must be quoted alongside any robustness gain rather
+  than buried.
+
+**Q2 — does it bound the resolution catastrophe?** The H-CC sweep
+(2.5k / 5k / 10k / 20k / 40k) on each arm's own checkpoint.
+
+- *Primary statistic, declared now:* the **40k / 10k ratio**. Control =
+  148 000. An arm "bounds" the catastrophe if its ratio is **< 10**.
+- *Secondary, reported not gated:* the shape of the whole curve, and
+  whether the minimum still sits at the training resolution.
+- The ratio is chosen over the absolute 40k value because it isolates
+  *resolution robustness* from any in-family accuracy difference the arm
+  may carry; an arm that is uniformly worse but flat would still be the
+  interesting result.
+
+**Q3 — does it survive cross-family?** Zero-shot SHIFT-SUV,
+`eval_pilot`, the frozen pipeline, corrected metric.
+
+- *Structural:* every seed finite with `pressure_l2 < 1.0`.
+- *Comparable:* seed-median $\le 1.354$ ($2\times$ GeoTransolver's
+  0.677).
+- Control for reference: fixed gauge $10^{4}$–$10^{15}$; intrinsic
+  gauge $5.97\times10^{3}$–$1.90\times10^{13}$.
+
+### Forbidden after results
+
+Stated explicitly because this wave has four arms and a strong prior:
+
+- **No re-picking the headline question.** Q2 is the primary; an arm that
+  fails Q2 but happens to look good on Q3 is reported as *failing Q2 and
+  passing Q3*, not promoted.
+- **No dropping the second seed** on `quad` or `homog` because it
+  disagrees with the first. Both are reported; if they straddle a bar,
+  that is the finding.
+- **No swapping the 40k/10k ratio** for a statistic that flatters
+  (e.g. 20k/10k, where the control is only 2.5×).
+- **No quoting a robustness gain without its Q1 price.**
+- Any deviation is logged here as exploratory before it is acted on.
+
+### Predictions, with reasoning
+
+| arm | Q1 (in-family) | Q2 (bounds resolution) | Q3 (cross-family) |
+|---|--:|--:|--:|
+| `quad` | $p \approx 0.6$ | $p \approx 0.45$ | $p \approx 0.35$ |
+| `homog` | $p \approx 0.5$ | $p \approx 0.5$ | $p \approx 0.4$ |
+| `mn2` | $p \approx 0.8$ | $p \approx 0.3$ | $p \approx 0.15$ |
+| `covaug` | $p \approx 0.6$ | $p \approx 0.55$ | $p \approx 0.2$ |
+
+Reasoning, stated so the predictions can be scored: the two
+`field_mode` arms attack the largest measured amplifier (degree 5.9–8.1)
+and are the most likely to bound Q2, with `homog` slightly ahead on
+robustness and slightly behind on Q1 because it is the stricter contract.
+`mn2` is expected to be nearly free in-family (its predecessor came in at
+0.013160 train loss, marginally better than control) but its mechanism
+was never connected to resolution transfer once the P1 story collapsed.
+`covaug` attacks the protocol rather than the architecture and is the
+most likely to bound resolution while doing nothing for cross-family,
+because a model trained across sampling rates has no reason to
+generalise across *geometry* families.
+
+**Early observation, recorded but explicitly not evidence:** the two
+`homog` seeds are tracking each other to 0.8% at matched epochs
+(0.024786 / 0.024595 at 78/77), against the intrinsic-gauge wave's 2.4×
+seed divergence. Seed tightness is one thing bounded internals ought to
+buy. It is 15% of the way through training and will not be cited as a
+result.
