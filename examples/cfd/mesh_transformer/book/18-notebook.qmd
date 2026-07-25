@@ -7300,3 +7300,64 @@ enough to reach the $10^{3}$+ regime, (ii) on a *trained* checkpoint
 where the learned members carry fitted weights rather than initialisation,
 and (iii) with `kernel_mlp_members=0` to test the member-MLP attribution
 directly. Item (iii) is a config-only run and should go first.
+
+## 2026-07-25 — METHOD RETRACTION: the random-init geometry-shift probes do not measure the phenomenon {#sec-nb-probe-retraction}
+
+The member-MLP attribution (registered at @sec-nb-hdeg-trace) returned
+numbers that do not support the hypothesis and, read together with the
+trace that motivated it, discredit the *instrument* rather than the
+hypothesis.
+
+End-to-end output ratio under geometry-statistics shift, random init:
+
+| shift | nonlin m=8 | nonlin m=0 | homog m=8 | homog m=0 |
+|---|--:|--:|--:|--:|
+| (1.7, 0.75, 0.9) | 1.006 | 0.724 | 1.172 | 1.029 |
+| (3.0, 0.5, 0.8) | 1.021 | 0.754 | 1.611 | 1.119 |
+| (6.0, 0.3, 0.7) | 1.697 | **2.007** | 3.823 | 1.305 |
+
+Three things are wrong here, and they are all the instrument:
+
+1. **Removing the members makes it worse** at the largest shift
+   (2.007 vs 1.697), the opposite of the attribution being tested.
+2. **The homogeneous mode looks worse than the nonlinear one**, reversing
+   @sec-nb-hdeg-trace's 0.995 vs 1.349 — and it should not even be a
+   fair comparison, because the read-in is zero-initialised, so at random
+   init "homogeneous" *is* the drive-linear machinery with an identity
+   read-in. The comparison is between two different architectures with
+   the nonlinearity switched off in one of them.
+3. **The same nominal comparison moved from 1.349 to 1.006** purely by
+   changing model dims (64/96 → 24/32) and mesh resolution
+   (320 → 80 cells). A quantity that swings by 35% on configuration
+   choices that are irrelevant to the physics is not measuring the
+   physics.
+
+**What this retracts, and what it does not.** The layer-attribution
+claims of @sec-nb-hdeg-trace — that amplification "concentrates in the
+member MLP and Gram-invariant formation" — rest on a single
+configuration of this same unreliable probe and are **withdrawn**. The
+`scalar_from_vector_dots` observation survives as *arithmetic* (vector
+dots square a ratio; that is true by inspection, not by measurement),
+but its numerical weight relative to other stages does not.
+
+**Untouched:** the direct degree measurement (@sec-nb-hdeg, 5.9 rising
+to 8.1) and the P2 comparison (@sec-nb-p2, @sec-nb-quad-p2). Those vary
+*one input* — the drive — with geometry held fixed, and fit a clean power
+law; they are a different and far better-posed measurement than
+perturbing geometry at random init and reading an O(1) ratio.
+
+**The methodological lesson, which is the actual output of this
+iteration.** The phenomenon under study is a $10^{13}$ excursion on
+*trained* weights under a *real* family shift. I substituted a cheap
+proxy — random weights, synthetic anisotropic stretch, O(1) ratios — and
+kept drawing structural conclusions from it because it was fast. Cheap
+proxies are legitimate for testing a *structural* property that holds for
+any weights (degree, equivariance, zero-preservation: all correctly
+measured that way this session). They are not legitimate for
+*attributing* a trained-weight phenomenon to a component. I crossed that
+line without noticing when the trace produced a plausible-looking table.
+
+**Consequence for the plan.** Component attribution waits for the trained
+checkpoints — six arms are in flight and will supply them. No further
+random-init geometry-shift probing; the remaining local work should be
+confined to properties that are provably weight-independent.
