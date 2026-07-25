@@ -6539,3 +6539,53 @@ arm):
 - If **neither** does, the compensation is not about sampling rate at
   all and the next suspect is the normalization statistics
   (`norm_stats.pt`), which are computed at one resolution and frozen.
+
+## 2026-07-25 — a monitoring failure mode worth codifying, and the pooled-path invariance closed {#sec-nb-watcher-bug}
+
+### The watcher lied, and the bug is mine
+
+The intrinsic-arm watcher woke with `WAKE: queue drained`. It was a
+**false positive**: the VPN went down, `ssh` failed with
+`Could not resolve hostname`, and the watcher's drained test —
+
+    echo "$out" | grep -qE "RUNNING|PENDING" || WAKE: drained
+
+cannot distinguish *an empty queue* from *a poll that never reached the
+scheduler*. Any connection failure reads as "all jobs finished". That is
+the worst possible direction for the error: a monitoring bug that
+reports **success** when it has no information at all, and it would have
+had me harvesting results from arms that were still mid-training.
+
+The fix, for every watcher this program writes from here: **require
+positive evidence of a successful poll before concluding anything.**
+Concretely, the poll must emit a sentinel (`echo POLL_OK` after the
+remote command) and the drained branch must be gated on it —
+
+    echo "$out" | grep -q POLL_OK || { sleep 240; continue; }   # unreachable
+    echo "$out" | grep -qE "RUNNING|PENDING" || WAKE: drained
+
+This is the same class as the launch-acceptance rule already codified
+(alive ≠ healthy ≠ productive): an ambiguous read is a FAIL pending
+re-check, never a pass with a story attached. Here the ambiguity was
+"no data" and the watcher scored it as "done".
+
+**Cluster state is unaffected.** Slurm jobs are independent of my
+connection; all five chains continue. Only observation is blocked, and
+the honest position until the VPN returns is that the arms' state is
+*unknown*, not *finished*.
+
+### Closed while blocked: the pooled path inherits the invariance
+
+`measure_normalization` was verified on the single-boundary path. The
+all-boundary arm uses `per_boundary_moment_pool_balanced`, whose
+log-gain offset is $\ln(\overline{m}) - \ln(m_{\text{segment}})$ — a
+*ratio*, so normalization ought to leave it untouched. Ought is not
+measured, and this is exactly the configuration where non-uniform
+Horvitz--Thompson weights would arrive (vehicle ~880×, tunnel 1×), so
+it is the one that most needs pinning.
+
+Added a seventh contract test on a two-boundary pooled+balanced model
+with a deliberate measure imbalance (small sphere beside a 6× wall):
+baseline drifts under a $k=880$ rescale, **normalised stays below
+10⁻⁹**. The whole pooled model is measure-scale invariant, not just the
+single-boundary path.
