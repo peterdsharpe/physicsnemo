@@ -1074,6 +1074,127 @@ statement about the architecture's conditioning, and it would apply
 to *every* future deployment that adopts the intrinsic gauge — which,
 after this section, is all of them.
 
+### The model is a coverage-specific regressor {#sec-drivaerml-coverage}
+
+Chapter @sec-future carries an item filed as *blocked on research, not
+wiring*: at full resolution — 17.7M query cells against 50k sources —
+the flagship's relative $L^2$ is $\sim$100, and nobody could name why.
+It now has a mechanism, and it is not the one anyone expected.
+
+The test is as simple as tests get: take one unchanged checkpoint
+(flagship s42, the best-characterised in the program), evaluate it on
+`id_reference`, and vary **nothing but `sampling_resolution`**.
+
+```{python}
+#| label: fig-coverage-cliff
+#| fig-cap: >
+#|   One unchanged checkpoint, one split, nothing varying but the source
+#|   sampling resolution. The error has a sharp minimum exactly at the
+#|   resolution the model was trained at (10k, dashed) and rises in BOTH
+#|   directions -- catastrophically above it, reaching 24,811 at 40k. The
+#|   10k lane reproduces the historical 0.167163 to six digits, so the
+#|   sweep is clean. A model approximating a boundary integral better with
+#|   more sources would fall monotonically; this is the signature of a
+#|   fitted correction to one sampling rate. Grey: the pure-numerics
+#|   sampling error of an EXACTLY evaluated boundary integral at the same
+#|   coverages -- the model beats it at 10k, which is only possible
+#|   because it is not approximating the integral at all. Data: AGA job
+#|   293567; grey curve from studies/gauge_diagnostics/exact_rms.py.
+import matplotlib.pyplot as plt
+
+res = [2500, 5000, 10000, 20000, 40000]
+err = [0.8966, 0.7998, 0.167163, 0.4106, 24810.9]
+### Exact-estimator field-level relative L2 at the matching coverages
+### (coverage = res / 8.8e6 vehicle cells).
+ex_res = [10000, 20000, 40000]
+ex_err = [0.337, 0.248, 0.174]
+
+fig, ax = plt.subplots(figsize=(6.8, 4.0))
+ax.axvline(10000, color="#0b0b0b", lw=1.0, ls="--", zorder=1)
+ax.text(10500, 3e3, "trained here", fontsize=8.5, color="#0b0b0b")
+ax.plot(ex_res, ex_err, "s--", ms=6, lw=1.4, color="#898781", zorder=2,
+        label="exact boundary integral (pure numerics)")
+ax.plot(res, err, "o-", ms=9, lw=2.2, color="#e34948", mec="white", mew=1.2,
+        zorder=4, label="trained MeshTransformer")
+for r, e in zip(res, err):
+    txt = f"{e:,.0f}" if e > 100 else f"{e:.3f}"
+    ### The trained-resolution label goes left; below would collide with
+    ### its own x tick.
+    off, ha = ((-10, -4), "right") if r == 10000 else ((0, 13), "center")
+    ax.annotate(txt, (r, e), textcoords="offset points", xytext=off, ha=ha,
+                fontsize=8.5, color="#a83a39", fontweight="bold")
+ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_xlim(1800, 62000); ax.set_ylim(0.08, 2e5)
+ax.set_xticks(res, [f"{r//1000}k" for r in res])
+ax.minorticks_off()
+ax.set_xlabel("source sampling resolution (cells of 8.8M)")
+ax.set_ylabel("id_reference pressure relative $L^2$")
+ax.grid(True, color="#e1e0d9", lw=0.8)
+ax.set_axisbelow(True)
+ax.legend(fontsize=8.5, loc="upper left", frameon=False)
+for spine in ("top", "right"):
+    ax.spines[spine].set_visible(False)
+fig.tight_layout()
+plt.show()
+```
+
+| resolution | coverage | pressure $L^2$ | vs trained |
+|---:|---:|---:|---:|
+| 2 500 | 0.028% | 0.8966 | 5.4× worse |
+| 5 000 | 0.057% | 0.7998 | 4.8× worse |
+| **10 000** | **0.11%** | **0.167163** | ← trained here |
+| 20 000 | 0.23% | 0.4106 | 2.5× worse |
+| 40 000 | 0.45% | **24 810.9** | **148 000× worse** |
+
+: Resolution sweep on an unchanged checkpoint. {#tbl-coverage-cliff}
+
+**Doubling the source count costs 2.5×; quadrupling it destroys the
+model.** An operator that approximates a boundary integral gets *better*
+with more sources. This gets catastrophically worse, and the minimum
+sits exactly where training put it.
+
+The grey curve is what makes the reading unambiguous. An *exactly*
+evaluated boundary integral — exact singular kernels, no learning —
+carries $\approx$34% field-level sampling error at 0.11% coverage
+(@sec-four-properties). The trained model reads 0.167 there: **better
+than the integral it is supposedly approximating.** A model cannot beat
+its own quadrature by approximating it more accurately. It can only be
+fitting coefficients that absorb the systematic part of the sampling
+error *at one sampling rate* — which is precisely why the accuracy
+evaporates when the rate moves.
+
+**Where the failure lives.** Two candidate homes, and the measurements
+separate them. At random initialisation the operator is well-behaved
+under subsampling (∼9% at 1.6% coverage, converging); the *trained*
+model is 148 000× wrong at 4× its training resolution. Both cannot be
+properties of the architecture's quadrature, so **the pathology is in
+the learned weights, not the operator** (@sec-nb-measnorm-caveat). A
+gauge-based attempt to rescale the measure back to its training value
+did not rescue it either — and its control showed why the lever is
+unusable: changing the gauge alone at fixed resolution costs 8×
+(@sec-nb-measmech-verdict).
+
+**Consequences, stated plainly because they bear on how every DrivAerML
+number in this chapter should be read.**
+
+1. Every accuracy figure here is *at one coverage*, and is not evidence
+   about the model at any other. The chapter's numbers are correct and
+   internally comparable — every arm shares the protocol — but they do
+   not transfer to deployment resolutions.
+2. The full-resolution inference failure is no longer unexplained. It
+   is this curve, one step further along.
+3. It is a **protocol** pathology before it is an architectural one,
+   which is good news: protocol is cheaper to change.
+
+Two arms are in flight against it, deliberately separable — one
+architectural (`measure_normalization`, which removes a measure-magnitude
+sensitivity the operator genuinely has) and one protocol
+(`RandomCoverageSubsample`, which denies the model a single sampling
+rate to overfit). Both are pre-registered with falsifiers
+(@sec-nb-hca-launch); the honest prior favours the protocol arm, and
+neither is expected to touch the separate ~35% coverage-completeness
+floor that no reweighting scheme reduces (@sec-four-properties).
+
 ### Decode efficiency: the 14× repricing
 
 The profile that the cluster's idle-GPU telemetry forced
