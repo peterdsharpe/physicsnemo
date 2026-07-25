@@ -37,6 +37,7 @@ from physicsnemo.mesh import (
     flatten_rank_spec,
     validate_rank_spec,
 )
+from physicsnemo.mesh.calculus.measure import compose_measure_weights
 
 from .attention import AttentionMoments, ScalarVectorState, TypedProjection
 from .gauge import measure_weighted_rms_radius
@@ -867,6 +868,7 @@ class MeshTransformer(Module):
         boundary_field_ranks: dict[str, FieldRoleRanks],
         global_field_ranks: FieldRoleRanks | None = None,
         reference_length_key: str | None = None,
+        measure_normalization: bool = False,
         field_mode: FieldMode = "linear",
         query_decoder: QueryDecoder = "moment",
         kernel_mlp_members: int = 8,
@@ -1268,6 +1270,12 @@ class MeshTransformer(Module):
         self.boundary_field_ranks = boundary_field_ranks
         self.global_field_ranks = global_field_ranks
         self.reference_length_key = reference_length_key
+        if not isinstance(measure_normalization, bool):
+            raise TypeError(
+                "measure_normalization must be a bool, got "
+                f"{type(measure_normalization).__name__}"
+            )
+        self.measure_normalization = measure_normalization
         self.kernel_auxiliary_scale_key = kernel_auxiliary_scale_key
         self.field_mode = field_mode
         self.query_decoder = query_decoder
@@ -2048,6 +2056,23 @@ class MeshTransformer(Module):
                 points=(merged.points - center) / length,
                 cells=merged.cells,
             )
+            if self.measure_normalization:
+                # Measure-scale invariance: every quadrature consumer reads
+                # the EFFECTIVE measure (``cell_measures``), so recording a
+                # single normalizing weight here makes the operator depend
+                # on the source measure's *distribution* and not on its
+                # magnitude.  The magnitude is not discarded -- it re-enters
+                # as the dimensionless global scalar below.  Composed (not
+                # assigned) so any Horvitz--Thompson weight the pipeline
+                # already recorded survives; a uniform HT factor cancels in
+                # the normalization, which is what makes subsample weights
+                # safe to carry at all (see the module docstring of gauge.py
+                # and the k-ladder in the notebook).
+                nondim_measure = source_mesh.cell_areas.double().sum()
+                compose_measure_weights(
+                    source_mesh,
+                    (1.0 / nondim_measure).to(source_mesh.points.dtype),
+                )
             # Populate the immutable geometric cache at full geometry precision
             # before learned layers are entered under any outer autocast scope.
             _ = source_mesh.cell_centroids

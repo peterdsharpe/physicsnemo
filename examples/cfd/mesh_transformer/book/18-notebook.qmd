@@ -6270,3 +6270,67 @@ tests — zero-drive, exact drive linearity, equivariance, bitwise query
 independence — which should survive by construction; (3) re-run *this*
 resolution sweep under it, which is the clean test; (4) only then decide
 whether a training arm is warranted.
+
+## 2026-07-25 — `measure_normalization` implemented; all four contracts survive by construction {#sec-nb-measnorm-impl}
+
+The clean test of the measure-magnitude hypothesis required an
+implementation (@sec-nb-measmech-verdict), because no configuration
+lever varies the quadrature measure while holding nondimensional
+coordinates fixed. It now exists.
+
+**Design.** Not a new parallel mechanism — the model records a single
+normalizing weight through the *existing* `compose_measure_weights`
+machinery from #1770, and every quadrature consumer switches from
+`source_mesh.cell_areas` to `cell_measures(source_mesh)` (5 sites in
+`attention.py`/`kernel_decoder.py`; `integrate_moment` already honoured
+effective measures, which is why the dense-oracle tests would have
+caught a partial conversion). Consequences worth stating:
+
+- the weight is *composed*, not assigned, so any Horvitz--Thompson
+  weight the pipeline recorded survives — and a uniform HT factor
+  cancels in the normalization, which is exactly what makes carrying
+  subsample weights safe at all (they are catastrophic today,
+  @sec-nb-hms-verdict);
+- with the knob off, `cell_measures` returns `cell_areas` bitwise, so
+  the default is unchanged. **540 existing tests pass.**
+
+**Contracts, all four, measured rather than argued** (new
+`test_measure_normalization.py`, 6 tests):
+
+| contract | result |
+|---|---|
+| measure-scale invariance ($k$: 1 → 880) | baseline drift > 1.0; **normalised < 10⁻⁹** |
+| zero-drive preservation | exactly 0.0 |
+| exact drive linearity | $3\times$ drive → $3\times$ output, rtol 10⁻¹¹ |
+| similarity equivariance (rotate+scale+translate) | 10⁻⁹ |
+| bitwise query independence | `torch.equal` |
+
+All survive *by construction*, as pre-registered: the reweighting is
+drive-independent, a fixed linear map, and a ratio of scalars.
+
+**What is now decidable, and what is not.** This adds a required
+invariance the architecture lacked — that stands on the contract
+evidence alone and is independent of any downstream benefit. Whether it
+*also* cures the resolution catastrophe cannot be read off an existing
+checkpoint: those weights were fitted at one measure magnitude, so
+evaluating them under normalization is meaningless. It needs a training
+arm.
+
+**Pre-registered, before that arm runs.** Train the flagship under
+`measure_normalization=True` (protocol otherwise identical to t2), then
+re-run the H-CC resolution sweep on it.
+
+- P1 *(the real test)*: the resolution catastrophe collapses — error at
+  40k within **3×** of error at 10k, against the measured 148 000×.
+  *Prediction: p ≈ 0.55.* The reasoning is arithmetic: coverage bias
+  alone is a ~30–40% effect (@sec-nb-hms-verdict P2), which cannot
+  produce 148 000×, so measure magnitude is plausibly the dominant term
+  — but today's four failed predictions say to hold that loosely.
+- P2: in-family accuracy at 10k is not materially worse than the
+  fixed-gauge band. Falsifier: > 10% beyond the band edge means the
+  invariance costs accuracy and the trade must be argued, not assumed.
+- P3 *(falsifier for the whole line)*: if the catastrophe persists
+  within 10× of 148 000×, measure magnitude is **not** the mechanism,
+  the resolution failure belongs entirely to coverage/completeness, and
+  `measure_normalization` reverts to "a required invariance, added" with
+  no claim on resolution transfer.

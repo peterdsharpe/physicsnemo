@@ -1,0 +1,82 @@
+The boundary integral is noise-dominated at the coverage you train at
+
+Pure numerics — exact solid-angle kernel on a sphere, no learning involved — so it bounds what any model of this class can do at this sampling rate. Kernel validated against 4π to ten digits.
+
+At a trace query (the DrivAerML surface task), the double layer splits into:
+
+┌────────────────────────────────────────────────┬─────────┐
+│                                                │  value  │
+├────────────────────────────────────────────────┼─────────┤
+│ own-panel jump term                            │  −6.415 │
+├────────────────────────────────────────────────┼─────────┤
+│ principal-value integral over all other panels │  +6.325 │
+├────────────────────────────────────────────────┼─────────┤
+│ physical answer                                │ −0.0905 │
+└────────────────────────────────────────────────┴─────────┘
+
+The answer is a 1.4% residual of two terms 40× larger. That's the second-kind Fredholm structure your theory chapter is built on — and it's a numerical trap under sampling, because Monte-Carlo noise scales with the large terms while the signal is the small difference.
+
+┌────────────────────────────────────────────┬───────┬────────────┐
+│                  coverage                  │  SNR  │ rel. error │
+├────────────────────────────────────────────┼───────┼────────────┤
+│ 0.11% — DrivAerML production (10k of 8.8M) │  0.65 │       385% │
+├────────────────────────────────────────────┼───────┼────────────┤
+│ 2%                                         │  2.78 │       113% │
+├────────────────────────────────────────────┼───────┼────────────┤
+│ 35%                                        │ 13.06 │        23% │
+└────────────────────────────────────────────┴───────┴────────────┘
+
+At the coverage the protocol actually uses, an exactly-evaluated boundary integral with exact singular kernels carries less signal than noise. HT weighting keeps it unbiased — it does nothing for variance.
+
+What this would explain (hypothesis — flagged as such)
+
+Four results the program treats as independent collapse into one mechanism, if this carries to the learned model:
+
+- Exact kernels contribute 0–8%. Exactness of a kernel is worthless when the estimator around it has 385% error. The factorial compared exact vs learned members in a regime where neither can compute the integral — it measured a noise floor.
+- Trace dominates at 3.8%×. The own-panel term is the one piece computed exactly and always retained. It's also the largest.
+- The two trace sub-mechanisms are near-perfect substitutes. Both deliver the same single reliable number. Once either does, the other is redundant — exactly the measured ~96% / ~96% / +6%.
+- The 2.34× ID gap to GeoTransolver. It never attempts the cancellation; smooth learned pooling is a low-variance aggregate. It's solving a better-conditioned estimation problem, not approximating better.
+
+If that holds, your central bet wasn't refuted — it was never tested at a sampling rate where it could pay off.
+
+The fix is algebraic, and free
+
+For a closed surface the total solid angle from the exterior side is exactly zero. So
+
+$$u(x)=\sigma(x)\underbrace{\textstyle\sum_j\Omega_j}_{=,0}+\sum_j\Omega_j(\sigma_j-\sigma(x))=\sum_j\Omega_j(\sigma_j-\sigma(x))$$
+
+The rewritten integrand is small everywhere — near the query Ω is huge but the difference →0; far away the difference is O(1) but Ω is tiny. The cancellation is removed analytically instead of numerically. Classical BEM singularity subtraction; what's new is using it as a variance-reduction device for a subsampled operator.
+
+Identical kernel, identical samples, identical coverage — only the arrangement differs:
+
+┌──────────┬───────────┬────────────────┬───────────────┐
+│ coverage │ plain SNR │ subtracted SNR │ std reduction │
+├──────────┼───────────┼────────────────┼───────────────┤
+│ 0.11%    │      0.65 │           4.16 │          6.4× │
+├──────────┼───────────┼────────────────┼───────────────┤
+│ 35%      │     13.06 │          93.49 │          7.5× │
+└──────────┴───────────┴────────────────┴───────────────┘
+
+6.4× on std is ~41× variance — the accuracy of 4.5% coverage obtained at 0.11%, and it crosses the estimator from noise-dominated to signal-dominated. Zero parameters. It needs exactly one input: σ(x), the query's own coefficient — which trace mode already computes as the own-cell readout. The mechanism your factorial found load-bearing is precisely the ingredient the fix requires.
+
+The falsifier, run
+
+The gain relies on σ being smooth, and a learned coefficient field needn't be:
+
+┌──────────────────────────────────┬───────────────┐
+│             density              │ std reduction │
+├──────────────────────────────────┼───────────────┤
+│ linear / quadratic               │   6.6× / 6.2× │
+├──────────────────────────────────┼───────────────┤
+│ degree-6 / degree-16 oscillatory │   3.3× / 2.9× │
+├──────────────────────────────────┼───────────────┤
+│ pure white noise                 │          1.1× │
+└──────────────────────────────────┴───────────────┘
+
+It degrades exactly as theory requires and vanishes only for white noise, which is not a physical boundary density. That the falsifier behaves as predicted is itself evidence the mechanism is understood rather than curve-fit. Note plain SNR ≈ 1 for every density — the noise domination is a property of the sampling rate, not my test function.
+
+Pre-registered, before implementing anything
+
+P1 exact-only beats MLP-only by more than the current ~7%; P2 trace's 3.8× shrinks; P3 absolute ID improves 10–30% (modest, because the model spent training compensating for noise it will no longer see). Each with its falsifier. Confounds stated: the identity needs a closed boundary, and the single-layer member has a different non-zero total requiring its own constant — derivable, not free.
+
+This bears directly on your framing: global interaction is one of the four properties a PDE solver must have, and the measurement says the sampling protocol was destroying it while leaving the local term intact.

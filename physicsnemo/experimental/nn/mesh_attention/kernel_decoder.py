@@ -252,6 +252,7 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import cell_measures
 
 from .attention import (
     ScalarVectorState,
@@ -1608,7 +1609,7 @@ class KernelBasisCrossDecoder(nn.Module):
             panel_vertices=source_mesh.points[source_mesh.cells],
             centroids=source_mesh.cell_centroids,
             normals=source_mesh.cell_normals,
-            weights=source_mesh.cell_areas,
+            weights=cell_measures(source_mesh),
             pair_vectors=self._kernel_pair_vectors(operator_state, drive_state),
             coefficients=self.coefficient_map(
                 self._kernel_source_invariants(operator_state, drive_state)

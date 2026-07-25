@@ -82,6 +82,7 @@ import torch.nn as nn
 from jaxtyping import Bool, Float, Int
 
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import cell_measures
 from physicsnemo.mesh.calculus.integration import (
     _integrate_weighted_moment,
     integrate_moment,
@@ -974,7 +975,7 @@ class MeshAttention(nn.Module):
             )
 
         accumulated: AttentionMoments | None = None
-        weights = source_mesh.cell_areas
+        weights = cell_measures(source_mesh)
         for start in range(0, key_state.n_entities, chunk_size):
             item = slice(start, min(start + chunk_size, key_state.n_entities))
             chunk_moments = _moments_from_projected(
@@ -1057,7 +1058,7 @@ class MeshAttention(nn.Module):
             # ln(mean measure) - ln(segment measure), computed per sample
             # from the Mesh quadrature measure (a dimensionless ratio, so
             # similarity covariance is untouched; see build_moments).
-            areas = source_mesh.cell_areas
+            areas = cell_measures(source_mesh)
             segment_measure = torch.stack(
                 [areas[segment].sum() for segment in segments]
             )
@@ -1279,13 +1280,13 @@ class MeshAttention(nn.Module):
             k.vectors,
             v.scalars,
             v.vectors,
-            source_mesh.cell_areas,
+            cell_measures(source_mesh),
         )
         with torch.autocast(device_type=q.scalars.device.type, enabled=False):
             score = torch.einsum(
                 "mhr,nhr->mnh", q.scalars.to(dtype), k.scalars.to(dtype)
             ) + torch.einsum("mhrd,nhrd->mnh", q.vectors.to(dtype), k.vectors.to(dtype))
-            weighted_score = score * source_mesh.cell_areas.to(dtype)[None, :, None]
+            weighted_score = score * cell_measures(source_mesh).to(dtype)[None, :, None]
             scalar_heads = torch.einsum(
                 "mnh,nhf->mhf", weighted_score, v.scalars.to(dtype)
             )
