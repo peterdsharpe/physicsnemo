@@ -6930,3 +6930,84 @@ hypothesis class, and on the industrial suite the declared-degree arm
 premium it enjoyed on exact families" (@sec-ns-cavity). So the honest
 framing of the trade is *bounded extrapolation versus in-distribution
 capacity*, and the experiment should report both.
+
+## 2026-07-25 — P2 measured: norm-factored homogeneity gets every property at once, and it diagnoses GLOBE's arcsinh {#sec-nb-p2}
+
+Peter asked whether GLOBE's arcsinh stabilisation points at a better
+architecture. It does, but not by being extended — by showing what it
+costs. Prototype measurements on a common ladder
+(`studies/gauge_diagnostics/p2_homogeneous.py`), all four schemes
+composed with the *same* unconstrained MLP:
+
+| scheme | $f(0)=0$ | degree | amp @2× | amp @10× | internal @10× |
+|---|:--:|--:|--:|--:|--:|
+| multiplicative (**the flagship's**) | yes | **7.00** | 62.6 | **9.96 × 10⁶** | 48.8 |
+| LayerNorm (incumbent-style) | **no** | 0.00 | 1.00 | 1 | 1 |
+| GLOBE radial arcsinh, $C=1$ | **no** | **0.09** | 1.05 | 1.22 | 4.57 |
+| **norm-factored** $f(x)=\lVert x\rVert\,g(x/\lVert x\rVert)$ | **yes** | **1.00** | **2.00** | **10** | **1** |
+
+### Why arcsinh helps only a little, quantified
+
+The received explanation was that its constant $C$ reintroduces an
+absolute scale — true, and the same defect as `reference_length: 8.0`.
+The measurement shows a second and worse cost: **at the magnitudes where
+the compression actually engages, the effective degree collapses to
+0.09.** Arcsinh does not merely bound the blow-up; it *flattens the
+amplitude response to nearly zero*, so the model loses the ability to
+respond to drive magnitude at all. It trades divergence for
+insensitivity. For targets whose physical degree is ~1 (nondimensional
+surface loads under a unit drive) that is trading one wrong answer for
+another.
+
+### Why norm-factoring gets everything
+
+$$f(x)\;=\;\lVert x\rVert\; g\!\left(x/\lVert x\rVert\right)$$
+
+- **degree exactly 1.00**, homogeneity error $3\times10^{-14}$: a
+  $k\times$ input shift produces a $k\times$ output shift, never
+  $k^{7}$. Against the flagship's mode this is $10^{7} \to 10$ at a
+  10× shift — **six orders of magnitude of OOD amplification removed.**
+- **bounded internals** (1.0 at any input scale): $g$ only ever sees
+  unit-norm arguments. This is precisely LayerNorm's benefit.
+- **zero-preservation, guaranteed structurally.** This is the crux and
+  it is why the row is not just "LayerNorm with extra steps":
+  multiplying the norm back forces $f(0)=0$ **regardless of what $g$
+  does**, so $g$ may be an unconstrained MLP *with biases*. LayerNorm
+  and arcsinh cannot make that guarantee — in the table both fail
+  $f(0)=0$ for exactly this reason, inheriting the MLP's bias.
+- **genuinely nonlinear**: additivity error 0.458, so it is not
+  secretly a linear map. The nonlinearity lives in the drive's
+  *direction*.
+
+**The contract conflict is therefore resolvable, not fundamental.** The
+earlier analysis (@sec-nb-hdeg) concluded that zero-preservation forbids
+the normalisation that bounds the incumbent's activations. That was too
+pessimistic: normalisation is forbidden only if you *discard* the norm.
+Factor it out, act nonlinearly on the direction, and multiply it back,
+and both properties hold simultaneously.
+
+### The honest limitation
+
+Degree-1 homogeneity means $u(\lambda g)=\lambda u(g)$ — amplitude
+nonlinearity is given up. That is a real restriction for Liouville and
+high-Re Navier–Stokes, where the solution's dependence on drive
+amplitude is the physics. It is nearly free for DrivAerML, where the
+drive is a **unit** freestream direction and the targets are
+nondimensional $C_p$/$C_f$ — natural degree 0–1. **The flagship is
+currently using a degree-7 map for a degree-~1 problem.**
+
+So the proposal is a *declared contract* in the program's existing
+sense, not a universal replacement: `field_mode="homogeneous"` sits
+between `linear` (degree 1 *and* additive) and
+`zero_preserving_nonlinear` (unbounded degree), and should be selected
+per problem exactly as the others are.
+
+**Pre-registered before implementation.** (i) A homogeneous-mode
+flagship arm matches the fixed-gauge control's in-family band within
+10%; (ii) its cross-family SHIFT-SUV output stays finite with
+pressure_l2 < 10, against the panel's $10^{3}$–$10^{13}$. *Prediction:
+(i) $p\approx0.6$, (ii) $p\approx0.7$.* Falsifier for the whole line: if
+(ii) fails, drive-read-in degree is not the amplifier and the search
+moves to the decode. The cheaper config-only test of the same
+hypothesis — `field_mode="quadratic"`, degree 0.97 measured — runs
+first and predicts the same direction.
