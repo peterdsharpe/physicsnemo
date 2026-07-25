@@ -6824,3 +6824,109 @@ protocol yields a model that leaves its operating point — which is
 precisely what the two in-flight arms (`measure_normalization`,
 `RandomCoverageSubsample`) test on the resolution axis, where the
 failure is cheapest to measure.
+
+## 2026-07-25 — THEORY: why the incumbent degrades and we detonate, and a structural measurement of the amplifier (H-DEG) {#sec-nb-hdeg}
+
+Two knob-shaped hypotheses have now been refuted by their own
+pre-registered tests (gauge, measure magnitude). That is the signal
+that end-to-end testing has stopped being informative, so this entry
+turns to mechanism. Peter's framing, adopted: trace the blow-up rather
+than fit another arm.
+
+### The asymmetry has a one-line explanation, and it is a contract
+
+**GeoTransolver runs LayerNorm throughout.** LayerNorm is scale-
+invariant: whatever magnitude arrives, the internal representation is
+renormalised, so an out-of-distribution input *magnitude* cannot
+propagate. Its failure mode under distribution shift is bounded — a
+wrong answer, not a divergent one.
+
+**Our drive stream is norm-free, and this is forced rather than
+chosen.** Zero-drive preservation ($u(0)=0$ exactly, for any weights)
+and exact drive-linearity require the drive $\to$ output map to be
+bias-free and homogeneous. LayerNorm is neither zero-preserving ($0/0$)
+nor linear. **The program's own contract forbids the mechanism that
+bounds the incumbent's activations.** The chapter text has long said
+"the zero-preserving stream is deliberately norm-free, so its inputs
+must arrive nondimensionalized"; what was never followed through is
+that this makes activation magnitude a pure function of input
+statistics, and therefore makes *any* distribution shift an amplitude
+shift.
+
+That alone explains a difference in kind. It does not explain a
+difference of thirteen orders of magnitude. For that there has to be a
+gain.
+
+### The gain, measured structurally
+
+Effective drive degree is a property of the *architecture*, not the
+weights, so a random-init model measures it exactly. Scaling the drive
+by $\lambda$ and fitting $\lVert u\rVert \propto \lambda^{d}$
+(artifact `studies/gauge_diagnostics/degree.py`):
+
+| field mode | effective degree | 1.5× shift | 2× shift | 4× shift |
+|---|--:|--:|--:|--:|
+| `zero_preserving_nonlinear` — **the flagship's mode** | **5.9, local degree rising 5.6 → 8.1** | 11× | 60× | 3 660× |
+| `quadratic` | 0.97 | 1.48× | 1.97× | 3.86× |
+| `linear` | **1.00** (contract confirmed) | 1.5× | 2× | 4× |
+
+The decisive detail is not the degree but its **non-constancy**: the
+nonlinear mode's local degree *increases* with input magnitude (5.60,
+4.02, 8.14 across the ladder). It is not a fixed-degree polynomial in
+the operating range — the exponent itself grows as the input moves
+out-of-distribution, which is precisely the shape required to turn a
+modest geometry-statistics shift into $10^{13}$.
+
+### H-DEG, and why it retro-explains the failed experiments
+
+> **H-DEG.** The cross-family blow-up is the *nonlinear-fragility*
+> mechanism this program already diagnosed and already fixed on the
+> synthetic suites — a super-polynomial drive read-in — and the
+> industrial arm never adopted the fix.
+
+The program's own ledger records that mode's implicit degree at
+$\sim$21 on the synthetic configuration and its off-range behaviour as
+"near-eigenvalue detonations of $10^{6}$–$10^{13}$"
+(@sec-nonlinear-fragility). **Our measured cross-family values are
+$5.97\times10^{3}$, $1.24\times10^{7}$, $2.12\times10^{10}$,
+$1.90\times10^{13}$** — the same range, from the same mode. The fix
+already exists, is implemented, and turned those detonations into 0.67:
+`field_mode="quadratic"`.
+
+It also retro-explains both refuted experiments, which is the strongest
+evidence for it:
+
+- **The gauge dose-response.** Changing $L_{\mathrm{ref}}$ rescales
+  every nondimensional input, and that rescale is then raised to a
+  power of 6–8. A 6× gauge change is $6^{7}\approx 3\times10^{5}$ of
+  output movement — so the gauge *looked* like the cause because it
+  feeds an enormous exponent, while being only a lever.
+- **Why retraining under the intrinsic gauge changed nothing.** The
+  gauge repair removes an input-scale *offset*; it does nothing to the
+  exponent that turns residual shift into divergence. A model with a
+  degree-8 read-in will detonate on any family whose statistics differ
+  at all.
+
+### The falsifiable consequences, pre-registered
+
+1. **Trace prediction.** A layer-wise magnitude trace on one DrivAerML
+   sample versus one SHIFT sample, same checkpoint, must show the ratio
+   *compounding through the drive blocks*, not jumping at the decode.
+   A jump at the decode instead means a kernel/geometry singularity and
+   H-DEG is wrong.
+2. **The fix prediction.** A flagship arm trained with
+   `field_mode="quadratic"` (degree $\le 2$ by construction, structural
+   test at $10^{-15}$) must not diverge cross-family: all seeds finite
+   with SHIFT pressure_l2 < 10. *Prediction $p \approx 0.6$.* It need
+   not become *competitive* with 0.677 — the claim is bounded failure,
+   not accuracy.
+3. **Falsifier.** If the quadratic arm still exceeds $10^{3}$
+   cross-family, the amplifier is not the read-in degree and the search
+   moves to the decode and the moment normalisation.
+
+**Cost note.** The quadratic mode is not free: it is a strictly weaker
+hypothesis class, and on the industrial suite the declared-degree arm
+"keeps pace with the unbounded nonlinear arm without the stability
+premium it enjoyed on exact families" (@sec-ns-cavity). So the honest
+framing of the trade is *bounded extrapolation versus in-distribution
+capacity*, and the experiment should report both.
