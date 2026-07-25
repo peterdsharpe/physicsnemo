@@ -88,9 +88,13 @@ including one live bug found (and confirmed) during figure generation.
   industrial campaign ran on the *explicit override* with a
   hard-coded constant, and paid for it — every fixed-gauge checkpoint
   diverged on cross-family zero-shot transfer. The default's guarantee
-  was never wrong; it was simply not the path in production. Repair
-  built, calibrated, and pre-registered
-  (@sec-drivaerml-crossfamily).
+  was never wrong; it was simply not the path in production. **The
+  repair was then built, calibrated, and tested — and it failed**
+  (@sec-drivaerml-transferv2): retraining under the intrinsic gauge
+  leaves every seed diverging cross-family, so the gauge was not the
+  mechanism. The unconditional-equivariance claim on the default path
+  stands; the inference that fixing the gauge would fix transfer does
+  not.
 - **One full-width head.** Heads at fixed score capacity are
   bookkeeping; the single full-width head won decisively on 2D Laplace
   and confirmed non-inferior on all 13 suite-split cells cross-suite,
@@ -284,16 +288,19 @@ including one live bug found (and confirmed) during figure generation.
   **The generalization identity failed its decisive zero-shot test as
   deployed.** A clean monotone dose-response localizes the failure to
   the fixed declared scale gauge, not to the architecture; the
-  intrinsic-gauge repair is calibrated ($C = 26.4766$, fit once on
-  train), its inertness control passes, its drop-in gate failed as
-  pre-registered, and three retrains under the repaired gauge are
-  complete. **Transfer-v2 is pre-registered and unrun**
-  (@sec-nb-transfer-v2-prereg). Odds moved with the evidence:
-  cross-family *advantage* 35% → ~10–15%; "transfers at all,
-  post-repair" ~75%. One open anomaly rides on it — the intrinsic
-  gauge made training seed-dependent in a way the fixed gauge did not
-  (seed 44 at 2.3× the others' basin), which is a statement about
-  conditioning, not about one dataset pair.
+  intrinsic-gauge repair was built, calibrated ($C = 26.4766$, fit once
+  on train), and **tested — it failed** (@sec-drivaerml-transferv2).
+  Retrained under the intrinsic gauge, all four gate-0-passing seeds
+  still diverge zero-shot (5.97 × 10³ to 1.90 × 10¹³ against
+  GeoTransolver's 0.677); gate 1 fails and gate 2 is moot. **The gauge
+  was a lever that moved the magnitude, not the cause.** Odds, revised
+  on evidence: "transfers at all, post-repair" was ~75% and is now
+  measured false at the structural gate; cross-family *advantage*
+  35% → **< 5%**. Two side findings outlast the verdict: the intrinsic
+  gauge carries a ~20% per-seed risk of a worse training basin (one in
+  five, with lr/2 only partly rescuing it), and the seed that failed
+  in-family transferred *best* by two orders of magnitude — suggesting
+  in-family fit and cross-family robustness may be in tension.
 - **True (full-mesh) OOD drag coefficients: blocked on research, not
   wiring.** The OOD verdict's drag numbers are subsample-integrated
   pseudo-coefficients; the upstream force/moment ground truth is

@@ -1071,8 +1071,67 @@ This is recorded here rather than smoothed away because it is the
 more interesting object. A transfer result is one number about one
 pair of datasets; a gauge that makes training seed-dependent is a
 statement about the architecture's conditioning, and it would apply
-to *every* future deployment that adopts the intrinsic gauge — which,
-after this section, is all of them.
+to *every* future deployment that adopts the intrinsic gauge.
+
+#### Transfer-v2: the repair was tested, and it failed {#sec-drivaerml-transferv2}
+
+The confirmatory run is complete, and the repair does not work.
+
+Six intrinsic-gauge checkpoints ran zero-shot on SHIFT-SUV through the
+frozen pipeline. Four of them (seeds 42, 43, 45, 46) passed gate 0 — the
+pre-registered in-family gate — and form the panel; seed 44 failed gate
+0 at both learning rates and is reported beside them rather than
+dropped.
+
+| arm | SHIFT pressure $L^2$ | |
+|---|--:|---|
+| GeoTransolver anchor | **0.677** | the bar |
+| s42 | 5.97 × 10³ | panel |
+| s43 | 2.12 × 10¹⁰ | panel |
+| s45 | 1.90 × 10¹³ | panel |
+| s46 | 1.24 × 10⁷ | panel |
+| s44 @ lr 3.0e-3 | **18.2** | gate-0 failure, reported |
+| s44 @ lr 1.5e-3 | 2.33 × 10³ | gate-0 failure, reported |
+
+: Transfer-v2. Gate 1 required every panel seed finite and below 1.0.
+{#tbl-transferv2}
+
+**Gate 1 fails.** Every seed is finite — a change from v1, which
+produced a NaN — and every seed is three to thirteen orders of
+magnitude past the bar. Gate 2 is moot. The pre-registered structural
+prediction was $p \approx 0.75$; it was wrong.
+
+This refutes the previous section's own diagnosis. The divergence was
+localised to the fixed gauge on a clean, monotone dose-response and
+described as "a repairable protocol flaw, not deep architectural
+brittleness". Retraining under a similarity-covariant, per-sample
+intrinsic gauge — calibrated once on train, never re-fit — leaves the
+model diverging. **The gauge was a lever that moved the magnitude, not
+the cause.** What the earlier section got right was insisting the
+dose-response was exploratory and could not support a rehabilitated
+claim; that is why this is a clean refutation rather than a retraction.
+
+*The excluded seed is the best transferrer.* Seed 44 — the worst
+in-family model in the program — transfers two orders of magnitude
+better than any panel seed, and its lower-learning-rate variant, which
+trained *closer* to the healthy band, transfers *worse*. At $n = 6$
+with thirteen orders of spread this is an observation and not a claim,
+but it is the reason the gate-0 failure was reported rather than
+dropped: **in-family fit and cross-family robustness may be in
+tension**, and dropping the failing seed would have discarded the most
+suggestive datum in the experiment while looking like good practice.
+
+The consequence for the chapter's framing is direct. Three independent
+probes — resolution (@sec-drivaerml-coverage), measure magnitude
+(@sec-four-properties), and geometry family (here) — now support one
+description: **the trained model is a regressor fitted to a narrow
+operating point, and the exact-kernel structure does not protect it
+outside that point.** That is consistent with the kernel factorial's
+0–8% (@sec-drivaerml-factorial): structure that is not load-bearing
+in-distribution should not have been expected to carry generalization.
+Cross-family *advantage* over the incumbent is now below 5%; the sealed
+within-family deep-S1 WSS differential is untouched and is likely to
+remain this architecture's strongest generalization claim.
 
 ### The model is a coverage-specific regressor {#sec-drivaerml-coverage}
 
