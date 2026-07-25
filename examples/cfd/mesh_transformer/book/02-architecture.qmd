@@ -52,7 +52,7 @@ flowchart TB
     B["nondimensionalize<br/>(subtract boundary center, divide by<br/>intrinsic reference length =<br/>RMS boundary radius; explicit override)"]:::stage
     C["per-cell lift<br/>geometry &rarr; scalar + vector channels"]:::stage
     D["boundary self-attention &times; 1<br/>(every cell sees every cell,<br/>signed weights, no softmax)"]:::stage
-    E["drive read-in<br/>(zero-preserving; linear, quadratic, or<br/>nonlinear mode, per problem)"]:::stage
+    E["drive read-in<br/>(zero-preserving; linear, quadratic,<br/>homogeneous, or nonlinear mode,<br/>per problem)"]:::stage
     F["encoded boundary<br/>(cached; reusable)"]:::data
     G["query points"]:::data
     H["kernel decode, per query:<br/>exact single- + double-layer panel<br/>integrals &times; conditioned coefficients"]:::stage
@@ -109,7 +109,7 @@ In words:
    layer that is **zero-preserving**: zero boundary data produces exactly
    zero output, for any weights — a homogeneous PDE with nothing driving it
    has the zero solution, and the architecture makes that structural. The
-   read-in has three modes, chosen per problem. In *linear* mode the layer is
+   read-in has four modes, chosen per problem. In *linear* mode the layer is
    additionally exactly linear in the drive, so superposition (doubling the
    data doubles the solution) holds to floating point — a guarantee worth
    taking **when** the governing PDE is linear, but a straitjacket when it
@@ -120,6 +120,30 @@ In words:
    targets of known drive degree (a Bernoulli pressure is exactly
    quadratic), after the nonlinear mode's *implicit* degree ~21 was
    measured detonating off-range (@sec-nonlinear-fragility). In
+   *homogeneous* mode the declared degree is **exactly one**: the field
+   state's O($D$)-invariant magnitude is factored out, a nonlinear typed
+   map acts on the resulting unit state, and the magnitude multiplies
+   back — $f(F) = \lVert F\rVert\,g(F/\lVert F\rVert)$. Three properties
+   follow by construction rather than by training, and the combination
+   is the reason the mode exists: a $k\times$ shift in drive statistics
+   produces a $k\times$ shift in output and never $k^{d}$; the learned
+   map $g$ only ever sees unit-magnitude states, so its internals are
+   bounded exactly as a normalization layer would bound them; and
+   zero-preservation stays *exact even though $g$ carries biases*,
+   because the magnitude multiplies back rather than being discarded.
+   That last point is what a normalization layer cannot offer — discard
+   the magnitude and $f(0)\neq0$ the moment anything downstream has a
+   bias — and it is why this mode recovers bounded activations without
+   surrendering the zero-drive contract. What it gives up is amplitude
+   nonlinearity ($u(\lambda g)=\lambda u(g)$), so it sits strictly
+   between *linear* (degree one **and** additive) and *nonlinear*
+   (unbounded degree): the right declaration when the target depends
+   nonlinearly on the drive's *shape* but roughly linearly on its
+   *amplitude*, as nondimensional surface loads under a unit freestream
+   do; the wrong one where amplitude nonlinearity is the physics, as on
+   Liouville. Degree one is also the only one of these laws closed under
+   composition, so it is the only one safe to stack
+   (@sec-nonlinear-fragility). In
    *nonlinear* mode the drive enters through structurally
    multiplicative updates: zero-preservation survives, superposition is
    deliberately given up, and the model can represent nonlinear solution
@@ -426,7 +450,7 @@ architecture" of @sec-future), used as the default comparison arm:
 |---|---|---|
 | Typed lift | scalar + vector channels (32/8 operator, 48/12 drive) | — |
 | Boundary self-attention | **1 layer**, **1 full-width head**, separable rank 48 (scalar) + 16 (vector) | — |
-| Drive read-in | zero-preserving; linear mode on linear benchmarks, quadratic (declared-degree) mode on known-degree targets, nonlinear mode otherwise | — |
+| Drive read-in | zero-preserving; linear mode on linear benchmarks, quadratic or homogeneous (declared-degree) mode on known-degree targets, nonlinear mode otherwise | — |
 | Decoder dictionary | **2 exact members** (single + double layer), 0 smooth members | — |
 | Total | | **81,547** |
 
