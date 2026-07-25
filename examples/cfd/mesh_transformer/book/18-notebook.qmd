@@ -7091,3 +7091,82 @@ implementation — queued behind the cheaper `field_mode` arms, which now
 look more promising anyway: the amplifier measured structurally at
 degree 7 (@sec-nb-hdeg) is a larger effect than anything the measure
 path can contribute, and `quadratic`/`homogeneous` attack it directly.
+
+## 2026-07-25 — quadratic arm launched; P2 validated on the real typed machinery {#sec-nb-quad-p2}
+
+### The cheap test of H-DEG is running
+
+`field_mode="quadratic"` on the flagship, one declared delta, smoke-tested
+forward+backward before queueing (the covaug lesson). Two observations
+from the smoke test itself, before any training:
+
+| | `zero_preserving_nonlinear` | `quadratic` |
+|---|--:|--:|
+| parameters | 1 278 268 | 849 892 |
+| loss at init | 4.329 | **0.271** |
+| gradient norm² at init | 9 237 | **32.7** |
+
+The quadratic mode is **280× better conditioned at initialisation** and
+carries 34% fewer parameters. The parameter gap is a stated confound —
+the declared-degree machinery is genuinely smaller, so this is not a
+parameter-matched comparison and will not be presented as one.
+
+### P2 validated on real typed states, not a toy
+
+The earlier P2 measurement (@sec-nb-p2) used a plain MLP. Re-run on the
+actual `ScalarVectorState` / `TypedProjection` machinery, with
+$f(F) = \lVert F\rVert\, g(F/\lVert F\rVert)$ and $\lVert F\rVert$ the
+O($D$)-invariant state magnitude:
+
+| contract | measured | verdict |
+|---|--:|---|
+| zero preservation $f(0)=0$ | **0.00** | **exact** |
+| degree-1 homogeneity | 2.25 × 10⁻¹⁶ | holds |
+| O($D$) equivariance, scalars | 2.05 × 10⁻¹⁶ | holds |
+| O($D$) equivariance, vectors | 2.30 × 10⁻¹⁶ | holds |
+| nonlinearity (additivity gap) | 0.451 | genuinely nonlinear |
+
+**Zero preservation is exactly 0 with `scalar_bias=True`.** That is the
+load-bearing property: an unconstrained, *biased* typed projection cannot
+break the contract, because the norm multiplies back. Every other
+bounding scheme in the comparison (LayerNorm, radial arcsinh) fails
+$f(0)=0$ for precisely the reason this one does not.
+
+### Implementation spec, now de-risked
+
+The design slots into the existing discipline without inventing a
+pattern. `QuadraticFieldReadIn`'s own docstring already frames the
+generalisation — "the same construction with a degree-graded tuple of
+states" — and warns why such a law must live in a **read-in composition
+applied once**, not a stackable block: a same-interface block composes to
+degree $2^k$ after $k$ layers, "exactly the implicit-degree escalation
+this class exists to forbid". The homogeneous law obeys that constraint
+trivially, since degree 1 is closed under composition — stacking it is
+safe, which the quadratic law cannot say.
+
+Spec: `HomogeneousFieldReadIn`, selected by
+`field_mode="homogeneous"`, applied once to the assembled query field
+state $F$ (drive-linear by construction, hence degree 1), emitting
+$\lVert F\rVert\,g(F/\lVert F\rVert)$ with $g$ a typed projection.
+Degree closure: $\lVert F\rVert$ is degree 1, $F/\lVert F\rVert$ degree
+0, $g(\cdot)$ degree 0, product degree **exactly 1**.
+
+Contract tests to ship with it, **parametrized over the kernel
+dictionary** per the rule adopted this morning after the second
+member-blind test hole: zero-drive, degree-1 homogeneity, equivariance,
+bitwise query independence, and — the one that would have caught the
+measure bug — behaviour at `kernel_mlp_members` ∈ {0, 8}.
+
+### Where the three arms now sit
+
+| arm | attacks | status |
+|---|---|---|
+| `measure_normalization` | measure-magnitude sensitivity | trained; sweep invalid (my bug); needs retrain under corrected code |
+| `quadratic` | drive-read-in degree (7 → 0.97) | **running** |
+| `homogeneous` | degree (7 → exactly 1) *without* losing shape nonlinearity | spec validated, unimplemented |
+| `covaug` | protocol overfit to one sampling rate | crashed twice; hydra instantiation of an int list |
+
+The ordering reflects the structural measurements rather than a
+preference: the degree amplifier is a factor of $10^{7}$ at a 10× shift
+and the measure path a factor of ~45 at 16×, so the `field_mode` arms
+attack the larger term.
