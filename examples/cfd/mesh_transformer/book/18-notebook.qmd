@@ -7170,3 +7170,65 @@ The ordering reflects the structural measurements rather than a
 preference: the degree amplifier is a factor of $10^{7}$ at a 10× shift
 and the measure path a factor of ~45 at 16×, so the `field_mode` arms
 attack the larger term.
+
+## 2026-07-25 — six arms in parallel; the covaug failure was torch.compile, not hydra (my diagnosis was wrong) {#sec-nb-parallel-fanout}
+
+### Correction: I misdiagnosed the covaug crash twice
+
+I recorded the second covaug failure as "hydra instantiation of an int
+list" — in the notebook, in a commit message, and in a status report —
+on the strength of the error *string* (`'int' object has no attribute
+'meta'`) without reading the traceback. The traceback says something
+else entirely:
+
+    torch/_functorch/_aot_autograd/runtime_wrappers.py:899
+        n.meta["val"] for n in (list(fw_module.graph.nodes)[-1].args[0])
+    torch._dynamo.exc.BackendCompilerFailed: AttributeError:
+        'int' object has no attribute 'meta'
+
+It is a **torch.compile / AOTAutograd** failure. `RandomCoverageSubsample`
+varies the source count per sample, which gives the compiled graph
+dynamic shapes, and the traced output ends up carrying a plain Python
+`int` where AOTAutograd expects a graph node. Nothing to do with hydra,
+config, or my int list — the transform instantiates fine.
+
+The lesson is embarrassingly basic and worth writing down anyway:
+`'int' object has no attribute 'meta'` *looks* like a config-layer error
+and is not one. **Read the frame, not the message.** Two relaunches were
+spent on a wrong hypothesis that one `grep -B4` would have killed.
+
+*Relaunched with `compile=false`.* Confound stated: the control arms are
+compiled, so this arm differs in wall-clock and in whatever roundoff
+compilation introduces — not in the operator. Acceptable for a
+generalization test; if covaug wins, it must be re-run compiled (with
+proper dynamic-shape handling, or padded static shapes) before the
+result is claimed.
+
+### The fan-out, and why it should have happened sooner
+
+Peter flagged that `homogeneous` was implemented, tested, and then
+*queued for a later loop tick* while `quadratic` ran alone against 347
+idle nodes and a 32-node budget. The two arms are independent tests of
+the same hypothesis by different mechanisms; neither's design depends on
+the other's result. The delay was sequencing habit, not a constraint.
+
+Six chains now run concurrently:
+
+| arm | declared law / intervention | seeds |
+|---|---|---|
+| `quad` | drive degree $\le 2$ | 42, 43 |
+| `homog` | drive degree **exactly 1** | 42, 43 |
+| `mn2` | measure normalisation, corrected decoder | 42 |
+| `covaug` | protocol: per-sample coverage, uncompiled | 42 |
+
+Second seeds went out with the first, rather than after: the program's
+own standard is three seeds for a load-bearing claim, so launching one
+and adding more later costs a full wall-clock cycle for nothing.
+
+**The real serializer is code, not compute.** `homogeneous` required its
+own copied tree because the running arms import `block.py` and
+`model.py`, and editing a tree a live wave imports is the wave-atomicity
+footgun already on record here. Copying a 4.7 GB tree costs minutes;
+waiting costs hours. A related hazard was caught in flight: symlinking
+the new tree's venv to the sibling's would have let its `uv sync` mutate
+the environment three running arms were importing.
