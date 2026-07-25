@@ -1609,7 +1609,19 @@ class KernelBasisCrossDecoder(nn.Module):
             panel_vertices=source_mesh.points[source_mesh.cells],
             centroids=source_mesh.cell_centroids,
             normals=source_mesh.cell_normals,
-            weights=cell_measures(source_mesh),
+            ### TRUE geometric measure, deliberately NOT the normalized
+            ### effective measure.  These weights serve two roles in the
+            ### decoder -- the boundary-integral quadrature AND the physical
+            ### panel extent (``panel_size = weights**(1/n_manifold_dims)``,
+            ### fed to the log-radial feature as panel_size/distance).  Both
+            ### are physical lengths/areas; normalizing them by their sum
+            ### makes panel size scale as n^(-1/d) and silently distorts the
+            ### near-field geometry.  Measured cost of getting this wrong:
+            ### the resolution sweep went from 2.5e4 to 1.7e11 at 40k
+            ### sources while improving at every smaller resolution.
+            ### Measure-scale invariance belongs to the moment quadrature,
+            ### not to the decoder's geometry.
+            weights=source_mesh.cell_areas,
             pair_vectors=self._kernel_pair_vectors(operator_state, drive_state),
             coefficients=self.coefficient_map(
                 self._kernel_source_invariants(operator_state, drive_state)

@@ -7011,3 +7011,83 @@ pressure_l2 < 10, against the panel's $10^{3}$–$10^{13}$. *Prediction:
 moves to the decode. The cheaper config-only test of the same
 hypothesis — `field_mode="quadratic"`, degree 0.97 measured — runs
 first and predicts the same direction.
+
+## 2026-07-25 — measnorm sweep: P1 REFUTED, but the test was confounded by a bug of mine, and the bug is the finding {#sec-nb-measnorm-sweep}
+
+Resolution sweep on the trained `measure_normalization` arm, against the
+plain flagship control:
+
+| resolution | control | measnorm |
+|---:|---:|---:|
+| 2 500 | 0.897 | 0.857 |
+| 5 000 | 0.800 | **0.435** |
+| 10 000 | 0.167163 | **0.166273** |
+| 20 000 | 0.411 | **0.355** |
+| 40 000 | 24 811 | **1.74 × 10¹¹** |
+
+**P2 passes** — in-family accuracy is not merely preserved but slightly
+better (0.166273 vs 0.167163), and better at 5k and 20k too. **P1 fails
+by twelve orders of magnitude**, and the pre-registered falsifier P3
+would fire.
+
+Except the shape of the failure is diagnostic rather than informative:
+*better everywhere, catastrophic only at the extreme*. That is not what
+a wrong hypothesis looks like; it is what a bug looks like. It was.
+
+### The bug: `cell_areas` has two jobs and I normalized both
+
+The kernel decoder consumes its weights twice over:
+
+    panel_size = cell_measures.clamp_min(0.0).pow(1.0 / n_manifold_dims)
+    ... panel_size[None, :] / distance
+
+That is a **physical length**, fed to the log-radial feature as a ratio
+against distance. So the decoder's weights are *geometry*, not only
+quadrature — and normalizing them by $\sum\omega$ makes panel size scale
+as $n^{-1/d}$, halving it at 40k relative to 10k and silently distorting
+the near-field feature every smooth member reads.
+
+Reverted: the decoder keeps true `cell_areas`; normalization applies to
+the moment quadrature alone. **Measure-scale invariance belongs to the
+quadrature, not to the geometry**, and conflating them cost twelve
+orders of magnitude at the one resolution far enough from training to
+expose it.
+
+### The worse part: my contract test certified an invariance the flagship does not have
+
+The test used `kernel_mlp_members=0`. With no smooth members the
+`panel_size` path is never evaluated, so the test could not see the
+conflation. Measured across the dictionary axis:
+
+| members | normalization | drift @ $k=880$ |
+|---:|---|--:|
+| 0 | off | 1.96 × 10¹³ |
+| 0 | **on** | **4.1 × 10⁻¹⁶** |
+| 8 (**the flagship**) | off | 1.57 × 10¹⁷ |
+| 8 (**the flagship**) | **on** | **8.34** |
+
+So the earlier claim — "all four contracts survive by construction" —
+is **over-scoped and now corrected**: the invariance is *exact* for a
+member-free dictionary and only *partial* (16 orders better, not exact)
+for the configuration the flagship actually runs. The test is now
+parametrized over both and pins each separately.
+
+This is the second instance in this book of the same failure mode, and
+the first is documented three chapters away: the pair-invariant einsum
+bug that hid because "every contract test ran on $L = 1$ data", with the
+lesson recorded as *a contract test whose fixtures all sit at a special
+value of an input is a contract test with a hole in it*. I read that
+sentence while writing this chapter and then wrote a contract test whose
+fixtures all sat at `members = 0`. **The rule needs teeth: any contract
+test for the mesh_attention core must be parametrized over the kernel
+dictionary**, because member-free and member-carrying dictionaries
+exercise different code paths by design.
+
+### Status of the hypothesis
+
+P1 is **not validly tested**. The sweep measured a broken normalization,
+not the claim. Re-running it requires retraining under the corrected
+implementation — queued behind the cheaper `field_mode` arms, which now
+look more promising anyway: the amplifier measured structurally at
+degree 7 (@sec-nb-hdeg) is a larger effect than anything the measure
+path can contribute, and `quadratic`/`homogeneous` attack it directly.
