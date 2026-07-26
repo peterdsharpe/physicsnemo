@@ -7782,3 +7782,256 @@ declared properties simultaneously with measured, seeded evidence. It
 would still not be *usable* cross-family — 600 is not a prediction — but
 it would fix the architecture and move the question to closing the
 remaining gap.
+
+## 2026-07-26 — Auditing the cross-family metric before trusting a five-seed verdict on it: it survives {#sec-nb-metric-audit}
+
+Every cross-family claim this program has made rests on one number,
+`pressure_l2` on SHIFT-SUV. Before writing a five-seed verdict on that
+number I checked what it actually computes, because a stray convention
+would make the whole axis meaningless.
+
+**The alarm.** Reading the saved fields out of the harvest artifacts, the
+two datasets do not store the same quantity:
+
+| split | true pressure RMS | true range |
+|---|--:|--:|
+| DrivAerML `res10000` | ~360 | [−2265, 767] |
+| SHIFT-SUV `shift` | 1.012e5 | [98 500, 102 000] |
+
+DrivAerML stores **gauge** pressure (mean ≈ 0); SHIFT-SUV stores
+**absolute** pressure (mean ≈ 101 325 Pa, atmospheric). A model trained
+to emit a mean-zero field, scored against a field offset by 101 kPa,
+would produce enormous errors for a reason that has nothing to do with
+generalization.
+
+**What the metric actually is.** `_relative_l2` in `src/metrics.py` is
+plain $\lVert p - t\rVert / \lVert t \rVert$ with no demeaning, which for
+the first shift sample gives 5.185 — but the logged value is 1845. So the
+logged number is not computed on the redimensionalized field. Matching
+candidate formulas against the log, per sample, identifies it exactly:
+
+$$\texttt{pressure\_l2} = \frac{\lVert p_{\text{pred}} - p_{\text{true}}\rVert}{\lVert p_{\text{true}} - p_\infty\rVert}$$
+
+with $p_\infty$ read from each sample's own `global_data`: **101 325 for
+SHIFT-SUV, 0 for DrivAerML**. Verified to `ratio = 1.0000` on four samples
+in each split — the reconstruction is exact, not approximate.
+
+**Verdict: the metric is sound.** The denominator is the gauge
+fluctuation in both datasets, and the two fluctuations are physically
+comparable — [−2825, +675] on shift against [−2265, +767] in-family. The
+storage-convention difference is absorbed exactly by the per-sample
+$p_\infty$. So the comparison is apples-to-apples and the cross-family
+numbers measure the model, not the file format.
+
+That is a null result, and it is worth the time it cost: it converts
+"~600 on the shift set" from an unaudited number into a measured one. The
+model's predicted pressure really is ~600× the physical fluctuation scale.
+
+**Tail structure, which the means were hiding.** Per-sample spreads over
+the 20 shift samples:
+
+| arm | min | median | max | worst sample's share of the mean |
+|---|--:|--:|--:|--:|
+| `homog` s42 | 92.5 | 696 | 1845 | 13.0% |
+| `homog` s43 | 151 | 544 | 1255 | 10.8% |
+| `quad` s42 | 1.47e5 | 5.27e6 | 4.43e7 | 28.4% |
+| `quad` s43 | 4729 | 2.27e4 | 1.52e5 | 17.9% |
+| `measnorm` s42 | 8.60e4 | 8.12e5 | **1.82e8** | **83.3%** |
+
+`homog`'s failure is *broad*: no sample dominates, so ~600 is a typical
+value rather than an average of one catastrophe and nineteen successes.
+`measnorm`'s is the opposite — a single sample supplies 83% of its mean,
+so its headline 1.09e7 describes one blow-up, not the arm. Its median,
+8.12e5, is the more honest summary and is still four orders above
+`homog`.
+
+I am **not** changing the declared statistic on the strength of this; the
+H-BOTH pre-registration forbids exactly that, and the wave pre-registration
+declared the mean. Both are now reported side by side so the tail is
+visible without the bar moving.
+
+**An open item, resolved in the same sitting — and not as I first framed
+it.** The shift set's *true* force coefficients are implausible
+($C_D = 0.0015$ where a real vehicle is ~0.3), which looked like a
+SHIFT-SUV data defect. It is not: the in-family true coefficients are
+just as small ($C_D \in [-0.00054, -0.00024]$ over 36 samples), and
+`infer.py` says why in a warning printed on every run — when the vehicle
+surface has exactly `sampling_resolution` cells it has been subsampled,
+so integrated force magnitudes are not physical. This is a property of
+the **evaluation protocol**, present in both families, not of the shift
+data. Force coefficients from any of these runs are unusable in absolute
+terms; `pressure_l2`, which is what every verdict uses, is unaffected.
+
+## 2026-07-26 — FIVE-SEED VERDICT: the reproducibility bar FAILS at 2491× against a 3× bar. The 1.23× was an n=2 mirage {#sec-nb-homog-seeds-verdict}
+
+The pre-registration (@sec-nb-homog-seeds-prereg) put the primary bar on
+Q3 reproducibility: all five seeds within a **3× band**. Result, all five
+seeds harvested with the same instrument and control values:
+
+| seed | in-family (10k) | 40k | 40k/10k | SHIFT mean | SHIFT median | SHIFT min–max |
+|---|--:|--:|--:|--:|--:|--:|
+| s42 | 0.192775 | 1.059 | 5.49 | 710.6 | 695.9 | 92.5 – 1845 |
+| s43 | 0.188710 | 46.37 | 245.7 | 579.7 | 544.3 | 151 – 1255 |
+| s44 | 0.206329 | 1.139 | 5.52 | **2.070** | 2.011 | 1.31 – 2.97 |
+| s45 | 0.192503 | 1.963 | 10.19 | **5156.6** | 3438 | 1465 – 17 460 |
+| s46 | 0.203893 | 4.728 | 23.19 | 89.77 | 91.98 | 32.5 – 163 |
+
+**Q3 (primary): FAILED, and not marginally.** Band = **2491×** on the
+declared per-seed means (1710× on medians) against a 3× bar. The 1.23×
+tightness of s42/s43 was a two-sample coincidence — exactly the failure
+mode the pre-registration named in advance ("n=2 is exactly the sample
+size that produced the Q2 mirage", predicted $p \approx 0.55$). The
+prediction was wrong and the bar did its job.
+
+**Q1 (secondary): FAILED as predicted.** Median 0.192775, +15.3% over the
+0.167163 control; every seed above the 0.1839 bar. Predicted $p=0.15$,
+and the expected direction and magnitude were right.
+
+**Q2: reported without a bar, as declared — and it turns out Q2 was
+measuring two opposite things.** Inspecting the 40k predictions directly:
+at 10k the predicted pressure RMS tracks the truth (ratio 0.99, 0.96,
+1.00), but at 40k it *collapses* (0.355, 0.270, 0.055). A prediction that
+goes to zero scores $\approx 1.0$ on a relative $L_2$, because the
+numerator becomes $\lVert t \rVert$. So a 40k value near 1.0 is not "mild
+degradation" — it is **total loss of signal**, and it is a different
+pathology from s43's 46.37, which is genuine divergence. Four of five
+seeds collapse; one diverges. The Q2 ratio conflates them into a single
+axis, which is why its seed spread was 44.8× and why gating it was a
+mistake. **Q2 should be retired and replaced by the signed diagnostic
+`pred_rms / true_rms`**, which separates collapse (→ 0) from divergence
+(→ ∞); the ratio cannot.
+
+### What survives
+
+The *level* separation from `quad` does survive the seed extension, and
+it is large: `homog`'s **worst** seed (5157) still beats `quad`'s
+**better** seed (42 527) by 8.25×, and the medians differ by ~6700×. So
+"declaring drive degree improves cross-family behaviour" stands. What
+does **not** stand is the claim I made in @sec-nb-wave-verdict that the
+effect is *reproducible* — that was the load-bearing word, it rested on
+two seeds, and the five-seed test refutes it. `quad`'s own 184× band is
+now equally suspect for the same n=2 reason and should not be quoted as a
+contrast.
+
+### An exploratory signal worth a pre-registration, not a claim
+
+Ordering the five seeds by in-family accuracy and by shift error:
+
+| rank (best→worst) | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| by in-family | s43 | s45 | s42 | s46 | s44 |
+| by shift | s44 | s46 | s43 | s42 | s45 |
+
+The two **worst** in-family seeds (s44 0.2063, s46 0.2039) are the two
+**best** cross-family (2.07, 89.8). Spearman $\rho = -0.70$ over n=5.
+
+At n=5 this is not significant ($p \approx 0.19$ two-tailed) and I am
+recording it as **exploratory only** — it is a post-hoc pattern in data
+gathered for another purpose, which is precisely the shape of finding
+this program has been burned by before. But it is mechanistically
+plausible: fitting the training family harder means absorbing more
+family-specific structure, and the seeds that fit it least transfer best.
+If real, it reframes the whole program — cross-family generalization
+would not be a bug to fix but a quantity being traded away by the
+training objective, and the ~600 median would be a statement about the
+objective rather than the architecture.
+
+**It also explains s44 without special pleading.** s44 reaching 2.07 —
+within a factor of two of the "usability" bar nobody expected any seed to
+approach — is not a fluke to be explained away; it is the extreme point
+of a trend that includes s46 at 89.8. The architecture *can* transfer.
+Training does not reliably find the configuration that does.
+
+**Registered follow-up (to be run, not assumed):** the anti-correlation
+needs seeds gathered *for* it, across ≥2 field modes, with the correlation
+declared as the primary statistic and a bar set before harvest. The
+`homogmn`/`measnorm` arms now running supply six more seeds at two
+configurations and will provide an out-of-sample test of the sign of
+$\rho$ — declared here, before those arms finish.
+
+## 2026-07-26 — The seed, not the architecture, ranks cross-family transfer: ρ=+0.70 across two unrelated models {#sec-nb-seed-transfer}
+
+The five-seed verdict (@sec-nb-homog-seeds-verdict) surfaced an
+in-family/cross-family anti-correlation at $\rho = -0.70$, which at n=5 is
+suggestive and nothing more. Chasing it produced something sharper.
+
+The book's transfer-v2 table (`tbl-transferv2` in
+@sec-drivaerml-transferv2, read in-session) reports SHIFT transfer for the
+**nonlinear flagship under the intrinsic gauge** at the same five seeds.
+Placing it beside the **homogeneous** arm — a different field mode, a
+different read-in, a different declared degree:
+
+| seed | transfer-v2 (nonlinear + intrinsic gauge) | homogeneous | tv2 rank | homog rank |
+|---|--:|--:|:-:|:-:|
+| s44 | **18.2** | **2.070** | 1 | 1 |
+| s42 | 5.97e3 | 710.6 | 2 | 4 |
+| s46 | 1.24e7 | 89.77 | 3 | 2 |
+| s43 | 2.12e10 | 579.7 | 4 | 3 |
+| s45 | **1.90e13** | **5156.6** | 5 | 5 |
+
+**The same seed is best in both. The same seed is worst in both.**
+Spearman $\rho = +0.70$; exact permutation test one-sided
+$p = 14/120 = 0.117$.
+
+The two arms share no architecture — different field mode, different
+read-in module, transfer values separated by up to ten orders of
+magnitude. What they share is the **data pipeline**: same dataset, same
+splits, same `sampling_resolution=10000`, same recipe. And `set_seed`
+(`src/utils.py:68`, read in-session) does not touch splits — it seeds
+Python, NumPy and Torch only, so `train_split`/`infer_split` are fixed
+strings identical across seeds. **There is no split confound: every seed
+is scored on the same evaluation set.**
+
+What the seed *does* control, besides weight initialization, is the
+training-data random stream — sample order and, more interestingly, the
+per-epoch random subsampling of surface cells down to 10 000. That last
+one is not a neutral knob: this program has already established
+(@sec-nb-hdi-verdict) that **random subsampling is a biased operator**
+whose bias is a far-field completeness effect. Different seeds draw
+different subsample sequences and therefore integrate different amounts
+of that bias over training.
+
+**Why this matters more than the architecture results.** Every
+architectural lever tried so far — the gauge, quadratic mode, homogeneous
+mode, measure normalization — moves the *level* of cross-family error.
+None has controlled its *variance*, which spans 2491× within a single
+configuration. If transfer rank is set by something the seed controls and
+the architecture does not, then the program has been optimizing the wrong
+object: cross-family generalization would be substantially a
+**data-exposure** property, and "which subsamples the model saw" would be
+a designable quantity rather than noise.
+
+### Pre-registration H-SEED (declared now, on data not yet collected)
+
+The `homogmn` and `measnorm` arms are already running at seeds 42/43/44,
+and I have just launched both at 45/46 — giving **two further
+architectures at the same five seeds**, harvested with the same
+instrument. This is an out-of-sample test of a hypothesis formed on two
+architectures, using data that does not yet exist.
+
+- **Primary:** across the two new arms, Spearman $\rho$ of SHIFT transfer
+  rank against the homogeneous arm's rank. **Bar: $\rho > 0$ in both.**
+  Predicted $p \approx 0.4$ — this is a genuine coin-flip and the honest
+  prior is low, because n=5 rank agreement between two experiments has a
+  one-sided $p$ of 0.117 and could easily be the tail I happened to find.
+- **Sharp point prediction:** **s44 is the best-transferring seed in both
+  new arms; s45 is the worst in both.** Under the null this has
+  probability $(1/20)^2 = 0.0025$. If it holds, the data-stream
+  hypothesis is established well beyond the rank statistic.
+- **Falsifier:** if $\rho \le 0$ in either new arm, or if s44 is not in
+  the best two seeds of both, the cross-architecture correlation was an
+  n=5 artifact and this entry should be read as a cautionary tale rather
+  than a lead.
+
+**Forbidden:** re-ranking after seeing the numbers; quoting the
+correlation without the permutation $p$; dropping `measnorm` if its
+divergence makes ranks awkward to compute (a non-finite value ranks last,
+by declaration, right now).
+
+**The decisive follow-up, if H-SEED survives.** `set_seed` currently pins
+every RNG at once, so init and data stream cannot be separated. The clean
+decomposition is a `training.data_seed` split out from the init seed and
+a 2×2 over (init 44/45) × (data 44/45): if transfer follows the *data*
+seed, the mechanism is settled. That needs a code change and therefore a
+fresh tree — it is not being started before H-SEED reports, because
+unlike the arms above it is not free.
