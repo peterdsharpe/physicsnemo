@@ -7476,3 +7476,71 @@ generalise across *geometry* families.
 seed divergence. Seed tightness is one thing bounded internals ought to
 buy. It is 15% of the way through training and will not be cited as a
 result.
+
+## 2026-07-25 — FIRST HARVEST (`quad` s42): all three bars FAIL, and the effect size is four orders of magnitude {#sec-nb-harvest-quad-s42}
+
+First arm of the six-arm wave, scored against the bars fixed at
+@sec-nb-wave-prereg before any of these numbers existed.
+**One arm, one seed — not a verdict.**
+
+| resolution | control | `quad` s42 |
+|---:|--:|--:|
+| 2 500 | 0.897 | 2.642 |
+| 5 000 | 0.800 | 0.929 |
+| **10 000** | **0.167163** | **0.190521** |
+| 20 000 | 0.411 | 0.763 |
+| **40 000** | **24 810.9** | **2.979** |
+| SHIFT zero-shot | $10^{4}$–$10^{15}$ | 7.81 × 10⁶ |
+
+| question | measured | bar | verdict |
+|---|--:|--:|---|
+| Q1 in-family | 0.190521 (+14%) | ≤ 0.1839 | **FAIL** |
+| Q2 40k/10k ratio | **15.6** | < 10 | **FAIL** |
+| Q3 SHIFT | 7.81 × 10⁶ | < 1.0 | **FAIL** |
+
+### Why Q2 is recorded as a failure
+
+The control ratio is **148 423**; this arm's is **15.6** — a
+**9 494× reduction**. That is the largest single effect measured on this
+axis in the program, and it missed the declared bar of 10.
+
+Both statements are true and the verdict is FAIL. Writing it any other
+way would be the exact failure the pre-registration exists to prevent:
+15.6 against a bar of 10 is precisely the value at which a bar chosen
+*after* the fact would have been drawn at 20. The bar was 10 because 10
+was defensible before the number existed; it is not more defensible now
+that the number is 15.6.
+
+**The scientific content is the effect size, not the pass/fail.**
+Declaring the drive degree changes the model's behaviour at 4× its
+training resolution from *destroyed* (24 811 — a hundred-thousand-fold
+error) to *roughly 3× wrong* (2.979). That is a qualitative change in
+kind, and it is the first intervention in this program to move the
+resolution axis at all: reweighting did not (measured twice),
+stratified sampling did not (1.2–1.4×), singularity subtraction did not
+(~1.6×). The degree hypothesis is the only one that has produced an
+order-of-magnitude result, and it produced four of them.
+
+### The price, quoted as required
+
+Q1 got **worse**: +14% in-family, past the 10% bar. The pre-registration
+required that any robustness gain be quoted with its Q1 price, and the
+price here is real. An arm that is 14% worse in-distribution and four
+orders better at 4× resolution is a genuine trade, not a free win, and
+whether it is worth taking depends on whether deployment resolution is
+fixed — which, given @sec-drivaerml-coverage, it is not.
+
+### What is not fixed
+
+Q3 remains catastrophic. 7.81 × 10⁶ is better than the intrinsic-gauge
+panel's $10^{13}$ but nowhere near structural, so **bounding the
+resolution axis does not bound the family axis.** Two failures the
+program had treated as one mechanism are now separated by direct
+evidence: an intervention that moves one by $10^{4}$ moves the other by
+$10^{6}$ from a base of $10^{13}$ — i.e. barely, on a log scale.
+
+### Standing
+
+`quad` s43 is at 477/500; `homog` s42/s43 at 482/464; `mn2` at 471.
+No conclusion until the paired seed lands, per the pre-registration's
+ban on treating one seed as decisive or dropping a disagreeing one.
