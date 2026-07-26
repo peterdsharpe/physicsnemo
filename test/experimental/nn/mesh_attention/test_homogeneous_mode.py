@@ -21,13 +21,14 @@ SPHERE = Mesh(points=_S.points.double(), cells=_S.cells)
 MEMBERS = [0, 8]
 
 
-def build(mode, members, seed=0):
+def build(mode, members, seed=0, measure_normalization=False):
     torch.manual_seed(seed)
     return MeshTransformer(
         n_spatial_dims=3, output_field_ranks={"u": 0, "w": 1},
         boundary_field_ranks={"b": {"operator": {}, "drive": {"g": 0}}},
         global_field_ranks={"operator": {}, "drive": {"h": 0}},
         field_mode=mode, query_decoder="kernel",
+        measure_normalization=measure_normalization,
         kernel_mlp_members=members, kernel_include_polynomial_members=False,
         kernel_include_single_layer_member=True,
         operator_scalar_dim=16, operator_vector_dim=4,
@@ -154,6 +155,27 @@ def test_similarity_equivariance(members):
                          global_data={"h": torch.tensor(1.0, dtype=torch.float64)})
               ).point_data["u"]
     assert torch.allclose(a, b, rtol=1e-9, atol=1e-11)
+
+
+@pytest.mark.parametrize("members", MEMBERS)
+def test_composes_with_measure_normalization(members):
+    """The two declared fixes must hold *simultaneously*.
+
+    ``measure_normalization`` rescales the boundary quadrature weights to close
+    the measure-dimension hole in units invariance; ``field_mode="homogeneous"``
+    pins the drive degree at one.  They touch the same forward pass, so the
+    combined configuration is the one that has to be certified -- shipping two
+    separately-tested flags and assuming the conjunction works is precisely the
+    member-blind mistake the module header warns about.
+    """
+    m = build("homogeneous", members, measure_normalization=True)
+    with torch.no_grad():
+        assert m(domain(drive=0.0)).point_data["u"].abs().max().item() == 0.0
+        base = m(domain(drive=1.0)).point_data["u"]
+        for k in (0.25, 3.0, 50.0):
+            scaled = m(domain(drive=k)).point_data["u"]
+            rel = float((scaled - k * base).abs().max() / (k * base).abs().max())
+            assert rel < 1e-11, f"degree-1 lost under normalization at k={k}: {rel}"
 
 
 @pytest.mark.parametrize("members", MEMBERS)
