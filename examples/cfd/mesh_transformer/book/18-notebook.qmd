@@ -8203,3 +8203,98 @@ randomizing `sampling_resolution` per sample during training, so no single
 subsampling bias can be learned. Note `covaug` does **not** do this: it
 trains at a fixed 20k, so it can only move the optimum, not remove it.
 Removing it is a separate arm and the natural next one.
+
+## 2026-07-26 — The operator IS consistent; the SAMPLING is not, and no per-cell weight can fix that {#sec-nb-decimation}
+
+Peter pushed back on resolution augmentation, correctly: numerical
+consistency is a property you prove, not one you fit. A turbulence model
+is not refitted per grid. If the surrogate needs augmentation to be
+resolution-independent, the architecture does not have the property. His
+hypothesis was that the decode has it and the *interaction* does not.
+
+Four measurements, all at random init on a small config (see caveats).
+
+**1. Under deterministic refinement the operator converges at second
+order.** Unit sphere, full covering mesh at each level, drive a fixed
+function of position, `kernel_mlp_members=8`:
+
+| n_cells | 320 | 1 280 | 5 120 | 20 480 | 81 920 |
+|---|--:|--:|--:|--:|--:|
+| u(q₀) | −0.1030067 | −0.1029976 | −0.1029953 | −0.1029948 | −0.1029946 |
+| rel change | — | −9e-5 | −2e-5 | −1e-5 | ~0 |
+
+Successive changes fall ~4× per halving of $h$. **The interaction and the
+decoder are both numerically consistent.** The hypothesis is refuted in
+the direction it was posed — but the instinct that one component lacks
+the property was right, and it is the sampling.
+
+**2. The network is blind to panel shape.** Replacing every triangle with
+an in-plane rotation about its own centroid — centroid, normal and area
+preserved exactly, vertices moved — changes the output by 2.9e-6 relative
+(members=8) and 1.1e-7 (members=0). Despite `panel_vertices` being in the
+decoder cache, the model effectively sees only **(centroid, normal,
+area)**.
+
+**3. The Horvitz–Thompson measure weights are inert here.** Patching the
+decoder to integrate against the represented measure rather than raw
+`cell_areas` leaves the output **bitwise unchanged**. Two independent
+reasons: under uniform subsampling the HT factor is a *global constant*
+$N/k$, and the decoder normalizes by `weights.sum()`, which cancels it
+exactly. The weights fix the absolute integral; nothing in the decoder
+consumes the absolute integral. My earlier k/N under-integration
+mechanism (@sec-nb-resfit) is **refuted** — the under-integration is real
+and cancels.
+
+**4. Random subsampling is systematically biased, and it is not noise.**
+16 independent draws per $k$ from the 81 920-cell mesh, against the
+full-mesh value:
+
+| k | mean u(q₀) | bias | std err | bias/stderr |
+|---|--:|--:|--:|--:|
+| 500 | −3.895e-2 | +62.2% | 11.5% | 5.4 |
+| 2 000 | −8.313e-2 | +19.3% | 1.7% | 11.2 |
+| 8 000 | −9.392e-2 | +8.8% | 0.7% | 12.5 |
+| 32 000 | −9.812e-2 | +4.7% | 0.6% | 8.4 |
+
+Bias/stderr 5–12: a real systematic bias, decaying only as $\sim k^{-1/2}$.
+The single-seed sweep that preceded this could not separate bias from
+variance and should not be quoted.
+
+### Why no reweighting can work
+
+The model is a **nonlinear functional of the empirical measure** — MLPs,
+`weights.sum()` normalization, learned coefficients. For a nonlinear
+functional the expectation over sampled sets is not the functional of the
+expectation; there is a Jensen gap that closes only as $k$ grows. Per-cell
+weights debias a *linear* integral. They cannot debias a nonlinear one.
+The measure machinery was never capable of the job it was being asked to
+do here, and that is a statement about the aggregation, not about a bug.
+
+### The diagnosis, and what it implies
+
+The pipeline does not **coarsen**, it **decimates**: it keeps $k$ of
+17.7M cells at their original tiny areas, covering 0.06% of the vehicle.
+That is a *sparse* mesh, not a coarse one, and it is not a member of the
+family the operator provably converges on. At the recipe's $k = 10\,000$
+the bias is ≈8%, and training absorbs it as a $k$-specific correction; any
+other $k$ makes that correction wrong. **That is the resolution
+overfitting of @sec-nb-resfit, and its cause is the sampling, not the
+operator.** Extrapolating $k^{-1/2}$, reaching 1% bias needs ~700 000
+cells per sample — not a viable training configuration.
+
+The indicated fix is structural and is **not** augmentation and **not**
+reweighting: feed the model a genuine coarse *covering* mesh (decimation
+or remeshing whose panel areas sum to the true surface area), so the input
+lies in the convergent family and the measured $h^2$ consistency applies
+by construction — the same reason a CFD solver may be run on a coarse
+grid.
+
+**Caveats, stated before anyone builds on this.** All four measurements
+are at random initialization on a small configuration; the bias magnitude
+must be confirmed on the flagship and on a trained checkpoint before it is
+quoted as the operating-point number. And the practical obstacle is real:
+remeshing 17.7M cells to ~10k per sample per epoch costs what random
+subsampling does not.
+
+**Supersedes H-RESFIT.** `covaug` tests whether the resolution optimum
+*moves*; the live question is now whether coarsening removes it.
