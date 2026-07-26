@@ -8035,3 +8035,66 @@ a 2×2 over (init 44/45) × (data 44/45): if transfer follows the *data*
 seed, the mechanism is settled. That needs a code change and therefore a
 fresh tree — it is not being started before H-SEED reports, because
 unlike the arms above it is not free.
+
+## 2026-07-26 — Looking for disconfirmation of H-SEED, and finding it: a third experiment breaks the ranking {#sec-nb-seed-transfer-caveat}
+
+H-SEED (@sec-nb-seed-transfer) rested on two experiments agreeing. Before
+its pre-registered test reports, I went looking for a *third* dataset
+specifically to try to break it, because a correlation found by placing
+two tables side by side is exactly the kind of thing that survives only
+until someone checks the third table.
+
+There is one: `tbl-crossfamily` in @sec-drivaerml-crossfamily — the
+earlier **fixed-gauge** transfer (v1), at seeds 42/43/44. On the three
+seeds common to all three experiments:
+
+| experiment | s42 | s43 | s44 |
+|---|:-:|:-:|:-:|
+| transfer-v1 (fixed gauge) | 3 | **1** | 2 |
+| transfer-v2 (intrinsic gauge) | 2 | 3 | **1** |
+| homogeneous | 3 | 2 | **1** |
+
+| pair | Spearman ρ |
+|---|--:|
+| v1 vs v2 | **−0.50** |
+| v1 vs homog | +0.50 |
+| v2 vs homog | +0.50 |
+
+**The two nonlinear-architecture experiments disagree with each other.**
+That is the cleanest available test of "seed ranks transfer independently
+of architecture", and it comes out negative. H-SEED is weaker than
+yesterday's entry implied, and I am recording that here rather than
+letting the pre-registered result arbitrate a claim I had already
+over-stated.
+
+Two honest qualifications, in both directions:
+
+*Against the disconfirmation:* at n=3 a Spearman ρ can only take the
+values ±0.5 and ±1, so none of these three numbers carries meaningful
+evidence on its own. And v1's transfer values are 1.3e15, 8.1e4, 4.1e13 —
+a regime in which every checkpoint has diverged to non-physical output.
+Ranking models *within* total divergence may be ranking noise. But I did
+not declare that exclusion in advance, so it is a caveat, not grounds for
+dropping v1.
+
+*For it:* the disagreement is between the two experiments that share an
+architecture (v1 and v2 are both the nonlinear flagship, differing only
+in gauge), which is the opposite of what the data-stream hypothesis
+predicts. If the seed's effect ran through the data pipeline, those two
+should have agreed most.
+
+**What does replicate, robustly.** In every experiment where seed 44
+appears, it is the **worst in-family** model: 0.180 in v1 (worst of
+three), a 70% in-family gate-0 failure in v2, and 0.2063 in the
+homogeneous five-seed (worst of five). Three for three. Whatever seed 44
+does, it produces a systematically different training trajectory — which
+is consistent with a data-stream effect but does **not** establish the
+link to transfer, which is the part in doubt.
+
+**Revised prior for H-SEED**, declared before its data exists: the
+primary bar (ρ > 0 in both new arms) drops from $p \approx 0.4$ to
+$p \approx 0.25$. The sharp point prediction (s44 best *and* s45 worst in
+both) drops to $p \approx 0.1$. The falsifier and the forbidden list are
+unchanged. If the two new arms come back positive despite this, the
+result is considerably more interesting than it looked an hour ago; if
+they come back negative, this entry is why that should surprise no one.
