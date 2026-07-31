@@ -1,0 +1,56 @@
+# Source-domain compatibility control for the historical intrinsic-gauge
+# MeshTransformer checkpoint. The launcher supplies a test-free canary manifest.
+train_datadir: ${oc.env:DRIVAER_SOURCE_ROOT}
+manifest: ${oc.env:DRIVAER_SOURCE_MANIFEST}
+
+pipeline:
+  reader:
+    _target_: ${dp:MeshReaderWithGlobalData}
+    path: ${train_datadir}
+    pattern: "run_*/*.pdmsh/_tensordict/boundaries/vehicle"
+    subsample_n_cells: ${sampling_resolution}
+    merge_global_data_from: "../../global_data"
+  augmentations:
+    - _target_: ${dp:RandomRotateMesh}
+      axes: ["z"]
+      transform_cell_data: true
+      transform_global_data: true
+    - _target_: ${dp:RandomTranslateMesh}
+      distribution:
+        _target_: torch.distributions.Uniform
+        low: [-1.0, -1.0, 0.0]
+        high: [1.0, 1.0, 0.0]
+  transforms:
+    - _target_: ${dp:DropMeshFields}
+      global_data: [TimeValue]
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
+    - _target_: ${dp:CenterMesh}
+      use_area_weighting: false
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        pMeanTrim: pressure
+        wallShearStressMeanTrim: stress
+      association: cell_data
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        pMeanTrim: pressure
+        wallShearStressMeanTrim: wss
+    - _target_: ${dp:NormalizeMeshFields}
+      association: cell_data
+      fields:
+        wss: {type: vector, mean: [0.0, 0.0, 0.0], std: 0.00313}
+    - _target_: ${dp:ComputeSurfaceNormals}
+      store_as: cell_data
+      field_name: normals
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: ${sampling_resolution}
+    - _target_: ${dp:ComputeIntrinsicReferenceLength}
+      scale_constant: 26.476592786355283
+    - _target_: ${dp:MeshToDomainMesh}
+      interior_points: cell_centroids
+
+targets:
+  pressure: scalar
+  wss: vector

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_launch_environment_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T08:46:43Z",
+  "status": "LAUNCH_ENVIRONMENT_SUPPLEMENT_V3_SUPERSEDED_BEFORE_REMOTE_TASK_CREATION_OR_SCHEMA_V5_OUTPUT",
+  "superseded_supplement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v3_2026-07-28.json",
+    "sha256": "4e5375cb5e909728ff6bdaf702db42ff5eecc81b557540cb1abcd5e694056559",
+    "bound_adjudicator_sha256": "4440a0278857a6da97959c8d3dbd31279269cf34253c6d19fab5b904ae182e04"
+  },
+  "definite_issues": [
+    {
+      "channel": "Implicit Slurm login-environment retrieval",
+      "kind": "execution-environment false guarantee",
+      "evidence": "Slurm documents that an explicit variable list without ALL implicitly behaves as --get-user-env. It can backfill every omitted login variable; env -i only makes the seven named caller values take precedence and does not guarantee that PYTHONWARNINGS, loader hooks, BASH_ENV, or other omitted variables remain absent.",
+      "required_repair": "Run sbatch under the seven-value env-i caller but use plain --export=ALL. SchedMD documents that this propagates only the already-clean caller environment and prevents implicit login-environment retrieval."
+    },
+    {
+      "channel": "Blanket remote extended-attribute prohibition on Lustre",
+      "kind": "unsatisfiable launch condition",
+      "evidence": "The physical task path is Lustre. Ordinary newly created Lustre files and directories may carry filesystem-intrinsic layout metadata, so a literal no-remote-xattr condition cannot be guaranteed even when the workflow never sets a payload.",
+      "required_repair": "Forbid user-controlled xattrs, nontrivial ACLs, and workflow layout mutation while tolerating automatically created intrinsic Lustre layout metadata remotely. Continue to require the copied local publication bundle to contain no xattrs."
+    }
+  ],
+  "scientific_effect": "No remote task was created or submitted and no schema-v5 output existed under revision 3. These launch-contract issues changed no scientific result or interpretation.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false
+  },
+  "replacement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v4_2026-07-28.json",
+    "sha256": "5be8f6425403bb448d51a2947e9674421288b401cb033e0bb38ee4e6a596a822",
+    "bound_adjudicator_sha256": "4440a0278857a6da97959c8d3dbd31279269cf34253c6d19fab5b904ae182e04",
+    "bound_test_sha256": "d584cf6f64a218e9c2f757d4a711ebef6ed574b616d3f49c83ce39b3443e62ef"
+  }
+}

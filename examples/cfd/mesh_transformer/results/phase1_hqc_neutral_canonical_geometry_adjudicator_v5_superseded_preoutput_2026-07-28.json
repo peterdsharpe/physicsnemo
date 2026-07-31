@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T07:11:10Z",
+  "status": "ADJUDICATOR_V5_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_freeze": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_adjudicator_freeze_v5_2026-07-28.json",
+    "sha256": "c17783dde5cbbfa70a2f597edb4526145ff2807091aadb1b3ff317190972bf14"
+  },
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v5.py",
+      "sha256": "f6424d168607a7c8118b663bc052be36644964df8d5e7174899b00837b2853e6"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v5.py",
+      "sha256": "65e46e8e95b1c0462d1e99152cff38ce3e6eb277952ca16d63a68757e345e2bb",
+      "result": "42 passed before the independent adversarial HOLD"
+    }
+  },
+  "definite_false_pass_paths": [
+    {
+      "channel": "NPZ ZIP metadata and bytes outside canonical members",
+      "evidence": "The v5 adjudicator enumerated and hashed NPZ members but did not reject an archive comment, per-member comment or extra field, or bytes appended after the ZIP end record. A forbidden target payload could therefore remain in the publication artifact while the parsed arrays and target-exclusion checks passed.",
+      "required_repair": "Require the diagnostic NPZ to be the exact canonical uncompressed np.savez envelope: no prefix, gap, orphan record, archive or member comment, central extra field, noncanonical local header, reordered member, central-directory extension, or trailing byte."
+    },
+    {
+      "channel": "Nonzero JSON float underflow to binary64 zero",
+      "evidence": "Python json.loads parsed 1e-9999 as 0.0, so a reported nonzero quantity outside binary64 range could compare equal to an independently recomputed zero.",
+      "required_repair": "Parse JSON floats through Decimal and reject every finite nonzero decimal token that rounds to binary64 zero."
+    }
+  ],
+  "scientific_effect": "No schema-v5 diagnostic output existed, so adjudicator v5 produced no publication pass, canonical-repair inference, or H-QC verdict. The frozen schema-v5 diagnostic producer itself is not invalidated by these adjudicator bugs.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v6.py",
+      "sha256": "2f1e20c54a20fffb3b737f5e9e8b8ed7edade625df160a0e89801528f8917f7e",
+      "audit_output_schema_version": 3
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v6.py",
+      "sha256": "9a296794f3ab38dbe44ca9bb923a7c32632585b99f2cfa059394647a0cb7747c",
+      "result": "48 passed; Ruff check/format and py_compile passed; independent adversarial re-audit pending"
+    }
+  }
+}

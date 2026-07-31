@@ -1,0 +1,207 @@
+{
+  "title": "DrivAerML-to-SHIFT-SUV validation-only adaptation pilot",
+  "frozen_at": "2026-07-30T00:58:30-04:00",
+  "scientific_question": "Does a DrivAerML-trained initialization reduce the number of SHIFT-SUV target simulations needed, and is any reduction larger for MeshTransformer than for GeoTransolver?",
+  "scope": {
+    "status": "pilot",
+    "source_checkpoints": 1,
+    "target_training_seed": 42,
+    "claim_limit": "conditional evidence only; not an untouched-family or physics-specific-transfer claim",
+    "test_policy": "No test case may be read, trained on, or evaluated during this pilot."
+  },
+  "activation_gate": {
+    "requirement": "The checkpoint-era MeshTransformer must complete finite forward/loss evaluations on its DrivAerML source canary before any target result is interpretable.",
+    "if_failed": "Do not launch or interpret the validation pilot; repair provenance instead.",
+    "status": "passed before pilot launch",
+    "evidence": "HSG job 5701700 completed finite source, estate, and fastback lanes under checkpoint-era model and gauge semantics."
+  },
+  "protocol_amendments": [
+    {
+      "amended_at": "2026-07-30T01:11:00-04:00",
+      "information_used": "Compatibility-canary finiteness and step time on training-origin cases only; no registered validation case or pilot outcome was inspected.",
+      "changes": {
+        "epochs": {
+          "from": 200,
+          "to": 70
+        },
+        "scheduler_step_size_epochs": {
+          "from": 100,
+          "to": 35
+        },
+        "checkpoint_interval_epochs": {
+          "from": 20,
+          "to": 10
+        },
+        "compile": {
+          "from": true,
+          "to": false
+        }
+      },
+      "reason": "Eager execution preserved finite adaptation while avoiding shape-specialized compilation overhead; 70 equal target exposures fit every 128-case arm inside the cluster's four-hour job limit."
+    },
+    {
+      "amended_at": "2026-07-30T02:27:35-04:00",
+      "information_used": "A registered learning-rate arm triggered the prospective non-finite-loss guard; no cross-arm validation ranking or label-efficiency contrast was inspected.",
+      "changes": {
+        "divergent_candidate_handling": "A learning-rate arm that terminates at the non-finite guard retains every fully completed registered checkpoint as an eligible early-stopping candidate. Later unavailable checkpoints have infinite selection error. The same rule applies to every architecture and initialization."
+      },
+      "reason": "The frozen rule selects a learning-rate and stored-epoch pair. A later divergence does not invalidate an earlier finite stored epoch, but it cannot create missing later candidates or be treated as ordinary missing data."
+    },
+    {
+      "amended_at": "2026-07-30T03:24:18-04:00",
+      "information_used": "A code-path audit showed that the training loop's random 10,000-cell validation subsample advances after the training iterator and therefore differs by epoch and label budget. Stored validation values or cross-arm rankings were not inspected.",
+      "changes": {
+        "formal_validation_evaluation": "Re-evaluate every eligible registered checkpoint on two dedicated validation-only passes with fixed seeds 20260730 and 20260731. Do not iterate the training loader. Average the two point-subsample measurements within each validation case before checkpoint selection and all derived comparisons.",
+        "training_loop_validation_metrics": "Retain for run-integrity diagnostics only; do not use them for formal selection or scientific ratios.",
+        "fixed_evaluation_non_finite_rule": "A checkpoint that is non-finite on either fixed evaluation pass has infinite selection error. Other stored checkpoints from the same learning-rate arm remain eligible."
+      },
+      "reason": "A common fixed point sample makes the 99 cases genuinely paired across architecture, initialization, learning rate, epoch, and label budget while retaining the registered 10,000-cell model resolution."
+    },
+    {
+      "amended_at": "2026-07-30T04:54:31-04:00",
+      "information_used": "Only the frozen training horizon and the logical distinction between target-label efficiency and faster optimization were used. No online or fixed-validation metric, checkpoint ranking, or cross-arm outcome was inspected.",
+      "changes": {
+        "optimization_horizon_gate": "If either selected checkpoint in a half-label comparison is the final registered epoch, interpret that comparison only as fixed-exposure learning-speed evidence. It cannot establish that fewer target simulations suffice until a prospectively extended horizon shows that the ordering survives."
+      },
+      "reason": "A scratch model that is still improving could catch up without receiving another target simulation. Equal target exposures therefore control optimization time but do not by themselves prove asymptotic label efficiency."
+    },
+    {
+      "amended_at": "2026-07-30T06:07:00-04:00",
+      "information_used": "Only the frozen three-point learning-rate grid and the logical distinction between within-grid selection and a bracketed optimum were used. No online or fixed-validation metric, checkpoint ranking, or cross-arm outcome was inspected.",
+      "changes": {
+        "optimization_grid_flag": "A half-label comparison is optimizer-bracketed only when both selected learning rates are the interior grid value. A boundary selection remains valid within-grid pilot evidence, but confirmation must add a stable flanking or intermediate rate before supporting an optimized target-label-efficiency claim."
+      },
+      "reason": "Symmetric tuning does not prove a fair optimum if either selected model is censored by the edge of the registered search grid."
+    }
+  ],
+  "rival_hypotheses": {
+    "reusable_source_knowledge": "Pretraining lowers validation error at fixed target-label budget and can match the scratch model with half as many target cases.",
+    "generic_adaptation": "MeshTransformer and GeoTransolver receive similar relative benefit; reuse is real but boundary-aware structure has no incremental support.",
+    "geometry_conditional_reuse": "The source benefit changes materially or reverses between estate and fastback.",
+    "specialist_regression": "Pretraining is neutral or harmful after symmetric validation selection."
+  },
+  "data": {
+    "families": [
+      "estate",
+      "fastback"
+    ],
+    "nested_training_budgets": [
+      64,
+      128
+    ],
+    "validation_cases_per_family": 99,
+    "manifest_hashes": {
+      "estate": "8b0a4d28bf5c0c3f0ea0fc5c6ac2c4da36f2f3221dcfefbc3e3a7b7a9718d144",
+      "fastback": "9506ef308e21fa4d1753d3a34716cd7cfd25c02ebdbc5d76306596f67ed0f8fd",
+      "split_audit": "91e2046c8f3dffdc8788398cc2673036e3a76f0ffe86c39f5f427313a13353ed"
+    },
+    "nesting_rule": "For each family, train_64 is a strict subset of train_128 and both are disjoint from validation.",
+    "selection_data": "validation only"
+  },
+  "models": {
+    "mesh_transformer": {
+      "checkpoint_sha256": "8364e1d4480838b46a6e3dbb0bee64dfc397137c5b5f191a32f50cc713fc0577",
+      "checkpoint_config_sha256": "239f1b0d86be0f6049f04d0bcbc5ae471f39cdd3bf176a0efda98999226ff7a9",
+      "checkpoint_era_model_commit": "0520f294",
+      "parameter_count": 1278268
+    },
+    "geotransolver": {
+      "checkpoint_sha256": "d01fb102f38875cc2a2765c04d1940ebd2ffff3e8324dbbbd27d541e25480cd6",
+      "checkpoint_config_sha256": "1302daa005cbfa4c3385dc3dbaa94a367b4768d3ade5f0ee2001dfc73e202964",
+      "parameter_count": 9046016
+    }
+  },
+  "factorial_design": {
+    "architectures": [
+      "mesh_transformer",
+      "geotransolver"
+    ],
+    "initializations": [
+      "scratch",
+      "drivaer_pretrained"
+    ],
+    "families": [
+      "estate",
+      "fastback"
+    ],
+    "target_cases": [
+      64,
+      128
+    ],
+    "learning_rates": [
+      0.0003,
+      0.001,
+      0.003
+    ],
+    "total_training_runs": 48
+  },
+  "common_training_protocol": {
+    "epochs": 70,
+    "batch_size": 1,
+    "target_exposures_per_case": 70,
+    "sampling_resolution": 10000,
+    "precision": "bfloat16",
+    "compile": false,
+    "loss": "Huber",
+    "weight_decay": 0.0001,
+    "scheduler": {
+      "type": "StepLR",
+      "step_size_epochs": 35,
+      "gamma": 0.1
+    },
+    "augmentation": false,
+    "checkpoint_completed_epochs": [
+      1,
+      11,
+      21,
+      31,
+      41,
+      51,
+      61,
+      70
+    ]
+  },
+  "selection_rule": {
+    "primary_metric": "mean per-case pressure relative L2 on all 99 validation cases, after averaging fixed point-subsample seeds 20260730 and 20260731 within case",
+    "secondary_metric": "mean per-case wall-shear-stress vector relative L2 under the same fixed evaluation",
+    "procedure": "Within each architecture, initialization, family, and label budget, choose the learning-rate and stored-epoch pair with the lowest primary metric.",
+    "tie_breaker": "If primary metrics are exactly equal, choose the earlier completed epoch, then the smaller learning rate.",
+    "symmetry": "Apply the identical grid and selection rule to scratch and pretrained arms.",
+    "non_finite_rule": "A guard-terminated learning-rate arm contributes its fully completed registered checkpoints; all later checkpoints are assigned infinite selection error.",
+    "fixed_evaluation_non_finite_rule": "A checkpoint that is non-finite on either fixed evaluation pass is ineligible; this does not remove other stored checkpoints from the arm."
+  },
+  "fixed_validation_evaluation": {
+    "sampling_resolution": 10000,
+    "seeds": [
+      20260730,
+      20260731
+    ],
+    "passes_per_checkpoint": 2,
+    "loader_rule": "Build the registered manifest dataset, set the validation loader epoch to zero, and iterate only the sequential validation sampler.",
+    "aggregation": "Average each metric across the two fixed point-subsample seeds within case, then average across the 99 cases.",
+    "coverage": "Every eligible registered checkpoint is evaluated; terminal arms have no candidates after their first guard."
+  },
+  "derived_quantities": {
+    "same_budget_gain": "G[a,f,n] = E[scratch,a,f,n] / E[pretrained,a,f,n]",
+    "half_label_ratio": "H[a,f] = E[pretrained,a,f,64] / E[scratch,a,f,128]",
+    "family_architecture_gain": "A[a,f] = geometric_mean_n(G[a,f,n])",
+    "architecture_interaction": "I[f] = A[mesh_transformer,f] / A[geotransolver,f]"
+  },
+  "prospective_decision_rules": {
+    "material_same_budget_benefit": "G >= 1.10",
+    "material_half_label_success": "H <= 0.95",
+    "field_safety": "At the half-label comparison, pretrained wall-shear-stress error may not exceed scratch error by more than 10%.",
+    "boundary_specific_increment": "I >= 1.10 on both families.",
+    "strong_validation_signal": "The paired case bootstrap 95% upper bound for H is below 1.0; this is descriptive because validation also selected hyperparameters.",
+    "optimization_horizon_gate": "A half-label comparison supports target-label efficiency only when neither selected checkpoint is the final registered epoch. Otherwise it supports fixed-exposure learning speed only and requires a prospectively extended horizon.",
+    "optimization_grid_flag": "A half-label comparison supports an optimized target-label-efficiency claim only when both selected learning rates are the interior grid value. A boundary selection may advance as within-grid pilot evidence, but its confirmation must refine the learning-rate bracket.",
+    "advance_to_confirmation": "Advance an architecture only if material half-label success, field safety, and the optimization-horizon gate hold on both families.",
+    "do_not_open_test": "The sealed tests remain unopened until confirmation seeds, hyperparameters, epoch, and final decision thresholds are frozen."
+  },
+  "interpretation_limits": [
+    "One source checkpoint and one target seed cannot establish a general transfer law.",
+    "A larger architecture interaction may reflect source-checkpoint quality as well as architecture.",
+    "Because SHIFT-SUV family identity has been inspected previously, this pilot cannot restore an untouched-family claim.",
+    "An unrelated-pretraining control would be required to isolate physics-specific transfer."
+  ]
+}

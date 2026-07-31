@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "analytic_result_before_any_learning_result",
+  "scientific_question": "Does the declared boundary-drive spectrum make aspect-ratio and screening changes distinguishable in response space?",
+  "task_reference": "rectangle_broadband_transfer_preregistration_2026-07-29.json",
+  "parameters": {
+    "target_aspect_ratio": 1.0,
+    "target_screening": 3.141592653589793,
+    "coordinates": ["log(aspect_ratio)", "log(screening)"],
+    "mode_support": [1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 22, 23, 24]
+  },
+  "metric": {
+    "definition": "G_ij = <partial B / partial theta_i, partial B / partial theta_j>_HS under the target observation measure and declared boundary-drive variances.",
+    "modal_response": "f(d,xi) sin(m pi y), with d=a sqrt((m pi)^2+lambda^2)",
+    "log_aspect_derivative_of_d": "d",
+    "log_screening_derivative_of_d": "d lambda^2 / ((m pi)^2+lambda^2)",
+    "direction_correlation": "rho = G_12 / sqrt(G_11 G_22)",
+    "standardized_condition_number": "(1+rho)/(1-rho)",
+    "interpretation": "rho near one means the two task directions produce nearly collinear first-order response changes and are hard to distinguish."
+  },
+  "results_on_fixed_mode_support": {
+    "designed_two_band_variance": {
+      "weight_law": "1 for modes 1-8 and 5.9217893970095155 for modes 17-24",
+      "direction_correlation": 0.5242450106447836,
+      "standardized_condition_number": 3.2038445097771224,
+      "gram_matrix": [
+        [0.18430296960367645, 0.01947480217801971],
+        [0.01947480217801971, 0.007487643610236122]
+      ]
+    },
+    "flat_variance": {
+      "weight_law": "1",
+      "direction_correlation": 0.681141266322828,
+      "standardized_condition_number": 5.272370140015976
+    },
+    "inverse_square_variance": {
+      "weight_law": "m^-2",
+      "direction_correlation": 0.9458101192002625,
+      "standardized_condition_number": 35.90725963009845
+    },
+    "inverse_fourth_power_variance": {
+      "weight_law": "m^-4",
+      "direction_correlation": 0.9901405905700462,
+      "standardized_condition_number": 201.85190651722186
+    }
+  },
+  "corroborating_complete_support": {
+    "mode_support": "1-24",
+    "inverse_square_direction_correlation": 0.9431095789553846,
+    "inverse_square_standardized_condition_number": 34.15530318243791,
+    "inverse_fourth_power_direction_correlation": 0.9901106869107729,
+    "inverse_fourth_power_standardized_condition_number": 201.23851565369972
+  },
+  "finite_source_displacement_corroboration": {
+    "definition": "Cosine between the exact finite response displacements B_P-B_T and B_G-B_T for the frozen source parameters.",
+    "designed_two_band_variance": {
+      "direction_correlation": 0.5826487436533735,
+      "angle_degrees": 54.36294237808912
+    },
+    "flat_variance": {
+      "direction_correlation": 0.7503503573191752,
+      "angle_degrees": 41.379263959528636
+    },
+    "inverse_square_variance": {
+      "direction_correlation": 0.959498691379067,
+      "angle_degrees": 16.362473505128648
+    },
+    "inverse_fourth_power_variance": {
+      "direction_correlation": 0.987359797127659,
+      "angle_degrees": 9.119545204540444
+    },
+    "scope": "Only the designed spectrum distance-matches P and G. The alternative spectra are used here solely to test whether the angular-confounding conclusion survives finite source displacements."
+  },
+  "numerical_verification": {
+    "method": "Gauss-Legendre quadrature in normalized streamwise coordinate; the transverse sine norm is integrated analytically.",
+    "quadrature_orders_checked": [64, 128, 256, 512, 1024],
+    "correlations_stable_to_reported_12_decimal_places": true
+  },
+  "scientific_conclusions": [
+    "The amplified high-frequency band is what makes aspect-ratio and screening directions well separated in the proposed response metric.",
+    "Smooth boundary spectra make those directions nearly collinear, so a null or unstable source ordering there would not by itself refute the transfer hypothesis.",
+    "A natural-spectrum follow-up must predict loss of discriminating power from the response metric or choose a task family with better-separated response tangents.",
+    "This rectangle tests aspect-ratio alignment versus screening alignment; it does not by itself test broad morphology reuse versus broad physics reuse."
+  ],
+  "interpretation_limits": [
+    "The metric is local at the declared target and describes first-order response changes.",
+    "It measures identifiability under one observation measure, not learned transfer.",
+    "A finite source displacement can depart from the tangent approximation; the exact response distances remain the finite-displacement control."
+  ]
+}

@@ -1,0 +1,293 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Configurable metric calculator on TensorDict inputs.
+
+Mirrors the TensorDict-based interface of :class:`LossCalculator`. Each
+named target field declared in ``target_config`` produces:
+
+- For ``"scalar"`` types: per-metric values (``l1``, ``l2``, ``mae`` by
+  default), keyed ``"<prefix>/<name>_<metric>"``.
+- For ``"vector"`` types: per-component values
+  (``"<prefix>/<name>_x_<metric>"`` etc.) plus aggregate magnitude values
+  (``"<prefix>/<name>_<metric>"``).
+
+Metrics are reported unweighted -- per-field weighting belongs in the
+loss, not in diagnostic summaries.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Literal, TypeAlias, cast
+
+import torch
+from jaxtyping import Float
+from omegaconf import DictConfig, OmegaConf
+from tensordict import TensorDict
+from utils import FieldType, align_scalar_shapes, validate_field_coverage
+
+### Recipe-wide alias for the metric-name enum that the dataset YAMLs use.
+MetricName: TypeAlias = Literal["mae", "l1", "l2"]
+
+
+### ---------------------------------------------------------------------------
+### Per-tensor metric kernels
+### ---------------------------------------------------------------------------
+
+
+def _mean_absolute_error(
+    pred: torch.Tensor, target: torch.Tensor
+) -> Float[torch.Tensor, ""]:
+    """Mean absolute error over all elements."""
+    return torch.mean(torch.abs(pred - target))
+
+
+def _relative_l1(
+    pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-8
+) -> Float[torch.Tensor, ""]:
+    """``sum|pred - target| / sum|target|``, computed over the spatial axis."""
+    abs_diff = torch.abs(pred - target)
+    if pred.ndim == 0:
+        return abs_diff / (torch.abs(target) + eps)
+    ### Sum over the spatial axis (treat all leading dims as batch).
+    spatial_axis = -1
+    num = torch.sum(abs_diff, dim=spatial_axis)
+    denom = torch.sum(torch.abs(target), dim=spatial_axis)
+    return torch.mean(num / (denom + eps))
+
+
+def _relative_l2(
+    pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-8
+) -> Float[torch.Tensor, ""]:
+    """``sqrt(sum diff^2) / sqrt(sum target^2)``, over the spatial axis."""
+    diff_sq = (pred - target) ** 2
+    if pred.ndim == 0:
+        return torch.sqrt(diff_sq) / (torch.sqrt(target**2) + eps)
+    spatial_axis = -1
+    num = torch.sqrt(torch.sum(diff_sq, dim=spatial_axis))
+    denom = torch.sqrt(torch.sum(target**2, dim=spatial_axis))
+    return torch.mean(num / (denom + eps))
+
+
+METRIC_FUNCTIONS: dict[MetricName, Callable[..., torch.Tensor]] = {
+    "mae": _mean_absolute_error,
+    "l1": _relative_l1,
+    "l2": _relative_l2,
+}
+
+### Default metrics computed when the user doesn't override `metrics:` in
+### the dataset YAML. Exposed as a constant so train.py can fall back to
+### the same list when the dataset YAML omits the block.
+DEFAULT_METRICS: tuple[MetricName, ...] = ("l1", "l2", "mae")
+
+
+def resolve_metrics(cfg: DictConfig) -> list[MetricName]:
+    """Resolve the recipe-side ``cfg.metrics`` list, or the default set.
+
+    ``metrics:`` is a recipe-level (not per-dataset) choice; both the
+    trainer and the inference companion read it the same way. Falls back
+    to :data:`DEFAULT_METRICS` when the key is unset.
+
+    The resolved list is validated against :data:`METRIC_FUNCTIONS` here so
+    a typo (e.g. ``rmse``) fails fast with a clear message rather than
+    surfacing later as a :class:`MetricCalculator` lookup error (which
+    still guards as a backstop).
+
+    Raises:
+        TypeError: If ``metrics:`` is set but is not a list.
+        ValueError: If any entry is not a known metric name.
+    """
+    metrics_cfg = OmegaConf.select(cfg, "metrics", default=None)
+    if metrics_cfg is None:
+        return list(DEFAULT_METRICS)
+    resolved = OmegaConf.to_container(metrics_cfg, resolve=True)
+    if not isinstance(resolved, list):
+        raise TypeError(
+            f"`metrics:` must be a list of metric names, got "
+            f"{type(resolved).__name__} ({resolved!r})."
+        )
+    unknown = [m for m in resolved if m not in METRIC_FUNCTIONS]
+    if unknown:
+        raise ValueError(
+            f"Unknown metric(s) {unknown!r} in `metrics:`; "
+            f"available: {list(METRIC_FUNCTIONS)!r}."
+        )
+    return cast("list[MetricName]", resolved)
+
+
+### ---------------------------------------------------------------------------
+### MetricCalculator
+### ---------------------------------------------------------------------------
+
+
+VECTOR_COMPONENTS = ("x", "y", "z", "w")
+
+
+class MetricCalculator:
+    """Per-field metric aggregator over `TensorDict` predictions.
+
+    Args:
+        target_config: ``{name: scalar|vector}`` mapping.
+        n_spatial_dims: Vector field dimensionality (used to label
+            components when ``> len(VECTOR_COMPONENTS)`` falls back to
+            integer indices).
+        metrics: Names of metrics to compute. Subset of
+            ``METRIC_FUNCTIONS``. Defaults to :data:`DEFAULT_METRICS`.
+        prefix: Optional prefix on the returned metric keys.
+    """
+
+    def __init__(
+        self,
+        target_config: dict[str, FieldType],
+        n_spatial_dims: int = 3,
+        metrics: Sequence[MetricName] | None = None,
+        prefix: str = "",
+    ) -> None:
+        ### `target_config` values are required to be lowercase per the
+        ### `FieldType` contract; copy verbatim so callers can mutate their
+        ### original without affecting us.
+        self.target_config: dict[str, FieldType] = dict(target_config)
+        self.n_spatial_dims = n_spatial_dims
+        self.metric_names = (
+            list(metrics) if metrics is not None else list(DEFAULT_METRICS)
+        )
+        self.prefix = prefix
+
+        for m in self.metric_names:
+            if m not in METRIC_FUNCTIONS:
+                raise ValueError(
+                    f"Unknown metric {m!r}; available {list(METRIC_FUNCTIONS)!r}"
+                )
+
+    def _make_key(self, *parts: str) -> str:
+        """Build a flat metric key, ``"<prefix>/<part1>_<part2>_..."``.
+
+        ``"_"`` joins the parts (e.g. ``"pressure_x_l2"``) because metric
+        names are leaf-level dashboard entries; the optional ``prefix/``
+        carries the namespacing. Compare with
+        :class:`LossCalculator._make_key`, which uses ``"/"`` everywhere
+        because loss keys feed into TensorBoard's nested-tag hierarchy
+        (``"loss/surface/pressure"``).
+        """
+        key = "_".join(parts)
+        return f"{self.prefix}/{key}" if self.prefix else key
+
+    def expected_keys(self) -> list[str]:
+        """The exact key set :meth:`__call__` produces, derivable without data.
+
+        Vector fields contribute one key per spatial component, the true
+        joint-component aggregate (bare name), and the direction-blind
+        magnitude family (``<name>_mag``); scalars contribute one key per
+        metric.
+        Lets callers pre-size accumulators identically on every rank --
+        e.g. ``infer.py`` zero-fills its running sums with these keys so
+        the cross-rank all-reduce packs the same tensor length even on a
+        rank whose sampler shard was empty.
+        """
+        keys: list[str] = []
+        for name, field_type in self.target_config.items():
+            if field_type == "vector":
+                for i in range(self.n_spatial_dims):
+                    comp = (
+                        VECTOR_COMPONENTS[i] if i < len(VECTOR_COMPONENTS) else str(i)
+                    )
+                    keys.extend(
+                        self._make_key(name, comp, m) for m in self.metric_names
+                    )
+                keys.extend(
+                    self._make_key(name, "mag", m) for m in self.metric_names
+                )
+            keys.extend(self._make_key(name, m) for m in self.metric_names)
+        return keys
+
+    def _metrics_for_tensor(
+        self, pred: torch.Tensor, target: torch.Tensor, name_parts: tuple[str, ...]
+    ) -> dict[str, torch.Tensor]:
+        return {
+            self._make_key(*name_parts, m): METRIC_FUNCTIONS[m](pred, target)
+            for m in self.metric_names
+        }
+
+    def __call__(
+        self,
+        pred: TensorDict,
+        target: TensorDict,
+    ) -> TensorDict:
+        """Compute per-field metrics over a TensorDict pred / target pair.
+
+        Args:
+            pred: TensorDict of predictions, one leaf per target field.
+            target: TensorDict of the same structure as ``pred``.
+
+        Returns:
+            0-D ``TensorDict`` (``batch_size=[]``) keyed by
+            ``"<prefix>/<name>_<metric>"`` for scalar fields and by
+            ``"<prefix>/<name>_<comp>_<metric>"`` plus
+            ``"<prefix>/<name>_<metric>"`` (aggregate over all
+            components jointly -- true vector metric) and
+            ``"<prefix>/<name>_mag_<metric>"`` (direction-blind
+            magnitude comparison) for vector fields. Slash-containing keys are stored verbatim;
+            TensorDict only treats ``/`` as nested when the caller
+            explicitly invokes ``flatten_keys("/")``.
+        """
+        validate_field_coverage(self.target_config, pred, target)
+
+        ### Build the per-field bag as a plain dict during the loop so
+        ### the inner ``out.update(...)`` calls stay simple, then wrap
+        ### into a 0-D TensorDict at the boundary so callers get
+        ### TensorDict's batched ops (``.detach()``, ``.add_()``, ...).
+        out: dict[str, torch.Tensor] = {}
+        with torch.no_grad():
+            for name, field_type in self.target_config.items():
+                p, t = pred[name], target[name]
+                if field_type == "scalar":
+                    p, t = align_scalar_shapes(p, t)
+                    out.update(self._metrics_for_tensor(p, t, (name,)))
+                else:  # vector
+                    n_components = p.shape[-1]
+                    ### Per-component metrics.
+                    for i in range(n_components):
+                        comp = (
+                            VECTOR_COMPONENTS[i]
+                            if i < len(VECTOR_COMPONENTS)
+                            else str(i)
+                        )
+                        out.update(
+                            self._metrics_for_tensor(p[..., i], t[..., i], (name, comp))
+                        )
+                    ### Aggregate TRUE vector metric: all components jointly
+                    ### (norms over the flattened field -- Frobenius for l2),
+                    ### so direction errors count. Keyed as the bare field
+                    ### name; this is the headline aggregate.
+                    out.update(self._metrics_for_tensor(p, t, (name,)))
+                    ### Direction-blind magnitude comparison, kept under an
+                    ### explicit "mag" component key. NEVER the headline: a
+                    ### prediction with correct magnitude and arbitrary
+                    ### direction scores 0 here (pre-2026-07-17 this was the
+                    ### bare-name aggregate -- external review finding).
+                    p_mag = torch.linalg.vector_norm(p, dim=-1)
+                    t_mag = torch.linalg.vector_norm(t, dim=-1)
+                    out.update(self._metrics_for_tensor(p_mag, t_mag, (name, "mag")))
+
+        return TensorDict(out)
+
+    def __repr__(self) -> str:
+        fields_str = ", ".join(f"{n}:{t}" for n, t in self.target_config.items())
+        return (
+            f"MetricCalculator(fields=[{fields_str}], "
+            f"metrics={self.metric_names}, prefix='{self.prefix}')"
+        )

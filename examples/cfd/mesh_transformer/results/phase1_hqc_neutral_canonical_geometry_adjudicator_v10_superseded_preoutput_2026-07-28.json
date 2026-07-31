@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T07:51:34Z",
+  "status": "ADJUDICATOR_V10_CANDIDATE_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v10.py",
+      "sha256": "dda4a283b4122f4e6af48bc3dcdf44d59252cf8ba00659783c739c06ce1088d0",
+      "audit_output_schema_version": 7
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v10.py",
+      "sha256": "52f8bae88c2e54a8a5296d7bfd0a9cd457b18de238b05c77b94344933dc612a9",
+      "result": "58 passed before two independent exact-hash HOLD reviews"
+    }
+  },
+  "validated_v9_repair": "Literal target_pressure and HQC_verdict lines in the required allowlisted Slurm log now failed closed, and normal wrapper/job304002-compatible ASCII output passed.",
+  "definite_issues": [
+    {
+      "channel": "Control, format, and separator characters bypassed log vocabulary scanning",
+      "kind": "false pass",
+      "evidence": [
+        "tar followed by ASCII DEL followed by get_pressure passed; DEL is a control character admitted by the incorrect ord(character)>=32 predicate.",
+        "Equivalent U+0085 C1-control and U+200B zero-width-format variants passed.",
+        "A tab-split target label and a literal backslash-u escaped target label also passed."
+      ],
+      "required_repair": "Restrict the known wrapper log to printable ASCII plus LF, reject escape metacharacters, and scan a separator-free normalized representation as well as literal text."
+    },
+    {
+      "channel": "Substring-only success markers",
+      "kind": "false pass",
+      "evidence": "A log with real failure lines COMPLETED_UNITS=0/1 rc=1 and EXIT_CODE=1 plus NOT_..._BAD lines containing the expected success strings as substrings passed.",
+      "required_repair": "Require exact ordered completed-unit lines, one exact exit-code line, one done line with a canonical timezone-aware timestamp, and the exact final three-line success sequence."
+    },
+    {
+      "channel": "Unallowlisted empty-directory path metadata",
+      "kind": "false pass",
+      "evidence": "Adding an empty directory named target_pressure=[1,2,3] passed because only files were compared with the closed allowlist.",
+      "required_repair": "Require the complete directory set to equal artifacts and sbatch_logs."
+    },
+    {
+      "channel": "Unbound copied-manifest and bundle-root names",
+      "kind": "false pass",
+      "evidence": "Renaming the excluded manifest itself to target_pressure=[1,2,3].sha256 passed; the copied root name was likewise unconstrained metadata.",
+      "required_repair": "Bind the manifest to manifest.sha256 and the copied root basename to the frozen diagnostic/job/date template."
+    }
+  ],
+  "scientific_effect": "Revision 10 was not frozen and no schema-v5 diagnostic output existed. It produced no publication pass, canonical-repair inference, or H-QC verdict.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v11.py",
+      "sha256": "f32f8116965aaac272673fa7f3cd86c3b00d0683c76b7f8508a4815cd0976062",
+      "audit_output_schema_version": 8
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v11.py",
+      "sha256": "83a7e05aa2615fa870eff999f5def7b4c3244bc9f87c33653feb9250d53d4e59",
+      "result": "68 passed; Ruff check/format, py_compile, and CLI help passed; independent exact-hash re-audits pending"
+    }
+  }
+}

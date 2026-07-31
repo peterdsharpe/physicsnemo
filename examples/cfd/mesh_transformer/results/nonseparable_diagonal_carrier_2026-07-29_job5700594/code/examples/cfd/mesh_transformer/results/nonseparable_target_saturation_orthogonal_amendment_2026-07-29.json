@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "prospective_protocol_amendment_before_any_orthogonal_design_learning_result",
+  "amends": "nonseparable_target_saturation_preregistration_2026-07-29.json",
+  "reason_for_amendment": "The frozen Gaussian input matrices were inspected before the formal seed matrix. At the eight-field budget their whitened condition numbers were 30.6717, 2646.8682, and 15.5896. Field count therefore failed to control directional coverage and would confound the saturation curve with random experimental-design conditioning.",
+  "learning_results_seen_before_amendment": {
+    "capacity_seed17_relative_rms": 0.004235151223838329,
+    "gaussian_target_seed17": {
+      "one_field_relative_rms": 1.128248691558838,
+      "eight_field_relative_rms": 0.03540074825286865
+    },
+    "use_in_amended_claim": "The capacity result remains a capability control. The Gaussian target results are exploratory and excluded from the amended saturation verdict."
+  },
+  "amended_target_design": {
+    "construction": "For each seed, draw one 8 by 8 standard-Gaussian matrix, take a QR factorization, canonicalize column signs, and use sqrt(8) times the first n rows of the orthogonal factor at budget n.",
+    "budgets": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "seeds": [
+      17,
+      29,
+      43
+    ],
+    "nested": true,
+    "whitened_nonzero_singular_values": "All equal to sqrt(8) at every budget.",
+    "eight_field_condition_number": 1.0,
+    "scientific_purpose": "Vary only the dimension of target excitation coverage while holding drive energy and conditioning fixed."
+  },
+  "unchanged_instrument_and_gates": {
+    "capacity": "At most 0.5% direct-operator relative response error.",
+    "target_threshold": "Eight-field geometric-mean target-only error at most 1.5%.",
+    "one_field_not_saturated": "One-field geometric-mean target-only error at least 2.5%.",
+    "material_improvement": "Four-field error at most 80% and eight-field error at most 50% of one-field error.",
+    "monotonicity": "Geometric-mean error strictly decreases at every budget."
+  },
+  "decision_rule": "Only the orthogonal-design seed matrix may decide the saturation gate. Gaussian pilot results remain an explicit invalid-design record.",
+  "scope": "Designed orthogonal drives test label efficiency under active experimental design. Passive random-drive efficiency is a separate question and is not inferred."
+}

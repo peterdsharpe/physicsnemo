@@ -1,0 +1,150 @@
+{
+  "amendment_scope": {
+    "changes_scientific_decision_rule": false,
+    "changes_scored_predictions_or_targets": false,
+    "changes_source_or_query_selection": false,
+    "changes_training_or_checkpoint": false,
+    "purpose": "Replace a false finite-precision normal-frame assertion and strengthen pre-publication blindness before the first deciding H-QC artifact exists."
+  },
+  "artifact_kind": "phase1_hqc_preregistration_amendment",
+  "blindness": {
+    "all_four_json_and_npz_lanes_must_be_complete_and_hashed": true,
+    "failed_v1_canary_emitted_no_deciding_artifact_or_headline_metric": true,
+    "fresh_v2_remote_task_did_not_exist_at_freeze": true,
+    "no_deciding_producer_output_existed_at_freeze": true,
+    "prepublication_metric_mismatch_errors_omit_reported_and_recomputed_values": true,
+    "producer_logs_exclude_headline_metrics": true,
+    "reducer_must_publish_once_before_headline_metrics_are_inspected": true
+  },
+  "correction_evidence": {
+    "all36_normal_frame_scan": {
+      "aggregate": {
+        "arm_count": 2,
+        "case_count": 36,
+        "max_component_abs_delta": 0.0032272455282509327,
+        "max_vector_l2_delta": 0.003403784247479692,
+        "min_dot": 0.9999942238869098,
+        "resolution_count": 5,
+        "row_count": 360,
+        "total_component_abs_delta_gt_v1_atol_count": 5347058,
+        "total_nonpositive_dot_count": 0,
+        "total_selected_cell_arm_rows": 5580000
+      },
+      "path": "results/phase1_hqc_normal_frame_scan_2026-07-27.json",
+      "sha256": "38462c2071a59599d32d36cd8700a7f457953e7d64e5dfc6ae7b6eecdd3aed68",
+      "status": "DIAGNOSTIC_ONLY_NO_MODEL_OUTPUT_INSPECTED"
+    },
+    "failed_canary": {
+      "completed_units": "0/4",
+      "failure_bundle_manifest_path": "results/hqc_failed_canary_job303767_2026-07-27/manifest.sha256",
+      "failure_bundle_manifest_sha256": "1ac715fa0b0fa3047d59fcdcbb114c93dbe02a528182e1487f1367f182e90d55",
+      "job_id": 303767,
+      "lane_json_or_npz_artifact_count": 0,
+      "remote_status": "FAILED",
+      "slurm_exit_code": "1:0",
+      "status_file_sha256": "fc4778ca214a63317e141806ae20db6d6ffe54dc4c80362ff1893dd455d6d06d"
+    },
+    "run118_archive_replay": {
+      "archived_vs_current_primary_pipeline_normal_rows": 10000,
+      "job_id": 303804,
+      "negative_cosine_count": 0,
+      "path": "results/hqc_normal_diagnostic_run118_job303804_2026-07-27.json",
+      "saved_vs_current_max_component_abs_delta": 0.0,
+      "sha256": "f6bfcc0faf2c61de84a60a2194bbafde250ce97363b08f3df7701a0c4f8da050",
+      "status": "PASSED_DIAGNOSTIC_ONLY"
+    }
+  },
+  "corrected_normal_contract": {
+    "archive_parity": "Compare saved 10k boundary normals to the current primary-arm post-transform 10k pipeline normals, not to raw native normals.",
+    "archive_pipeline_normal_abs_tolerance": 0.000002,
+    "fixed_center_q_pipeline_normals_exact_across_k": true,
+    "model_input_definition": "The actual model input is each arm's stored post-transform pipeline normal.",
+    "npz_fields_added": [
+      "primary_pipeline_normals_float32",
+      "fixed_center_pipeline_normals_float32"
+    ],
+    "physical_metric_definition": "Native raw-coordinate unit normals and native triangle areas remain canonical for WSS-normal-energy and scaled-subset pressure-force metrics.",
+    "pipeline_normal_geometry_abs_tolerance": 5e-7,
+    "pipeline_normal_unit_abs_tolerance": 0.000005,
+    "pipeline_validation": [
+      "finite",
+      "unit length within the frozen tolerance",
+      "matches the direct cross-normalization of that arm's transformed points and connectivity",
+      "strictly positive rowwise dot product with the native raw-coordinate normal"
+    ],
+    "primary_equals_fixed_center_at_k10000_exactly": true,
+    "reducer_recomputation": [
+      "independently checks pipeline-normal finite/unit/native-orientation diagnostics from NPZ arrays",
+      "requires fixed-center Q pipeline normals to be exact across all K",
+      "requires primary and fixed-center pipeline normals to be exact at K=10000",
+      "recomputes all deciding and physical metrics from raw native normals and areas"
+    ]
+  },
+  "frozen_at_utc": "2026-07-28T03:58:12Z",
+  "hypothesis": {
+    "canonical_json_sha256": "a2e1fd6d626fd243651a5911f8b5acccc40a628e97f6969d5d2698cdd4fa6314",
+    "id": "H-QC",
+    "inherit_exactly_from_v1": true
+  },
+  "implementation": {
+    "execution_source_tree_manifest_sha256": "fa6a7b683fa9aa02e4537ef69e8e977906df7c9fa6964cb759edfcee8d7b90cd",
+    "focused_tests_passed": 38,
+    "frozen_contract_canonical_json_sha256": "7c9447198723afe13e3bc97ad0672849b70ae0c4ae8704454828bf8ffab7c0ee",
+    "notebook_snapshot": {
+      "path": "book/18-notebook.qmd",
+      "sha256": "60975f13e408529dc8974f9978dd5a04673aa2dba6a6ab5e3d84bd2580ed4108"
+    },
+    "producer": {
+      "path": "studies/drivaerml_trace_fixed_query_audit.py",
+      "schema_version": 2,
+      "sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f"
+    },
+    "producer_test": {
+      "path": "tests/test_drivaerml_trace_fixed_query_audit.py",
+      "sha256": "53014009c1920ad2b85e26bbf2b4029b5230b093443025bc0f2b5fd07fa6c056"
+    },
+    "reducer": {
+      "frozen_producer_sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f",
+      "path": "studies/phase1_hqc_verdict.py",
+      "sha256": "3f9d9d002cce8fcc6eedb2be6f2b4303f87a77899dccf9d1294be5cd03882d28"
+    },
+    "reducer_test": {
+      "path": "tests/test_phase1_hqc_verdict.py",
+      "sha256": "5aff37615f284e62cf06d9b09d0b288a271fc645383606552b171eb618aadd21"
+    },
+    "remote_task_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-hqc-fixed-query-v2",
+    "wrapper_freeze_policy": "The wrapper contains this preregistration's SHA-256, so its final hash is recorded only in the subsequent launch manifest to avoid a circular hash dependency."
+  },
+  "inherited_scientific_contract": {
+    "cohort_canonical_json_sha256": "ec947a48495b1ddcaa9ec81e96ad299a4f34e438940d57fe5f053db47aecdf9d",
+    "decision_rule_canonical_json_sha256": "33f16f471c35afee68259ef293a0d335c812cec026f43e8c4bdb026677fae62c",
+    "inherits_exactly": [
+      "hypothesis and named checkpoint scope",
+      "36-case cohort, ordering, historical starts, and reader indices",
+      "K={2500,5000,10000,20000,40000}, baseline K=10000, and fixed Q=S_2500",
+      "source/query construction and both centering arms",
+      "uniform and area-weighted metric definitions",
+      "eligibility, support, futility, mixed, and physical-wording thresholds",
+      "all dataset, checkpoint, normalization, historical-metric, and execution-source hashes",
+      "publish-once reducer requirement"
+    ],
+    "source_path": "results/phase1_hqc_preregistration_2026-07-27.json",
+    "source_sha256": "ffe42b6113b1ff6e11ce8da4e1b219b6655a1d38278e9542563979c6a0a83638",
+    "source_status": "FROZEN_BEFORE_DECIDING_OUTPUT"
+  },
+  "preoutput_edits": [
+    "Replace raw-native versus post-transform pipeline-normal componentwise equality with separate transformed-geometry, unit-length, and positive-orientation checks.",
+    "Compare archived 10k normals against current primary pipeline normals and preserve both per-arm pipeline-normal arrays for independent reducer validation.",
+    "Keep all physical metrics on raw native normals and areas.",
+    "Prevent a pre-publication JSON/NPZ mismatch exception from disclosing reported or recomputed deciding metric values."
+  ],
+  "schema_version": 2,
+  "status": "FROZEN_BEFORE_DECIDING_OUTPUT",
+  "supersedes_for_execution": {
+    "reason": "V1 job 303767 failed on a false float32 normal-frame assertion before publishing any deciding lane artifact; v2 corrects only that instrumentation contract.",
+    "v1_launch_manifest_path": "results/phase1_hqc_launch_manifest_2026-07-27.json",
+    "v1_launch_manifest_sha256": "2318c29c6a0d43242b4b4100b6a956da97c86e1f606fec3d0a92d0af4220803",
+    "v1_preregistration_path": "results/phase1_hqc_preregistration_2026-07-27.json",
+    "v1_preregistration_sha256": "ffe42b6113b1ff6e11ce8da4e1b219b6655a1d38278e9542563979c6a0a83638"
+  }
+}

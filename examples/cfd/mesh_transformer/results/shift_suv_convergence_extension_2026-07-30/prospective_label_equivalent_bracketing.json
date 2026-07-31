@@ -1,0 +1,124 @@
+{
+  "schema_version": 3,
+  "title": "Prospective bracketing of the target-label equivalent of pretraining",
+  "frozen_at": "2026-07-30T13:40:02-04:00",
+  "amended_at": "2026-07-30T14:45:04-04:00",
+  "amendment": {
+    "original_sha256": "15036528a35cb7c9038e28f20d1c3cfaed6c69a3207430c578f1be6f4e78441b",
+    "reason": "The estimand was defined per architecture and target family, but the original activation gate required a persistent gain on both families. That would leave a real family-conditional gain unmeasured.",
+    "correction": "Activate and bracket each architecture-family cell that independently passes the persistent material-gain rule. Reserve a broad label-saving claim for replicated savings on both families, and report any one-family result only as family-conditional.",
+    "information_boundary": "This correction was made while the convergence extension was still running and without inspecting any continuation loss, validation metric, or test result."
+  },
+  "materiality_amendment": {
+    "amended_from_sha256": "2d95708776ca3ed098df0c1dd760e82ff8d6acf451064f0897599f0f95ab213c",
+    "reason": "If scratch-80 matched pretrained-64, the original [64, 80] bracket could not decide the registered materiality claim that pretraining is worth more than 5% of the 64-case target budget. Its lower bound always included an immaterial saving.",
+    "correction": "On the low branch only, add scratch-67 after scratch-80 matches. Because N_equiv is an integer, scratch-67 matching bounds the saving at 1-3 cases, while scratch-67 not matching proves N_equiv >= 68 and therefore a saving of at least 4 cases, which exceeds 5% of 64.",
+    "information_boundary": "This correction and the pilot-only forecast below were frozen while the convergence extension was still running and without inspecting any continuation loss, validation metric, or test result."
+  },
+  "information_boundary": "Written while the pretrained-64 versus scratch-128 convergence extension was still running. No convergence-extension loss, validation metric, or test result was inspected.",
+  "status": "conditional future experiment; not launched",
+  "scientific_question": "If a same-budget pretraining gain persists but does not replace all 64 additional target vehicles, how many target-only training vehicles is that gain actually worth?",
+  "estimand": {
+    "definition": "For each architecture and target family, N_equiv is the smallest nested scratch-training sample count whose stabilized pressure error is no larger than the stabilized pretrained-64 pressure error at the same target-update budget.",
+    "label_value_of_pretraining": "N_equiv - 64 target vehicles.",
+    "scope": "A validation-only, protocol-specific label equivalent. It is not a universal data-efficiency constant."
+  },
+  "activation_gate": {
+    "activate": "For each architecture-family cell, activate if the architecture fails the half-label gate and that cell passes the prospectively amended persistent material same-budget-gain rule.",
+    "do_not_activate": "If the half-label gate passes, confirm it across seeds and source checkpoints. Do not bracket a cell that passes the null-or-immaterial same-budget rule; it has no material positive label equivalent under this source protocol.",
+    "family_scope": "If only one target family activates, run and interpret only that family. This can support a family-conditional saving after replication, not a broad source-reuse claim."
+  },
+  "nested_sample_counts": {
+    "existing": [
+      64,
+      128
+    ],
+    "first_new_count": 96,
+    "lower_follow_up_count": 80,
+    "materiality_threshold_count": 67,
+    "upper_follow_up_count": 112,
+    "construction": "Use the first N cases from the exact deterministic ordering in shift_suv_adaptation_design.py: sort each family's source-training cases by SHA256('shift-suv-adaptation-pilot-v1\\0' + family + '\\0' + case_id). This is the ordering that generated the existing nested 64- and 128-case subsets. No case may be selected by geometry, label, or validation performance.",
+    "case_list_sha256": {
+      "hash_definition": "SHA256 of lexicographically sorted case IDs joined by newline, including a final newline.",
+      "estate": {
+        "67": "a8742cc2b8fc54c584de75dfbded43132980a2495dd624918eb93763b10253d0",
+        "80": "47c866a93b730b1c52e197e82bbc078feb3499fcd1d934470c5c567cf1eb9acc",
+        "96": "3dc8f13d7272e799b3cad90c3787181ed3ec6c6bc54f2a932b2020e234fd2f5f",
+        "112": "01deaf24f89f973645796abaa31a755cb78aaa43311201419ac285422d753e6c"
+      },
+      "fastback": {
+        "67": "ee0fe94b62c5faca1ef81e5b7c406f07156cad5600642f9092fa28ce1e0747f4",
+        "80": "42b1d6666723d8b18263309f6e29bd5450339237339b46c5a658b3e9acd4d36a",
+        "96": "f774806ff5e0a0b09914c8143655c86d5ae03497a8b9b2773ff0511ce3a84edb",
+        "112": "ebc72d72331dcc6deb612147ee836747e916eb486d8ad552a5ca3f68bcc4d4af"
+      },
+      "verification": "The same ordering exactly reproduced the existing train_64 and train_128 sets for both families, reproduced the previously frozen 80/96/112 hashes, and all six counts were strictly nested."
+    }
+  },
+  "adaptive_rule": [
+    "For each activated architecture-family cell, train and stabilize scratch-96 first.",
+    "For that cell, if scratch-96 pressure error is no larger than pretrained-64 error on both full-validation and cross-fit reductions, train scratch-80.",
+    "If scratch-80 also matches pretrained-64, train scratch-67 to decide the registered 5%-of-64 materiality threshold.",
+    "For that cell, if scratch-96 pressure error is larger than pretrained-64 error on either reduction, train scratch-112.",
+    "Each cell follows only its selected path: 96 to 112, or 96 to 80 and then to 67 only if 80 matches. Different cells may select different paths."
+  ],
+  "controls": {
+    "target_updates": "Use the same final target-update budget as the convergence extension. If an epoch boundary cannot hit it exactly, stop by optimizer step rather than changing the sample count.",
+    "optimization": "Use the same continuation-rate grid, model-selection protocol, plateau gate, and outward-learning-rate-flank rule as the convergence extension.",
+    "validation": "Use the same 99 validation cases and two fixed point samples. Full-validation selection is descriptive; the frozen five-fold case cross-fit may block but not create a conclusion.",
+    "field_safety": "Wall-shear-stress error must not worsen by more than 10% relative to the pretrained-64 reference.",
+    "test_policy": "All SHIFT-SUV test cases remain sealed."
+  },
+  "monotonicity_gate": {
+    "requirement": "Across every evaluated nested scratch count, pressure error must be nonincreasing with sample count within a 2% tolerance in both full-validation and cross-fit reductions.",
+    "failure_interpretation": "A larger target set performing materially worse means optimization or seed noise dominates the learning curve; N_equiv is not identifiable from these runs and no interpolation is allowed."
+  },
+  "pilot_only_forecast": {
+    "status": "A non-decision forecast from the completed epoch-70 parent pilot; all parent curves were still improving and the continuation result was not inspected.",
+    "method": "For each architecture-family cell, fit the two-point local scratch-only law error(N) proportional to N^(-alpha) from N=64 and N=128, then solve N_equiv = 64 * G_64^(1/alpha) using the pilot same-budget gain G_64.",
+    "cells": [
+      {
+        "architecture": "mesh_transformer",
+        "family": "estate",
+        "alpha": 0.410136,
+        "G_64": 1.026842,
+        "predicted_N_equiv": 68.27
+      },
+      {
+        "architecture": "mesh_transformer",
+        "family": "fastback",
+        "alpha": 0.415606,
+        "G_64": 1.072619,
+        "predicted_N_equiv": 75.759
+      },
+      {
+        "architecture": "geotransolver",
+        "family": "estate",
+        "alpha": 0.259372,
+        "G_64": 1.148781,
+        "predicted_N_equiv": 109.25
+      },
+      {
+        "architecture": "geotransolver",
+        "family": "fastback",
+        "alpha": 0.287425,
+        "G_64": 1.184689,
+        "predicted_N_equiv": 115.415
+      }
+    ],
+    "interpretation": "The adaptive 80/96/112 counts straddle the pilot forecasts, but the MeshTransformer-estate forecast lies close enough to the materiality boundary that scratch-67 is required for a decisive low-branch claim."
+  },
+  "prospective_brackets": {
+    "scratch_67_matches": "Activation establishes that scratch-64 does not match. If scratch-67 matches, integer N_equiv is in [65, 67], so pretraining is worth 1-3 target vehicles and is immaterial under the registered greater-than-5%-of-64 rule.",
+    "scratch_67_does_not_match_but_scratch_80_matches": "Integer N_equiv is in [68, 80], so pretraining is worth 4-16 target vehicles and clears the registered materiality threshold before seed replication.",
+    "scratch_80_does_not_match_but_scratch_96_matches": "Integer N_equiv is in [81, 96], so pretraining is worth 17-32 additional target vehicles.",
+    "scratch_96_does_not_match_but_scratch_112_matches": "Integer N_equiv is in [97, 112], so pretraining is worth 33-48 additional target vehicles.",
+    "scratch_112_does_not_match_but_scratch_128_matches": "Integer N_equiv is in [113, 128], so pretraining is worth 49-64 additional target vehicles.",
+    "scratch_128_does_not_match": "N_equiv lies above 128 and is not bracketed by this study. This does not retroactively pass the original half-label gate, whose 5% materiality and uncertainty requirements remain controlling."
+  },
+  "decision": {
+    "broad_material_partial_saving": "Advance a broad partial label-saving claim only if the identified integer bracket implies N_equiv >= 68 on both target families and survives independent target-training seeds.",
+    "family_conditional_partial_saving": "If the same threshold and replication rule passes on exactly one family, report a family-conditional saving only; do not average it with or generalize it over the other family.",
+    "architecture_claim_limit": "Different single-seed brackets between architectures motivate replication; they do not establish that one architecture transfers better."
+  }
+}

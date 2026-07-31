@@ -1,0 +1,89 @@
+{
+  "schema_version": 2,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_launch_environment_supplement",
+  "status": "FROZEN_BEFORE_REMOTE_TASK_CREATION_OR_SCHEMA_V5_OUTPUT",
+  "frozen_at_utc": "2026-07-28T08:23:33Z",
+  "supersedes": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v1_2026-07-28.json",
+    "sha256": "f34a729e4d2972820f74e4d76d473ba0050a677010620306fb31cad7a9ccb3af",
+    "reason": "With Slurm --export=ALL, an inherited caller value takes precedence over an explicit NAME=value. Revision 1 did not set or verify the sbatch caller environment, so an inherited empty or zero PYTHONDONTWRITEBYTECODE could permit the task-local __pycache__ that the publication gate correctly rejects."
+  },
+  "bound_launch_manifest": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_manifest_v5_2026-07-28.json",
+    "sha256": "e6eb2a92fc01b100ab5e3b40b47d03263f0e6330b72e8f7a804bf4e65add17f2"
+  },
+  "bound_wrapper": {
+    "path": "studies/drivaerml_hqc_neutral_canonical_geometry_v5_aga.sbatch",
+    "sha256": "adc6bc6deabe3838113cef935fcc3de26b34e0e10bba077d12c755e2a01f01ce"
+  },
+  "bound_publication_gate": {
+    "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v13.py",
+    "sha256": "8eb10838862342dd26d77cf9a6b4650c7ba9b0d46282d78e45b26f32d82a2091",
+    "test_path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v13.py",
+    "test_sha256": "27e741ac2bf0943d686c6bb86431878048b990d488df344e33d0521670a0d1ae",
+    "audit_output_schema_version": 10,
+    "test_result": "94 passed; Ruff format/check and py_compile passed"
+  },
+  "remote_task": {
+    "logical_path": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-hqc-neutral-canonical-v5",
+    "expected_physical_path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-hqc-neutral-canonical-v5",
+    "must_be_unused_before_staging": true,
+    "precreated_directories": [
+      "artifacts",
+      "sbatch_logs"
+    ],
+    "other_directories_permitted": [],
+    "python_may_execute_in_task_before_submission": false
+  },
+  "frozen_submission": {
+    "working_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-hqc-neutral-canonical-v5",
+    "argv": [
+      "env",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "PYTHONWARNINGS=default",
+      "LC_ALL=C",
+      "sbatch",
+      "--parsable",
+      "--export=ALL,PYTHONDONTWRITEBYTECODE=1,PYTHONWARNINGS=default,LC_ALL=C",
+      "drivaerml_hqc_neutral_canonical_geometry_v5_aga.sbatch"
+    ],
+    "required_sbatch_caller_environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONWARNINGS": "default",
+      "LC_ALL": "C"
+    },
+    "required_job_environment": {
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONWARNINGS": "default",
+      "LC_ALL": "C"
+    },
+    "slurm_all_precedence_handling": "The leading env assignments atomically set the sbatch caller values to the same values repeated in --export. Therefore Slurm's documented ALL precedence cannot substitute inherited empty, zero, localized, or warning-suppressing values."
+  },
+  "rationale": "The frozen diagnostic dynamically imports the staged producer. Without effective PYTHONDONTWRITEBYTECODE=1, Python creates a task-root __pycache__, as completed job 304002 demonstrates. PYTHONWARNINGS=default and LC_ALL=C make the exact warning and coreutils log grammar deterministic. The publication gate requires the complete copied directory set to contain only artifacts and sbatch_logs, so launch prevention must be explicit rather than deleting or selectively omitting post-run members.",
+  "post_run_copy_contract": {
+    "copy_complete_remote_task": true,
+    "omit_or_delete_remote_members": false,
+    "local_root_template": "results/hqc_neutral_canonical_geometry_four_canaries_v5_job{job_id}_2026-07-28",
+    "manifest_basename": "manifest.sha256",
+    "canonical_manifest": "ASCII; root-relative ./ paths; lexicographically sorted; one lowercase SHA-256 and filename per LF-terminated line; manifest excludes itself",
+    "adjudication_output_template": "results/phase1_hqc_neutral_canonical_geometry_adjudication_v13_job{job_id}_2026-07-28.json",
+    "adjudication_output_must_be_exact_sibling_of_copied_root": true,
+    "copied_bundle_must_have_no_extended_attributes": true
+  },
+  "prelaunch_checks": [
+    "AGA private DNS and SSH resolve.",
+    "The logical and physical task paths are both absent before staging.",
+    "The remote execution source-tree digest matches the frozen launch manifest.",
+    "Every staged root file and prior-artifact sidecar matches the frozen manifest.",
+    "Only artifacts and sbatch_logs directories exist before submission.",
+    "No Python command is run from or against a staged task-local module before sbatch.",
+    "The exact env-plus-sbatch argv above is used from the exact working directory and the returned job ID is numeric."
+  ],
+  "preoutput_state": {
+    "schema_v5_job_submitted": false,
+    "schema_v5_remote_task_existed": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "aga_dns_resolved_at_freeze": false
+  }
+}

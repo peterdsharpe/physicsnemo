@@ -1,0 +1,2160 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-07-28T01:47:38.759239+00:00",
+  "status": "PASSED_PRODUCTION_COMMON_MASTER_AUDIT",
+  "scope": "Per-case full curated CFD vehicle meshes are frozen integration masters. No transfer is performed between different cars.",
+  "warnings": [
+    "The cyclic representation is a sparse scattered triangle support, not a full-cover remesh and not a literal overlap surface.",
+    "The centroidal cover is a deterministic reconstruction design, not a trained-model result.",
+    "P0 projection floors quantify representation error only; they do not estimate model error.",
+    "Ambient centroid distance is not geodesic surface distance."
+  ],
+  "design": {
+    "requested_k": 40000,
+    "synthetic_k": null,
+    "explicit_cyclic_replicates": {
+      "run_1": [
+        {
+          "start": 11914080,
+          "seed": 20300727
+        },
+        {
+          "start": 11878329,
+          "seed": 20300727
+        },
+        {
+          "start": 14546186,
+          "seed": 20300727
+        },
+        {
+          "start": 2529054,
+          "seed": 20300727
+        }
+      ]
+    },
+    "candidate_multiplier": 16,
+    "lloyd_iterations": 2,
+    "normal_aware_assignment": {
+      "squared_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+      "lambda": "sqrt(per_case_master_area / k)"
+    },
+    "geometry_chunk_cells": 250000,
+    "point_chunk": 1000000,
+    "repair_pool_size": 2048,
+    "workers": 16,
+    "hash_inputs": true
+  },
+  "cases": [
+    {
+      "case_id": "run_1",
+      "source": {
+        "kind": "curated_drivaerml_vehicle_tensordict_memmaps",
+        "requested_path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh",
+        "vehicle_root": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict",
+        "n_points": 8846052,
+        "n_cells": 17684913,
+        "metadata": {
+          "mesh": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/meta.json",
+            "sha256": "65743a44e4907d7f97a690da24f2bcf591849e0f81cc825390fe22725a02204e"
+          },
+          "cell_data": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/cell_data/meta.json",
+            "sha256": "cfce5811c1843a1b9b7c294fdd93d2cb47ddea6b77c28806379c7d46e5a82c6f"
+          }
+        },
+        "arrays": {
+          "points": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/points.memmap",
+            "shape": [
+              8846052,
+              3
+            ],
+            "dtype": "float32",
+            "bytes": 106152624,
+            "mtime_ns": 1780328493000000000,
+            "sha256": "c4b17fc985f84bfe046e948c637c4dff32001b440593620f6f6d6b493f5361a4"
+          },
+          "cells": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/cells.memmap",
+            "shape": [
+              17684913,
+              3
+            ],
+            "dtype": "int64",
+            "bytes": 424437912,
+            "mtime_ns": 1780328496000000000,
+            "sha256": "bb7df92b6535208b4cb81fbe85ea009694d851c351be0351b413b49f02c27def"
+          },
+          "CpMeanTrim": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/cell_data/CpMeanTrim.memmap",
+            "shape": [
+              17684913
+            ],
+            "dtype": "float32",
+            "bytes": 70739652,
+            "mtime_ns": 1780328497000000000,
+            "sha256": "7a41b16506e68981a546e1e00458f22a38e0642685a4863a310802b45dcce095"
+          },
+          "wallShearStressMeanTrim": {
+            "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh/_tensordict/boundaries/vehicle/_tensordict/cell_data/wallShearStressMeanTrim.memmap",
+            "shape": [
+              17684913,
+              3
+            ],
+            "dtype": "float32",
+            "bytes": 212218956,
+            "mtime_ns": 1780328501000000000,
+            "sha256": "a651f8d484553891d9f0452a7b3a92c4701e4545a749756fb199ce5ef467a601"
+          }
+        }
+      },
+      "effective_k": 40000,
+      "full_master": {
+        "n_cells": 17684913,
+        "geometric_area": 36.01974589708446,
+        "bbox_min": [
+          -0.7651930451393127,
+          -1.0102157592773438,
+          -0.31759700179100037
+        ],
+        "bbox_max": [
+          3.9384641647338867,
+          1.0102157592773438,
+          1.195139765739441
+        ],
+        "bbox_diagonal": 5.338062120001957,
+        "degenerate_triangle_count": 0,
+        "CpMeanTrim_area_weighted_squared_norm": 3.8498924161910018,
+        "wallShearStressMeanTrim_area_weighted_squared_norm": 173.39731254761693
+      },
+      "normal_coordinate_length_scale": 0.030008226329243645,
+      "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+      "cover_construction": {
+        "initialization": "evenly spaced on-disk candidates, stratified by normal octant and 3-D Morton order",
+        "candidate_count": 640000,
+        "candidate_multiplier": 16,
+        "candidate_indices_sha256_int64": "c31e34b2c770a57dafbaf5f160fc09d829e4125eebd79c07fd76d35c2068d023",
+        "initial_seed_source_indices_sha256_int64": "7177d6bbd55d959386409cf0822be83b0c3423f91c1ee7b8d4099a2555f92617",
+        "assignment": "exact nearest neighbor in augmented [centroid, lambda * unit_normal] coordinates",
+        "squared_assignment_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+        "normal_coordinate_length_scale": 0.030008226329243645,
+        "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+        "centroidal_updates": "area-weighted master-cell centroid and unit area-vector normal",
+        "lloyd_iterations": 2,
+        "lloyd_history": [
+          {
+            "empty_before_repair": 0,
+            "repaired_support_indices": [],
+            "repair_master_cells": [],
+            "shift": {
+              "min": 1.376538784825243e-05,
+              "mean": 0.005881294258887919,
+              "q50": 0.004133222158998251,
+              "q90": 0.013315867073833936,
+              "q95": 0.01738987583667039,
+              "q99": 0.028418491464108242,
+              "max": 0.0665619745850563
+            },
+            "iteration": 1,
+            "represented_measure": {
+              "min": 7.674748481178995e-08,
+              "mean": 0.000900493647427112,
+              "q50": 0.00018918720443217296,
+              "q90": 0.0025313926582384728,
+              "q95": 0.004111067467647442,
+              "q99": 0.00991915323555304,
+              "max": 0.0279828590573743
+            },
+            "neighbor_backend": "scipy.spatial.cKDTree"
+          },
+          {
+            "empty_before_repair": 8,
+            "repaired_support_indices": [
+              1547,
+              7100,
+              9677,
+              11841,
+              15109,
+              21112,
+              25232,
+              27187
+            ],
+            "repair_master_cells": [
+              12067865,
+              3571121,
+              12915101,
+              2332903,
+              12948649,
+              7757809,
+              8341603,
+              1853809
+            ],
+            "shift": {
+              "min": 0.0,
+              "mean": 0.0032159979969157803,
+              "q50": 0.001878871233202517,
+              "q90": 0.006437348993495106,
+              "q95": 0.008650540467351675,
+              "q99": 0.01493948901072146,
+              "max": 2.2149393558502197
+            },
+            "iteration": 2,
+            "represented_measure": {
+              "min": 0.0,
+              "mean": 0.000900493647427112,
+              "q50": 0.00022367262276823396,
+              "q90": 0.0025771965223157153,
+              "q95": 0.004002246179982193,
+              "q99": 0.00929167169423981,
+              "max": 0.02189931722386973
+            },
+            "neighbor_backend": "scipy.spatial.cKDTree"
+          }
+        ],
+        "restriction_empty_cell_repairs": [
+          {
+            "empty_before_repair": 7,
+            "repaired_support_indices": [
+              1842,
+              9947,
+              14576,
+              21712,
+              26841,
+              33775,
+              38904
+            ],
+            "repair_master_cells": [
+              15411681,
+              1685230,
+              13318658,
+              6387441,
+              15234502,
+              8373624,
+              2308042
+            ],
+            "shift": {
+              "min": 0.0,
+              "mean": 0.0003772451967000961,
+              "q50": 0.0,
+              "q90": 0.0,
+              "q95": 0.0,
+              "q99": 0.0,
+              "max": 2.9223995208740234
+            },
+            "restriction_attempt": 1,
+            "repair_scope": "empty_supports_only"
+          }
+        ]
+      },
+      "cyclic_replicates": [
+        {
+          "ordinal": 0,
+          "frozen_cyclic_start": 11914080,
+          "frozen_seed": 20300727,
+          "representations": {
+            "cyclic_sparse": {
+              "k": 40000,
+              "definition": {
+                "selection": "explicit cyclic block mathematically identical to production cyclic-block indexing",
+                "start": 11914080,
+                "frozen_seed": 20300727,
+                "frozen_seed_role": "provenance for the external frozen draw; the explicit start is authoritative and no RNG is called by this audit",
+                "replicate_ordinal": 0,
+                "wraps": false,
+                "indices_sha256_int64": "655a22b74d82d0c9d4ca5bb2ab7c04fd5182105eafb4c9f28868c166ebcc7767",
+                "first_indices": [
+                  11914080,
+                  11914081,
+                  11914082,
+                  11914083,
+                  11914084,
+                  11914085,
+                  11914086,
+                  11914087,
+                  11914088,
+                  11914089
+                ],
+                "native_selected_geometric_area": 0.08133647792656173,
+                "assignment": "ambient nearest support centroid; normal mismatch is diagnosed but does not alter the production-like nearest choice"
+              },
+              "support_points_sha256_float32": "d024c35e8247cf94eb180c1d90b196ec979bfa6c7daa754f6417f2a0578a517a",
+              "support_normals_sha256_float32": "0f76501e5ab48654ad2e3994590dbd59d3de15e450b3d54ac32703405e4f9195",
+              "master_assignment_sha256_int64": "4fbf95e4d368f05523676a1f1e4aefb4758df9fc1acdc93ab2e2a558ca4628d0",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 4.831880175970582e-07,
+                "mean": 0.000900493647427112,
+                "q50": 0.0001877108090013735,
+                "q90": 0.0024410268473729958,
+                "q95": 0.004135400310360633,
+                "q99": 0.010248837324921871,
+                "max": 0.04492349517386174
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 2.2665821100847414,
+                "max_over_min": 92973.11509766059
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00967917467434546,
+                  "q50": 0.005120090674608946,
+                  "q90": 0.02389963865280153,
+                  "q95": 0.03372960910201073,
+                  "q99": 0.059405480623245216,
+                  "max": 0.17760984599590302
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.02417357824742794,
+                  "q90": 0.06181385851681003,
+                  "q95": 0.0761646478422851,
+                  "q99": 0.10538939684958855
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0018132375488994707,
+                    "q50": 0.000959166558857331,
+                    "q90": 0.004477212538094774,
+                    "q95": 0.0063186992477334385,
+                    "q99": 0.0111286604179165,
+                    "max": 0.03327234528245578
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.0045285307109575335,
+                    "q90": 0.011579831243475183,
+                    "q95": 0.01426822058830915,
+                    "q99": 0.01974300682164971
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.0,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00967917467434546,
+                  "q50": 0.005120090674608946,
+                  "q90": 0.02389963865280153,
+                  "q95": 0.03372960910201073,
+                  "q99": 0.059405480623245216,
+                  "max": 0.17760984599590302
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.02417357824742794,
+                  "q90": 0.06181385851681003,
+                  "q95": 0.0761646478422851,
+                  "q99": 0.10538939684958855
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -1.000000238418579,
+                "negative_normal_assignment_cell_count": 1091178,
+                "negative_normal_assignment_cell_fraction": 0.06170106689244103,
+                "negative_normal_assignment_area": 1.7508574495213325,
+                "negative_normal_assignment_area_fraction": 0.048608267657519806
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.23489806960236795,
+                  "area_weighted_rms_floor": 0.07679508441510657,
+                  "integral_relative_error": 0.0,
+                  "restriction_orthogonality_max_abs": 5.826739644162332e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.5806454568331604,
+                      0.1005858438566984,
+                      0.1536802477876734
+                    ],
+                    "relative_error": 0.051509778558301564
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06559174450861988,
+                      -0.9349377624562236,
+                      0.255493698239783
+                    ],
+                    "relative_error": 0.00999514849000023
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.302687923350085,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.6641190722075163,
+                  "tangent_projected_relative_l2_floor": 0.283827079086252,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.6227370234791962,
+                  "integral_relative_error": 4.500282597386495e-16,
+                  "restriction_orthogonality_max_vector_norm": 4.0049055377207625e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.13888377653990902,
+                    "after_explicit_master_tangent_projection": 9.817886390629378e-09
+                  }
+                }
+              }
+            },
+            "normal_aware_centroidal_cover": {
+              "k": 40000,
+              "definition": {
+                "initialization": "evenly spaced on-disk candidates, stratified by normal octant and 3-D Morton order",
+                "candidate_count": 640000,
+                "candidate_multiplier": 16,
+                "candidate_indices_sha256_int64": "c31e34b2c770a57dafbaf5f160fc09d829e4125eebd79c07fd76d35c2068d023",
+                "initial_seed_source_indices_sha256_int64": "7177d6bbd55d959386409cf0822be83b0c3423f91c1ee7b8d4099a2555f92617",
+                "assignment": "exact nearest neighbor in augmented [centroid, lambda * unit_normal] coordinates",
+                "squared_assignment_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+                "centroidal_updates": "area-weighted master-cell centroid and unit area-vector normal",
+                "lloyd_iterations": 2,
+                "lloyd_history": [
+                  {
+                    "empty_before_repair": 0,
+                    "repaired_support_indices": [],
+                    "repair_master_cells": [],
+                    "shift": {
+                      "min": 1.376538784825243e-05,
+                      "mean": 0.005881294258887919,
+                      "q50": 0.004133222158998251,
+                      "q90": 0.013315867073833936,
+                      "q95": 0.01738987583667039,
+                      "q99": 0.028418491464108242,
+                      "max": 0.0665619745850563
+                    },
+                    "iteration": 1,
+                    "represented_measure": {
+                      "min": 7.674748481178995e-08,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00018918720443217296,
+                      "q90": 0.0025313926582384728,
+                      "q95": 0.004111067467647442,
+                      "q99": 0.00991915323555304,
+                      "max": 0.0279828590573743
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  },
+                  {
+                    "empty_before_repair": 8,
+                    "repaired_support_indices": [
+                      1547,
+                      7100,
+                      9677,
+                      11841,
+                      15109,
+                      21112,
+                      25232,
+                      27187
+                    ],
+                    "repair_master_cells": [
+                      12067865,
+                      3571121,
+                      12915101,
+                      2332903,
+                      12948649,
+                      7757809,
+                      8341603,
+                      1853809
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0032159979969157803,
+                      "q50": 0.001878871233202517,
+                      "q90": 0.006437348993495106,
+                      "q95": 0.008650540467351675,
+                      "q99": 0.01493948901072146,
+                      "max": 2.2149393558502197
+                    },
+                    "iteration": 2,
+                    "represented_measure": {
+                      "min": 0.0,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00022367262276823396,
+                      "q90": 0.0025771965223157153,
+                      "q95": 0.004002246179982193,
+                      "q99": 0.00929167169423981,
+                      "max": 0.02189931722386973
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  }
+                ],
+                "restriction_empty_cell_repairs": [
+                  {
+                    "empty_before_repair": 7,
+                    "repaired_support_indices": [
+                      1842,
+                      9947,
+                      14576,
+                      21712,
+                      26841,
+                      33775,
+                      38904
+                    ],
+                    "repair_master_cells": [
+                      15411681,
+                      1685230,
+                      13318658,
+                      6387441,
+                      15234502,
+                      8373624,
+                      2308042
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0003772451967000961,
+                      "q50": 0.0,
+                      "q90": 0.0,
+                      "q95": 0.0,
+                      "q99": 0.0,
+                      "max": 2.9223995208740234
+                    },
+                    "restriction_attempt": 1,
+                    "repair_scope": "empty_supports_only"
+                  }
+                ]
+              },
+              "support_points_sha256_float32": "ae9a097138ec5eb0d33c6f19d74a6347c91d9b884d5773aec2b2b482c2365516",
+              "support_normals_sha256_float32": "240bfe87ea24184d33e4f5d3cdef9093a515dc66b100aeec8f009adf0e9cc549",
+              "master_assignment_sha256_int64": "19e7a23e07481612cd18b70911fdbcb2f04d4173091fc69efe34aec8ae30648e",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 7.674748481178995e-08,
+                "mean": 0.000900493647427112,
+                "q50": 0.00024489049102260907,
+                "q90": 0.002601631110479729,
+                "q95": 0.0039642958485387675,
+                "q99": 0.008905675627374899,
+                "max": 0.01825565366198134
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 1.8656868738418073,
+                "max_over_min": 237866.47480044726
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00909006991744104,
+                  "q50": 0.00643558194860816,
+                  "q90": 0.020453456416726114,
+                  "q95": 0.027018173784017552,
+                  "q99": 0.041567575186490915,
+                  "max": 0.09836892038583755
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.019880653845547467,
+                  "q90": 0.04295094311237335,
+                  "q95": 0.050896590554259685,
+                  "q99": 0.06491882277334679
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0017028782567704006,
+                    "q50": 0.0012056026707695565,
+                    "q90": 0.003831625776718877,
+                    "q95": 0.005061419889210215,
+                    "q99": 0.007787016009187184,
+                    "max": 0.018427833579763866
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.0037243204366344427,
+                    "q90": 0.008046167719074354,
+                    "q95": 0.009534656849261438,
+                    "q99": 0.012161496309698807
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.010116198797048965,
+                  "q50": 0.007579094730317593,
+                  "q90": 0.021852305531501776,
+                  "q95": 0.028516041859984395,
+                  "q99": 0.042832709401845734,
+                  "max": 0.09837014228105545
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.020797183590948627,
+                  "q90": 0.04349037441956587,
+                  "q95": 0.051177295151698304,
+                  "q99": 0.06499490676568634
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -0.944917619228363,
+                "negative_normal_assignment_cell_count": 709,
+                "negative_normal_assignment_cell_fraction": 4.0090669374511485e-05,
+                "negative_normal_assignment_area": 0.003928378045628733,
+                "negative_normal_assignment_area_fraction": 0.0001090617922972829
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.19986510425032952,
+                  "area_weighted_rms_floor": 0.06534177815305214,
+                  "integral_relative_error": 2.4315351730605615e-16,
+                  "restriction_orthogonality_max_abs": 3.056677208844753e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.6056207093852234,
+                      0.10330738199291206,
+                      0.16105844003681732
+                    ],
+                    "relative_error": 0.026125878662536184
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06448457069269471,
+                      -0.9507252211799896,
+                      0.261363096081962
+                    ],
+                    "relative_error": 0.016472647436564427
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.2493026091117351,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.5469878534622156,
+                  "tangent_projected_relative_l2_floor": 0.24301231597532758,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.5331864979425484,
+                  "integral_relative_error": 2.99763092950459e-16,
+                  "restriction_orthogonality_max_vector_norm": 2.6378314838725204e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.10096643993308,
+                    "after_explicit_master_tangent_projection": 7.096211416267695e-09
+                  }
+                }
+              }
+            }
+          },
+          "common_master_algebra": {
+            "definition": "M_ij = sum_f area_f 1[A(f)=i,B(f)=j] on this case's full CFD master; T_A_to_B = D_B^-1 M^T and T_B_to_A = D_A^-1 M",
+            "operator_sha256_streaming_assignment_a_b_area_float64": "75497aca2eedc31cbf49b2f1b644fe22ef93068f22c92bdeda0d084aa460bd2b",
+            "measure_total_relative_error": 3.9452956597209836e-16,
+            "restriction_measure_replay_max_relative_error": 0.0,
+            "constant_max_abs_error": 0.0,
+            "representation_roundtrip_max_abs_error": 1.7763568394002505e-15,
+            "pythagorean_relative_error": 1.4618306964108545e-15,
+            "a_to_b_vector_integral_relative_error": 4.7542664476976034e-15,
+            "b_to_a_vector_integral_relative_error": 8.228243645340923e-15,
+            "mass_adjoint_relative_error": 1.6177687577215185e-16,
+            "max_load_bearing_error": 8.228243645340923e-15,
+            "tolerance": 1e-12,
+            "passed": true
+          },
+          "comparison": {
+            "ratio_definition": "normal_aware_centroidal_cover / cyclic_sparse",
+            "CpMeanTrim_relative_l2_floor_ratio": 0.8508588622659108,
+            "wallShearStressMeanTrim_relative_l2_floor_ratio": 0.8236291899343301,
+            "normalized_area_weighted_fill_q95_ratio": 0.668244283878943,
+            "normalized_cell_uniform_fill_q95_ratio_diagnostic": 0.8010224400260515,
+            "normalized_fill_max_ratio": 0.5538483513358075
+          },
+          "execution": {
+            "cyclic_restriction_neighbor_backend": "scipy.spatial.cKDTree",
+            "final_neighbor_backends": [
+              "scipy.spatial.cKDTree",
+              "scipy.spatial.cKDTree"
+            ],
+            "runtime_seconds": 82.91512602195144
+          }
+        },
+        {
+          "ordinal": 1,
+          "frozen_cyclic_start": 11878329,
+          "frozen_seed": 20300727,
+          "representations": {
+            "cyclic_sparse": {
+              "k": 40000,
+              "definition": {
+                "selection": "explicit cyclic block mathematically identical to production cyclic-block indexing",
+                "start": 11878329,
+                "frozen_seed": 20300727,
+                "frozen_seed_role": "provenance for the external frozen draw; the explicit start is authoritative and no RNG is called by this audit",
+                "replicate_ordinal": 1,
+                "wraps": false,
+                "indices_sha256_int64": "26bfb4195f860faf4980767c506ee34af1731823d7a434a09044ee17b9cd8e2e",
+                "first_indices": [
+                  11878329,
+                  11878330,
+                  11878331,
+                  11878332,
+                  11878333,
+                  11878334,
+                  11878335,
+                  11878336,
+                  11878337,
+                  11878338
+                ],
+                "native_selected_geometric_area": 0.08204206581727203,
+                "assignment": "ambient nearest support centroid; normal mismatch is diagnosed but does not alter the production-like nearest choice"
+              },
+              "support_points_sha256_float32": "93eea568572c0956df87dc6db9cb339134a58a24437945f04b1591161e8a4822",
+              "support_normals_sha256_float32": "35d9b7cd62020dfc009d629e34bbaa585a3645d508a973ab9ec6b0fa3b1b0bcf",
+              "master_assignment_sha256_int64": "57436e99e1aa49e1613a118cdb820a138a7952a0f65f6f8e67235053ea862078",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 3.6453752727538813e-07,
+                "mean": 0.000900493647427112,
+                "q50": 0.00018287639568459468,
+                "q90": 0.0024455015767330204,
+                "q95": 0.004214576228775962,
+                "q99": 0.010218236338805618,
+                "max": 0.03737165797792841
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 2.200939599540983,
+                "max_over_min": 102517.9993326069
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009681944530391211,
+                  "q50": 0.0050960723310709,
+                  "q90": 0.024025174230337155,
+                  "q95": 0.034176343679428095,
+                  "q99": 0.05884985208511352,
+                  "max": 0.18342170119285583
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.024278700391831862,
+                  "q90": 0.060308915174197994,
+                  "q95": 0.07344244926845431,
+                  "q99": 0.09975231636449094
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.001813756436837356,
+                    "q50": 0.0009546671088700317,
+                    "q90": 0.004500729607531871,
+                    "q95": 0.00640238777877234,
+                    "q99": 0.011024572356436337,
+                    "max": 0.03436110278776385
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.004548223652336021,
+                    "q90": 0.011297904336522762,
+                    "q95": 0.013758260510544112,
+                    "q99": 0.01868699054488605
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.0,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009681944530391211,
+                  "q50": 0.0050960723310709,
+                  "q90": 0.024025174230337155,
+                  "q95": 0.034176343679428095,
+                  "q99": 0.05884985208511352,
+                  "max": 0.18342170119285583
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.024278700391831862,
+                  "q90": 0.060308915174197994,
+                  "q95": 0.07344244926845431,
+                  "q99": 0.09975231636449094
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -1.000000238418579,
+                "negative_normal_assignment_cell_count": 1093533,
+                "negative_normal_assignment_cell_fraction": 0.06183423124558204,
+                "negative_normal_assignment_area": 1.7483515023535223,
+                "negative_normal_assignment_area_fraction": 0.048538696173729495
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.23434008713615834,
+                  "area_weighted_rms_floor": 0.0766126635435036,
+                  "integral_relative_error": 0.0,
+                  "restriction_orthogonality_max_abs": 4.8407932935583264e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.5758124211733036,
+                      0.0994777091329797,
+                      0.15679400725271808
+                    ],
+                    "relative_error": 0.060268714048818964
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06588819913860296,
+                      -0.9391653946264096,
+                      0.25018937544233144
+                    ],
+                    "relative_error": 0.015982163953447953
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.3012825985799396,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.661035688595215,
+                  "tangent_projected_relative_l2_floor": 0.2832709204574244,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.6215167714503436,
+                  "integral_relative_error": 1.6007970062510897e-16,
+                  "restriction_orthogonality_max_vector_norm": 3.617255685428725e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.13626463442161704,
+                    "after_explicit_master_tangent_projection": 9.615454801909298e-09
+                  }
+                }
+              }
+            },
+            "normal_aware_centroidal_cover": {
+              "k": 40000,
+              "definition": {
+                "initialization": "evenly spaced on-disk candidates, stratified by normal octant and 3-D Morton order",
+                "candidate_count": 640000,
+                "candidate_multiplier": 16,
+                "candidate_indices_sha256_int64": "c31e34b2c770a57dafbaf5f160fc09d829e4125eebd79c07fd76d35c2068d023",
+                "initial_seed_source_indices_sha256_int64": "7177d6bbd55d959386409cf0822be83b0c3423f91c1ee7b8d4099a2555f92617",
+                "assignment": "exact nearest neighbor in augmented [centroid, lambda * unit_normal] coordinates",
+                "squared_assignment_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+                "centroidal_updates": "area-weighted master-cell centroid and unit area-vector normal",
+                "lloyd_iterations": 2,
+                "lloyd_history": [
+                  {
+                    "empty_before_repair": 0,
+                    "repaired_support_indices": [],
+                    "repair_master_cells": [],
+                    "shift": {
+                      "min": 1.376538784825243e-05,
+                      "mean": 0.005881294258887919,
+                      "q50": 0.004133222158998251,
+                      "q90": 0.013315867073833936,
+                      "q95": 0.01738987583667039,
+                      "q99": 0.028418491464108242,
+                      "max": 0.0665619745850563
+                    },
+                    "iteration": 1,
+                    "represented_measure": {
+                      "min": 7.674748481178995e-08,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00018918720443217296,
+                      "q90": 0.0025313926582384728,
+                      "q95": 0.004111067467647442,
+                      "q99": 0.00991915323555304,
+                      "max": 0.0279828590573743
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  },
+                  {
+                    "empty_before_repair": 8,
+                    "repaired_support_indices": [
+                      1547,
+                      7100,
+                      9677,
+                      11841,
+                      15109,
+                      21112,
+                      25232,
+                      27187
+                    ],
+                    "repair_master_cells": [
+                      12067865,
+                      3571121,
+                      12915101,
+                      2332903,
+                      12948649,
+                      7757809,
+                      8341603,
+                      1853809
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0032159979969157803,
+                      "q50": 0.001878871233202517,
+                      "q90": 0.006437348993495106,
+                      "q95": 0.008650540467351675,
+                      "q99": 0.01493948901072146,
+                      "max": 2.2149393558502197
+                    },
+                    "iteration": 2,
+                    "represented_measure": {
+                      "min": 0.0,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00022367262276823396,
+                      "q90": 0.0025771965223157153,
+                      "q95": 0.004002246179982193,
+                      "q99": 0.00929167169423981,
+                      "max": 0.02189931722386973
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  }
+                ],
+                "restriction_empty_cell_repairs": [
+                  {
+                    "empty_before_repair": 7,
+                    "repaired_support_indices": [
+                      1842,
+                      9947,
+                      14576,
+                      21712,
+                      26841,
+                      33775,
+                      38904
+                    ],
+                    "repair_master_cells": [
+                      15411681,
+                      1685230,
+                      13318658,
+                      6387441,
+                      15234502,
+                      8373624,
+                      2308042
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0003772451967000961,
+                      "q50": 0.0,
+                      "q90": 0.0,
+                      "q95": 0.0,
+                      "q99": 0.0,
+                      "max": 2.9223995208740234
+                    },
+                    "restriction_attempt": 1,
+                    "repair_scope": "empty_supports_only"
+                  }
+                ]
+              },
+              "support_points_sha256_float32": "ae9a097138ec5eb0d33c6f19d74a6347c91d9b884d5773aec2b2b482c2365516",
+              "support_normals_sha256_float32": "240bfe87ea24184d33e4f5d3cdef9093a515dc66b100aeec8f009adf0e9cc549",
+              "master_assignment_sha256_int64": "19e7a23e07481612cd18b70911fdbcb2f04d4173091fc69efe34aec8ae30648e",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 7.674748481178995e-08,
+                "mean": 0.000900493647427112,
+                "q50": 0.00024489049102260907,
+                "q90": 0.002601631110479729,
+                "q95": 0.0039642958485387675,
+                "q99": 0.008905675627374899,
+                "max": 0.01825565366198134
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 1.8656868738418073,
+                "max_over_min": 237866.47480044726
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00909006991744104,
+                  "q50": 0.00643558194860816,
+                  "q90": 0.020453456416726114,
+                  "q95": 0.027018173784017552,
+                  "q99": 0.041567575186490915,
+                  "max": 0.09836892038583755
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.019880653845547467,
+                  "q90": 0.04295094311237335,
+                  "q95": 0.050896590554259685,
+                  "q99": 0.06491882277334679
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0017028782567704006,
+                    "q50": 0.0012056026707695565,
+                    "q90": 0.003831625776718877,
+                    "q95": 0.005061419889210215,
+                    "q99": 0.007787016009187184,
+                    "max": 0.018427833579763866
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.0037243204366344427,
+                    "q90": 0.008046167719074354,
+                    "q95": 0.009534656849261438,
+                    "q99": 0.012161496309698807
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.010116198797048965,
+                  "q50": 0.007579094730317593,
+                  "q90": 0.021852305531501776,
+                  "q95": 0.028516041859984395,
+                  "q99": 0.042832709401845734,
+                  "max": 0.09837014228105545
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.020797183590948627,
+                  "q90": 0.04349037441956587,
+                  "q95": 0.051177295151698304,
+                  "q99": 0.06499490676568634
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -0.944917619228363,
+                "negative_normal_assignment_cell_count": 709,
+                "negative_normal_assignment_cell_fraction": 4.0090669374511485e-05,
+                "negative_normal_assignment_area": 0.003928378045628733,
+                "negative_normal_assignment_area_fraction": 0.0001090617922972829
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.19986510425032952,
+                  "area_weighted_rms_floor": 0.06534177815305214,
+                  "integral_relative_error": 2.4315351730605615e-16,
+                  "restriction_orthogonality_max_abs": 3.056677208844753e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.6056207093852234,
+                      0.10330738199291206,
+                      0.16105844003681732
+                    ],
+                    "relative_error": 0.026125878662536184
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06448457069269471,
+                      -0.9507252211799896,
+                      0.261363096081962
+                    ],
+                    "relative_error": 0.016472647436564427
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.2493026091117351,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.5469878534622156,
+                  "tangent_projected_relative_l2_floor": 0.24301231597532758,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.5331864979425484,
+                  "integral_relative_error": 2.99763092950459e-16,
+                  "restriction_orthogonality_max_vector_norm": 2.6378314838725204e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.10096643993308,
+                    "after_explicit_master_tangent_projection": 7.096211416267695e-09
+                  }
+                }
+              }
+            }
+          },
+          "common_master_algebra": {
+            "definition": "M_ij = sum_f area_f 1[A(f)=i,B(f)=j] on this case's full CFD master; T_A_to_B = D_B^-1 M^T and T_B_to_A = D_A^-1 M",
+            "operator_sha256_streaming_assignment_a_b_area_float64": "0599d0b3eab8a7c3c43d466da22d20d0a5f57cafd81289f03ea95769b8751ddc",
+            "measure_total_relative_error": 3.9452956597209836e-16,
+            "restriction_measure_replay_max_relative_error": 0.0,
+            "constant_max_abs_error": 0.0,
+            "representation_roundtrip_max_abs_error": 1.7763568394002505e-15,
+            "pythagorean_relative_error": 1.493114966345007e-15,
+            "a_to_b_vector_integral_relative_error": 3.928204805369941e-15,
+            "b_to_a_vector_integral_relative_error": 7.143504757724514e-15,
+            "mass_adjoint_relative_error": 8.094212914214139e-16,
+            "max_load_bearing_error": 7.143504757724514e-15,
+            "tolerance": 1e-12,
+            "passed": true
+          },
+          "comparison": {
+            "ratio_definition": "normal_aware_centroidal_cover / cyclic_sparse",
+            "CpMeanTrim_relative_l2_floor_ratio": 0.8528848251823092,
+            "wallShearStressMeanTrim_relative_l2_floor_ratio": 0.8274709866643274,
+            "normalized_area_weighted_fill_q95_ratio": 0.6930132513448359,
+            "normalized_cell_uniform_fill_q95_ratio_diagnostic": 0.7905519103344196,
+            "normalized_fill_max_ratio": 0.536299247832235
+          },
+          "execution": {
+            "cyclic_restriction_neighbor_backend": "scipy.spatial.cKDTree",
+            "final_neighbor_backends": [
+              "scipy.spatial.cKDTree",
+              "scipy.spatial.cKDTree"
+            ],
+            "runtime_seconds": 81.51127946190536
+          }
+        },
+        {
+          "ordinal": 2,
+          "frozen_cyclic_start": 14546186,
+          "frozen_seed": 20300727,
+          "representations": {
+            "cyclic_sparse": {
+              "k": 40000,
+              "definition": {
+                "selection": "explicit cyclic block mathematically identical to production cyclic-block indexing",
+                "start": 14546186,
+                "frozen_seed": 20300727,
+                "frozen_seed_role": "provenance for the external frozen draw; the explicit start is authoritative and no RNG is called by this audit",
+                "replicate_ordinal": 2,
+                "wraps": false,
+                "indices_sha256_int64": "a3e9f0a74ea9e3d3c4788d59627f47a220a79744a9d34d54de605ed183908554",
+                "first_indices": [
+                  14546186,
+                  14546187,
+                  14546188,
+                  14546189,
+                  14546190,
+                  14546191,
+                  14546192,
+                  14546193,
+                  14546194,
+                  14546195
+                ],
+                "native_selected_geometric_area": 0.08156727637786432,
+                "assignment": "ambient nearest support centroid; normal mismatch is diagnosed but does not alter the production-like nearest choice"
+              },
+              "support_points_sha256_float32": "7692c3ec3f2adf1ceb82ec97e8606a1217d531e820308eb34350ec2f01c8989d",
+              "support_normals_sha256_float32": "9c9d7d59a9e0e61f1baf0fbda51957dc19821a3b07566e54fa6bd05108d84f9d",
+              "master_assignment_sha256_int64": "91168b5d0ebb808cc2bc012ba33f6bfbc837aab7f964371e15fde4d2a12c9e7e",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 7.141248143938128e-07,
+                "mean": 0.000900493647427112,
+                "q50": 0.00018876526864630705,
+                "q90": 0.002384258481401956,
+                "q95": 0.004182775049366672,
+                "q99": 0.010259163716953602,
+                "max": 0.03733505686977878
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 2.2448746730976326,
+                "max_over_min": 52280.856395489864
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009702048937324736,
+                  "q50": 0.005122848320752382,
+                  "q90": 0.023938629031181338,
+                  "q95": 0.03405318334698673,
+                  "q99": 0.059479091465473144,
+                  "max": 0.16070164740085602
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.024242531525423952,
+                  "q90": 0.06150926186042495,
+                  "q95": 0.07545661057800636,
+                  "q99": 0.10272594552096644
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0018175226738127918,
+                    "q50": 0.0009596831594665864,
+                    "q90": 0.004484516757772868,
+                    "q95": 0.006379315673264261,
+                    "q99": 0.011142450224137021,
+                    "max": 0.030104866483044432
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.00454144799750196,
+                    "q90": 0.011522769963644111,
+                    "q95": 0.014135581205633983,
+                    "q99": 0.019244052094494694
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.0,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009702048937324736,
+                  "q50": 0.005122848320752382,
+                  "q90": 0.023938629031181338,
+                  "q95": 0.03405318334698673,
+                  "q99": 0.059479091465473144,
+                  "max": 0.16070164740085602
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.024242531525423952,
+                  "q90": 0.06150926186042495,
+                  "q95": 0.07545661057800636,
+                  "q99": 0.10272594552096644
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -1.000000238418579,
+                "negative_normal_assignment_cell_count": 1084403,
+                "negative_normal_assignment_cell_fraction": 0.06131797199115427,
+                "negative_normal_assignment_area": 1.7387201691797634,
+                "negative_normal_assignment_area_fraction": 0.04827130580397848
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.23370082286733557,
+                  "area_weighted_rms_floor": 0.07640366926112865,
+                  "integral_relative_error": 0.0,
+                  "restriction_orthogonality_max_abs": 6.879813355836241e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.5768869986026862,
+                      0.09975566296392921,
+                      0.1545845315240053
+                    ],
+                    "relative_error": 0.057696199672310114
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06308781007642904,
+                      -0.9479108796127022,
+                      0.2508414218313486
+                    ],
+                    "relative_error": 0.019841644870659675
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.29889810523089577,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.6558039387020406,
+                  "tangent_projected_relative_l2_floor": 0.28131584368340795,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.6172271924050885,
+                  "integral_relative_error": 7.49415735772463e-16,
+                  "restriction_orthogonality_max_vector_norm": 4.3430160931078894e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.13552495131258976,
+                    "after_explicit_master_tangent_projection": 9.579568875162827e-09
+                  }
+                }
+              }
+            },
+            "normal_aware_centroidal_cover": {
+              "k": 40000,
+              "definition": {
+                "initialization": "evenly spaced on-disk candidates, stratified by normal octant and 3-D Morton order",
+                "candidate_count": 640000,
+                "candidate_multiplier": 16,
+                "candidate_indices_sha256_int64": "c31e34b2c770a57dafbaf5f160fc09d829e4125eebd79c07fd76d35c2068d023",
+                "initial_seed_source_indices_sha256_int64": "7177d6bbd55d959386409cf0822be83b0c3423f91c1ee7b8d4099a2555f92617",
+                "assignment": "exact nearest neighbor in augmented [centroid, lambda * unit_normal] coordinates",
+                "squared_assignment_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+                "centroidal_updates": "area-weighted master-cell centroid and unit area-vector normal",
+                "lloyd_iterations": 2,
+                "lloyd_history": [
+                  {
+                    "empty_before_repair": 0,
+                    "repaired_support_indices": [],
+                    "repair_master_cells": [],
+                    "shift": {
+                      "min": 1.376538784825243e-05,
+                      "mean": 0.005881294258887919,
+                      "q50": 0.004133222158998251,
+                      "q90": 0.013315867073833936,
+                      "q95": 0.01738987583667039,
+                      "q99": 0.028418491464108242,
+                      "max": 0.0665619745850563
+                    },
+                    "iteration": 1,
+                    "represented_measure": {
+                      "min": 7.674748481178995e-08,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00018918720443217296,
+                      "q90": 0.0025313926582384728,
+                      "q95": 0.004111067467647442,
+                      "q99": 0.00991915323555304,
+                      "max": 0.0279828590573743
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  },
+                  {
+                    "empty_before_repair": 8,
+                    "repaired_support_indices": [
+                      1547,
+                      7100,
+                      9677,
+                      11841,
+                      15109,
+                      21112,
+                      25232,
+                      27187
+                    ],
+                    "repair_master_cells": [
+                      12067865,
+                      3571121,
+                      12915101,
+                      2332903,
+                      12948649,
+                      7757809,
+                      8341603,
+                      1853809
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0032159979969157803,
+                      "q50": 0.001878871233202517,
+                      "q90": 0.006437348993495106,
+                      "q95": 0.008650540467351675,
+                      "q99": 0.01493948901072146,
+                      "max": 2.2149393558502197
+                    },
+                    "iteration": 2,
+                    "represented_measure": {
+                      "min": 0.0,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00022367262276823396,
+                      "q90": 0.0025771965223157153,
+                      "q95": 0.004002246179982193,
+                      "q99": 0.00929167169423981,
+                      "max": 0.02189931722386973
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  }
+                ],
+                "restriction_empty_cell_repairs": [
+                  {
+                    "empty_before_repair": 7,
+                    "repaired_support_indices": [
+                      1842,
+                      9947,
+                      14576,
+                      21712,
+                      26841,
+                      33775,
+                      38904
+                    ],
+                    "repair_master_cells": [
+                      15411681,
+                      1685230,
+                      13318658,
+                      6387441,
+                      15234502,
+                      8373624,
+                      2308042
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0003772451967000961,
+                      "q50": 0.0,
+                      "q90": 0.0,
+                      "q95": 0.0,
+                      "q99": 0.0,
+                      "max": 2.9223995208740234
+                    },
+                    "restriction_attempt": 1,
+                    "repair_scope": "empty_supports_only"
+                  }
+                ]
+              },
+              "support_points_sha256_float32": "ae9a097138ec5eb0d33c6f19d74a6347c91d9b884d5773aec2b2b482c2365516",
+              "support_normals_sha256_float32": "240bfe87ea24184d33e4f5d3cdef9093a515dc66b100aeec8f009adf0e9cc549",
+              "master_assignment_sha256_int64": "19e7a23e07481612cd18b70911fdbcb2f04d4173091fc69efe34aec8ae30648e",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 7.674748481178995e-08,
+                "mean": 0.000900493647427112,
+                "q50": 0.00024489049102260907,
+                "q90": 0.002601631110479729,
+                "q95": 0.0039642958485387675,
+                "q99": 0.008905675627374899,
+                "max": 0.01825565366198134
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 1.8656868738418073,
+                "max_over_min": 237866.47480044726
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00909006991744104,
+                  "q50": 0.00643558194860816,
+                  "q90": 0.020453456416726114,
+                  "q95": 0.027018173784017552,
+                  "q99": 0.041567575186490915,
+                  "max": 0.09836892038583755
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.019880653845547467,
+                  "q90": 0.04295094311237335,
+                  "q95": 0.050896590554259685,
+                  "q99": 0.06491882277334679
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0017028782567704006,
+                    "q50": 0.0012056026707695565,
+                    "q90": 0.003831625776718877,
+                    "q95": 0.005061419889210215,
+                    "q99": 0.007787016009187184,
+                    "max": 0.018427833579763866
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.0037243204366344427,
+                    "q90": 0.008046167719074354,
+                    "q95": 0.009534656849261438,
+                    "q99": 0.012161496309698807
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.010116198797048965,
+                  "q50": 0.007579094730317593,
+                  "q90": 0.021852305531501776,
+                  "q95": 0.028516041859984395,
+                  "q99": 0.042832709401845734,
+                  "max": 0.09837014228105545
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.020797183590948627,
+                  "q90": 0.04349037441956587,
+                  "q95": 0.051177295151698304,
+                  "q99": 0.06499490676568634
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -0.944917619228363,
+                "negative_normal_assignment_cell_count": 709,
+                "negative_normal_assignment_cell_fraction": 4.0090669374511485e-05,
+                "negative_normal_assignment_area": 0.003928378045628733,
+                "negative_normal_assignment_area_fraction": 0.0001090617922972829
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.19986510425032952,
+                  "area_weighted_rms_floor": 0.06534177815305214,
+                  "integral_relative_error": 2.4315351730605615e-16,
+                  "restriction_orthogonality_max_abs": 3.056677208844753e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.6056207093852234,
+                      0.10330738199291206,
+                      0.16105844003681732
+                    ],
+                    "relative_error": 0.026125878662536184
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06448457069269471,
+                      -0.9507252211799896,
+                      0.261363096081962
+                    ],
+                    "relative_error": 0.016472647436564427
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.2493026091117351,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.5469878534622156,
+                  "tangent_projected_relative_l2_floor": 0.24301231597532758,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.5331864979425484,
+                  "integral_relative_error": 2.99763092950459e-16,
+                  "restriction_orthogonality_max_vector_norm": 2.6378314838725204e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.10096643993308,
+                    "after_explicit_master_tangent_projection": 7.096211416267695e-09
+                  }
+                }
+              }
+            }
+          },
+          "common_master_algebra": {
+            "definition": "M_ij = sum_f area_f 1[A(f)=i,B(f)=j] on this case's full CFD master; T_A_to_B = D_B^-1 M^T and T_B_to_A = D_A^-1 M",
+            "operator_sha256_streaming_assignment_a_b_area_float64": "c6bad97b966e70108fc9630c947a95c1eac9204d6ff8047afbbc875453ebad89",
+            "measure_total_relative_error": 3.9452956597209836e-16,
+            "restriction_measure_replay_max_relative_error": 0.0,
+            "constant_max_abs_error": 0.0,
+            "representation_roundtrip_max_abs_error": 1.7763568394002505e-15,
+            "pythagorean_relative_error": 5.730498546899882e-16,
+            "a_to_b_vector_integral_relative_error": 9.248155664342167e-15,
+            "b_to_a_vector_integral_relative_error": 5.1420032068533724e-15,
+            "mass_adjoint_relative_error": 6.4738986179171175e-16,
+            "max_load_bearing_error": 9.248155664342167e-15,
+            "tolerance": 1e-12,
+            "passed": true
+          },
+          "comparison": {
+            "ratio_definition": "normal_aware_centroidal_cover / cyclic_sparse",
+            "CpMeanTrim_relative_l2_floor_ratio": 0.8552178028221429,
+            "wallShearStressMeanTrim_relative_l2_floor_ratio": 0.834072229796008,
+            "normalized_area_weighted_fill_q95_ratio": 0.6745146669640463,
+            "normalized_cell_uniform_fill_q95_ratio_diagnostic": 0.7934111037054722,
+            "normalized_fill_max_ratio": 0.6121214186464747
+          },
+          "execution": {
+            "cyclic_restriction_neighbor_backend": "scipy.spatial.cKDTree",
+            "final_neighbor_backends": [
+              "scipy.spatial.cKDTree",
+              "scipy.spatial.cKDTree"
+            ],
+            "runtime_seconds": 80.45006596110761
+          }
+        },
+        {
+          "ordinal": 3,
+          "frozen_cyclic_start": 2529054,
+          "frozen_seed": 20300727,
+          "representations": {
+            "cyclic_sparse": {
+              "k": 40000,
+              "definition": {
+                "selection": "explicit cyclic block mathematically identical to production cyclic-block indexing",
+                "start": 2529054,
+                "frozen_seed": 20300727,
+                "frozen_seed_role": "provenance for the external frozen draw; the explicit start is authoritative and no RNG is called by this audit",
+                "replicate_ordinal": 3,
+                "wraps": false,
+                "indices_sha256_int64": "26af5b8d41224df6b11248ddb6417dbd78c520a809daa885da87faa5da92bedd",
+                "first_indices": [
+                  2529054,
+                  2529055,
+                  2529056,
+                  2529057,
+                  2529058,
+                  2529059,
+                  2529060,
+                  2529061,
+                  2529062,
+                  2529063
+                ],
+                "native_selected_geometric_area": 0.08108534653412414,
+                "assignment": "ambient nearest support centroid; normal mismatch is diagnosed but does not alter the production-like nearest choice"
+              },
+              "support_points_sha256_float32": "67562a076fdd541917fc57a5a992a1f6cb9e5efb9d1864239c03d00f6f912091",
+              "support_normals_sha256_float32": "d7cc506c931e36f6bfba1b98a1e8df42508ad5a217cd7eb3f135ebb4fd87102a",
+              "master_assignment_sha256_int64": "dfde6b584318f8784049708f9e0f340c8519fcb772d29e4604789a80dda3b581",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 4.248750702373627e-07,
+                "mean": 0.000900493647427112,
+                "q50": 0.00018854700040105143,
+                "q90": 0.0023744921943873007,
+                "q95": 0.004074348351497283,
+                "q99": 0.010348779455403044,
+                "max": 0.0347443832697536
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 2.2845495757025738,
+                "max_over_min": 81775.52815782564
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009703896110843054,
+                  "q50": 0.0051184771582484245,
+                  "q90": 0.02378582693636419,
+                  "q95": 0.033800552785396565,
+                  "q99": 0.06010122716426844,
+                  "max": 0.20067979395389557
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.0241382852498771,
+                  "q90": 0.06273816965953304,
+                  "q95": 0.07799154765045348,
+                  "q99": 0.10982082078202428
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0018178687120335528,
+                    "q50": 0.0009588642925434049,
+                    "q90": 0.004455891745290419,
+                    "q95": 0.006331989404683843,
+                    "q99": 0.011258997331459757,
+                    "max": 0.03759412862618054
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.004521919136053113,
+                    "q90": 0.011752986055454528,
+                    "q95": 0.014610460855862968,
+                    "q99": 0.0205731627532997
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.0,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.009703896110843054,
+                  "q50": 0.0051184771582484245,
+                  "q90": 0.02378582693636419,
+                  "q95": 0.033800552785396565,
+                  "q99": 0.06010122716426844,
+                  "max": 0.20067979395389557
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.0241382852498771,
+                  "q90": 0.06273816965953304,
+                  "q95": 0.07799154765045348,
+                  "q99": 0.10982082078202428
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -1.000000238418579,
+                "negative_normal_assignment_cell_count": 1066177,
+                "negative_normal_assignment_cell_fraction": 0.06028737602497677,
+                "negative_normal_assignment_area": 1.7143435348424458,
+                "negative_normal_assignment_area_fraction": 0.04759454827195795
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.23324373625643074,
+                  "area_weighted_rms_floor": 0.07625423421073055,
+                  "integral_relative_error": 1.2157675865302808e-16,
+                  "restriction_orthogonality_max_abs": 7.818114103157192e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.5789578783731268,
+                      0.10512287886498103,
+                      0.15198022086480018
+                    ],
+                    "relative_error": 0.05294134693472828
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06266793530440681,
+                      -0.9330275986974619,
+                      0.2617522980353221
+                    ],
+                    "relative_error": 0.004916294991941626
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.3002099788619144,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.6586822837943817,
+                  "tangent_projected_relative_l2_floor": 0.2823448476832374,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.6194849011834931,
+                  "integral_relative_error": 1.5248295554431104e-16,
+                  "restriction_orthogonality_max_vector_norm": 6.68710007760473e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.1361086080055149,
+                    "after_explicit_master_tangent_projection": 9.629082240213234e-09
+                  }
+                }
+              }
+            },
+            "normal_aware_centroidal_cover": {
+              "k": 40000,
+              "definition": {
+                "initialization": "evenly spaced on-disk candidates, stratified by normal octant and 3-D Morton order",
+                "candidate_count": 640000,
+                "candidate_multiplier": 16,
+                "candidate_indices_sha256_int64": "c31e34b2c770a57dafbaf5f160fc09d829e4125eebd79c07fd76d35c2068d023",
+                "initial_seed_source_indices_sha256_int64": "7177d6bbd55d959386409cf0822be83b0c3423f91c1ee7b8d4099a2555f92617",
+                "assignment": "exact nearest neighbor in augmented [centroid, lambda * unit_normal] coordinates",
+                "squared_assignment_cost": "||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "normal_coordinate_scale_definition": "sqrt(master_area / k)",
+                "centroidal_updates": "area-weighted master-cell centroid and unit area-vector normal",
+                "lloyd_iterations": 2,
+                "lloyd_history": [
+                  {
+                    "empty_before_repair": 0,
+                    "repaired_support_indices": [],
+                    "repair_master_cells": [],
+                    "shift": {
+                      "min": 1.376538784825243e-05,
+                      "mean": 0.005881294258887919,
+                      "q50": 0.004133222158998251,
+                      "q90": 0.013315867073833936,
+                      "q95": 0.01738987583667039,
+                      "q99": 0.028418491464108242,
+                      "max": 0.0665619745850563
+                    },
+                    "iteration": 1,
+                    "represented_measure": {
+                      "min": 7.674748481178995e-08,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00018918720443217296,
+                      "q90": 0.0025313926582384728,
+                      "q95": 0.004111067467647442,
+                      "q99": 0.00991915323555304,
+                      "max": 0.0279828590573743
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  },
+                  {
+                    "empty_before_repair": 8,
+                    "repaired_support_indices": [
+                      1547,
+                      7100,
+                      9677,
+                      11841,
+                      15109,
+                      21112,
+                      25232,
+                      27187
+                    ],
+                    "repair_master_cells": [
+                      12067865,
+                      3571121,
+                      12915101,
+                      2332903,
+                      12948649,
+                      7757809,
+                      8341603,
+                      1853809
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0032159979969157803,
+                      "q50": 0.001878871233202517,
+                      "q90": 0.006437348993495106,
+                      "q95": 0.008650540467351675,
+                      "q99": 0.01493948901072146,
+                      "max": 2.2149393558502197
+                    },
+                    "iteration": 2,
+                    "represented_measure": {
+                      "min": 0.0,
+                      "mean": 0.000900493647427112,
+                      "q50": 0.00022367262276823396,
+                      "q90": 0.0025771965223157153,
+                      "q95": 0.004002246179982193,
+                      "q99": 0.00929167169423981,
+                      "max": 0.02189931722386973
+                    },
+                    "neighbor_backend": "scipy.spatial.cKDTree"
+                  }
+                ],
+                "restriction_empty_cell_repairs": [
+                  {
+                    "empty_before_repair": 7,
+                    "repaired_support_indices": [
+                      1842,
+                      9947,
+                      14576,
+                      21712,
+                      26841,
+                      33775,
+                      38904
+                    ],
+                    "repair_master_cells": [
+                      15411681,
+                      1685230,
+                      13318658,
+                      6387441,
+                      15234502,
+                      8373624,
+                      2308042
+                    ],
+                    "shift": {
+                      "min": 0.0,
+                      "mean": 0.0003772451967000961,
+                      "q50": 0.0,
+                      "q90": 0.0,
+                      "q95": 0.0,
+                      "q99": 0.0,
+                      "max": 2.9223995208740234
+                    },
+                    "restriction_attempt": 1,
+                    "repair_scope": "empty_supports_only"
+                  }
+                ]
+              },
+              "support_points_sha256_float32": "ae9a097138ec5eb0d33c6f19d74a6347c91d9b884d5773aec2b2b482c2365516",
+              "support_normals_sha256_float32": "240bfe87ea24184d33e4f5d3cdef9093a515dc66b100aeec8f009adf0e9cc549",
+              "master_assignment_sha256_int64": "19e7a23e07481612cd18b70911fdbcb2f04d4173091fc69efe34aec8ae30648e",
+              "empty_representation_cell_count": 0,
+              "represented_measure": {
+                "min": 7.674748481178995e-08,
+                "mean": 0.000900493647427112,
+                "q50": 0.00024489049102260907,
+                "q90": 0.002601631110479729,
+                "q95": 0.0039642958485387675,
+                "q99": 0.008905675627374899,
+                "max": 0.01825565366198134
+              },
+              "represented_measure_imbalance": {
+                "coefficient_of_variation": 1.8656868738418073,
+                "max_over_min": 237866.47480044726
+              },
+              "fill_distance": {
+                "definition": "exact ambient-Euclidean distance from every full-master cell centroid to its assigned representation centroid",
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.00909006991744104,
+                  "q50": 0.00643558194860816,
+                  "q90": 0.020453456416726114,
+                  "q95": 0.027018173784017552,
+                  "q99": 0.041567575186490915,
+                  "max": 0.09836892038583755
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.019880653845547467,
+                  "q90": 0.04295094311237335,
+                  "q95": 0.050896590554259685,
+                  "q99": 0.06491882277334679
+                },
+                "normalized_by_master_bbox_diagonal": {
+                  "cell_uniform": {
+                    "min": 0.0,
+                    "mean": 0.0017028782567704006,
+                    "q50": 0.0012056026707695565,
+                    "q90": 0.003831625776718877,
+                    "q95": 0.005061419889210215,
+                    "q99": 0.007787016009187184,
+                    "max": 0.018427833579763866
+                  },
+                  "area_weighted_quantiles": {
+                    "q50": 0.0037243204366344427,
+                    "q90": 0.008046167719074354,
+                    "q95": 0.009534656849261438,
+                    "q99": 0.012161496309698807
+                  }
+                }
+              },
+              "assignment_metric_distance": {
+                "definition": "sqrt(||x_i-s_j||^2 + lambda^2 ||n_i-m_j||^2); lambda=0 for the ambient cyclic arm",
+                "normal_coordinate_length_scale": 0.030008226329243645,
+                "cell_uniform": {
+                  "min": 0.0,
+                  "mean": 0.010116198797048965,
+                  "q50": 0.007579094730317593,
+                  "q90": 0.021852305531501776,
+                  "q95": 0.028516041859984395,
+                  "q99": 0.042832709401845734,
+                  "max": 0.09837014228105545
+                },
+                "area_weighted_quantiles": {
+                  "q50": 0.020797183590948627,
+                  "q90": 0.04349037441956587,
+                  "q95": 0.051177295151698304,
+                  "q99": 0.06499490676568634
+                }
+              },
+              "normal_assignment": {
+                "minimum_selected_dot": -0.944917619228363,
+                "negative_normal_assignment_cell_count": 709,
+                "negative_normal_assignment_cell_fraction": 4.0090669374511485e-05,
+                "negative_normal_assignment_area": 0.003928378045628733,
+                "negative_normal_assignment_area_fraction": 0.0001090617922972829
+              },
+              "p0_projection_floor": {
+                "target_definition": "area-adjoint restriction of full-master truth followed by piecewise-constant prolongation",
+                "CpMeanTrim": {
+                  "relative_l2_floor": 0.19986510425032952,
+                  "area_weighted_rms_floor": 0.06534177815305214,
+                  "integral_relative_error": 2.4315351730605615e-16,
+                  "restriction_orthogonality_max_abs": 3.056677208844753e-18,
+                  "pressure_force": {
+                    "definition": "integral master_area * Cp * master_unit_normal",
+                    "truth": [
+                      0.6121875993718022,
+                      0.10559577765593016,
+                      0.14590631214331168
+                    ],
+                    "projected": [
+                      0.6056207093852234,
+                      0.10330738199291206,
+                      0.16105844003681732
+                    ],
+                    "relative_error": 0.026125878662536184
+                  },
+                  "pressure_moment": {
+                    "definition": "integral master_area * cross(master_centroid, Cp * master_unit_normal)",
+                    "origin": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "truth": [
+                      -0.06518817546656024,
+                      -0.9351634237071502,
+                      0.2652202767813576
+                    ],
+                    "projected": [
+                      -0.06448457069269471,
+                      -0.9507252211799896,
+                      0.261363096081962
+                    ],
+                    "relative_error": 0.016472647436564427
+                  }
+                },
+                "wallShearStressMeanTrim": {
+                  "raw_p0_relative_l2_floor": 0.2493026091117351,
+                  "raw_p0_area_weighted_vector_rms_floor": 0.5469878534622156,
+                  "tangent_projected_relative_l2_floor": 0.24301231597532758,
+                  "tangent_projected_area_weighted_vector_rms_floor": 0.5331864979425484,
+                  "integral_relative_error": 2.99763092950459e-16,
+                  "restriction_orthogonality_max_vector_norm": 2.6378314838725204e-17,
+                  "tangency_relative_normal_l2": {
+                    "full_master_truth": 0.08411972978175325,
+                    "raw_p0_prolongation": 0.10096643993308,
+                    "after_explicit_master_tangent_projection": 7.096211416267695e-09
+                  }
+                }
+              }
+            }
+          },
+          "common_master_algebra": {
+            "definition": "M_ij = sum_f area_f 1[A(f)=i,B(f)=j] on this case's full CFD master; T_A_to_B = D_B^-1 M^T and T_B_to_A = D_A^-1 M",
+            "operator_sha256_streaming_assignment_a_b_area_float64": "1951ced3b3bda8373421cb0097362554f2664de0d45affced444286a3efad292",
+            "measure_total_relative_error": 3.9452956597209836e-16,
+            "restriction_measure_replay_max_relative_error": 0.0,
+            "constant_max_abs_error": 0.0,
+            "representation_roundtrip_max_abs_error": 1.7763568394002505e-15,
+            "pythagorean_relative_error": 6.395473696024276e-16,
+            "a_to_b_vector_integral_relative_error": 1.0883886130480007e-14,
+            "b_to_a_vector_integral_relative_error": 6.929795774815934e-15,
+            "mass_adjoint_relative_error": 3.236995004696959e-16,
+            "max_load_bearing_error": 1.0883886130480007e-14,
+            "tolerance": 1e-12,
+            "passed": true
+          },
+          "comparison": {
+            "ratio_definition": "normal_aware_centroidal_cover / cyclic_sparse",
+            "CpMeanTrim_relative_l2_floor_ratio": 0.8568937689739098,
+            "wallShearStressMeanTrim_relative_l2_floor_ratio": 0.8304274563318402,
+            "normalized_area_weighted_fill_q95_ratio": 0.6525911087489973,
+            "normalized_cell_uniform_fill_q95_ratio_diagnostic": 0.7993411810617097,
+            "normalized_fill_max_ratio": 0.4901785000259516
+          },
+          "execution": {
+            "cyclic_restriction_neighbor_backend": "scipy.spatial.cKDTree",
+            "final_neighbor_backends": [
+              "scipy.spatial.cKDTree",
+              "scipy.spatial.cKDTree"
+            ],
+            "runtime_seconds": 80.1653176927939
+          }
+        }
+      ],
+      "replicate_comparison_summary": {
+        "CpMeanTrim_relative_l2_floor_ratio": {
+          "min": 0.8508588622659108,
+          "mean": 0.8539638148110682,
+          "q50": 0.8540513140022261,
+          "q90": 0.8563909791283797,
+          "q95": 0.8566423740511447,
+          "q99": 0.8568434899893568,
+          "max": 0.8568937689739098
+        },
+        "wallShearStressMeanTrim_relative_l2_floor_ratio": {
+          "min": 0.8236291899343301,
+          "mean": 0.8288999656816264,
+          "q50": 0.8289492214980838,
+          "q90": 0.8329787977567576,
+          "q95": 0.8335255137763828,
+          "q99": 0.833962886592083,
+          "max": 0.834072229796008
+        },
+        "normalized_area_weighted_fill_q95_ratio": {
+          "min": 0.6525911087489973,
+          "mean": 0.6720908277342057,
+          "q50": 0.6713794754214946,
+          "q90": 0.687463676030599,
+          "q95": 0.6902384636877175,
+          "q99": 0.6924582938134123,
+          "max": 0.6930132513448359
+        },
+        "normalized_cell_uniform_fill_q95_ratio_diagnostic": {
+          "min": 0.7905519103344196,
+          "mean": 0.7960816587819133,
+          "q50": 0.7963761423835909,
+          "q90": 0.8005180623367489,
+          "q95": 0.8007702511814002,
+          "q99": 0.8009720022571213,
+          "max": 0.8010224400260515
+        },
+        "normalized_fill_max_ratio": {
+          "min": 0.4901785000259516,
+          "mean": 0.5481118794601172,
+          "q50": 0.5450737995840212,
+          "q90": 0.5946394984532746,
+          "q95": 0.6033804585498747,
+          "q99": 0.6103732266271547,
+          "max": 0.6121214186464747
+        }
+      },
+      "execution": {
+        "cover_restriction_neighbor_backend": "scipy.spatial.cKDTree",
+        "runtime_seconds": 464.4109665863216
+      }
+    }
+  ],
+  "provenance": {
+    "script": {
+      "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-common-surface-production/drivaerml_common_master_audit.py",
+      "sha256": "44a95610f844daba0b3367809fc061e1edbb2c334f37d46fc4ca32b21258aa77"
+    },
+    "command": [
+      "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-common-surface-production/.venv/bin/python",
+      "drivaerml_common_master_audit.py",
+      "--case",
+      "run_1",
+      "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerML/run_1/domain_run_1.pdmsh",
+      "--k",
+      "40000",
+      "--lloyd-iterations",
+      "2",
+      "--workers",
+      "16",
+      "--hash-inputs",
+      "--output",
+      "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-common-surface-production/artifacts/drivaerml_common_master_run_1_k40000_2026-07-27.json",
+      "--cyclic-replicate",
+      "run_1",
+      "11914080",
+      "20300727",
+      "--cyclic-replicate",
+      "run_1",
+      "11878329",
+      "20300727",
+      "--cyclic-replicate",
+      "run_1",
+      "14546186",
+      "20300727",
+      "--cyclic-replicate",
+      "run_1",
+      "2529054",
+      "20300727"
+    ],
+    "cwd": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-common-surface-production",
+    "hostname": "cpu-0002",
+    "python": "3.13.14",
+    "platform": "Linux-6.8.0-1047-nvidia-aarch64-with-glibc2.39",
+    "versions": {
+      "numpy": "2.5.1",
+      "scipy": "1.16.1"
+    },
+    "environment": {
+      "SLURM_JOB_ID": "303478",
+      "SLURM_JOB_NODELIST": "cpu-0002",
+      "SLURM_CPUS_PER_TASK": "16",
+      "OMP_NUM_THREADS": "16",
+      "OPENBLAS_NUM_THREADS": "16",
+      "MKL_NUM_THREADS": "16"
+    }
+  },
+  "runtime_seconds": 465.74243317265064
+}

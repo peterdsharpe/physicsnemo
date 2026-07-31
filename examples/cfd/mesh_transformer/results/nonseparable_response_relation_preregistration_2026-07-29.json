@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "formal_gates_frozen_after_exploratory_instrument_design_and_before_formal_resolution_result",
+  "scientific_question": "Can the length-versus-screening response-direction contrast be retained after a material nonseparable mode coupling removes the rectangle's one-field spectral-demixing loophole?",
+  "problem": {
+    "domain": "A strip with normalized propagation coordinate xi in (0,1) and periodic transverse coordinate y in (0,2 pi).",
+    "equation": "After cosine Galerkin projection, u_xixi = a^2[-u_yy + lambda^2 u + 5 q(xi,y) u].",
+    "coefficient": "q=exp(log(0.8)+sin(2 pi xi+0.3) cos(y)+0.45 sin(4 pi xi-0.8) cos(2y)+0.25 sin(2 pi xi+1.2) cos(3y)).",
+    "boundary_contract": "Eight independent cosine coefficients at the left boundary; zero Dirichlet data at the right boundary.",
+    "target": {
+      "propagation_length": 1.0,
+      "uniform_screening": 0.0
+    },
+    "source_P": "Same uniform screening as target; increase propagation length until the exact relative response distance is 15%.",
+    "source_G": "Same propagation length as target; increase uniform screening until the exact relative response distance is 15%.",
+    "drive_distribution": "Independent zero-mean coefficients with variance inversely proportional to each target response column's energy, normalized to mean variance one."
+  },
+  "exploratory_design_result_not_used_as_confirmation": {
+    "galerkin_channels": 8,
+    "longitudinal_layers": 12,
+    "transverse_quadrature_points": 256,
+    "interior_query_points": 32,
+    "coefficient_dynamic_range": 12.030324867856478,
+    "diagonal_demixing_relative_error": 0.06195336849272358,
+    "response_direction_angle_degrees": 35.71759536098842,
+    "source_P_propagation_length": 1.278832914976178,
+    "source_G_screening_over_pi": 0.8707726727297144,
+    "drive_variance_dynamic_range": 3.1240020161301882
+  },
+  "formal_resolution_levels": [
+    {
+      "name": "coarse",
+      "galerkin_channels": 10,
+      "longitudinal_layers": 16,
+      "transverse_quadrature_points": 128,
+      "interior_query_points": 64
+    },
+    {
+      "name": "medium",
+      "galerkin_channels": 14,
+      "longitudinal_layers": 32,
+      "transverse_quadrature_points": 192,
+      "interior_query_points": 64
+    },
+    {
+      "name": "reference",
+      "galerkin_channels": 18,
+      "longitudinal_layers": 64,
+      "transverse_quadrature_points": 256,
+      "interior_query_points": 64
+    }
+  ],
+  "registered_gates": {
+    "material_nonseparability": "The best response obtained by retaining only same-index input/output mode pairs has at least 4% relative root-mean-square error under the declared drive distribution.",
+    "causal_separation": "The exact source-response displacement angle is at least 30 degrees.",
+    "spectral_crossover": "Source P is closer on at least three of the four lowest input modes, and source G is closer on at least three of the four highest modes.",
+    "nonextreme_drive_distribution": "The largest prescribed drive variance is at most five times the smallest.",
+    "source_distance_control": "Both reference-resolution source radii equal 15% within 1e-7 absolute.",
+    "boundary_certification": "The left-boundary response equals identity and the right-boundary response equals zero to 1e-9 maximum absolute error.",
+    "resolution_stability": "Medium versus reference changes the response angle by at most 2 degrees and the diagonal-demixing error by at most 0.5 percentage points; both medium source radii remain within 0.3 percentage points of 15%; the low/high source winner pattern is identical."
+  },
+  "decision_rule": "Advance only to an empirical target-only saturation pilot if every gate passes. Failure rejects this coefficient profile as a transfer instrument; it does not refute response-direction reuse.",
+  "scope": [
+    "This is a causal instrument inside one coercive elliptic propagation class, not a general geometry-transfer result.",
+    "Passing removes the known separable-demixing defect but does not prove a lower bound on target simulations; the target-only learning curve must still be measured.",
+    "No architecture comparison or transfer outcome is part of this formal gate."
+  ]
+}

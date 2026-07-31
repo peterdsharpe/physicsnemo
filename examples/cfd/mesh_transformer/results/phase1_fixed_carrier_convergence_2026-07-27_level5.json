@@ -1,0 +1,680 @@
+{
+  "status": "phase1_fixed_carrier_common_surface_convergence",
+  "date": "2026-07-27",
+  "scope": "Uniform in-plane quadrature refinement of the frozen subdivision-3 carrier against the exact 156-face Phase-1 representation. No curved geometry is introduced after level 0.",
+  "hypothesis": "If the earlier refinement drift is whole-cell boundary aliasing, then fixed-carrier subdivision should localize changes to mixed parents and reduce represented-measure and field-metric drift.",
+  "screen_registration": {
+    "status": "formalized_after_exploratory_diagnosis_before_generation_of_this_dated_artifact",
+    "confirmatory_preregistration": false,
+    "global_metric": "represented_measure_normalized_shape_l1",
+    "global_metric_threshold": 0.005,
+    "field_force_moment_metrics": [
+      "pressure_projection_floor_relative_l2",
+      "wss_tangent_projection_floor_relative_l2",
+      "traction_force_projection_relative_error",
+      "traction_moment_projection_relative_error"
+    ],
+    "field_metric_relative_drift_threshold": 0.02,
+    "relative_drift_denominator": "max(abs(coarse), abs(fine), float64_tiny)",
+    "required_successive_joint_transitions": 2
+  },
+  "run_configuration": {
+    "max_refinement_level": 5,
+    "representation_source": {
+      "kind": "frozen_npz",
+      "path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-27-mt-common-surface-production/phase1_representation_156faces_2026-07-27.npz",
+      "sha256": "5df5bb3305738de575473c574369b640629b96bd5bede9de2c3e555fac88f713"
+    }
+  },
+  "construction": {
+    "base_surface": "unit icosphere at subdivision 3",
+    "refinement": "four coplanar midpoint children per parent; vertices are not renormalized to the sphere",
+    "maximum_uniform_refinement_level": 5,
+    "representation_source_kind": "frozen_npz",
+    "representation_faces": 156,
+    "representation_mesh_sha256": "4bddf871938b80d6f93396544cac8e43decdc5db28b4c00db3983bf0f2094b88",
+    "expected_level_0_map_sha256": "7687e70cef50ccca705ea5d8f80c39f1843d59c214b7f1cf3c7c5821898c36d2",
+    "face_relative_change_definition": "abs(fine_normalized_measure - coarse_normalized_measure) / fine_normalized_measure"
+  },
+  "levels": [
+    {
+      "level": 0,
+      "n_reference_cells": 1280,
+      "n_reference_points": 642,
+      "reference_mesh_sha256": "a5e060ac19c132fa772ebf4cb942be85c942c9d51c998718eb10a6f81be9176c",
+      "map_sha256": "7687e70cef50ccca705ea5d8f80c39f1843d59c214b7f1cf3c7c5821898c36d2",
+      "total_area": 12.506175017575341,
+      "total_area_relative_drift_from_level_0": 0.0,
+      "represented_measure_min": 0.030451281066559387,
+      "represented_measure_max": 0.12669312949991748,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.024416198022663593,
+          "q95": 0.038553504087030885,
+          "q99": 0.0458707532286644,
+          "max": 0.05218159779906273,
+          "mean": 0.024252408185202513
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9540023525238134,
+          "q50": 0.9905420882327134,
+          "q95": 0.9995508201360661,
+          "q99": 0.9998554324652904,
+          "max": 0.9999936082314581,
+          "mean": 0.9892233887971471
+        },
+        "representation_to_reference_distance": {
+          "min": 0.02192692644894123,
+          "q50": 0.031834926456213,
+          "q95": 0.043066857382655144,
+          "q99": 0.04961137380450964,
+          "max": 0.053189318627119064,
+          "mean": 0.032935585492314436
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 0.5525313929332133,
+          "q50": 1.047347465898353,
+          "q95": 1.2431804354598774,
+          "q99": 1.4595583760813173,
+          "max": 1.5998803307732081,
+          "mean": 1.044506183416498
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.030115391368332297,
+        "wss_raw_p0_projection_floor_relative_l2": 0.16799952909256274,
+        "wss_tangent_projection_floor_relative_l2": 0.14313601719381291,
+        "truth_wss_tangency_max_abs": 4.440892098500626e-16,
+        "projected_wss_tangency_max_abs": 1.6653345369377348e-16,
+        "traction_force_projection_relative_error": 0.0161141673222041,
+        "traction_moment_projection_relative_error": 0.01616544747409275,
+        "common_refinement_first_moment_vs_direct_relative_error": 1.56092770779458e-16,
+        "naive_representation_centroid_moment_relative_error": 0.025644124990640515
+      }
+    },
+    {
+      "level": 1,
+      "n_reference_cells": 5120,
+      "n_reference_points": 15360,
+      "reference_mesh_sha256": "004d9564cf9cb206e606fd883b0f02a5b231c321dd32b23e7f2f1e0326a28e87",
+      "map_sha256": "5593e3073942ed21b0bea0f899ffb059adb9e30f4305fe8633b12d476b9204b4",
+      "total_area": 12.506175017575337,
+      "total_area_relative_drift_from_level_0": 2.840767599851877e-16,
+      "represented_measure_min": 0.04786177066503786,
+      "represented_measure_max": 0.12700890962904646,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.025018423795700073,
+          "q95": 0.0392713176086545,
+          "q99": 0.04635122340172533,
+          "max": 0.053113650530576706,
+          "mean": 0.024886227450906517
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9482321030618905,
+          "q50": 0.9902637506958407,
+          "q95": 0.999527507784713,
+          "q99": 0.9998564508020998,
+          "max": 0.9999936082314581,
+          "mean": 0.988561506021345
+        },
+        "representation_to_reference_distance": {
+          "min": 0.021926846355199814,
+          "q50": 0.03183489292860031,
+          "q95": 0.04306687880307436,
+          "q99": 0.04961137417703867,
+          "max": 0.05318931117653847,
+          "mean": 0.03293557755219249
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 0.8930416570578088,
+          "q50": 1.0416707973580435,
+          "q95": 1.1397705147096073,
+          "q99": 1.1932242022369293,
+          "max": 1.211096842573408,
+          "mean": 1.042059277576646
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.03125336168635639,
+        "wss_raw_p0_projection_floor_relative_l2": 0.1755924716229063,
+        "wss_tangent_projection_floor_relative_l2": 0.1476639418058563,
+        "truth_wss_tangency_max_abs": 5.290906601729262e-16,
+        "projected_wss_tangency_max_abs": 2.220446049250313e-16,
+        "traction_force_projection_relative_error": 0.017807528516362744,
+        "traction_moment_projection_relative_error": 0.01790071775367236,
+        "common_refinement_first_moment_vs_direct_relative_error": 1.0411972222409098e-16,
+        "naive_representation_centroid_moment_relative_error": 0.023303464543213668
+      }
+    },
+    {
+      "level": 2,
+      "n_reference_cells": 20480,
+      "n_reference_points": 61440,
+      "reference_mesh_sha256": "fedd6d7b965553d987594f34a96b770b796f7718f69ff02ba2bfb93a814e282b",
+      "map_sha256": "38d730742ca2d806c3d703152de50e73c06c0b287eb0d261a63c8fc8e9af7022",
+      "total_area": 12.506175017575337,
+      "total_area_relative_drift_from_level_0": 2.840767599851877e-16,
+      "represented_measure_min": 0.051110048608430846,
+      "represented_measure_max": 0.123839978326944,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.0251913545653224,
+          "q95": 0.03953722454607487,
+          "q99": 0.046537204235792155,
+          "max": 0.053579676896333694,
+          "mean": 0.0250580621007785
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9304022454880531,
+          "q50": 0.9901570765827126,
+          "q95": 0.999527053578484,
+          "q99": 0.9998759035212385,
+          "max": 0.9999936082314581,
+          "mean": 0.9883334071069392
+        },
+        "representation_to_reference_distance": {
+          "min": 0.021926850080490112,
+          "q50": 0.031834926456213,
+          "q95": 0.04306690953671932,
+          "q99": 0.04961136505007744,
+          "max": 0.053189318627119064,
+          "mean": 0.032935578865596116
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 0.9800554939432096,
+          "q50": 1.0410870297749113,
+          "q95": 1.0770444406144875,
+          "q99": 1.1106020170571893,
+          "max": 1.1389143967296946,
+          "mean": 1.0419876348460961
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.0313739042701552,
+        "wss_raw_p0_projection_floor_relative_l2": 0.17705016691744924,
+        "wss_tangent_projection_floor_relative_l2": 0.14868916785261985,
+        "truth_wss_tangency_max_abs": 5.299580219109146e-16,
+        "projected_wss_tangency_max_abs": 2.220446049250313e-16,
+        "traction_force_projection_relative_error": 0.01808420008617247,
+        "traction_moment_projection_relative_error": 0.0182163904862043,
+        "common_refinement_first_moment_vs_direct_relative_error": 1.4724493714395944e-16,
+        "naive_representation_centroid_moment_relative_error": 0.024559495037600552
+      }
+    },
+    {
+      "level": 3,
+      "n_reference_cells": 81920,
+      "n_reference_points": 245760,
+      "reference_mesh_sha256": "1aadc76eb6e5b9b77e3857b3b35c7d77fb25fbe451d574f582eb44d4efd7ee8b",
+      "map_sha256": "2b0f3d6707383e017bc04d57ab1035ce3be26ffbb1f70cb8ebd2f4d46178310c",
+      "total_area": 12.506175017575341,
+      "total_area_relative_drift_from_level_0": 0.0,
+      "represented_measure_min": 0.052595801470334866,
+      "represented_measure_max": 0.1271299625796437,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.025216788053512573,
+          "q95": 0.039578307792544364,
+          "q99": 0.04655486680567262,
+          "max": 0.05381264537572861,
+          "mean": 0.025103724439585483
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9304022454880531,
+          "q50": 0.9901394714150367,
+          "q95": 0.999527053578484,
+          "q99": 0.999876546399556,
+          "max": 0.9999936082314581,
+          "mean": 0.9883104736320188
+        },
+        "representation_to_reference_distance": {
+          "min": 0.0219268836081028,
+          "q50": 0.03183493763208389,
+          "q95": 0.043066876009106636,
+          "q99": 0.04961132183670998,
+          "max": 0.05318930372595787,
+          "mean": 0.03293557763577272
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 1.0117116767371648,
+          "q50": 1.0410641772682319,
+          "q95": 1.065059327399615,
+          "q99": 1.082295792354233,
+          "max": 1.099974364634164,
+          "mean": 1.0420622926045446
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.03140910310200348,
+        "wss_raw_p0_projection_floor_relative_l2": 0.17717366172468232,
+        "wss_tangent_projection_floor_relative_l2": 0.1487000139995746,
+        "truth_wss_tangency_max_abs": 6.106226635438361e-16,
+        "projected_wss_tangency_max_abs": 2.220446049250313e-16,
+        "traction_force_projection_relative_error": 0.01810707461444329,
+        "traction_moment_projection_relative_error": 0.01821274987626849,
+        "common_refinement_first_moment_vs_direct_relative_error": 1.87682919514257e-16,
+        "naive_representation_centroid_moment_relative_error": 0.02482488519080412
+      }
+    },
+    {
+      "level": 4,
+      "n_reference_cells": 327680,
+      "n_reference_points": 983040,
+      "reference_mesh_sha256": "3156110318a9136b59d23412c8078e6db92642db4f7d267047bf052bfe853683",
+      "map_sha256": "137e2389b52ec6127999d2678136d6618ae5df2e6635ade3880af6b4f4845dbc",
+      "total_area": 12.50617501757534,
+      "total_area_relative_drift_from_level_0": 1.4203837999259386e-16,
+      "represented_measure_min": 0.05302638592656487,
+      "represented_measure_max": 0.1270731087729738,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.025239111855626106,
+          "q95": 0.0396014716476202,
+          "q99": 0.046574095860123656,
+          "max": 0.053929172456264496,
+          "mean": 0.025114609372418273
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9304022454880531,
+          "q50": 0.9901394714150367,
+          "q95": 0.999527053578484,
+          "q99": 0.999876546399556,
+          "max": 0.9999936082314581,
+          "mean": 0.9882954524110963
+        },
+        "representation_to_reference_distance": {
+          "min": 0.021926933899521828,
+          "q50": 0.031834932044148445,
+          "q95": 0.04306687135249376,
+          "q99": 0.04961134232580662,
+          "max": 0.05318932980298996,
+          "mean": 0.03293558287744721
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 1.0142829371267028,
+          "q50": 1.0400585466453263,
+          "q95": 1.0657710443338417,
+          "q99": 1.0740488067072231,
+          "max": 1.0859013594687479,
+          "mean": 1.042123397768599
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.03143698553410161,
+        "wss_raw_p0_projection_floor_relative_l2": 0.17731040871230824,
+        "wss_tangent_projection_floor_relative_l2": 0.1488390768969489,
+        "truth_wss_tangency_max_abs": 6.635317295611287e-16,
+        "projected_wss_tangency_max_abs": 2.220446049250313e-16,
+        "traction_force_projection_relative_error": 0.01814475094503485,
+        "traction_moment_projection_relative_error": 0.01823117857423144,
+        "common_refinement_first_moment_vs_direct_relative_error": 7.366129189434013e-16,
+        "naive_representation_centroid_moment_relative_error": 0.02478756148933951
+      }
+    },
+    {
+      "level": 5,
+      "n_reference_cells": 1310720,
+      "n_reference_points": 3932160,
+      "reference_mesh_sha256": "e124f9f9d87512c0f54d27177d15e6eb4470a1ef9a1292ed5fa1f82e035ef925",
+      "map_sha256": "4fe422423c288991b2280df93d8a2d9fd9a5cdb3c53877f9e789f7c98642021a",
+      "total_area": 12.506175017575341,
+      "total_area_relative_drift_from_level_0": 0.0,
+      "represented_measure_min": 0.05322980756904262,
+      "represented_measure_max": 0.12695781627745453,
+      "geometry": {
+        "method": "closest_triangle_discrete_common_refinement",
+        "reference_to_representation_distance": {
+          "min": 0.0,
+          "q50": 0.025246165692806244,
+          "q95": 0.03960462212562561,
+          "q99": 0.04657768715173007,
+          "max": 0.05398743599653244,
+          "mean": 0.025117337948622514
+        },
+        "reference_to_representation_normal_dot": {
+          "min": 0.9304022454880531,
+          "q50": 0.9901394714150367,
+          "q95": 0.999527053578484,
+          "q99": 0.999876546399556,
+          "max": 0.9999936082314581,
+          "mean": 0.9882938645570263
+        },
+        "representation_to_reference_distance": {
+          "min": 0.0219268836081028,
+          "q50": 0.03183490037918091,
+          "q95": 0.04306689836084843,
+          "q99": 0.04961134660989046,
+          "max": 0.05318930372595787,
+          "mean": 0.03293558130136285
+        },
+        "representation_to_reference_normal_dot": {
+          "min": 0.9784933036864711,
+          "q50": 0.9991019158016707,
+          "q95": 0.9998777850713925,
+          "q99": 0.999967546502918,
+          "max": 0.9999837995091309,
+          "mean": 0.9968940598414869
+        },
+        "represented_to_native_measure_ratio": {
+          "min": 1.014443909396263,
+          "q50": 1.0409394908357723,
+          "q95": 1.0672145050103243,
+          "q99": 1.0729924142153133,
+          "max": 1.081232371288532,
+          "mean": 1.0421331702026804
+        },
+        "negative_reference_normal_fraction": 0.0,
+        "negative_representation_normal_fraction": 0.0
+      },
+      "field_force_moment_metrics": {
+        "pressure_projection_floor_relative_l2": 0.03143248939697865,
+        "wss_raw_p0_projection_floor_relative_l2": 0.17731054482071393,
+        "wss_tangent_projection_floor_relative_l2": 0.14884426226895814,
+        "truth_wss_tangency_max_abs": 6.800116025829084e-16,
+        "projected_wss_tangency_max_abs": 2.220446049250313e-16,
+        "traction_force_projection_relative_error": 0.018142218446570463,
+        "traction_moment_projection_relative_error": 0.01822461267458824,
+        "common_refinement_first_moment_vs_direct_relative_error": 8.213859279414065e-16,
+        "naive_representation_centroid_moment_relative_error": 0.024797602128437422
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "transition": "level_0_to_1",
+      "represented_measure_normalized_shape_l1": 0.09316320570737517,
+      "represented_measure_raw_relative_l1": 0.09316320570737521,
+      "total_area_relative_change": 2.840767599851878e-16,
+      "normalized_face_measure_absolute_change": {
+        "q95": 0.001471252894946034,
+        "max": 0.0019995372110152747
+      },
+      "normalized_face_measure_relative_change_to_fine": {
+        "q95": 0.24442418843787436,
+        "max": 0.40786871452461665
+      },
+      "mixed_parent_count": 611,
+      "mixed_parent_area_fraction": 0.47870986612608035,
+      "parent_with_any_child_assignment_change_area_fraction": 0.47870986612608035,
+      "assignment_changes_confined_to_mixed_parents": true,
+      "child_area_reassigned_from_parent_fraction": 0.1476900021553366,
+      "split_integrity": {
+        "parent_area_partition_max_relative_error": 1.9162540397277968e-16,
+        "total_area_relative_error": 0.0,
+        "child_centroid_parent_plane_distance_max_abs": 5.898059818321144e-17,
+        "child_parent_normal_dot_min": 0.9999999999999997
+      },
+      "field_force_moment_metric_relative_drift": {
+        "pressure_projection_floor_relative_l2": 0.03641113328685122,
+        "wss_tangent_projection_floor_relative_l2": 0.030663712187749558,
+        "traction_force_projection_relative_error": 0.09509243197913016,
+        "traction_moment_projection_relative_error": 0.09693858667894009
+      },
+      "maximum_field_force_moment_metric_relative_drift": 0.09693858667894009,
+      "screen_components": {
+        "global_normalized_shape_l1_below_0p5pct": false,
+        "all_field_force_moment_metric_drifts_below_2pct": false,
+        "joint_transition_pass": false
+      }
+    },
+    {
+      "transition": "level_1_to_2",
+      "represented_measure_normalized_shape_l1": 0.036060034108801806,
+      "represented_measure_raw_relative_l1": 0.03606003410880182,
+      "total_area_relative_change": 0.0,
+      "normalized_face_measure_absolute_change": {
+        "q95": 0.0005435052434573867,
+        "max": 0.0006914011865535074
+      },
+      "normalized_face_measure_relative_change_to_fine": {
+        "q95": 0.08886171247529681,
+        "max": 0.1371821813423858
+      },
+      "mixed_parent_count": 1370,
+      "mixed_parent_area_fraction": 0.2694792832008266,
+      "parent_with_any_child_assignment_change_area_fraction": 0.2694792832008266,
+      "assignment_changes_confined_to_mixed_parents": true,
+      "child_area_reassigned_from_parent_fraction": 0.08214473320006503,
+      "split_integrity": {
+        "parent_area_partition_max_relative_error": 2.1384408991253605e-16,
+        "total_area_relative_error": 0.0,
+        "child_centroid_parent_plane_distance_max_abs": 5.637851296924623e-17,
+        "child_parent_normal_dot_min": 0.9999999999999997
+      },
+      "field_force_moment_metric_relative_drift": {
+        "pressure_projection_floor_relative_l2": 0.0038421288839552157,
+        "wss_tangent_projection_floor_relative_l2": 0.006895095732728531,
+        "traction_force_projection_relative_error": 0.015299077011499932,
+        "traction_moment_projection_relative_error": 0.017329049504675866
+      },
+      "maximum_field_force_moment_metric_relative_drift": 0.017329049504675866,
+      "screen_components": {
+        "global_normalized_shape_l1_below_0p5pct": false,
+        "all_field_force_moment_metric_drifts_below_2pct": true,
+        "joint_transition_pass": false
+      }
+    },
+    {
+      "transition": "level_2_to_3",
+      "represented_measure_normalized_shape_l1": 0.01229529590121474,
+      "represented_measure_raw_relative_l1": 0.012295295901214733,
+      "total_area_relative_change": 2.840767599851877e-16,
+      "normalized_face_measure_absolute_change": {
+        "q95": 0.000185148685652806,
+        "max": 0.00032613427531750713
+      },
+      "normalized_face_measure_relative_change_to_fine": {
+        "q95": 0.03213689381012433,
+        "max": 0.045597101275245244
+      },
+      "mixed_parent_count": 3007,
+      "mixed_parent_area_fraction": 0.1478866250921129,
+      "parent_with_any_child_assignment_change_area_fraction": 0.1478866250921129,
+      "assignment_changes_confined_to_mixed_parents": true,
+      "child_area_reassigned_from_parent_fraction": 0.044005777386673404,
+      "split_integrity": {
+        "parent_area_partition_max_relative_error": 2.1384408991253605e-16,
+        "total_area_relative_error": 0.0,
+        "child_centroid_parent_plane_distance_max_abs": 5.724587470723463e-17,
+        "child_parent_normal_dot_min": 0.9999999999999997
+      },
+      "field_force_moment_metric_relative_drift": {
+        "pressure_projection_floor_relative_l2": 0.0011206570188895223,
+        "wss_tangent_projection_floor_relative_l2": 7.293978435532456e-05,
+        "traction_force_projection_relative_error": 0.0012632923184937048,
+        "traction_moment_projection_relative_error": 0.00019985352963145908
+      },
+      "maximum_field_force_moment_metric_relative_drift": 0.0012632923184937048,
+      "screen_components": {
+        "global_normalized_shape_l1_below_0p5pct": false,
+        "all_field_force_moment_metric_drifts_below_2pct": true,
+        "joint_transition_pass": false
+      }
+    },
+    {
+      "transition": "level_3_to_4",
+      "represented_measure_normalized_shape_l1": 0.004434072640955818,
+      "represented_measure_raw_relative_l1": 0.004434072640956163,
+      "total_area_relative_change": 1.4203837999259389e-16,
+      "normalized_face_measure_absolute_change": {
+        "q95": 6.753067364949502e-05,
+        "max": 0.0001323295892260816
+      },
+      "normalized_face_measure_relative_change_to_fine": {
+        "q95": 0.011883974275297655,
+        "max": 0.020020650396873653
+      },
+      "mixed_parent_count": 6204,
+      "mixed_parent_area_fraction": 0.0760352866736286,
+      "parent_with_any_child_assignment_change_area_fraction": 0.0760352866736286,
+      "assignment_changes_confined_to_mixed_parents": true,
+      "child_area_reassigned_from_parent_fraction": 0.023120481008397014,
+      "split_integrity": {
+        "parent_area_partition_max_relative_error": 2.1384408991253605e-16,
+        "total_area_relative_error": 0.0,
+        "child_centroid_parent_plane_distance_max_abs": 5.561957144850638e-17,
+        "child_parent_normal_dot_min": 0.9999999999999997
+      },
+      "field_force_moment_metric_relative_drift": {
+        "pressure_projection_floor_relative_l2": 0.0008869308435403975,
+        "wss_tangent_projection_floor_relative_l2": 0.0009343171180144027,
+        "traction_force_projection_relative_error": 0.002076431399124342,
+        "traction_moment_projection_relative_error": 0.0010108341535856574
+      },
+      "maximum_field_force_moment_metric_relative_drift": 0.002076431399124342,
+      "screen_components": {
+        "global_normalized_shape_l1_below_0p5pct": true,
+        "all_field_force_moment_metric_drifts_below_2pct": true,
+        "joint_transition_pass": true
+      }
+    },
+    {
+      "transition": "level_4_to_5",
+      "represented_measure_normalized_shape_l1": 0.0018525374235581794,
+      "represented_measure_raw_relative_l1": 0.0018525374235578334,
+      "total_area_relative_change": 1.4203837999259386e-16,
+      "normalized_face_measure_absolute_change": {
+        "q95": 3.109414820479236e-05,
+        "max": 6.025917366841993e-05
+      },
+      "normalized_face_measure_relative_change_to_fine": {
+        "q95": 0.005161068368882463,
+        "max": 0.010280648421233095
+      },
+      "mixed_parent_count": 14220,
+      "mixed_parent_area_fraction": 0.04345757981897367,
+      "parent_with_any_child_assignment_change_area_fraction": 0.04345757981897367,
+      "assignment_changes_confined_to_mixed_parents": true,
+      "child_area_reassigned_from_parent_fraction": 0.01425236568449335,
+      "split_integrity": {
+        "parent_area_partition_max_relative_error": 2.1384408991253605e-16,
+        "total_area_relative_error": 0.0,
+        "child_centroid_parent_plane_distance_max_abs": 5.5294310796760726e-17,
+        "child_parent_normal_dot_min": 0.9999999999999997
+      },
+      "field_force_moment_metric_relative_drift": {
+        "pressure_projection_floor_relative_l2": 0.00014302061875752224,
+        "wss_tangent_projection_floor_relative_l2": 3.48375673351639e-05,
+        "traction_force_projection_relative_error": 0.0001395719606215015,
+        "traction_moment_projection_relative_error": 0.000360146746216436
+      },
+      "maximum_field_force_moment_metric_relative_drift": 0.000360146746216436,
+      "screen_components": {
+        "global_normalized_shape_l1_below_0p5pct": true,
+        "all_field_force_moment_metric_drifts_below_2pct": true,
+        "joint_transition_pass": true
+      }
+    }
+  ],
+  "integrity_gates": {
+    "level_0_map_matches_phase1_artifact": true,
+    "representation_has_156_faces": true,
+    "fixed_carrier_total_area_relative_drift_below_1e-12": true,
+    "all_parent_area_partitions_below_1e-12": true,
+    "all_child_centroids_in_parent_plane_below_1e-12": true,
+    "all_child_parent_normal_dots_above_1_minus_1e-12": true
+  },
+  "all_integrity_gates_pass": true,
+  "screen": {
+    "verdict": "pass",
+    "passed": true,
+    "trailing_global_shape_transitions_passing": 2,
+    "trailing_field_metric_transitions_passing": 4,
+    "trailing_joint_transitions_passing": 2,
+    "interpretation": "The fixed-carrier whole-cell partition passes the declared two-transition convergence screen."
+  },
+  "runtime": {
+    "python": "3.13.14",
+    "platform": "Linux-6.8.0-1047-nvidia-aarch64-with-glibc2.39",
+    "torch": "2.12.0+cu130",
+    "cuda_runtime": "13.0",
+    "float32_matmul_precision": "highest",
+    "device": "cpu",
+    "torch_intraop_threads": 16,
+    "device_name": "aarch64"
+  },
+  "source_provenance": {
+    "git_sha": null,
+    "relevant_worktree_dirty": false,
+    "relevant_status": [],
+    "relevant_source_sha256": "7cb7b637865ccf6ef62716cbad52003916f8bc629b6e33004372b57346166c94",
+    "source_files": [
+      "examples/cfd/mesh_transformer/provenance.py",
+      "examples/cfd/mesh_transformer/studies/common_surface_transfer.py",
+      "examples/cfd/mesh_transformer/studies/phase1_common_surface.py",
+      "examples/cfd/mesh_transformer/studies/phase1_fixed_carrier_convergence.py",
+      "physicsnemo/experimental/nn/mesh_attention/__init__.py",
+      "physicsnemo/experimental/nn/mesh_attention/attention.py",
+      "physicsnemo/experimental/nn/mesh_attention/barnes_hut.py",
+      "physicsnemo/experimental/nn/mesh_attention/block.py",
+      "physicsnemo/experimental/nn/mesh_attention/gauge.py",
+      "physicsnemo/experimental/nn/mesh_attention/kernel_decoder.py",
+      "physicsnemo/experimental/nn/mesh_attention/model.py",
+      "physicsnemo/mesh/calculus/integration.py",
+      "physicsnemo/mesh/domain_mesh.py",
+      "physicsnemo/mesh/fields.py",
+      "physicsnemo/mesh/mesh.py"
+    ]
+  }
+}

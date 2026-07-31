@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "analytic_preregistration_before_any_learning_result",
+  "scientific_question": "When symbolic source relations stay the same, does transfer contrast follow the angle between their exact response-operator displacements?",
+  "task": {
+    "domain": "(0,a) x (0,1)",
+    "equation": "(Delta-lambda^2)u=0",
+    "boundary_drive": "u(0,y)=sum_m c_m sin(m pi y), with zero Dirichlet data on the other sides",
+    "mode_support": [1, 2, 3, 4, 5, 6, 7, 8, 17, 18, 19, 20, 21, 22, 23, 24],
+    "observation_measure": "uniform in normalized coordinates xi=x/a and y",
+    "target_aspect_ratio": 1.0
+  },
+  "prospective_controls": {
+    "equal_target_mode_energy": "For each target, set Var(c_m) proportional to the reciprocal of the exact target response energy of mode m, then normalize the mean variance to one.",
+    "effective_response_dimension_at_one_percent": 16,
+    "matched_source_relative_rms_distance": 0.15,
+    "source_P_relation": "same screening as target; aspect ratio is changed until exact response distance is 15%",
+    "source_G_relation": "same aspect ratio as target; screening is changed until exact response distance matches P",
+    "exact_linear_reconstruction_dimension": 16,
+    "target_example_budgets": [0, 1, 2, 4, 8, 12, 15, 16]
+  },
+  "frozen_targets_and_sources": [
+    {
+      "regime": "separated",
+      "target_screening_over_pi": 1.0,
+      "source_P_aspect_ratio": 1.2521341613463948,
+      "source_G_screening_over_pi": 2.962692255357571,
+      "local_tangent_direction_correlation": 0.4404876386896367,
+      "finite_response_direction_cosine": 0.5598936137675784,
+      "finite_response_direction_angle_degrees": 55.951559254433676,
+      "source_source_chord_over_source_target_radius": 0.9381965532151796,
+      "source_P_low_band_distance_fraction": 0.4990368892517773,
+      "source_G_low_band_distance_fraction": 0.9989535864279002,
+      "relative_drive_variance_dynamic_range": 16.94821665021973
+    },
+    {
+      "regime": "intermediate",
+      "target_screening_over_pi": 8.0,
+      "source_P_aspect_ratio": 1.251846686009299,
+      "source_G_screening_over_pi": 11.77005748628736,
+      "local_tangent_direction_correlation": 0.8022787697606626,
+      "finite_response_direction_cosine": 0.8462627582535868,
+      "finite_response_direction_angle_degrees": 32.1925165580813,
+      "source_source_chord_over_source_target_radius": 0.5545038173834572,
+      "source_P_low_band_distance_fraction": 0.5000000000000663,
+      "source_G_low_band_distance_fraction": 0.9408262809488247,
+      "relative_drive_variance_dynamic_range": 3.137858162209664
+    },
+    {
+      "regime": "near_collinear",
+      "target_screening_over_pi": 16.0,
+      "source_P_aspect_ratio": 1.251846686009316,
+      "source_G_screening_over_pi": 21.7609439209665,
+      "local_tangent_direction_correlation": 0.9219824409395689,
+      "finite_response_direction_cosine": 0.947987767763559,
+      "finite_response_direction_angle_degrees": 18.560555649656376,
+      "source_source_chord_over_source_target_radius": 0.3225282382565627,
+      "source_P_low_band_distance_fraction": 0.5000000000000364,
+      "source_G_low_band_distance_fraction": 0.7929822049182746,
+      "relative_drive_variance_dynamic_range": 1.7992648736640648
+    }
+  ],
+  "exact_minimum_change_null": {
+    "aggregate_prediction": "P and G tie at every budget and every target regime.",
+    "relative_rms_error_by_target_examples": {
+      "0": 0.15,
+      "1": 0.14523687548277814,
+      "2": 0.1403121520040228,
+      "4": 0.12990381056766578,
+      "8": 0.10606601717798213,
+      "12": 0.075,
+      "15": 0.0375,
+      "16": 0.0
+    },
+    "band_prediction": "P has lower low-band error and G has lower high-band error at every nonterminal budget.",
+    "low_band_distance_contrast_G_minus_P_as_fraction_of_total_distance": {
+      "separated": 0.4999166971761229,
+      "intermediate": 0.4408262809487584,
+      "near_collinear": 0.2929822049182382
+    }
+  },
+  "registered_rivals": {
+    "continuous_response_direction": "Aggregate errors remain tied; opposite band winners follow exact response distance; the source contrast weakens monotonically as the response-direction angle and source-source chord shrink.",
+    "categorical_screening_alignment": "P has lower error than G in both bands across screening regimes.",
+    "categorical_aspect_alignment": "G has lower error than P in both bands across screening regimes.",
+    "global_regime_specificity": "Source ordering changes with target screening in a way not explained by exact response distance or direction.",
+    "learner_specificity": "Prospectively distinct learner classes show incompatible source orderings."
+  },
+  "outcomes": {
+    "primary": "Signed P-versus-G target error contrast in each mode band, reported beside the exact minimum-change null at every frozen budget.",
+    "secondary": [
+      "aggregate deviation from the exact P/G tie",
+      "source contrast versus exact source-source chord",
+      "distance from target-only and exact linear-reconstruction references"
+    ],
+    "not_an_outcome": "Architecture ranking or optimization"
+  },
+  "falsifiers_and_gates": [
+    "Continuous response-direction reuse is refuted if the farther source repeatedly wins within both bands across declared learner classes.",
+    "A categorical account is refuted by the preregistered opposite band winners.",
+    "The angle trend is not interpretable if target mode energies or the 15% source radii fail their exact controls.",
+    "The high-screening regimes create thinner boundary layers; any later learned comparison must demonstrate equal observation fidelity before the screening trend is interpreted.",
+    "No architecture-robust claim is permitted from one learner class."
+  ],
+  "numerical_verification": {
+    "method": "Closed-form modal responses, Gauss-Legendre quadrature, and scalar root solves for the equal-radius sources.",
+    "quadrature_orders_checked": [64, 128, 256, 512, 1024],
+    "source parameters_and_angles_stable_to_reported_12_decimal_places": true,
+    "no_learning_result_inspected": true
+  },
+  "scope_limits": [
+    "This is a causal instrument for one separable screened elliptic family, not evidence of broad morphology or PDE transfer.",
+    "Equal target mode energy is deliberately designed and is not asserted to be a natural boundary spectrum.",
+    "The sweep changes the target screening regime; the registered trend therefore needs later triangulation through a second way of rotating response directions."
+  ]
+}

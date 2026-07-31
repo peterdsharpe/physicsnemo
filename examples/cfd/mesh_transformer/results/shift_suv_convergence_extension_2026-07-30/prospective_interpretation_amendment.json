@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "title": "Prospective interpretation boundary for the matched-update half-label experiment",
+  "frozen_at": "2026-07-30T13:20:38-04:00",
+  "information_boundary": "Written while all 32 continuation runs were still in progress. No convergence-extension loss, validation metric, or test result was inspected.",
+  "status": "prospective amendment; the original numerical gates and analysis remain unchanged",
+  "takes_precedence_over": [
+    "The phrase 'close as optimization-only' in preregistration.json.",
+    "Any branch in prospective_scientific_branch_map.json that treats failure of the half-label gate as proof that the same-budget pretraining gain is transient."
+  ],
+  "identification": {
+    "half_label_ratio": "H_U = error(pretrained_64, U) / error(scratch_128, U)",
+    "target_data_penalty": "D_U = error(scratch_64, U) / error(scratch_128, U)",
+    "same_budget_pretraining_gain": "G_U = error(scratch_64, U) / error(pretrained_64, U)",
+    "identity": "H_U = D_U / G_U",
+    "what_the_running_experiment_identifies": "The running pretrained-64 versus scratch-128 comparison identifies H_U at matched update counts and can decide whether pretraining replaces half of the target labels under the registered gate.",
+    "what_it_does_not_identify": "Because it has no matched-update scratch-64 arm, it does not identify D_U or G_U separately and therefore cannot decide whether a smaller same-budget pretraining gain persists after convergence."
+  },
+  "allowed_conclusions": {
+    "if_half_label_gate_passes": "Persistent half-label saving is plausible and warrants the registered multi-seed, multi-checkpoint confirmation.",
+    "if_half_label_gate_closes": "Pretraining does not replace half of the target labels under this protocol. This alone does not show that pretraining is merely an optimization warm start or that its label-equivalent saving is zero.",
+    "if_plateau_or_rate_gate_fails": "No transfer interpretation is licensed until the same comparison is stabilized."
+  },
+  "revised_next_question_if_half_label_gate_closes": "At the same final update budget, does pretrained-64 retain a material advantage over scratch-64, and what intermediate scratch sample count matches pretrained-64 error?",
+  "minimum_deciding_evidence": [
+    "Add matched-update scratch-64 for the same target subsets, architectures, families, and validation protocol to estimate G_U.",
+    "If G_U persists, add the smallest set of intermediate target-only sample counts needed to bracket the label-equivalent saving.",
+    "Change the source distribution or architecture only after establishing whether a persistent gain exists and how large it is."
+  ],
+  "test_policy": "All SHIFT-SUV test cases remain sealed."
+}

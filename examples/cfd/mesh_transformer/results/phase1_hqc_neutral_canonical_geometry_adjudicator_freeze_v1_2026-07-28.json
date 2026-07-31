@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_freeze",
+  "status": "FROZEN_BEFORE_DIAGNOSTIC_OUTPUT",
+  "frozen_at_utc": "2026-07-28T05:41:02Z",
+  "diagnostic_output_existed_at_freeze": false,
+  "software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v2.py",
+      "sha256": "e0256a4b46897b9c618fb6d6b80a92cefeb962a8447c9d7ab32ecf74609e36f0"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v2.py",
+      "sha256": "defa117154173990c7a32b3153ca89e9a42f9b41d935a846cd83a670cdbd8410",
+      "result": "8 passed; Ruff check/format, py_compile, and CLI help passed"
+    }
+  },
+  "frozen_checks": [
+    "Verify the diagnostic JSON, diagnostic NPZ, and prior job-304002 NPZ sidecars.",
+    "Verify the schema, frozen scope, exact expected NPZ key set, per-array shapes/dtypes/hashes, and absence of forbidden supervised or H-QC-decision schema keys.",
+    "Recompute canonical-array finite, positive-area, unit-normal, area-centering, connectivity, and exact 5 times 8 equals 40 scale checks.",
+    "Replay persisted selected IDs, historical predictions, and historical internal source geometry against job 304002.",
+    "Recompute every canonical primary-versus-fixed and primary-versus-primary-replay pressure/WSS comparison from NPZ arrays.",
+    "Recompute every case/precision derived and full gate, aggregate both gates, and recompute the schema-v2 outcome label.",
+    "Refuse publication on any sidecar, schema, manifest, replay, comparison, gate, or outcome mismatch."
+  ],
+  "frozen_numeric_contract": {
+    "relative_l2": "norm(a-b)_2 / max(norm(a)_2, norm(b)_2, 1e-12), computed in NumPy float64",
+    "reported_float_match_relative_tolerance": 1e-10,
+    "reported_float_match_absolute_tolerance": 2e-12,
+    "derived_gate_relative_l2": 0.001,
+    "full_gate": "fieldwise bitwise equality"
+  },
+  "explicit_limit": "Raw external point/query replay, canonical construction repeat before persistence, current path topology equality, injected-geometry equality, and neutral decode runtime state were not persisted twice. The adjudicator reports those as producer-only validity gates and recomputes the outcome from independently rescored decision gates plus the producer-reported validity bit; it does not falsely label those runtime facts independently regenerated."
+}

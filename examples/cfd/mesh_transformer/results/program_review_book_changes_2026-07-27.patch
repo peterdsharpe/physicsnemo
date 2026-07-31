@@ -1,0 +1,2268 @@
+diff --git a/examples/cfd/mesh_transformer/book/02-architecture.qmd b/examples/cfd/mesh_transformer/book/02-architecture.qmd
+index 2ffe1936..2bc79bfa 100644
+--- a/examples/cfd/mesh_transformer/book/02-architecture.qmd
++++ b/examples/cfd/mesh_transformer/book/02-architecture.qmd
+@@ -1,5 +1,15 @@
+ # The architecture, plainly {#sec-architecture}
+ 
++::: {.callout-warning title="Implementation audit correction"}
++This chapter describes the intended architecture. The 2026-07-27 audit found
++two material gaps between the contract and the public path: incoming effective
++measure weights are stripped during `encode`, and the Barnes--Hut
++approximation is not rotation equivariant because its spatial partition is
++axis aligned. The exact dense backend retains the tested similarity contract.
++See @sec-program-review before treating the opt-in measure or approximate
++far-field statements below as established.
++:::
++
+ This chapter is the **source of truth** for what the MeshTransformer *is*:
+ what goes in, what comes out, and what happens in between, in that order,
+ with as little jargon as we can manage. The mathematics behind each piece
+@@ -120,22 +130,26 @@ In words:
+    targets of known drive degree (a Bernoulli pressure is exactly
+    quadratic), after the nonlinear mode's *implicit* degree ~21 was
+    measured detonating off-range (@sec-nonlinear-fragility). In
+-   *homogeneous* mode the declared degree is **exactly one**: the field
+-   state's O($D$)-invariant magnitude is factored out, a nonlinear typed
+-   map acts on the resulting unit state, and the magnitude multiplies
+-   back — $f(F) = \lVert F\rVert\,g(F/\lVert F\rVert)$. Three properties
+-   follow by construction rather than by training, and the combination
+-   is the reason the mode exists: a $k\times$ shift in drive statistics
+-   produces a $k\times$ shift in output and never $k^{d}$; the learned
+-   map $g$ only ever sees unit-magnitude states, so its internals are
+-   bounded exactly as a normalization layer would bound them; and
++   *homogeneous* mode the intended degree is one: the field state's
++   O($D$)-invariant magnitude is factored out, a nonlinear typed map acts
++   on the resulting direction, and the magnitude multiplies back.
++   The implementation actually uses
++   $F/(\lVert F\rVert+\varepsilon)$ with
++   $\varepsilon=10^{-30}$, so degree one is approximate for positive
++   scales comfortably above that floor, not an exact all-magnitude
++   contract; it is also not odd after training. At ordinary tested
++   magnitudes, a $k\times$ shift in drive statistics produces a
++   $k\times$ shift in output rather than $k^{d}$; the learned map $g$
++   sees a bounded near-unit state; and
+    zero-preservation stays *exact even though $g$ carries biases*,
+    because the magnitude multiplies back rather than being discarded.
+    That last point is what a normalization layer cannot offer — discard
+    the magnitude and $f(0)\neq0$ the moment anything downstream has a
+    bias — and it is why this mode recovers bounded activations without
+-   surrendering the zero-drive contract. What it gives up is amplitude
+-   nonlinearity ($u(\lambda g)=\lambda u(g)$), so it sits strictly
++   surrendering the zero-drive contract. What it approximately gives up
++   is amplitude nonlinearity
++   ($u(\lambda g)\approx\lambda u(g)$ for $\lambda>0$ away from the
++   floor), so it sits
+    between *linear* (degree one **and** additive) and *nonlinear*
+    (unbounded degree): the right declaration when the target depends
+    nonlinearly on the drive's *shape* but roughly linearly on its
+@@ -428,18 +442,17 @@ Each refusal is a falsifiable contract with a test attached, not a slogan:
+ | Never respond to zero drive | homogeneous problems with no data have the zero solution | zero-drive eval, every field mode |
+ | Never break superposition *in linear mode* | when the problem is linear, its law should be structural, not learned | drive-linearity contract eval |
+ | Never point-sample a singular kernel | near-boundary accuracy | quadrature-vs-closed-form tests to ~1e-14 |
+-| Never depend on the *magnitude* of the quadrature measure (opt-in) | units invariance in the measure dimension, not just the length dimension | measure-rescale test, $k$ to 880: $<10^{-9}$ (@sec-four-properties) |
++| Never depend on the *magnitude* of the quadrature measure (opt-in) | intended units invariance in the measure dimension | synthetic internal-rescale test only; upstream effective weights are currently stripped (@sec-program-review) |
+ 
+-The last row is newer than the others and carries a caveat worth
+-stating in the source-of-truth chapter: it is **opt-in**
+-(`measure_normalization`, default off, bitwise-inert when off) because
+-the reweighting changes the operator every existing checkpoint was
+-trained under. With it off — which is every archived result in this
+-book — the model is strongly sensitive to measure magnitude: 45% drift
+-at a 16× rescale, and non-physical output at the 880× rescale the
+-DrivAerML subsampling protocol's own statistics call for. Whether the
+-default should flip is an empirical question with a training arm
+-attached, not a matter of principle.
++The last row is newer than the others and is not yet a public-input
++contract. `measure_normalization` is opt-in and bitwise-inert when off,
++but `MeshTransformer.encode` reconstructs geometry-only meshes after
++deleting incoming cell data. Thus composed Horvitz--Thompson weights do
++not reach the normalization or decoder; only reconstructed geometric
++areas do. Existing measure-rescale tests establish an internal algebraic
++property, not correctness of the production intervention. Repair the
++data path and add an end-to-end nonuniform-weight test before deciding
++whether the default should flip.
+ 
+ ## Reference configuration {#sec-reference-config}
+ 
+diff --git a/examples/cfd/mesh_transformer/book/06-benchmarks.qmd b/examples/cfd/mesh_transformer/book/06-benchmarks.qmd
+index df522b3a..9957e611 100644
+--- a/examples/cfd/mesh_transformer/book/06-benchmarks.qmd
++++ b/examples/cfd/mesh_transformer/book/06-benchmarks.qmd
+@@ -1,10 +1,11 @@
+ # Evaluation methodology and the benchmark suites {#sec-benchmarks}
+ 
+ The program's claims are only as good as its evaluation. Three principles
+-govern every suite: **exact analytic labels** (no numerical-solver error to
+-hide behind), **frozen paired evaluation banks** (every model sees identical
+-cases), and **contract checks as exact tests** (structural properties are
+-asserted to floating point, never averaged into a soft score).
++govern every suite: **exact/manufactured labels where available and
++explicitly verified solver labels elsewhere**, **frozen paired evaluation
++banks** (every model sees identical cases), and **contract checks as exact
++tests** (structural properties are asserted to floating point, never
++averaged into a soft score).
+ 
+ This chapter is the program's cross-cutting evidence: how every suite
+ is evaluated, the walls that declared contracts predict and break, the
+@@ -315,16 +316,16 @@ The current honest scorecard:
+ | spatial equivariance | **holds**, by construction | $3\times10^{-7}$ on trained models under rotation, reflection, translation, rescaling (@sec-intrinsic-gauge) |
+ | global interaction | **holds**, by construction | all-to-all boundary coupling, no cutoffs (@sec-global-flow) |
+ | units invariance — *length* | **holds** | the intrinsic gauge; a 3× corrupted external gauge costs the explicit-key model 4.64×, the intrinsic model is bitwise immune (@sec-intrinsic-gauge) |
+-| units invariance — *measure* | **was missing; now fixed** | see below |
+-| discretization invariance — *refinement* | **holds** | converges, below |
+-| discretization invariance — *subsampling* | **fails, and cannot be reweighted away** | below |
++| units invariance — *measure* | **implementation invalid** | upstream effective weights are stripped before use (@sec-program-review) |
++| discretization invariance — *refinement* | **strong random-init observation** | one sphere/query probe converges, below |
++| discretization invariance — *subsampling* | **fails in the current probe** | simple-random decimation is biased; production uses cyclic blocks and remains untested |
+ 
+-### Units invariance had a hole in the measure dimension
++### Units invariance has an unresolved implementation hole
+ 
+ Lengths are nondimensionalized by the gauge, and that half was solid.
+ The **measure** — the quadrature weight each boundary cell carries —
+-had no corresponding invariance. Holding the geometry fixed and scaling
+-only the cell measures by $k$:
++has no validated production intervention. Holding the geometry fixed
++and scaling only internally reconstructed cell measures by $k$ produced:
+ 
+ | $k$ | baseline drift | with `measure_normalization` |
+ |---:|---:|---:|
+@@ -332,20 +333,28 @@ only the cell measures by $k$:
+ | 16 | 44.99% | $0.0$ |
+ | 880 | **6.9 × 10⁷ %** | **2.9 × 10⁻⁵ %** |
+ 
+-$k = 880$ is not hypothetical: it is the exact Horvitz--Thompson factor
+-for the DrivAerML protocol (8.8M surface cells subsampled to 10k), i.e.
+-the rescale the *statistically correct* estimator requires. The model
+-could not survive its own correction.
++The historical diagnostic called $k=880$ the exact
++Horvitz--Thompson factor using roughly 8.8M **cells**. Preprocessing
++documentation describes that as the pre-triangulation quad-dominant
++population, whereas the curated reader reports roughly 17.7M triangles
++in its cited case. The sampler draws the latter cells, so a uniform
++sample instead requires the case-specific factor
++$N_\mathrm{cells}/10{,}000$ (roughly 1,770 there). This
++pre-/post-triangulation bookkeeping mismatch does not rescue the
++implementation: incoming weights are disconnected entirely.
+ 
+-The repair is a one-line reweighting — the operator consumes
++The intended repair is a one-line reweighting — the operator consumes
+ $\hat\omega_j = \omega_j/\sum_i\omega_i$, so it depends on the source
+ measure's *distribution* rather than its magnitude, with the magnitude
+-re-entering as a dimensionless global scalar. It is implemented through
+-the existing effective-measure machinery, is bitwise-inert when off,
+-and all four program contracts survive **by construction** rather than
+-by training: zero-drive exactly 0.0, drive linearity to rtol $10^{-11}$,
+-equivariance to $10^{-9}$, bitwise query independence — on the
+-single-boundary *and* pooled/balanced paths.
++re-entering as a dimensionless global scalar. The audit found that this
++claim is not implemented end to end: `MeshTransformer.encode` removes
++incoming cell data and constructs fresh geometry-only meshes, so
++effective weights never reach the normalization or decoder and the
++purported global scalar is not subsequently used. The internal
++measure-rescale tests still pass, but a nonuniform public-input probe is
++bitwise unchanged when effective weights vary. These results cannot
++support H-MW or H-BOTH until the data path and test are repaired
++(@sec-program-review).
+ 
+ ### Discretization invariance means two different things, and the model does well at one
+ 
+@@ -359,12 +368,14 @@ been conflating the two readings.
+ #|   REFINEMENT -- an icosphere at increasing subdivision, panels tiling
+ #|   the surface, coverage always 100%. The operator converges (2.45% over
+ #|   a 64x cell-count change, with shrinking increments), which is the
+-#|   textbook test and the one the property names. Red: random cell
+-#|   SUBSAMPLING, what the training pipeline actually does -- coverage
++#|   textbook test and the one the property names. Red: simple-random cell
++#|   SUBSAMPLING, a diagnostic approximation to the training pipeline --
++#|   production actually selects cyclic contiguous blocks in on-disk order; coverage
+ #|   equals n/N, and nothing converges until coverage does. The two are
+ #|   not the same experiment: subsampling is not a resolution change but a
+ #|   different, systematically biased operator. The shaded band marks the
+-#|   coverage DrivAerML trains at (0.11%: 10k cells of 8.8M), an order of
++#|   coverage DrivAerML trains at (about 0.06% in the documented
++#|   17.7M-cell case), an order of
+ #|   magnitude sparser than the sparsest point measured here. Data:
+ #|   studies/gauge_diagnostics/hdi_test.py.
+ import matplotlib.pyplot as plt
+@@ -396,7 +407,7 @@ ax_l.text(360, 0.42, "converges at\nsecond order", fontsize=8,
+           color="#2a5fa8", va="top")
+ 
+ ax_r.axvspan(0.02, 0.3, color="#e34948", alpha=0.10, lw=0)
+-ax_r.text(0.115, 34, " DrivAerML\n trains here\n (0.11%)", fontsize=7.5,
++ax_r.text(0.115, 34, " historical marker\n (point/cell\n mismatch)", fontsize=7.5,
+           color="#a83a39", va="top", ha="center")
+ ax_r.plot(sub_cov, sub_err, "o-", ms=8, lw=2, color="#e34948",
+           mec="white", mew=1.2)
+@@ -426,8 +437,8 @@ the surface area's own convergence to $4\pi$. This is the test the
+ property names, and as far as the notebook records it had never been run
+ this way before.
+ 
+-**Under random subsampling it does not, and no weighting fixes it.**
+-Three independent interventions were measured and all failed: uniform
++**Under random subsampling the current probe does not converge.**
++Three interventions were measured and all failed in that probe: uniform
+ Horvitz--Thompson reweighting (inert by construction once normalised),
+ full measure normalisation (36.4% → 39.9%, i.e. slightly worse), and
+ spatially stratified sampling (1.24× at 0.11% coverage, 1.40× at 0.45%,
+@@ -435,8 +446,18 @@ gone by 2%). The forked branch's singularity subtraction, replicated
+ independently, gives a comparable ~1.6×
+ (@sec-nb-subtraction-replication).
+ 
+-The reason is that the bias is a **completeness** effect, not a
+-weighting one — and it is distributed the opposite way to intuition.
++This suggests a **completeness** effect, but it does not yet establish
++one as the trained industrial mechanism. The probe uses a random-init
++model, one sphere family, one query arrangement, and changes the source
++set without isolating the query-resolution effect seen in the trained
++campaign. Moreover, a classical constant-density double-layer
++counterexample shows that correct nonuniform weights can repair a
++decimated integral (93.8% observed error without them versus 0.4%
++Monte Carlo mean error with them in the audit probe; the HT total is
++design-unbiased). The universal claim that weighting cannot help is
++therefore false; whether learned nonlinear attention can exploit a
++correct empirical measure remains open. In the current probe, error is
++distributed opposite to the original intuition.
+ Relative error against the full-coverage operator, by query depth:
+ **222% at the sphere centre versus 0.3% at the wall.** Deep-interior
+ values are global accumulations that need the whole surface (the
+@@ -449,11 +470,12 @@ Two consequences the program should carry forward:
+ 1. **The surface task is the lucky configuration.** Trace-mode queries
+    sit exactly where the bias is smallest. Interior and volume
+    prediction at these coverages are the exposed cases.
+-2. **There is no sampling-side rescue.** ~35% error at 0.11% coverage
+-   is largely irreducible without more samples, which leaves two honest
+-   options — train at higher coverage, or accept a coverage-specific
+-   model — and the choice should be made deliberately rather than
+-   discovered downstream (@sec-drivaerml).
++2. **The next rescue must preserve coverage.** The discriminating test
++   is a conservative nested hierarchy or aggregation scheme that covers
++   the whole surface at every level, compared against both the actual
++   cyclic-block sampler and simple-random decimation at matched compute.
++   Only that experiment can distinguish missing support, cell-order
++   correlation, model conditioning, and query-resolution effects.
+ 
+ ## Part II — the declared contracts, and their walls {#sec-part-contracts}
+ 
+@@ -1429,10 +1451,11 @@ The cost was measured, and it was total: on zero-shot transfer to a
+ different vehicle family, **every** fixed-gauge checkpoint diverged to
+ non-physical output (relative $L^2$ of $10^4$–$10^{15}$, and NaN at
+ the largest capacity) while a gauge-agnostic baseline stayed
+-structured at 0.677. A monotone dose-response in the gauge alone
+-localizes the failure to that constant. The full account, the repair
+-(a per-sample intrinsic gauge calibrated once on the training split),
+-and its pre-registered acceptance are @sec-drivaerml-crossfamily.
++structured at 0.677. A monotone, test-set-touching dose-response in the
++gauge initially implicated that constant, but intrinsic retraining later
++failed too; it was a lever, not an identified cause. The audit also
++found that the calibration labeled train-only included held-out cases.
++The full corrected account is @sec-program-review.
+ 
+ The lesson generalizes past this program: **a contract that holds by
+ default and is escapable by an override is only as strong as the
+diff --git a/examples/cfd/mesh_transformer/book/16-drivaerml.qmd b/examples/cfd/mesh_transformer/book/16-drivaerml.qmd
+index a729ac36..09f90058 100644
+--- a/examples/cfd/mesh_transformer/book/16-drivaerml.qmd
++++ b/examples/cfd/mesh_transformer/book/16-drivaerml.qmd
+@@ -1,6 +1,18 @@
+ # DrivAerML: the industrial target {#sec-drivaerml}
+ 
+-::: {.callout-note title="Status: campaign run; results below"}
++::: {.callout-important title="Audit correction — current status is in the 2026-07-27 notebook entry"}
++This chapter preserves the campaign as it unfolded, including claims that later
++failed. The 2026-07-27 audit (@sec-program-review) is authoritative: the
++intrinsic-gauge repair did not restore transfer; its calibration leaked held-out
++cases; all tested SHIFT-SUV predictions have essentially unrelated field
++patterns; the effective-measure intervention is disconnected inside
++`MeshTransformer.encode`; and the five-versus-five WSS comparison is
++provisional, not statistically sealed. Read statements below about a localized
++gauge cause, completed measure repair, or a sealed industrial differential as
++historical interpretations.
++:::
++
++::: {.callout-note title="Historical campaign snapshot"}
+ The pre-registration sections (standing hypothesis, integration plan)
+ are preserved as written before any run. The results
+ (@sec-drivaerml-results) close H-ground, the gap investigation, the
+@@ -31,12 +43,10 @@ pressure differential to suggestive.
+ Since that update the chapter's sharpest result landed, and it went
+ against us: the **cross-family zero-shot test fired its falsifier
+ maximally** — the model as shipped does not transfer to a different
+-vehicle family at all (@sec-drivaerml-crossfamily). The mechanism is
+-localized to a repairable protocol flaw (a fixed declared scale
+-gauge), the repair is built and calibrated, and the confirmatory
+-re-run is pre-registered and awaiting its first gate. PENDING now:
+-transfer-v2's gate 0, the AirFRANS clean-protocol ranking, and the
+-all-boundary redo.
++vehicle family at all (@sec-drivaerml-crossfamily). At this historical
++snapshot the fixed gauge was the leading explanation and transfer-v2
++was pending; later evidence rejected that explanation
++(@sec-program-review).
+ :::
+ 
+ ## The dataset, and what makes our variant special
+@@ -741,7 +751,7 @@ excess degradation remains 11–100× smaller than the allowed excess.
+ Integrated drag concurs: 4.5–5.4% relative CD error in-distribution
+ vs 6–7% on the S1 extremes, 4–6% on both for S2.
+ 
+-**The differential — sealed at five seeds on WSS; pressure demoted.**
++**The differential — provisional at five seeds on WSS; pressure demoted.**
+ The incumbent's exclusion-retrain arms — same splits, harness,
+ metric, and protocol — give the paired comparison the zero-shot
+ read could not, now at five seeds per model
+@@ -752,12 +762,15 @@ read could not, now at five seeds per model
+ | this program (5 seeds) | 1.019–1.044 | **1.072–1.113** | 1.03 | 0.97–0.98 |
+ | incumbent (5 seeds) | 1.043–1.069 | **1.126–1.136** | 1.03–1.05 | 0.99 |
+ 
+-On S1 vector WSS the seed ranges are disjoint at 5-vs-5 (exact
+-rank-sum p ≈ 0.008): the incumbent's mean excess degradation is
++On S1 vector WSS the seed ranges are disjoint at 5-vs-5. The historical
++independent rank-sum calculation gives $p \approx 0.008$, but it
++discards the matched-seed design; with only five same-sign paired
++differences, the minimum two-sided exact sign-test $p$ is 0.0625.
++The incumbent's mean excess degradation is
+ 1.4× ours (0.131 vs 0.092). The pre-registered extension sharpened
+ the estimate honestly in both directions — the effect survived its
+ falsifier (no overlap), but the original "ours ≤ 1.10" bound broke
+-(seeds 45/46 came in at 1.113/1.104), so the sealed effect is
++(seeds 45/46 came in at 1.113/1.104), so the observed effect is
+ thinner than the 3-seed read suggested (1.4×, not 1.65×). On
+ pressure the extension ranges TOUCH (our 1.044 vs their 1.043):
+ per the same falsifier logic the pressure differential is demoted
+@@ -774,14 +787,16 @@ not comparable to full-mesh CD values); and the extremes are
+ **parameter-space extrapolation within the DrivAer family** — real
+ aerodynamic regime shifts (wake topology, ground effect), but not
+ novel vehicle topologies. Within that stated scope: **geometry
+-generalization on the industrial benchmark holds at ~3% (pressure)
++generalization on the industrial benchmark is observed at ~3% (pressure)
+ and ~8% (vector WSS, S1 only) degradation — boundary and deep, both
+-protocols — and, at deep-S1, measurably better than the incumbent's
+-on vector WSS at five seeds per side (disjoint ranges, exact
+-rank-sum $p \approx 0.008$). On pressure the five-seed extension
++protocols. At deep-S1 its vector-WSS degradation ratio is consistently
++smaller than the incumbent's at five seeds per side, but absolute WSS
++errors favor the incumbent by 2.5–2.7× and the paired uncertainty is
++too thin for “sealed” language. On pressure the five-seed extension
+ demoted the differential to *suggestive*: the ranges touch, the
+-means still order in our favour. One field sealed, one field
+-softened — that is what the extension bought, in both directions.**
++means still order in our favour. One field remained consistent but
++provisional; one softened — that is what the extension bought, in both
++directions.**
+ 
+ And one boundary this whole section does not cross: every split above
+ is drawn from the DrivAer family's own design-of-experiments. The
+@@ -991,9 +1006,12 @@ $$
+ 
+ with $r_{\mathrm{RMS}}$ the sample's own measure-weighted RMS radius
+ about its measure-weighted centroid — translation- and
+-rotation-invariant, similarity-*covariant*, and Horvitz–Thompson
+-subsample-robust. $C$ is calibrated **once on the DrivAerML training
+-split** and never re-fit: 484 samples give
++rotation-invariant and similarity-*covariant*. The historical run
++claimed Horvitz–Thompson subsample robustness and a calibration
++performed **once on the DrivAerML training split**. The audit found both
++claims invalid in the executed path: effective weights are stripped,
++and the calibration iterated all 484 dataset cases rather than the
++435-case training sampler. Its artifact reports
+ $r_{\mathrm{RMS}} = 0.30215 \pm 0.0089$ and hence
+ $C = 26.476593$, putting DrivAerML's per-sample gauges in
+ $[7.41, 8.64]$ — a ±3.5% spread around the historical 8.0, well
+@@ -1102,10 +1120,11 @@ magnitude past the bar. Gate 2 is moot. The pre-registered structural
+ prediction was $p \approx 0.75$; it was wrong.
+ 
+ This refutes the previous section's own diagnosis. The divergence was
+-localised to the fixed gauge on a clean, monotone dose-response and
++initially attributed to the fixed gauge from a monotone but
++test-set-touching dose-response and
+ described as "a repairable protocol flaw, not deep architectural
+ brittleness". Retraining under a similarity-covariant, per-sample
+-intrinsic gauge — calibrated once on train, never re-fit — leaves the
++intrinsic gauge — using a constant mislabeled as train-only — leaves the
+ model diverging. **The gauge was a lever that moved the magnitude, not
+ the cause.** What the earlier section got right was insisting the
+ dose-response was exploratory and could not support a rehabilitated
+@@ -1129,12 +1148,26 @@ operating point, and the exact-kernel structure does not protect it
+ outside that point.** That is consistent with the kernel factorial's
+ 0–8% (@sec-drivaerml-factorial): structure that is not load-bearing
+ in-distribution should not have been expected to carry generalization.
+-Cross-family *advantage* over the incumbent is now below 5%; the sealed
+-within-family deep-S1 WSS differential is untouched and is likely to
+-remain this architecture's strongest generalization claim.
++Cross-family *advantage* over the incumbent is now below 5%; the
++provisional within-family deep-S1 WSS degradation-ratio differential is
++likely to remain this architecture's strongest industrial
++generalization observation, subject to the metric and paired-uncertainty
++audit above.
+ 
+ ### The model is a coverage-specific regressor {#sec-drivaerml-coverage}
+ 
++::: {.callout-warning title="What this sweep does and does not identify"}
++The sweep below changes source and trace-query sets together, compares a
++trained car model to an unrelated sphere estimator, and mixes an
++approximately 8.8M pre-triangulation quad-dominant cell count with a
++post-triangulation sampler. The curated reader documents roughly 17.7M
++triangles in the cited case. Production selects a cyclic
++contiguous block in on-disk cell order, whereas the sphere diagnostic
++uses simple-random subsets. The U-shape is real; its
++coverage-specific-correction mechanism and the grey quantitative comparison
++are not identified. See @sec-program-review.
++:::
++
+ Chapter @sec-future carries an item filed as *blocked on research, not
+ wiring*: at full resolution — 17.7M query cells against 50k sources —
+ the flagship's relative $L^2$ is $\sim$100, and nobody could name why.
+@@ -1164,7 +1197,9 @@ import matplotlib.pyplot as plt
+ res = [2500, 5000, 10000, 20000, 40000]
+ err = [0.8966, 0.7998, 0.167163, 0.4106, 24810.9]
+ ### Exact-estimator field-level relative L2 at the matching coverages
+-### (coverage = res / 8.8e6 vehicle cells).
++### Historical calculation used coverage = res / 8.8e6
++### pre-triangulation cells, while the reader samples post-triangulation
++### triangles; retained here as campaign history.
+ ex_res = [10000, 20000, 40000]
+ ex_err = [0.337, 0.248, 0.174]
+ 
+@@ -1186,7 +1221,7 @@ ax.set_xscale("log"); ax.set_yscale("log")
+ ax.set_xlim(1800, 62000); ax.set_ylim(0.08, 2e5)
+ ax.set_xticks(res, [f"{r//1000}k" for r in res])
+ ax.minorticks_off()
+-ax.set_xlabel("source sampling resolution (cells of 8.8M)")
++ax.set_xlabel("source sampling resolution (historical pre-triangulation denominator)")
+ ax.set_ylabel("id_reference pressure relative $L^2$")
+ ax.grid(True, color="#e1e0d9", lw=0.8)
+ ax.set_axisbelow(True)
+diff --git a/examples/cfd/mesh_transformer/book/17-future.qmd b/examples/cfd/mesh_transformer/book/17-future.qmd
+index e65bf7fe..6ed89973 100644
+--- a/examples/cfd/mesh_transformer/book/17-future.qmd
++++ b/examples/cfd/mesh_transformer/book/17-future.qmd
+@@ -1,5 +1,12 @@
+ # Where the program stands, and where it goes {#sec-future}
+ 
++::: {.callout-important title="Agenda superseded on 2026-07-27"}
++This chapter records the pre-audit agenda. The current decision memo is
++@sec-program-review. It freezes new industrial architecture arms, requires
++durable provenance and split repair, and makes a conservative full-cover
++surface hierarchy the next discriminating experiment.
++:::
++
+ This chapter does three things: it reviews what is established and what
+ is honestly incomplete, it lays out the program's agenda — a deliberate
+ redirect away from architecture-driven iteration, adopted once the
+@@ -271,13 +278,13 @@ including one live bug found (and confirmed) during figure generation.
+   NOT adopted — an exploratory ×2L8 reading (members removed costs
+   ~9% at 9.6M, single seed vs ±12% rung spread) leaves the default
+   configuration members-on.
+-- **The incumbent-on-OOD differential: SEALED at deep-S1 on vector
+-  WSS** (@sec-nb-seal-verdict). Five seeds per model, disjoint
+-  ranges (ours 1.072–1.113 vs the incumbent's 1.126–1.136, exact
+-  rank-sum p ≈ 0.008; incumbent excess degradation 1.4× ours — the
+-  extension thinned the 3-seed estimate honestly). The pressure
+-  differential DEMOTED to suggestive (ranges touch at 5 seeds). S2
+-  and zero-shot depth show no differential for either model.
++- **The incumbent-on-OOD differential is provisional at deep-S1 on
++  vector WSS** (@sec-nb-seal-verdict, @sec-program-review). Five seeds
++  per model give disjoint degradation-ratio ranges (ours 1.072–1.113
++  versus 1.126–1.136), but the published rank-sum calculation discards
++  the matched-seed structure, the metric record is contradictory, and
++  the incumbent's absolute WSS error is 2.5–2.7× lower. Pressure is
++  suggestive only; S2 and zero-shot depth show no differential.
+ - **Cross-family transfer: the falsifier fired maximally, and the
+   mechanism is a protocol flaw** (@sec-drivaerml-crossfamily,
+   @sec-nb-crossfam-verdict). The stronger test — DrivAerML-trained
+@@ -286,21 +293,24 @@ including one live bug found (and confirmed) during figure generation.
+   three seeds) diverged to non-physical output while the incumbent
+   stayed structured at 0.677 through the identical frozen pipeline.
+   **The generalization identity failed its decisive zero-shot test as
+-  deployed.** A clean monotone dose-response localizes the failure to
+-  the fixed declared scale gauge, not to the architecture; the
+-  intrinsic-gauge repair was built, calibrated ($C = 26.4766$, fit once
+-  on train), and **tested — it failed** (@sec-drivaerml-transferv2).
++  deployed.** A monotone but test-set-touching dose-response initially
++  implicated the fixed declared scale gauge; the intrinsic-gauge repair
++  was built, calibrated ($C=26.4766$), and **tested — it failed**
++  (@sec-drivaerml-transferv2). The audit then found that the loader used
++  for the supposedly train-only calibration included the held-out
++  cases.
+   Retrained under the intrinsic gauge, all four gate-0-passing seeds
+   still diverge zero-shot (5.97 × 10³ to 1.90 × 10¹³ against
+   GeoTransolver's 0.677); gate 1 fails and gate 2 is moot. **The gauge
+   was a lever that moved the magnitude, not the cause.** Odds, revised
+   on evidence: "transfers at all, post-repair" was ~75% and is now
+   measured false at the structural gate; cross-family *advantage*
+-  35% → **< 5%**. Two side findings outlast the verdict: the intrinsic
+-  gauge carries a ~20% per-seed risk of a worse training basin (one in
+-  five, with lr/2 only partly rescuing it), and the seed that failed
+-  in-family transferred *best* by two orders of magnitude — suggesting
+-  in-family fit and cross-family robustness may be in tension.
++  35% → **< 5%**. Two exploratory side findings outlast the verdict:
++  one of five intrinsic-gauge seeds reached a worse training basin
++  (far too little evidence to estimate a 20% population risk), and
++  that seed transferred *best* by two orders of magnitude — suggesting
++  a possible tension between in-family fit and cross-family robustness
++  that would need a separate, prospectively designed study.
+ - **True (full-mesh) OOD drag coefficients: blocked on research, not
+   wiring.** The OOD verdict's drag numbers are subsample-integrated
+   pseudo-coefficients; the upstream force/moment ground truth is
+@@ -331,23 +341,16 @@ strongest mainstream baseline. Most of its original directions have
+ since completed; their outcomes live in the ledger above and their
+ numbers in @sec-benchmarks.
+ 
+-**Item zero, ahead of the list below: finish the cross-family
+-question.** It is not one more agenda entry, because it is the only
+-open item that can invalidate the program's stated identity. The
+-sequence is fixed and pre-registered
+-(@sec-nb-transfer-v2-prereg): gate 0 (do the intrinsic-retrained
+-checkpoints hold their in-family accuracy?), then transfer-v2's
+-structural and comparability gates. Two outcomes are both
+-informative and neither is a tuning exercise — if the repaired model
+-transfers comparably, the architecture story rehabilitates and the
+-industrial identity has evidence; if it still diverges, the
+-brittleness is deeper than the gauge and the within-family
+-differential (@sec-nb-seal-verdict) is the strongest generalization
+-claim this architecture gets. Riding on the same thread: the
+-seed-dependent training instability the intrinsic gauge introduced,
+-which is worth a discriminating experiment in its own right (a
+-half-learning-rate retrain of the divergent seed) because it
+-concerns conditioning rather than one dataset pair.
++**Item zero is now representation consistency.** Transfer-v2 ran and
++failed its structural gate, so more gauge or optimizer arms cannot
++rehabilitate the industrial identity. Before retraining, repair the
++train/validation split, checkpoint/scheduler semantics, effective-weight
++plumbing, and run manifest. Then compare the current cyclic contiguous-block
++against a deterministic, nested, full-cover hierarchy at matched compute.
++The decisive measurement is convergence of the represented surface
++operator and its field pattern across levels, not another amplitude-only
++validation score. The exact protocol and stop rules are in
++@sec-program-review.
+ 
+ What else remains live:
+ 
+@@ -356,13 +359,13 @@ What else remains live:
+    @sec-transolver-dataset as the label pipeline, and the
+    operator-fidelity columns no longer optional (@sec-part-ns holds the
+    first rung, Navier–Stokes).
+-2. **Hierarchical decode backend** — now a *speed* lever, not a memory
+-   necessity: the training-memory wall is measured closed
+-   (@sec-scale-ckpt), and the remaining cost of the dense decode is
+-   wall-clock ($\approx$978 s per product-scope forward,
+-   $\approx$1.9$\times$ that for a checkpointed training step). An
+-   FMM-style backend with the dense implementation as its oracle is
+-   the standing answer.
++2. **Hierarchical decode backend — parked.** It is a possible speed
++   lever, not a memory necessity, but the current Morton/AABB
++   Barnes--Hut implementation has no measured dense crossover and
++   introduces percent-to-tens-of-percent rotation dependence. Reopen
++   only after the representation experiment establishes a real
++   wall-clock need and a hierarchy can meet an explicit rotation-error
++   contract (@sec-program-review).
+ 3. **Strong-form residuals on the original suites** — the open problem
+    behind the fidelity columns: $L^2$-fit training fits fields, not
+    operators (@sec-fidelity-columns).
+@@ -612,9 +615,10 @@ certification is the family's boundary of validity;
+ training histories, checkpoints, and the mode-response comparison behind
+ @fig-kernel, @fig-convergence, and @sec-kernel-decoder are
+ single-machine `/tmp` artifacts; and the cross-family transfer evidence
+-(@sec-drivaerml-crossfamily) is **one family pair, one 20-case pilot,
+-zero-shot only** — the verdict against the fixed-gauge protocol is
+-frozen-protocol and stands, the gauge dose-response that explains it is
+-test-set-touching and exploratory, and no post-repair transfer number
+-exists yet. The checked-in JSONs under `results/` are the durable
+-record.
++(@sec-drivaerml-crossfamily) is **one family pair, one reused 20-case
++pilot, zero-shot only**. Transfer-v2 exists and fails, but its gauge
++constant was calibrated through a loader containing held-out cases and
++the same pilot informed successive hypotheses, architectures, and
++diagnostics. The gauge dose-response is exploratory, not causal; raw
++industrial predictions, complete configs, and checkpoint provenance are
++not durably checked in. The complete audit is @sec-program-review.
+diff --git a/examples/cfd/mesh_transformer/book/18-notebook.qmd b/examples/cfd/mesh_transformer/book/18-notebook.qmd
+index 1ff0c059..ce2d7d03 100644
+--- a/examples/cfd/mesh_transformer/book/18-notebook.qmd
++++ b/examples/cfd/mesh_transformer/book/18-notebook.qmd
+@@ -1,5 +1,21 @@
+ # Lab notebook {#sec-notebook}
+ 
++::: {.callout-important title="EDIT (2026-07-27 audit) — dated does not mean independently registered"}
++This chronology is preserved as the record of evolving belief. For the
++post-2026-07-20 industrial campaign, many results are prose-only, several
++“preregistrations” were local commits minutes before verdicts, the same
++20-case SHIFT pilot became a development set, and exact configs/raw
++predictions are often absent. The supposedly train-only gauge calibration
++also iterated all 484 cases, including the held-out split; chained jobs
++dropped scheduler steps and therefore did not follow the same trajectory;
++current code defines WSS by a whole-field Frobenius norm, not the later
++pointwise prose; and incoming effective weights are stripped before use.
++The production reader also selects cyclic contiguous cell blocks, while
++the later sphere diagnostics use simple-random subsets; “random
++subsampling” does not name one common experiment.
++Use @sec-program-review for current evidence labels and decisions.
++:::
++
+ This chapter is the program's running lab notebook: the dated,
+ chronological record of hypotheses, pre-registrations, runs, refutations,
+ and course corrections, in the order they actually happened. Unlike the
+@@ -8,10 +24,11 @@ stay, marked as superseded, because the path matters.
+ 
+ The documentation chapters state what is currently believed and why; this
+ chapter records how we got there. If a claim in the clean chapters seems to
+-appear from nowhere, its full history is here. Every entry names the
+-checked-in archive key in `results/learned_bie_2026-07-02.json` that holds
+-its numbers; the clean sections holding the current-best tables are
+-cross-referenced at the end of each entry.
++appear from nowhere, its full history is here. Early controlled entries
++name checked-in archive keys; many later industrial entries do not have a
++machine-readable result bundle and must be treated as exploratory. The
++clean sections holding the current-best tables are cross-referenced at
++the end of each entry.
+ 
+ (Iterations 1–6 — the falsification ladder, the Neumann extension, the
+ parametric study, the pruning study, and the 3D suite — predate this
+@@ -1938,6 +1955,13 @@ backend, task #41).
+ 
+ ## 2026-07-07 — why the tunnel panels weren't ignored: the quadrature-weight fight {#sec-nb-measure-asymmetry}
+ 
++> **EDIT (2026-07-27 audit):** The “exact license” is over-scoped.
++> Green/layer-potential representations split over boundary components
++> only under PDE-specific hypotheses; the hardcoded Laplace members are
++> not a Green representation theorem for nonlinear RANS. Per-boundary
++> pooling remains a plausible structural/optimization prior, not exact
++> physics for this industrial problem.
++
+ Peter's question on the H-ground negative — *why doesn't the model
+ just learn to ignore unhelpful tunnel panels via the BC type?* — has a
+ code-grounded answer, and it names an architectural operating-point
+@@ -2108,6 +2132,14 @@ arms training on-trend; evalx extrapolation evals partially done
+ 
+ ## 2026-07-07 (late) — two speed threads registered: FLARE-separable and Barnes–Hut {#sec-nb-speed-threads}
+ 
++> **EDIT (2026-07-27 audit):** The finite-$\theta$ Barnes--Hut
++> implementation does not preserve the stated rotation contract. Its
++> Morton ordering, axis-aligned bounding boxes, node membership, and opening
++> rule change under rotation; dense evaluation remains equivariant, but the
++> approximate backend does not. The acceptance test below was therefore
++> incomplete, and this backend is parked pending a rotation test and either a
++> rotationally intrinsic hierarchy or an explicitly weakened contract.
++
+ Peter surfaced FLARE (the low-rank attention variant accelerating
+ GeoTransolver in-repo) as a speed direction orthogonal to the
+ hierarchical plan. The architecture-specific mapping, worked out
+@@ -2281,6 +2313,12 @@ touched files.
+ 
+ ## 2026-07-08 — H-ground verdict: level; capacity dominates again {#sec-nb-hground-verdict}
+ 
++> **EDIT (2026-07-27 audit):** This one-seed global null did not settle
++> H-ground. Later all-boundary runs changed learning rate,
++> diverged/relaunched, and never completed the preregistered localized-band
++> evaluation. The correct status is incomplete, not a clean refutation or
++> confirmation.
++
+ The clean three-arm DrivAerML comparison completed (500 epochs each,
+ matched 4-node DDP, fixed pipeline, 1 seed/arm): vehicle-only val
+ **0.1019**, all-five-boundaries **0.1026**, pooled **0.1036** — level
+@@ -2516,6 +2554,14 @@ generated after the sync will record `fill_interior (PR #1800)`.
+ 
+ ## 2026-07-10 — the four-day stall was fair-share arithmetic, and short-QOS chunking breaks it {#sec-nb-fairshare-stall}
+ 
++> **EDIT (2026-07-27 audit):** “Same trajectory” is false for the current
++> trainer. It serializes the scheduler before the epoch-level
++> `scheduler.step()`, then resumes after that epoch, dropping one scheduler
++> update at every chain boundary. It also never writes the terminal state
++> (the campaign later evaluated epoch 491 while describing epoch 499/500 as
++> final). Runs with different restart histories are not matched until a
++> continuous-versus-chained equivalence test passes.
++
+ The pure-"(Priority)" stall on both clusters (all jobs PD since
+ 2026-07-06, zero scheduling) is now diagnosed with numbers, not vibes.
+ On HSG, `sshare -u psharpe` shows RawUsage 1,673,675 — **37.2% of the
+@@ -4138,6 +4184,14 @@ re100 running, re1000 queued. Rsync to clusters once all four land.
+ 
+ ## 2026-07-18 (night) — KERNEL FACTORIAL VERDICT: the falsifier fires; the industrial causal claim is demoted {#sec-nb-factorial-verdict-industrial}
+ 
++> **EDIT (2026-07-27 audit):** `exactonly` is not a pure two-member layer
++> potential. Removing learned kernel members leaves the nonlinear
++> query-geometry network, a direct query-drive path, and the learned
++> query-conditioned output projection active. This factorial identifies the
++> marginal value of learned versus exact kernel members *conditional on that
++> query network*; it does not show that the two exact kernels carry the full
++> prediction.
++
+ Finals (flagship rung, 1-node 500ep, ONLY the member dictionary
+ varied, 3 seeds each; control = flagship's existing 3 seeds):
+ 
+@@ -4363,6 +4417,15 @@ harvest at the next connected session.
+ 
+ ## 2026-07-19 (mid-day) — 5-seed seal verdict: WSS differential SEALS; pressure demotes {#sec-nb-seal-verdict}
+ 
++> **EDIT (2026-07-27 audit):** The word “seals” is withdrawn. Current code
++> defines `wss_l2` as one whole-field Frobenius relative norm, while later
++> prose describes a mean of pointwise vector-relative errors; the producing
++> evaluation SHA and raw predictions are absent, and shared seed labels do
++> not by themselves establish either paired or independent experimental
++> units. The disjoint reported ratios remain a provisional within-family
++> observation, but GeoTransolver's absolute WSS error is still about
++> 2.5--2.7× lower.
++
+ MT s45/s46 deep evals landed (corrected metric, same harness). The
+ full 5-versus-5 picture on the deep S1 extremes:
+ 
+@@ -4538,6 +4601,12 @@ extended grace via the fork.
+ 
+ ## 2026-07-20 — TRACE FACTORIAL VERDICT: the dominant mechanism, and its two halves are substitutes {#sec-nb-trace-factorial-verdict}
+ 
++> **EDIT (2026-07-27 audit):** The reported 3.8× factorial effect is a
++> strong observation, but correction/readout substitution does not uniquely
++> identify “boundary self-identification.” It establishes the marginal
++> value of a trace channel under this protocol, not that one semantic
++> mechanism.
++
+ The full 2×2 at flagship capacity (1-node 500ep, 3 seeds/arm):
+ 
+ | arm | jump corr | trace readouts | finals | mean |
+@@ -4710,6 +4779,14 @@ annotation: "steady labels end here."
+ 
+ ## 2026-07-22 — CROSS-FAMILY VERDICT: the falsifier fires maximally — MT does not transfer zero-shot {#sec-nb-crossfam-verdict}
+ 
++> **EDIT (2026-07-27 audit):** This first 20-case read remains a valid
++> untouched falsifier of the shipped model. From this point onward the same
++> SHIFT-SUV cases were a development set: the gauge scan, transfer-v2,
++> architecture wave, seed extension, and pattern analysis are not
++> independent confirmations. The dose-response below also did not identify
++> the fixed gauge as the cause; transfer-v2 later refuted that causal
++> interpretation.
++
+ The pre-registered decisive test (@sec-nb-crossfamily-prereg) returned
+ the worst branch. DrivAerML-trained checkpoints, zero-shot on 20
+ SHIFT-SUV cases, frozen pipeline, corrected metric:
+@@ -4822,6 +4899,14 @@ Combined relative-L2:
+ 
+ ## 2026-07-22 (evening) — band tooling ready (partition pre-registered); metric-description correction {#sec-nb-band-tooling}
+ 
++> **EDIT (2026-07-27 audit):** This correction is itself incorrect.
++> Current `MetricCalculator` code and its tests pin `wss_l2` as a
++> whole-field Frobenius relative norm, not a mean of pointwise
++> vector-relative errors. Without the raw predictions and producing SHA,
++> the historical table cannot be reconstructed under both definitions.
++> Any conclusion that depends on the distinction—especially the five-seed
++> WSS “seal”—is provisional.
++
+ **Metric-description CORRECTION (semantics, not results).** The
+ corrected-metric `wss_l2` is the *pointwise-mean relative vector
+ error* — mean over cells of per-cell ‖Δτ‖/‖τ‖ — NOT the Frobenius
+@@ -4855,6 +4940,16 @@ finals land (the script takes latest checkpoints).
+ 
+ ## 2026-07-22 (afternoon) — intrinsic gauge calibrated on TRAIN: C = 26.4766; acceptance gates pre-registered {#sec-nb-gauge-calib}
+ 
++> **EDIT (2026-07-27 audit):** The calibration was **not train-only**.
++> `calibrate_intrinsic_gauge.py` iterated all 484 entries in
++> `val_loader.dataset` instead of the 435 indices in its training sampler,
++> so $C=26.476593$ includes all 49 held-out DrivAerML cases while the
++> artifact labels them train. In addition, Horvitz--Thompson weighting makes
++> totals unbiased, not a centered ratio followed by a square root; the
++> sampled RMS radius must be treated as an empirical statistic whose
++> cyclic-block bias and variance are unmeasured. Recompute $C$ from the
++> exact frozen training IDs before using it again.
++
+ The cross-family repair (@sec-nb-crossfam-verdict localized the
+ zero-shot divergence to the fixed `reference_length: 8.0` via the
+ gauge dose-response) is now calibrated. The intrinsic gauge is
+@@ -5479,6 +5574,15 @@ different panel subsets.
+ 
+ ## 2026-07-24 (later) — H-DI VERDICT: the contract HOLDS under refinement; subsampling is a biased operator, and the bias is a FAR-field effect {#sec-nb-hdi-verdict}
+ 
++> **EDIT (2026-07-27 audit):** The refinement ladder is a durable,
++> rerunnable small-probe observation. The sampling interpretation is much
++> weaker. `hdi_test.py` uses one simple-random draw at each resolution, and
++> the reported 16-replicate extension has no retained raw bundle in this
++> checkout. More importantly, production does not use simple-random
++> subsets: it reads one cyclic contiguous block of cells from a
++> not-durably-verified on-disk ordering. This entry does not establish the
++> production sampler's bias, variance, or far-field mechanism.
++
+ The discretization-invariance gap of @sec-nb-verdict-0724 resolves into
+ two different things that had been conflated, and my mechanism guess was
+ wrong again — the second sign-flip of the day. Artifacts
+@@ -5886,6 +5990,15 @@ bitwise query independence.
+ 
+ ## 2026-07-24 (evening) — H-MS VERDICT: a missing required invariance, found and fixed exactly; the unification is DEMOTED by its own falsifier {#sec-nb-hms-verdict}
+ 
++> **EDIT (2026-07-27 audit):** P1 tests an internal rescaling of
++> reconstructed geometric cell areas, not the public represented-measure
++> path. `MeshTransformer.encode` deletes incoming cell data, including
++> `MEASURE_WEIGHTS_KEY`, before constructing `source_mesh`; the promised
++> total-measure scalar is also computed and then unused. The test therefore
++> establishes a bare-area normalization identity only. It does **not** show
++> that upstream Horvitz--Thompson weights survive or that the production
++> represented measure was fixed.
++
+ Both pre-registered predictions returned, and they split cleanly.
+ Artifact `studies/gauge_diagnostics/hms_test.py`.
+ 
+@@ -6071,6 +6184,12 @@ variable nobody has swept.
+ 
+ ## 2026-07-25 — PRE-REGISTRATION H-CC: did the model learn a COVERAGE-SPECIFIC compensation? {#sec-nb-hcc-prereg}
+ 
++> **EDIT (2026-07-27 audit):** The motivating arithmetic is not an
++> identification argument. The 0.167 trained DrivAer pressure error and
++> roughly 0.337 exact-estimator sphere error use different geometries,
++> densities, queries, targets, and error decompositions; their comparison
++> cannot show that the trained model learned a coverage-specific correction.
++
+ Written before the sweep runs. The cheapest decisive test available for
+ the estimation thread, and it is inference-only.
+ 
+@@ -6128,6 +6247,15 @@ comparison, and no claim will be made as if it were.
+ 
+ ## 2026-07-25 — H-CC VERDICT: CONFIRMED at maximum strength — a sharp minimum exactly at the training resolution, and catastrophe above it {#sec-nb-hcc-verdict}
+ 
++> **EDIT (2026-07-27 audit):** The U-shaped resolution response is a
++> strong reported observation; “coverage-specific compensation” is not
++> confirmed. Trace mode changes the source cells, trace-query locations,
++> and the points entering the uniformly reduced metric together, while the
++> sphere comparison uses a different geometry, density, query distribution,
++> and sampler. The exact generating bundle is not retained locally. Treat
++> the cause as a hypothesis requiring a crossed train/evaluation
++> representation experiment scored against fixed full-resolution truth.
++
+ One unchanged checkpoint (flagship s42, fixed gauge), `id_reference`,
+ nothing varying but `sampling_resolution`. AGA job 293567, task dir
+ `agents/2026-07-25-mt-coverage-sweep/`.
+@@ -6273,6 +6401,14 @@ whether a training arm is warranted.
+ 
+ ## 2026-07-25 — `measure_normalization` implemented; all four contracts survive by construction {#sec-nb-measnorm-impl}
+ 
++> **EDIT (2026-07-27 audit):** The advertised end-to-end measure contract
++> is not implemented. `encode` strips the incoming effective weights, then
++> normalization acts on freshly reconstructed bare geometric areas; the
++> tests monkeypatch internal `cell_areas` and do not exercise
++> `compose_measure_weights` through the public model API. Thus the table
++> below scopes only to internal bare-area rescaling. H-MW and the
++> Horvitz--Thompson interpretation remain untested.
++
+ The clean test of the measure-magnitude hypothesis required an
+ implementation (@sec-nb-measmech-verdict), because no configuration
+ lever varies the quadrature measure while holding nondimensional
+@@ -6742,6 +6878,15 @@ for seeds that train successfully.
+ 
+ ## 2026-07-25 — TRANSFER-V2 VERDICT: gate 1 FAILS. The gauge was not the mechanism {#sec-nb-transferv2-verdict}
+ 
++> **EDIT (2026-07-27 audit):** The qualitative refutation survives: the
++> reported misses are far too large for the calibration leak plausibly to
++> reverse, and later pattern diagnostics find essentially unrelated fields.
++> The exact magnitudes are nevertheless non-auditable from this checkout:
++> the treatment configs, copied source trees, checkpoint hashes, case-level
++> predictions, and complete raw bundle were not retained. Label the numbers
++> reported observations on the reused SHIFT development set, not an
++> independently reproducible confirmation.
++
+ The repair does not work. Zero-shot SHIFT-SUV, intrinsic-gauge
+ retrained checkpoints, frozen pipeline, corrected metric:
+ 
+@@ -6843,6 +6988,13 @@ failure is cheapest to measure.
+ 
+ ## 2026-07-25 — THEORY: why the incumbent degrades and we detonate, and a structural measurement of the amplifier (H-DEG) {#sec-nb-hdeg}
+ 
++> **EDIT (2026-07-27 audit):** Drive degree constrains
++> $g\mapsto\lambda g$; SHIFT-SUV changes the geometry distribution.
++> Later offset-free pattern errors of 0.9897--0.9995 refute degree control
++> as a geometry-transfer repair even when it changes amplitude by orders of
++> magnitude. Homogeneous and quadratic modes remain useful only as scoped
++> drive-law contracts.
++
+ Two knob-shaped hypotheses have now been refuted by their own
+ pre-registered tests (gauge, measure magnitude). That is the signal
+ that end-to-end testing has stopped being informative, so this entry
+@@ -6949,6 +7101,15 @@ capacity*, and the experiment should report both.
+ 
+ ## 2026-07-25 — P2 measured: norm-factored homogeneity gets every property at once, and it diagnoses GLOBE's arcsinh {#sec-nb-p2}
+ 
++> **EDIT (2026-07-27 audit):** The unrestricted “degree exactly 1”
++> language is too strong. The implementation normalizes with
++> $1/(\lVert x\rVert+\varepsilon)$, so positive homogeneity is only
++> approximate for $\lambda>0$ when $\lVert x\rVert\gg\varepsilon$;
++> a probe at the default floor gives a 0.5 relative scaling residual.
++> Oddness under negative scaling is not constructed after training. The
++> ordinary-magnitude positive-scale measurements below remain valid in
++> that narrower domain.
++
+ Peter asked whether GLOBE's arcsinh stabilisation points at a better
+ architecture. It does, but not by being extended — by showing what it
+ costs. Prototype measurements on a common ladder
+@@ -7110,6 +7271,12 @@ path can contribute, and `quadratic`/`homogeneous` attack it directly.
+ 
+ ## 2026-07-25 — quadratic arm launched; P2 validated on the real typed machinery {#sec-nb-quad-p2}
+ 
++> **EDIT (2026-07-27 audit):** “Exact degree one” again holds only for
++> the ordinary positive scales exercised here. The real implementation
++> still divides by $\lVert F\rVert+\varepsilon$, so it has the same
++> tiny-magnitude floor caveat as @sec-nb-p2 and does not construct
++> oddness for negative scaling. Zero preservation remains exact.
++
+ ### The cheap test of H-DEG is running
+ 
+ `field_mode="quadratic"` on the flagship, one declared delta, smoke-tested
+@@ -7682,6 +7849,14 @@ the remaining gap.
+ 
+ ## 2026-07-26 — The two fixes are complementary, not redundant: `measure_normalization` is free in-family and useless out, `homogeneous` is the reverse {#sec-nb-hboth-prereg}
+ 
++> **EDIT (2026-07-27 audit):** H-BOTH is a valid prospective ablation of
++> homogeneous drive handling plus normalization of **bare geometric
++> areas**. It is invalid as the advertised test of composed
++> effective-measure or Horvitz--Thompson invariance because those incoming
++> weights never reach the model. Its exact configs and result bundle are
++> also absent, so completed runs must be archived as exploratory rather
++> than harvested into the four-property claim.
++
+ Waiting on the `homogeneous` seeds, I re-read the five arms already
+ harvested rather than only the two the wave verdict discussed. Pulling
+ `pressure_l2` out of every `metrics.jsonl` at once — including `mn2_s42`,
+@@ -8101,6 +8276,12 @@ they come back negative, this entry is why that should surprise no one.
+ 
+ ## 2026-07-26 — The model is overfit to its training RESOLUTION, and both failure axes end in an uncorrelated prediction {#sec-nb-resfit}
+ 
++> **EDIT (2026-07-27 audit):** The sharp train-resolution pattern minimum
++> is a strong reported observation, but sources and trace queries co-vary
++> and there is no covering control. “Sampling caused resolution overfit”
++> and the proposed common cause with geometry-family failure are
++> provisional mechanisms, not established conclusions.
++
+ Retiring Q2 (@sec-nb-homog-seeds-verdict) required a replacement
+ diagnostic. Building it produced the sharpest result of the program so
+ far, and it is not a good one.
+@@ -8206,6 +8387,16 @@ Removing it is a separate arm and the natural next one.
+ 
+ ## 2026-07-26 — The operator IS consistent; the SAMPLING is not, and no per-cell weight can fix that {#sec-nb-decimation}
+ 
++> **EDIT (2026-07-27 audit):** The categorical title and production-cause
++> claim are withdrawn. The diagnostic uses simple-random subsets, whereas
++> production uses cyclic contiguous cell blocks; the reported replicated
++> bias lacks a durable raw bundle; and an exact constant-density
++> double-layer control is design-unbiased under correct
++> Horvitz--Thompson weighting. Deterministic full-cover refinement is the
++> credible observation. Whether cyclic sparse support, cell ordering,
++> nonlinear aggregation, objective measure, or representation adaptation
++> causes the industrial resolution cliff remains open.
++
+ Peter pushed back on resolution augmentation, correctly: numerical
+ consistency is a property you prove, not one you fit. A turbulence model
+ is not refitted per grid. If the surrogate needs augmentation to be
+@@ -8262,6 +8453,18 @@ variance and should not be quoted.
+ 
+ ### Why no reweighting can work
+ 
++::: {.callout-warning title="EDIT (2026-07-27 audit) — no-weighting theorem retracted"}
++The categorical heading is false. The public effective-weight path was
++never exercised because `encode` strips the weights, and a classical
++constant-density double-layer counterexample is repaired from 93.8% to
++0.4% Monte Carlo mean error by correct Horvitz--Thompson weights; the HT
++total is design-unbiased. That does not prove a weighted nonlinear
++network will work; it leaves the question open. The random-init sphere
++probe below supports testing full-cover coarsening, not a universal
++impossibility theorem or a production causal verdict
++(@sec-program-review).
++:::
++
+ The model is a **nonlinear functional of the empirical measure** — MLPs,
+ `weights.sum()` normalization, learned coefficients. For a nonlinear
+ functional the expectation over sampled sets is not the functional of the
+@@ -8298,3 +8501,1204 @@ subsampling does not.
+ 
+ **Supersedes H-RESFIT.** `covaug` tests whether the resolution optimum
+ *moves*; the live question is now whether coarsening removes it.
++
++## 2026-07-27 — Program audit: stop widening and repair the empirical measure {#sec-program-review}
++
++
++::: {.callout-important title="Decision memo — audit snapshot 2026-07-27"}
++The unified thesis is not currently defensible. The controlled
++synthetic program is a strong continue; the industrial
++DrivAerML-to-new-geometry program is a major-revision project whose
++present checkpoints do not transfer. Freeze new industrial architecture
++arms. First repair the experiment substrate and test a conservative,
++full-cover boundary representation.
++
++This review audits the code at local commit
++`a3b566fa5390115a475c36c19db4157c161385bf`. The review and the
++corrections it makes elsewhere in the book are not part of that commit.
++The companion
++`results/program_review_audit_manifest_2026-07-27.json` records the
++review-source hash, tracked-book diff hash, and dirty paths at delivery.
++It supersedes stale status language elsewhere in the book, including the
++claim that transfer-v2 is unrun or that the fixed gauge caused the
++cross-family failure.
++:::
++
++### Executive verdict
++
++The program has produced real science, but not the single result the
++book currently implies.
++
++| program | current evidence | decision |
++|---|---|---|
++| Controlled MeshTransformer benchmark program | Several multi-seed, checked-in falsification ladders, including exact/manufactured-label and solver-verified ladders; useful structural contracts; a credible synthetic paper nucleus | **Continue and write separately** |
++| Industrial within-family DrivAerML model | Reported strong training improvement from trace handling; parameter efficiency versus GeoTransolver is not established; weaker absolute error than the incumbent; one thin OOD-ratio differential | **Retain as an engineering baseline; downgrade the generalization claim** |
++| Industrial cross-family operator | Available records say every tested MeshTransformer checkpoint fails on SHIFT-SUV and field-pattern error is approximately one; later raw bundles are absent | **Failed in its current form; exact magnitudes non-auditable** |
++| Current measure-normalization / H-BOTH interpretation | The model strips the effective weights the intervention claims to normalize; exact experiment configs and artifacts are missing | **At most a non-auditable bare-geometric-area ablation; invalid as a test of the advertised effective-measure hypothesis** |
++| Covering-mesh explanation | Deterministic full-cover refinement beats simple-random subsampling in a small probe; production uses cyclic contiguous blocks and causality is not isolated | **Highest-value hypothesis, not yet a verdict** |
++
++The most important research decision is therefore negative: **do not
++launch another gauge, degree, normalization, seed, or augmentation
++wave on the current 10,000-panel cyclic-block subsampling substrate.** The
++program is now bottlenecked by whether its discrete input is a
++consistent representation of a surface **and whether its loss/metrics
++approximate a fixed continuum norm**, not by whether another
++nonlinearity can bound its amplitudes.
++
++My overall grades are:
++
++- scientific self-correction: **A−**;
++- code-level structural ambition: **A−**;
++- industrial experimental identification: **C−**;
++- industrial reproducibility: **D+**;
++- present unified thesis: **weak reject / major revision**.
++
++The negative grades are not a judgment that the work was wasted. The
++week found the program's real fault line. The problem is that the
++narrative and the experiment queue continued to move faster than that
++finding was absorbed.
++
++### Scope and audit standard
++
++I reviewed:
++
++- the full book and dated notebook, with special attention to
++  2026-07-20 through 2026-07-26;
++- the current `mesh_attention` implementation and its contract tests;
++- the unified external-aerodynamics recipe, launch scripts, metrics,
++  checkpoint semantics, dataset splitting, and provenance helpers;
++- checked-in result artifacts and the relationship between prose and
++  machine-readable evidence;
++- the completed and still-unharvested AGA campaign state available on
++  2026-07-27;
++- primary literature on discretization-convergent neural operators,
++  geometry generalization, boundary/domain coupling, and
++  structure-preserving models;
++- four independent reviews focused on methodology/statistics,
++  architecture/mathematics, reproducibility, and research strategy.
++
++I use five evidence labels:
++
++| label | meaning |
++|---|---|
++| **established** | replicated in the relevant scope, with a durable artifact and no known material contradiction |
++| **strong observation** | the numerical phenomenon is convincing, but its cause, inference, or provenance is incomplete |
++| **provisional mechanism** | plausible and testable, but the intervention does not yet isolate it |
++| **refuted** | a stated falsifier fired or a later diagnostic removed the proposed explanation |
++| **non-auditable** | exact generating code, config, checkpoint, split, or raw result cannot be reconstructed |
++
++Labels can compound. For example, a phenomenon can be a strong
++observation in the notebook while its exact magnitude remains
++non-auditable from this checkout.
++
++Passing tests is necessary but not sufficient here. The audit's most
++important failures are precisely contracts that the current tests do
++not exercise.
++
++For completeness, the full relevant local suite was green at the audited
++commit:
++
++```text
++uv run --no-sync pytest -q test/experimental/nn/mesh_attention \
++  examples/cfd/mesh_transformer/tests
++949 passed, 1 skipped
++```
++
++That result is evidence that the checked contracts are internally
++consistent; it is not evidence against the uncovered public-input,
++rotation, resume, split, or provenance failures below.
++
++The small numerical counterprobes introduced by this review are
++identified as **audit-only**. Their exact decimals are not yet backed by
++a checked-in raw bundle and should become regression artifacts before
++publication. The source-level conclusions—deleted weights, leaked
++split, scheduler ordering, axis-dependent hierarchy, and forward-graph
++paths—do not depend on those decimals.
++
++### What happened in the last week
++
++The week's pace was extraordinarily high. The sequence matters because
++several later “confirmatory” reads reused data and choices exposed by
++earlier reads.
++
++| date | useful result | judgment that did not survive |
++|---|---|---|
++| Jul 20 | The 2×2 trace factorial measured a 3.8× flagship effect; jump correction and own-cell readouts were near substitutes | “Boundary self-identification” is a good interpretation, but the factorial does not uniquely identify that semantic mechanism |
++| Jul 20–21 | All-boundary pooling exposed real optimization instability | Balanced pooling was treated too quickly as a cure; learning rates, relaunches, and incomplete band evaluation prevent a clean H-ground verdict |
++| Jul 22 | The first untouched 20-case SHIFT-SUV evaluation decisively rejected cross-family transfer; GeoTransolver remained structured | A test-set-touching gauge scan was promoted into a causal story: fixed gauge as the repairable mechanism |
++| Jul 22–24 | The intrinsic gauge was implemented; the Re curve and several measure/coverage probes generated useful negative evidence | The gauge calibration called “train-only” actually included the held-out split |
++| Jul 24 | Deterministic refinement and random subsampling behaved differently; the singularity-subtraction replication corrected an exaggerated 41× claim to a modest effect | Measure invariance was declared solved before the public effective-weight path was tested |
++| Jul 25 | Transfer-v2 refuted the gauge explanation; a dramatic train-resolution optimum was measured | The response was an immediate six-arm architecture wave before source/query confounding, field pattern, and provenance were settled |
++| Jul 25–26 | Degree-controlled modes bounded some amplitudes; the five-seed extension honestly failed its 3× reproducibility bar | Drive homogeneity was treated as a candidate remedy for a geometry-family shift—a category error |
++| Jul 26 | Offset-free diagnostics showed that all cross-family fields are essentially unrelated to truth; the small full-cover/simple-random experiment identified the right numerical question | The final notebook title overstates causality from one random-init sphere/query probe using a different sampler than production |
++| Jul 27 audit | Effective weights are stripped, calibration leaks, chained resumes alter the schedule, key configs/artifacts are absent, and Barnes–Hut breaks its stated rotation contract | The clean-book synthesis had not yet incorporated any of these facts |
++
++The week should be remembered less as “many failed fixes” than as a
++sequence that finally changed the object of study. Before Jul 26, the
++program was optimizing a model. After Jul 26, the live question became:
++
++> What discrete surface measure is the model actually operating on,
++> and does every layer approximate one resolution-independent
++> continuum map?
++
++That is the right question. It should now govern the queue.
++
++### The eight findings that change the program
++
++#### 1. The effective-measure intervention does not reach the model
++
++This is the highest-severity correctness finding.
++
++`MeshTransformer.encode` constructs geometry-only boundary meshes with
++`with_data(point_data={}, cell_data={}, global_data={})`. That deletes
++`MEASURE_WEIGHTS_KEY`, the public cell-data entry carrying composed
++Horvitz–Thompson or other effective weights. It then creates a fresh
++`source_mesh` from normalized points and cells. Consequently:
++
++1. upstream effective weights are deleted before attention or decoding;
++2. `source_mesh.cell_areas` is bare geometric area;
++3. `measure_normalization` normalizes those reconstructed geometric
++   areas, not the represented effective measure;
++4. `nondim_measure` is never used after the normalization block, despite
++   the comment that magnitude “re-enters as the dimensionless global
++   scalar below.”
++
++An audit-only public-API probe attached both a uniform 880× factor,
++replicating the historical campaign convention, and nonuniform
++0.2-to-5.0 factors with `compose_measure_weights`. Outputs were bitwise
++identical with normalization on and off, and with zero or eight learned
++kernel members. That is not measure invariance; it is measure blindness.
++
++The 880× value carries a separate bookkeeping mismatch. The historical
++diagnostic calls the denominator 8.8 million **cells**, and preprocessing
++documentation describes roughly 8.8 million quad-dominant cells before
++triangulation. The curated reader later reports roughly 17.7 million
++triangles for the cited vehicle case. The sampler draws the latter cell
++population, so its uniform inclusion factor is the case-specific
++$N_\mathrm{cells}/n_\mathrm{sample}$, roughly 1,770 there. This
++pre-/post-triangulation counting mismatch makes the requested data
++contract more important, not less.
++
++There is also a direct counterexample to the later categorical claim
++that weights cannot help. On a 5,120-panel sphere with constant-density
++exact double-layer truth $-1$, an audit probe drew 512 uniform
++320-panel samples:
++
++| estimator | sample mean | observed mean error | design bias |
++|---|---:|---:|---:|
++| bare retained-panel sum | $-0.06225$ | 93.8% | 93.75% |
++| HT-weighted sum | $-0.99595$ | 0.4% | 0% |
++
++Equal first-order inclusion makes the HT estimator design-unbiased for
++this full discrete panel total; 0.4% is finite Monte Carlo error of the
++reported sample mean, not estimator bias. Its standard error was 0.0105
++**for the mean over 512 replicate samples**, so a normal 95% interval
++is approximately $[-1.0165,-0.9754]$ and contains $-1$. It implies
++a single-draw standard deviation, and hence a roughly 0.238
++standard-deviation contribution to RMSE, but the audit did not retain
++the individual draws needed for empirical RMSE or quantiles. Those must
++become part of the durable artifact before making an estimator-quality
++claim. This does not show that HT weighting solves a trained nonlinear
++model; finite-sample variance, nonlinear plug-in bias, and
++representation shift remain. It does show that the exact linear
++component is reweightable and that “weights cannot fix it” is false as a
++universal statement.
++
++The tests missed this because they monkeypatch `Mesh.cell_areas`,
++changing physical panel area globally instead of attaching
++`MEASURE_WEIGHTS_KEY` to an input mesh. The flagship path is weaker
++still:
++
++- exact invariance is asserted only for `kernel_mlp_members=0`;
++- the production flagship uses eight learned members;
++- its “partial invariance” test permits relative drift below 50;
++- the all-boundary test again hardcodes zero learned members;
++- `test_off_is_bitwise_default` does not compare two outputs;
++- the H-BOTH composition test does not rescale a measure.
++
++Therefore the following claims are invalid as written:
++
++- “measure units are now fixed”;
++- “the magnitude re-enters as a global scalar”;
++- “the HT distribution survives”;
++- “H-BOTH has both required invariances”;
++- “HT weights are inert, therefore no weights can help.”
++
++The last statement may eventually be true for a particular estimator,
++but the current implementation never ran that experiment. The correct
++status is: **the production model ignores incoming effective weights;
++the proposed finite-sample correction remains untested.**
++
++#### 2. The intrinsic-gauge calibration leaked the held-out split
++
++`calibrate_intrinsic_gauge.py` sets `infer_split=train`, but iterates
++`range(len(val_loader.dataset))`. In manifest mode, the dataset contains
++all 484 cases; the sampler carries the 435/49 split. The normal
++inference loop correctly iterates `val_loader.sampler`.
++
++The saved artifact reports `n_samples: 484` and labels it `"split":
++"train"`. The book simultaneously says the standard training split has
++435 cars and that the constant was fit once on train and “must never”
++see evaluation data. Thus
++
++$$
++C = 26.476592786355283
++$$
++
++was fit on all 435 training plus 49 held-out cases.
++
++This is a real protocol breach, but it does **not** rehabilitate the
++gauge hypothesis. Transfer-v2 missed its structural bar by three to
++thirteen orders of magnitude, and later pattern diagnostics show
++near-orthogonal fields. A small change in $C$ cannot plausibly reverse
++that. The required response is to fix, recompute, quantify the delta,
++and correct the record—not to rerun the entire failed transfer program
++before measuring that delta.
++
++There is a second statistical overclaim in the gauge implementation
++documentation. HT weighting is unbiased for discrete totals, not for a
++centered ratio followed by a square root. With a uniform factor on one
++boundary it cancels exactly and leaves the sampled RMS radius. Call this
++statistic consistent or empirically subsample-robust only after measuring
++its cyclic-block bias and variance; do not call it an unbiased estimate
++of the full-resolution radius.
++
++#### 3. Chained jobs do not follow the same training trajectory
++
++The notebook calls two- and four-hour checkpoint chains
++“protocol-neutral—same trajectory.” The trainer saves the optimizer and
++scheduler before the epoch-level `scheduler.step()`, then resumes at the
++next epoch. The checkpoint therefore restores the pre-step scheduler
++state while skipping the epoch whose step was omitted. Every restart
++drops one schedule update.
++
++The default flagship uses `StepLR(step_size=100, gamma=0.1)`. Runs that
++hit different numbers or locations of wall-time boundaries can cross LR
++decays at different effective epochs. This matters because the July 25
++arms explicitly resumed after repeated SIGTERM boundaries and because
++seed and architecture runtimes need not be identical.
++
++There is a second reporting mismatch: training completes epoch 499/500,
++but no final checkpoint is saved. With the hidden campaign
++`save_interval=10`, inference loads `checkpoint.0.491.pt`. The prose
++mixes epoch-499 training validation with epoch-491 inference as “final”
++results, and the exact override is not checked in.
++
++Until a continuous-versus-resumed equivalence test exists, “matched
++protocol” must include the effective LR sequence and restart history,
++not just the nominal YAML.
++
++#### 4. The industrial evidence is not independently reconstructable
++
++The only last-week JSON under `mesh_transformer/results/` is
++`crossfamily_transfer_2026-07-22.json`. It says explicitly that it is a
++manual transcription from the notebook. It contains no resolved config,
++command, environment, tree digest, dirty diff, checkpoint hash, manifest
++hash, case IDs, or per-case values, and it stops before the transfer-v2
++verdict.
++
++The later transfer-v2, resolution, wave, five-seed, and pattern results
++live only in prose or remote scratch output. Headline treatment configs
++for `measure_normalization`, `field_mode: homogeneous`, `quadratic`, and
++H-BOTH are not tracked. The notebook records that they were trained from
++separate byte-copy trees with manual patches; those trees have no `.git`,
++saved diff, or source digest. The current flagship config remains
++nonlinear with eight learned members.
++
++This creates three distinct uncertainties:
++
++- Was current HEAD the code that generated a number?
++- Did treatment and reused controls run the same code and schedule?
++- Can a case-level metric be recomputed under a corrected definition?
++
++For the post-Jul-24 industrial wave, the answer is generally no. Those
++numbers can guide exploration, but they cannot support a paper or a
++“sealed” claim.
++
++#### 5. Barnes–Hut violates its stated similarity contract
++
++The Barnes–Hut module says it is similarity-equivariant because its tree
++lives in the normalized frame. Its Morton/AABB tree, node membership,
++axis-aligned diameter, and AABB-gap opening rule are coordinate-axis
++dependent. Normalizing length does not make an axis-aligned hierarchy
++rotation-equivariant.
++
++An audit-only end-to-end rotation probe found dense residuals at roundoff, while
++Barnes–Hut produced approximately:
++
++| $\theta$ | scalar rotation residual | vector rotation residual |
++|---:|---:|---:|
++| 0.25 | 1.2% | 4.1% |
++| 0.50 | 3.1% | 10.5% |
++| 1.00 | 6.8% | 17.2% |
++
++No rotation test exists in the Barnes–Hut acceptance suite. This does
++not damage the default dense backend, and Barnes–Hut already has no
++measured speed crossover at current product sizes. It does mean the
++backend must be parked or its contract weakened until the approximation
++error explicitly includes rotation dependence.
++
++It also constrains the proposed hierarchy pivot below: do not turn the
++current axis-aligned tree directly into the scientific coarsener and
++silently sacrifice a core contract.
++
++#### 6. “Exact-members-only” is not a pure layer-potential model
++
++The book's strongest mechanism language says the two exact singular
++members carry propagation while operator-conditioned source
++coefficients carry the unknown PDE. Removing learned kernel members
++does not isolate that graph.
++
++Even in exact-only mode:
++
++- queries pass through a nonlinear typed geometry network;
++- global drives have a direct query-side path that bypasses the kernel;
++- the summed kernel field passes through a learned
++  query-geometry-conditioned projection;
++- that projection contains invariant gates, field–geometry
++  contractions, and scalar–vector products.
++
++A learned query gate can multiply or contract a harmonic layer
++potential into a non-harmonic field. The project's own far-field work
++found this path load-bearing. Thus dictionary factorials measure the
++**marginal value of members conditional on an active query network**.
++They do not show that a two-member layer potential carries the full
++prediction.
++
++The theoretical license is also narrower than the book sometimes
++states. Classical Green/layer-potential representations and
++second-kind Fredholm density solves apply under PDE-specific
++conditions, most cleanly to linear elliptic problems with the
++appropriate Green function. They are not a PDE-agnostic theorem for
++Liouville, Euler, RANS, or a general unknown nonlinear operator. The
++hardcoded exact members are Laplace single and double layers, not the
++Green functions of all benchmark families.
++
++The surviving claim is still useful: the model is a typed,
++symmetry-aware boundary surrogate with a Laplace-like singular prior.
++To establish a stronger BIE mechanism, run a factorial between:
++
++1. a true linear layer-potential output with no query gate or direct
++   query drive;
++2. output gate only;
++3. direct query-drive path only;
++4. the full current graph.
++
++Report both field error and PDE residual. This experiment is more
++informative than another dictionary-member sweep.
++
++#### 7. The homogeneity contract has both a sign and a floor caveat
++
++The homogeneous read-in computes its unit state with
++$1/(\lVert x\rVert+\varepsilon)$, where the default
++$\varepsilon=10^{-30}$. It is therefore only approximately
++positive-homogeneous when $\lVert x\rVert\gg\varepsilon$, not exactly
++homogeneous for every positive scale. An audit probe at
++$\lVert x\rVert=10^{-30}$ found a relative scaling residual of 0.5;
++the existing tests use ordinary magnitudes and miss the floor.
++
++Nor is oddness guaranteed after training. The last MLP layer is
++zero-initialized, so a fresh module begins as the identity, but a
++learned nonlinear map of the normalized direction need not satisfy
++$f(-x)=-f(x)$. Tests use only $k>0$, while public prose writes
++$u(\lambda g)=\lambda u(g)$ without restricting either $\lambda$
++or the magnitude range.
++
++Either implement an exact nonzero branch and state $\lambda>0$, or
++document an approximate contract with a tested lower-magnitude domain.
++Add oddness only for physics that license sign reversal. None of these
++changes rescues homogeneity as a geometry-transfer remedy.
++
++#### 8. The production sampler is not the random sampler in the probe
++
++`_subsample_mesh_cells` does not draw a simple random subset or
++`randperm`. It selects one cyclic contiguous block of $k$ entries in
++the on-disk cell tensor from a uniformly random start. Every cell has
++marginal inclusion probability $k/N$, so the stored HT factor is
++valid for totals under repeated starts, but joint inclusion,
++spatial coverage, and variance depend on cell ordering.
++
++The core reader recommends pre-shuffling **point** order for its separate
++point-subsampling mode; it makes no equivalent guarantee for cell order.
++Recipe-local comments assert that the curated DrivAerML cell order is
++shuffled, but the audit found no durable measurement of its spatial
++representativeness.
++The sphere diagnostics instead use simple-random subsets. Therefore
++their bias/variance curves do not reproduce the production design.
++
++The frequently quoted 0.06% is also a **cell-count fraction**, not a
++measured surface-area or fill-distance coverage. Before attributing the
++resolution cliff to random decimation, measure for every relevant case
++and start:
++
++- retained geometric-area fraction and its spatial distribution;
++- fill distance / nearest-retained-cell distance on the full surface;
++- autocorrelation of area, normals, and labels in on-disk cell order;
++- cyclic-block versus simple-random versus conforming-cover behavior.
++
++The live hypothesis remains that sparse support is harmful. The
++production mechanism is now more specific and less settled:
++**cyclic-block subsampling of an unverified cell order**, not generic
++random decimation.
++
++### Experimental judgment: what was done well, and what must change
++
++#### What was done well
++
++The record's strongest feature is adversarial honesty. It preserves
++failed predictions, corrects exaggerated effects, reports excluded
++seeds, and repeatedly seeks disconfirmation. Specific examples include:
++
++- the five-seed homogeneous result was not rescued after missing the
++  declared 3× band by 2,491×;
++- the gauge dose-response was labeled exploratory before its later
++  refutation;
++- the 41× singularity-subtraction claim was independently replicated
++  and corrected downward by 4–10×;
++- the Q2 statistic was retired after it was shown to conflate collapse
++  and divergence;
++- H-SEED was attacked with an older experiment before commissioning a
++  new one;
++- the final notebook states its random-init and single-geometry caveats.
++
++This is why the program is recoverable. Negative results have not been
++buried.
++
++#### Where judgment failed
++
++The recurring error was **premature causal compression**: a dramatic
++observation was quickly assigned one mechanism and then encoded as a
++preregistered architecture wave before the relevant variables and
++metrics were isolated.
++
++##### The same SHIFT pilot became a development set
++
++The first 20-case SHIFT-SUV test was a legitimate untouched
++cross-family falsifier. The same cases were then used for:
++
++- the gauge scan;
++- transfer-v2;
++- four architecture arms;
++- the homogeneous seed extension;
++- metric validation;
++- amplitude and pattern diagnosis.
++
++Fresh predictions do not make the labels or family untouched again.
++After the gauge scan, SHIFT-SUV was a development set. Transfer-v2's
++failure is so enormous that its qualitative negative result is
++credible, but later “confirmatory” language is not.
++
++##### Drive degree was asked to solve the wrong invariance
++
++For positive $\lambda$ and drive magnitudes well above the
++implementation floor, `field_mode="homogeneous"` approximately enforces
++
++$$
++u(\lambda g)=\lambda u(g)
++$$
++
++for drive amplitude $g$. SHIFT-SUV changes the geometry distribution.
++Positive homogeneity in boundary drive cannot guarantee geometry-family
++generalization. The same category error affects the quadratic arm.
++
++The eventual pattern metric makes the mistake visible: homogeneous mode
++changed output amplitude by orders of magnitude while offset-free
++pattern error remained 0.990–0.999. The program was improving a symptom
++on an axis orthogonal to the failed task.
++
++Homogeneous and quadratic modes remain legitimate scoped API contracts
++for problems known to have those drive laws and within the tested
++magnitude/sign domains. They are not transfer repairs.
++
++##### The resolution experiment changed sources and queries together
++
++Trace-mode evaluation uses the sampled surface as both source and query.
++The 2.5k-to-40k sweep therefore changes:
++
++- the empirical source measure;
++- source geometry coverage;
++- query locations;
++- the set over which error is aggregated.
++
++The notebook disclosed this in advance, then later called the
++coverage-specific compensation interpretation unambiguous. The observed
++U-shape and 40k blow-up are strong. The claimed mechanism is not. A
++fixed-source/fixed-query crossed experiment is a cheap discriminator for
++a non-trace path, but it is incompatible with the flagship trace
++contract, where query $i$ must remain source cell $i$. The missed
++design was therefore a non-trace fixed-query compatibility arm plus
++aligned trace evaluations scored on an independently fixed reference
++surface.
++
++##### The exact-estimator comparison mixed different problems
++
++H-CC was motivated by comparing 0.167 trained DrivAer pressure error to
++roughly 0.337 sampling error from an exact-estimator sphere experiment.
++Those are not the same target density, geometry, learned coefficients,
++query distribution, or error decomposition. The arithmetic cannot prove
++that the trained model learned a coverage-specific correction.
++
++The later random-init simple-random-decimation probe is useful evidence,
++but it does not reproduce the production cyclic-block sampler, and one
++small model, sphere, drive, and query cannot establish:
++
++- an 8% production bias;
++- universal $k^{-1/2}$ decay;
++- a 700,000-panel requirement;
++- categorical impossibility of any weighted or control-variate
++  estimator;
++- causality for the trained industrial resolution cliff.
++
++Those are hypotheses for the next experiment, not results of the last
++one.
++
++##### “Preregistered” was treated as stronger than it was
++
++Several preregistration/verdict commits are separated by minutes, and
++the branch is 33 commits ahead of its remote. Local Git author dates are
++useful lab history, not immutable external registration. H-GC/H-MW put
++predictions and results in the same commit. Transfer-v2 changed its
++headline panel after seed 44 failed gate 0. These deviations were
++usually disclosed, which is good, but the correct evidence label is
++“prospectively written exploratory analysis,” not independent
++confirmation.
++
++Future decision rules should be content-addressed and externally
++timestamped before jobs begin.
++
++##### The WSS “seal” is not sealed
++
++The book gives contradictory definitions of `wss_l2`: first a
++whole-field Frobenius relative norm, later a pointwise mean of per-cell
++relative vector errors. Current code and tests pin the Frobenius
++definition. The machine-readable row does not record the evaluation
++SHA, and raw predictions are absent.
++
++The stated $p$-value has no auditable sampling model. Shared integer
++seed labels across different architectures do not automatically create
++matched experimental units; conversely, common data order and other
++randomness can make independence false. The rank-sum result assumes
++independence without preserving the information needed to check it. If
++the runs were prospectively paired by common random numbers, five
++same-sign differences would give a minimum two-sided exact sign-test
++$p=0.0625$. That is one conservative analysis, not proof that pairing
++is the only valid model.
++Absolute WSS errors still favor GeoTransolver by about 2.5–2.7×; the
++reported effect is only a lower *relative degradation ratio*.
++
++The appropriate status is **provisional within-family ratio effect,
++pending metric reconstruction and a declared dependence model**, not sealed
++generalization superiority.
++
++### Claim ledger after audit
++
++| claim | audit status | why |
++|---|---|---|
++| Kernel decoder removes the moment-decoder ceiling on controlled suites | **established in synthetic scope** | Proof plus checked-in multi-seed artifact; large effect |
++| Typed parity and scoped drive laws work in their tested domains | **established as software contracts in scope** | Direct structural tests and controlled benchmark falsification ladders; tiny-scale positive homogeneity and negative scaling are excluded |
++| One full-width head is the parsimonious reference | **established in tested synthetic suites** | Multi-suite comparison; limited to those families |
++| Exact singular dictionary is the industrial cause | **reported refutation; provenance non-auditable** | Prose reports only 0–8% and overlap; raw industrial bundle is absent |
++| Exact-only output is a pure two-member layer potential | **refuted by the forward graph** | Nonlinear query gate and direct-drive paths remain active |
++| BIE factorization is generic to unknown/nonlinear PDEs | **over-scoped** | Green representation and Fredholm structure require PDE-specific hypotheses |
++| Trace handling is the dominant industrial ID mechanism | **reported strong observation; provenance non-auditable** | Prose reports 3 seeds/arm and 3.8×; semantic “self-identification” remains an interpretation |
++| MeshTransformer has superior within-family OOD generalization | **provisional and narrowly scoped** | Thin ratio effect, absolute error worse, metric/statistical concerns |
++| Fixed gauge caused cross-family failure | **reported refutation; provenance non-auditable** | Transfer-v2 prose says every healthy seed still fails; complete artifacts are absent |
++| Any existing arm transfers a useful SHIFT-SUV pressure field | **reported refutation on the reused pilot** | Prose reports pattern error 0.9897–0.9995 and $\lvert r\rvert$ about 0.03–0.14; raw predictions are absent |
++| Homogeneous mode is a transfer fix | **reported refutation; provenance non-auditable** | Amplitude changes while reported spatial pattern remains unrelated; five-seed bar fails |
++| H-SEED explains transfer | **reported refutation / post-hoc** | Third reported experiment breaks ranking; pattern metric explains rank as an amplitude accident |
++| Measure normalization fixes the represented measure | **refuted at implementation level** | Incoming weights are deleted; total scalar absent |
++| H-BOTH combines the two needed effective-measure fixes | **non-auditable and invalid for that hypothesis** | It remains a possible ablation of normalized bare geometric areas, but incoming effective weights are not wired and config/artifacts are absent |
++| Trained model is sharply resolution-sensitive | **reported strong observation; provenance non-auditable** | Large reported 10k optimum for harvested arms; sources and trace queries co-vary |
++| Coverage-specific compensation is the cause | **provisional mechanism** | Sources and queries co-vary; one checkpoint; no covering control |
++| Production uses simple-random decimation | **refuted by code** | Reader selects a cyclic contiguous block; representativeness depends on unverified on-disk order |
++| Deterministic refinement converges in the sphere probe | **durably rerunnable small-probe observation** | `hdi_test.py` reproduces the ladder; scope is one random-init model/geometry/query setup |
++| The tracked simple-random ladder establishes systematic bias | **not established** | It uses one draw per resolution and cannot estimate bias; the reported 16-replicate result lacks raw output/script support |
++| No per-cell weighting can help | **not established** | Actual effective weights never reach the model; categorical theorem too broad |
++| Public unrestricted degree-one equation holds exactly | **refuted at implementation level** | Epsilon floor breaks tiny-scale homogeneity; oddness is not constructed |
++| Singularity subtraction is a 41× cure | **reported refutation; provenance incomplete** | Replication prose supports roughly 1.6× standard-deviation reduction, useful but modest |
++| Balanced all-boundary pooling proves H-ground | **incomplete** | Seed/LR instability and unfinished localized-band verdict |
++| Re-band U-curve is intrinsic physics difficulty | **incomplete/confounded** | Protocol tuned on middle band; no per-band fair retuning |
++| Barnes–Hut preserves similarity equivariance | **refuted by construction; residual magnitude audit-only** | Axis-aligned hierarchy changes under rotation; numerical probe is not yet a durable artifact |
++
++### What to keep, park, and kill
++
++#### Keep and deepen
++
++| line | action | reason |
++|---|---|---|
++| Controlled benchmark program with exact/manufactured-label ladders | Package as its own research story now | Best artifacts, cleanest causal ladders, strongest connection between theorem and experiment |
++| Dense-backend structural contracts | Keep as the reference oracle | Exact equivariance, query independence, zero preservation, and scoped degree contracts are genuine assets |
++| Exterior trace correction | Keep; make it the minimal industrial trace mechanism | Zero-parameter, principled, and part of the strongest industrial effect |
++| Pure-layer-potential versus query-gate factorial | Run on controlled suites | Identifies whether exact kernels or the learned query network carries the result |
++| PDE-specific principal-part residualization | Add to the synthetic program | Cleaner mathematical license: compute the singular part exactly and learn only a smooth geometry-dependent remainder |
++| Pattern/amplitude decomposition | Keep, but add signed correlation and positive-gain error | It exposed that apparently “good” L2 seeds were unrelated fields |
++| Conservative full-cover hierarchy | Make this the next primary hypothesis | Directly tests the mismatch between continuum theory and industrial input |
++| Strong-form/operator fidelity | Keep as a scientific endpoint, not merely a column | The synthetic program already shows field fit can hide operator error |
++
++#### Park
++
++| line | resume only when |
++|---|---|
++| Barnes–Hut production backend | A real dense crossover exists and rotation dependence is tested/fixed |
++| Singularity subtraction | Full-cover representation is in place and estimator variance is again limiting |
++| All-boundary H-ground | Vehicle/tunnel surfaces have consistent covering representations and a fixed-LR paired protocol |
++| Re-band and higher-Re solver suites | The representation question is resolved and the training protocol is fair across bands |
++| Solver-labeled RANS expansion | The industrial architecture can first generalize across discretization and geometry on cheaper data |
++| Further exact-kernel industrial claims | Exact-only beats a simple learned aggregator at matched compute on the corrected substrate |
++
++#### Kill as research directions
++
++- fixed-gauge tuning as a transfer remedy;
++- another intrinsic-gauge seed or LR sweep;
++- H-SEED;
++- homogeneous or quadratic mode as a geometry-transfer remedy;
++- the advertised effective-measure interpretation of the current
++  measure-normalization and H-BOTH experiment;
++- Q2's 40k/10k relative-$L^2$ ratio;
++- coverage augmentation on the current cyclic sampler as a substitute for numerical
++  consistency;
++- the 41× singularity-subtraction narrative;
++- “sealed” wording for the current WSS differential;
++- the generic claim that any homogeneous/nonlinear PDE admits the
++  program's two-member BIE factorization;
++- more architecture fan-out before the source/query/coverage causal
++  experiment.
++
++Completed H-BOTH and measure-normalization checkpoints should be
++archived, hashed, and labeled non-confirmatory for the effective-measure
++hypothesis. They may document bare-geometric-area normalization, but do
++not spend another evaluation wave trying to extract a favorable
++effective-measure interpretation from them.
++
++### The deep direction: a conservative boundary representation
++
++The model's intended continuum input can be written schematically as a
++surface measure
++
++$$
++\mu_h =
++\sum_{i=1}^{N_h}
++A_i\,
++\delta_{(c_i,n_i,\ell_i,g_i)},
++$$
++
++where $A_i$ is represented area, $c_i$ centroid, $n_i$ normal,
++$\ell_i$ boundary role, and $g_i$ boundary data. The current
++industrial pipeline keeps 10,000 of approximately 17.7 million
++post-triangulation panels, each at its full-resolution tiny area. That
++is roughly 0.06% of the
++**cell indices**; the retained surface-area fraction and spatial fill
++distance have not been durably measured. It is a sparse empirical
++surface sample, not a coarse conforming discretization.
++
++A genuine coarse representation should preserve at least:
++
++$$
++\sum_i A_i \approx |\Gamma|,
++\qquad
++\sum_i A_i c_i,
++\qquad
++\sum_i A_i n_i,
++$$
++
++locally as well as globally, while retaining boundary labels, topology,
++and the trace query/source association. Its cells should cover the
++surface rather than leave almost all of it absent.
++
++The practical missed opportunity is that DrivAerML is finite. A
++multiresolution hierarchy need not be remeshed every epoch. Precompute
++5k/10k/20k/40k conservative surface levels once per car and sample
++hierarchy *levels* during training if needed.
++
++Two representation designs must not be conflated:
++
++1. A **conforming triangular coarsening/remesh** has physical vertices,
++   cells, extents, and centroids. This is the first design to test with
++   the current exact panel decoder and trace identity.
++2. A **cluster quadrature** stores representative points, areas, local
++   moments, and ancestry. It can serve a learned point/graph aggregator,
++   but it is not a triangle mesh and cannot be passed to exact panel
++   kernels without a separate element-reconstruction rule.
++
++For the first path, use topology-preserving edge collapse or remeshing
++with a conservative projection of fields and labels. For the second,
++mesh-adjacency agglomeration, geodesic Voronoi cells, or graph
++partitioning with local moment aggregation are reasonable candidates.
++Do not compare them as if they were the same intervention. The
++acceptance tests matter more than the brand:
++
++- 100% represented area up to numerical tolerance;
++- local moment conservation;
++- boundary-label purity or explicit mixed-label treatment;
++- stable normals and trace association;
++- rotation/reflection equivariance;
++- deterministic nesting across levels;
++- convergence of area-weighted fields and integrated forces after
++  projection to a common reference surface.
++
++The continuum contract also has an **output** side. Current training
++losses and field metrics reduce uniformly over retained panels. On an
++unequal-cell covering mesh, that changes the represented norm and can
++reward refinement density rather than physical area. A valid hierarchy
++therefore requires explicit target/query measures in the loss,
++validation metrics, projection, and force integration—not only source
++quadrature inside the model.
++
++Let $y^\star$ be truth on a frozen full-resolution reference surface,
++$P_h$ a restriction to representation $h$, and $R_h$ its
++prolongation. Score a coarse prediction against the unchanged truth,
++
++$$
++\lVert R_h\widehat y_h-y^\star\rVert_{L^2(\Gamma;\,A)},
++$$
++
++not against a coarse-and-reconstructed truth. Separately report the
++projection floor
++$\lVert R_hP_hy^\star-y^\star\rVert_{L^2(\Gamma;\,A)}$,
++round-trip error, scalar-integral conservation, force/moment
++conservation, and stability of tangent-vector/WSS transport when normals
++change. Otherwise projection error can masquerade as a sampler effect.
++
++The existing cluster-tree work is useful engineering prior, but its
++Morton/AABB construction is not rotation-equivariant. Reuse its batching
++and moment-aggregation ideas, not its hierarchy uncritically.
++
++This direction aligns with the modern function-space view of neural
++operators: each aggregation should be a quadrature of a defined
++continuum operator, and the output discrepancy should vanish as the
++discretization is refined. The recent
++[function-space design synthesis in *Nature Machine
++Intelligence*](https://www.nature.com/articles/s42256-026-01267-z)
++makes the same distinction between accepting variable-size arrays and
++actually defining one discretization-convergent operator.
++
++### The next experiments, in the order they should run
++
++#### Phase 0 — correctness and evidence gates, no new science run
++
++All must pass before GPU training:
++
++1. **End-to-end continuum-measure contract.** Preserve or deliberately
++   transform `MEASURE_WEIGHTS_KEY`; make every consumer's choice
++   explicit; either wire the promised total-measure scalar or remove
++   the claim. Keep physical panel extent, source quadrature measure,
++   sampling/inclusion weight, and target/query measure distinct. Test
++   geometry centering/gauging, every attention/kernel integral,
++   `LossCalculator`, `MetricCalculator`, projection, and force
++   integration on uniform and strongly nonuniform cells through the
++   public API with the actual eight-member flagship and all-boundary
++   config. The same continuum field represented on two unequal
++   refinements must give the same area-weighted objective and metric.
++2. **Audited common-surface map.** Implement the currently missing
++   projection utility; freeze and hash source/target meshes and the map.
++   Test constants, scalar integrals, projection-only and round-trip
++   error, WSS tangent transport across changed normals, and integrated
++   force/moment conservation before it is used in a model comparison.
++3. **Sampling-design fidelity.** Reproduce the production cyclic-block
++   sampler in diagnostics; inspect the actual on-disk cell order; record
++   retained area and fill distance, not only $k/N$; compare with
++   simple-random sampling before transferring any sphere-probe curve.
++   Measure the cyclic-block bias and variance of the nonlinear
++   measure-weighted RMS gauge too.
++4. **Train-only calibration.** Iterate the sampler; assert the exact set
++   of 435 case IDs equals the frozen training manifest; record the
++   manifest and split hashes; recompute $C$; and publish the change.
++5. **Resume equivalence.** Save the post-scheduler state or reorder the
++   step; add a bitwise continuous-versus-chained test including an LR
++   decay boundary.
++6. **Final checkpoint.** Always save the actual terminal state and
++   distinguish train-final from inference-checkpoint metrics.
++7. **Metric reconstruction.** Recompute current WSS tables from raw
++   predictions under both documented definitions, identify the
++   producing SHA, and retire the wrong prose.
++8. **Artifact bundle.** Recover remote configs/logs/checkpoints before
++   scratch cleanup; store hashes and label unrecoverable arms.
++9. **Barnes–Hut contract.** Add rotation tests and either fix the
++   hierarchy or state finite-$\theta$ non-equivariance.
++10. **Homogeneity domain.** Restrict the documented equation to
++    $\lambda>0$, specify and test the lower magnitude domain relative
++    to $\varepsilon$, or implement an exact nonzero branch. Do not imply
++    oddness without a separately licensed construction and test.
++
++If the historical configs and raw results cannot be recovered, say so
++once and rerun only the minimal future baseline—not the whole wave.
++
++#### Phase 1 — frozen-checkpoint compatibility screen, not a causal verdict
++
++Use frozen checkpoints to find gross incompatibilities before training,
++but respect each model's query contract.
++
++| path | valid comparison |
++|---|---|
++| Exact linear estimator | Freeze a manufactured density, kernel, and full-resolution discrete reference. At fixed queries, compare replicated cyclic-block bare/HT pairs using identical retained indices, conforming covering sources, and a simple-random diagnostic |
++| Non-trace MeshTransformer checkpoint, where available | The same source representations and 2.5k–40k counts at one fixed nested query set |
++| Trace MeshTransformer | Query $i$ must remain source cell $i$; evaluate each representation on its own aligned centroids, then use the audited map to prolong predictions to the frozen full-resolution truth surface |
++| GeoTransolver | Its surface tokens are jointly input and output; run a separate token-resolution sensitivity study, prolonging predictions to the same full-resolution truth surface rather than pretending it is a source-only factorial |
++| Geometry | Several ID cars and several already-open SHIFT development cars, not one sphere |
++
++For the fixed-query paths, the primary estimand is source representation
++at fixed source count and query set. For trace/token models, sources and
++queries still co-vary; the estimand is representation compatibility
++after projection. Repeat a predeclared, hashed set of cyclic starts
++within every car. Bare and HT variants must reuse the same retained
++indices; simple random sampling is a diagnostic, not a proxy for
++production. Report area-weighted scores against full-resolution truth,
++together with the projection floor:
++
++- signed centered field correlation;
++- positive-gain-only pattern error;
++- amplitude ratio;
++- pressure and WSS relative $L^2$;
++- integrated forces with a full-surface reference;
++- per-case failures/nonfinites;
++- wall time and memory.
++
++Include the exact linear estimator as a control. If HT weighting repairs
++that control but not the trained network, the gap could arise from
++nonlinear aggregation, learned coefficients, representation
++out-of-distribution behavior, panel-size features, trace coupling, or
++projection—not from an impossibility theorem. This control narrows the
++search; it does not uniquely localize the cause.
++
++Do **not** accept or kill the covering hypothesis from this screen.
++A checkpoint trained on cyclic-block subsampling may reject a covering mesh
++merely because the representation is out of distribution. Frozen-model
++improvement is encouraging; frozen-model degradation is inconclusive.
++
++#### Phase 2 — matched train/evaluation representation factorial
++
++Run the smallest retraining experiment that can identify adaptation to
++the substrate:
++
++| factor | levels |
++|---|---|
++| training representation | actual 10k cyclic-block sampler; 10k conforming full-cover coarsening |
++| evaluation representation | cyclic-block; covering, crossed with training representation; simple-random only as a diagnostic |
++| evaluation source count | 2.5k, 5k, 10k, 20k, and 40k for both primary representations |
++| model | minimal trace MeshTransformer and one strong token/aggregation baseline |
++| uncertainty hierarchy | paired training seeds; vehicle cases within seed; repeated predeclared cyclic-block starts within case; starts are nested observations, not independent replicates |
++| output comparison | audited prolongation of predictions to frozen full-resolution truth; area-weighted field norms, projection floor, and forces |
++
++The primary estimand is the training-representation ×
++evaluation-representation interaction, plus stability across adjacent
++covering levels. Write $t,e\in\{B,C\}$ for cyclic-block and covering
++training/evaluation representations. For paired training seed $s$,
++case $c$, and cyclic start $b$, retain the two arm contrasts
++
++$$
++L_{\mathrm{lo},t,e,s,c,b}
++  =\log\!\frac{E_{t,e,2.5k,scb}}{E_{t,e,10k,scb}},
++\qquad
++L_{\mathrm{hi},t,e,s,c,b}
++  =\log\!\frac{E_{t,e,40k,scb}}{E_{t,e,10k,scb}},
++$$
++
++The primary endpoint $E$ is area-weighted pressure relative $L^2$
++against full-resolution truth for the minimal trace MeshTransformer,
++the model in which the historical U-shape was reported. Covering
++evaluation has one deterministic value in place of $b$. Aggregate
++starts within case, then define the per-seed resolution-cliff score
++
++$$
++C_{t,e,s}
++=\operatorname{median}_{c}
++\left(
++  [\operatorname{median}_{b}L_{\mathrm{lo},t,e,s,c,b}]_+
++ +[\operatorname{median}_{b}L_{\mathrm{hi},t,e,s,c,b}]_+
++\right),
++\qquad [x]_+=\max(x,0).
++$$
++
++Never count block starts as extra cases or training seeds. The
++difference-in-differences
++
++$$
++I_s=(C_{B,C,s}-C_{B,B,s})-(C_{C,C,s}-C_{C,B,s})
++$$
++
++is the primary adaptation interaction: $I_s>0$ means matching the
++training and evaluation representation reduces the resolution cliff
++more than a main effect of either representation alone. Also report the
++same interaction separately for the low- and high-resolution arms,
++without the positive-part sum.
++
++Three paired seeds are a **variance pilot only**. Use them to choose the
++confirmatory count, then freeze the list; require at least six previously
++unused seed values, each shared across all four $t\times e$ arms, for
++a mechanism verdict. Call “most of the U-shape removed” only if:
++
++1. under cyclic training/evaluation, the seed-median of both
++   case-median contrasts exceeds $\log 2$;
++2. under covering training/evaluation, both are at most
++   $\log 1.25$;
++3. $\operatorname{median}_s\operatorname{median}_c
++   \log(\widetilde E_{C,C,10k,s,c}/
++   \widetilde E_{B,B,10k,s,c})\leq\log 1.05$, where
++   $\widetilde E$ first takes the predeclared median over block starts;
++   and
++4. both arm-specific median interactions are positive and the paired
++   $I_s$ values have the favorable sign in enough seeds for a
++   two-sided exact sign test at $\alpha=0.05$ (all six if $n=6$).
++
++Report a case-cluster bootstrap as a separate geometry-population
++sensitivity analysis; it does not replace the seed-level exact test.
++Only after the pressure/primary-model gate passes, inspect WSS, pattern,
++forces, and the baseline as prespecified ordered secondary endpoints.
++The baseline determines whether any surviving effect is
++substrate-general; it does not silently replace a failed primary
++MeshTransformer result.
++Lock these thresholds, case list, and block-start list before
++confirmatory training. Covering becomes a supported mechanism only if
++it clears that bar and improves field pattern across geometries and
++seeds. If matched retraining leaves cyclic-block and covering
++representations similar, kill covering as the dominant causal story. If
++both MeshTransformer and the baseline improve similarly, credit the
++substrate—not a MeshTransformer-specific insight.
++
++#### Phase 3 — a solver-labeled vehicle-family bridge
++
++Before another expensive RANS training wave, isolate geometry transfer
++from turbulence and label complexity. Generate high-accuracy
++panel-method potential-flow $C_p$ on conforming covering meshes, with
++mesh-convergence, residual, and reference-uncertainty checks. These are
++numerical solver labels, not exact labels.
++
++Do not build the conclusion on the 435 DrivAer training cases and the
++already-used 20-case SHIFT pilot alone. Reuse the much larger public
++car/aircraft geometry pool from M-PCNO if available, or generate
++additional parametric families; reserve family blocks rather than
++randomly mixing them. SHIFT remains development-only. Compare the
++minimal trace MeshTransformer, M-PCNO, and a strong simple baseline.
++
++The outcomes update, rather than deterministically identify, the cause:
++transfer by all methods would shift suspicion toward the RANS
++operator/labels; success only for M-PCNO would implicate the current
++architecture/representation; failure by all would argue against broad
++geometry-generalization claims and for a new data/geometry factorization.
++
++#### Phase 4 — one corrected RANS training comparison
++
++Only if Phases 2–3 support continuing:
++
++- precompute and train on a conservative 10k hierarchy level;
++- compare the minimal trace/exact-only MeshTransformer, the current
++  flagship, GeoTransolver, and M-PCNO or another
++  discretization-conscious multiscale operator;
++- report matched-parameter/matched-compute and native-capacity rows;
++- use the SHIFT pilot only for development;
++- use a seed variance pilot to choose the final seed count before the
++  untouched evaluation;
++- preserve identical data-order/subsampling seeds where pairing is
++  claimed.
++
++The industrial MeshTransformer earns another iteration only if it
++produces a spatially related field—not merely finite amplitude—and is
++competitive with the strongest baseline after its accuracy, compute,
++and parameter advantage are all stated.
++
++#### Phase 5 — one untouched geometry-family test
++
++Freeze model selection, calibration, metrics, seed count, exclusions,
++and thresholds in an externally timestamped artifact. Then evaluate
++once on:
++
++- an untouched third vehicle family, or
++- a genuinely sealed SHIFT partition whose labels have not informed
++  this program.
++
++Use hierarchical uncertainty over both cases and training seeds. Report
++absolute errors and degradation ratios. A comparator needs multiple
++seeds too; one GeoTransolver anchor is not a distribution.
++
++If the corrected MeshTransformer still has near-zero centered
++correlation or loses materially to the baseline, end the industrial
++cross-family MeshTransformer thesis. Continue the synthetic work and
++ship the industrial result as a negative study of discretization and
++geometry shift.
++
++A positive result supports transfer only to that named untouched family.
++Any broader geometry-family generalization claim requires replication on
++multiple independently held-out families.
++
++### Baselines and external positioning
++
++The nearest literature does not say “add another amplitude
++normalization.” It points toward aggregation, discretization, and
++geometry-conditioned structure.
++
++- The closest architectural overlap is
++  [Geometric Generalization of Neural Operators from a Kernel Integral
++  Perspective](https://arxiv.org/html/2602.01498). Its M-PCNO separates
++  learned singular kernel integrals into smooth Fourier far field and
++  localized near field, has $O(p^dN)$ cost (linear in point count
++  $N$ only at fixed Fourier cutoff $p$), uses
++  conventional quadrature so discretization error is tied to local mesh
++  size, and reports 8.05% mean relative error on a 500-case mixed random
++  test after training on 4,000 cases drawn from a pool of roughly 5,000
++  cars and 6,000 aircraft, each decimated to about 40,000 panels. This is
++  both a priority baseline and a novelty constraint: the multiscale
++  unknown-kernel/BIE story is already occupied. The result is not an
++  untouched cross-family test and does not settle sparse random
++  decimation or RANS, but it supplies the obvious bridge experiment and
++  makes its Ewald-style split a more relevant speed comparison than the
++  present axis-aligned Barnes--Hut backend.
++- [Principal-Part Decomposed Neural
++  Operators](https://arxiv.org/html/2606.25952) provides an even sharper
++  controlled direction. For smooth planar Laplace/Helmholtz
++  Dirichlet-to-Neumann maps, it computes a universal singular Fourier
++  multiplier exactly and learns only the smoother
++  geometry-conditioned remainder, while keeping strict linear action
++  on boundary data. Its current evidence is limited to smooth 2D
++  boundaries and moderate-frequency problems, but the decomposition is
++  a cleaner theorem-to-ablation template than claiming that two fixed
++  Laplace members carry a generic unknown nonlinear PDE.
++- [GINO](https://proceedings.neurips.cc/paper_files/paper/2023/file/70518ea42831f02afc3a2828993935ad-Paper-Conference.pdf)
++  maps irregular geometry through graph neural operators to a regular
++  latent grid and explicitly targets discretization convergence. It is
++  an appropriate reference for the source-resolution experiment,
++  although its published automotive evidence is not an untouched
++  reproduction here.
++- [LinearNO](https://arxiv.org/html/2511.06294) argues that much of
++  Transolver's advantage comes from slice/deslice aggregation rather
++  than slice self-attention, reports about 40% fewer parameters and
++  36.2% less computation, and includes industrial aerodynamic tasks.
++  Whether those numbers transfer is open, but the mechanistic lesson is
++  directly relevant: simplify attention and test the aggregation.
++- [Boundary-Augmented Neural
++  Operators](https://openreview.net/pdf?id=DqZoWaDwfN) explicitly couple
++  boundary and domain representations and report robustness to
++  discretization, point distributions, and unseen geometry. It is a
++  workshop-scale result, not a settled baseline, but it is closer to the
++  program's boundary-to-interior problem statement than another
++  drive-degree arm.
++- [Geo-NeW](https://arxiv.org/html/2602.02788v2) learns
++  geometry-conditioned reduced finite-element spaces and an integral
++  balance law while enforcing conservation and boundary conditions. Its
++  evidence is currently limited to 2D steady problems and incurs an
++  implicit-solve cost, but its mesh-based ablation and unseen-geometry
++  results support testing explicit geometric/physical structure rather
++  than relying on coordinate tokens alone.
++- [Discretization mismatch in neural
++  operators](https://openreview.net/forum?id=J9FgrqOOni) shows that
++  resolution-independent parameters do not by themselves guarantee
++  consistent cross-resolution predictions. [Representation-Equivalent
++  Neural Operators](https://openreview.net/forum?id=7LSEkvEGCM)
++  formalizes the related discrete/continuous inconsistency as operator
++  aliasing. These are closer descriptions of the current failure than
++  “the operator accepts a variable number of panels.”
++- Boundary-integral positioning is already active:
++  [Learning Only On
++  Boundaries](https://arxiv.org/abs/2308.12939) trains through
++  PDE-specific boundary integral equations;
++  [Neural Green's Functions](https://arxiv.org/abs/2511.01924) learns
++  geometry-dependent solution-operator decompositions for linear PDEs;
++  and a recent [boundary-integral neural operator for mesh
++  deformation](https://arxiv.org/abs/2602.23703) learns a
++  geometry/material-aware Green traction kernel while retaining
++  linearity. These works narrow the defensible novelty here to the
++  proved angular ceiling, typed contracts, trace mechanism, and the
++  covering-versus-decimation question—not the generic idea of a learned
++  Green-like boundary kernel.
++
++These are author-reported results, not independent validations. The
++immediate recommendation is not to replace MeshTransformer wholesale.
++It is to include at least one simpler aggregation baseline and one
++discretization-conscious operator so the next experiment can distinguish
++a MeshTransformer insight from a substrate repair that helps everything.
++For the synthetic paper, PPDNO makes the highest-value comparison one of
++**licensed singular principal part versus learned smooth remainder**,
++not merely exact members versus more learned members.
++
++### Minimum result-bundle contract
++
++Every future headline row should be a directory whose identity is
++content-addressed and whose summary can be regenerated with one command.
++
++| category | required contents |
++|---|---|
++| source | commit SHA, full dirty diff, relevant-tree digest, container/lock digest |
++| configuration | resolved train and inference configs, exact commands, launch script |
++| data | manifest and case IDs, split hash, preprocessing version, units/gauge convention |
++| training | seed decomposition, effective LR history, restart history, terminal checkpoint hash/epoch |
++| evaluation | checkpoint hash, per-case metrics, raw or losslessly referenced predictions, failure/missingness rows |
++| analysis | metric definitions and code SHA, aggregation script, uncertainty method, preregistration hash |
++| performance | hardware, precision, warmups, every timing sample, memory measurement method |
++
++The synthetic `provenance.py` helper is a good start but currently
++misses nested diagnostics, the unified recipe, configs, manifests,
++launch scripts, and the environment lock. The industrial harness does
++not call it. Make the bundle creation part of the train/eval program,
++not a notebook convention.
++
++### Current compute state on 2026-07-27
++
++The final H-BOTH and measure-normalization training lanes had completed
++on AGA, with no active jobs at the audit snapshot. The following exact
++decimals are an **ephemeral remote-scratch readout**: no durable job/log
++identifiers or result bundle were found, so they are operational context,
++not scientific evidence.
++
++| arm | s42 | s43 | s44 | s45 | s46 |
++|---|---:|---:|---:|---:|---:|
++| homogeneous + measure normalization | 0.017453 | 0.018275 | 0.019654 | 0.017894 | 0.018930 |
++| measure normalization only | 0.014022 | 0.013979 | **NaN** | 0.014243 | 0.014882 |
++
++These runs are completed but unharvested for ID-reference, resolution,
++and SHIFT evaluation. Their configs are not tracked, the generating
++trees have no Git identity, and the measure intervention does not
++consume incoming effective weights. The correct action is:
++
++1. archive logs, checkpoints, exact copied trees, and resolved configs;
++2. label them exploratory/non-confirmatory;
++3. investigate why the divergence guard did not stop the NaN lane;
++4. do not launch the expensive harvest as a research wave.
++
++### Two-week decision plan
++
++| window | deliverable | decision |
++|---|---|---|
++| days 1–2 | Phase-0 fixes, recovered artifact archive, corrected book status | No GPU training until complete |
++| days 3–5 | Conforming mesh pyramids on a small car subset; sampler audit and frozen compatibility screen | Authorize retraining only if the pipeline and common-surface metrics are valid |
++| day 6 | Compatibility report with raw bundle; explicitly no causal verdict yet | Freeze the minimal 2×2 retrain protocol |
++| days 7–12 | Three-paired-seed cyclic-block-versus-covering train/eval variance pilot | Estimate effect scale, sampler variance, runtime, and the confirmatory seed budget on MT and one baseline; no mechanism verdict |
++| days 13–14 | Pilot report and frozen confirmatory protocol with at least six new/common paired seeds | Kill for gross incompatibility, or authorize the confirmatory factorial—not yet the solver-labeled bridge |
++
++Subjective forecasts, stated so they can be scored:
++
++| proposition | probability |
++|---|---:|
++| The synthetic/contract paper survives a dedicated artifact audit with only scoped revisions | 75–90% |
++| Trace handling remains useful after conservative coarsening | 65–80% |
++| Conservative covering removes most of the observed resolution U-shape | 35–55% |
++| Exact singular members produce a clear industrial advantage after coverage is fixed | 10–30% |
++| Any currently trained MeshTransformer checkpoint is useful cross-family without retraining | <5% |
++| A corrected MeshTransformer beats a strong modern baseline on an untouched vehicle family | 15–35% |
++
++The key forecast is intentionally uncertain. Covering coarsening is the
++best next hypothesis because it is important and discriminable, not
++because the present evidence has already proved it.
++
++### Final assessment
++
++The program's best habit—trying to kill its own stories—eventually
++worked. It killed the fixed-gauge explanation, the seed story, the
++homogeneous-transfer story, Q2, the 41× variance story, and the premise
++that cross-family error was mostly calibration. The next act of
++discipline is to let those deaths change the queue.
++
++There are now two candidate paper directions after evidence repair:
++
++1. a controlled account of typed, contract-driven
++   boundary-to-interior operators, with exact/manufactured-label and
++   solver-verified falsification ladders; and
++2. a potentially valuable negative-to-constructive industrial study:
++   exact architectural contracts can coexist with catastrophic failure
++   under the current sparse cyclic-block sampling pipeline, while the
++   causal role of sparse support versus cell order, objective measure,
++   and representation adaptation remains to be tested. Geometry
++   generalization was not repaired by amplitude contracts alone.
++
++Trying to force both into a single triumphant MeshTransformer thesis
++will weaken them. Separating them, repairing the evidence substrate,
++and running the matched sampling-versus-coarsening experiment is the
++highest-leverage path forward.
+diff --git a/examples/cfd/mesh_transformer/book/_quarto.yml b/examples/cfd/mesh_transformer/book/_quarto.yml
+index cc2e1d3f..f5bd2da2 100644
+--- a/examples/cfd/mesh_transformer/book/_quarto.yml
++++ b/examples/cfd/mesh_transformer/book/_quarto.yml
+@@ -5,7 +5,7 @@ project:
+ book:
+   title: "Learning Boundary-to-Interior Operators on Meshes"
+   subtitle: "A falsification-driven research program on PDE surrogates"
+-  date: "2026-07-02"
++  date: "2026-07-27"
+   chapters:
+     - index.qmd
+     - 01-pde-theory.qmd
+diff --git a/examples/cfd/mesh_transformer/book/index.qmd b/examples/cfd/mesh_transformer/book/index.qmd
+index ac66e55a..ca164d4b 100644
+--- a/examples/cfd/mesh_transformer/book/index.qmd
++++ b/examples/cfd/mesh_transformer/book/index.qmd
+@@ -3,12 +3,25 @@
+ This book documents a research program on **surrogates for steady, homogeneous,
+ boundary-driven PDEs**, developed around the `MeshTransformer` /
+ `MeshAttention` stack in `physicsnemo/experimental/nn/mesh_attention/` and the
+-exact-label benchmark suite in `examples/cfd/mesh_transformer/`.
++exact/manufactured-label and solver-verified benchmark suite in
++`examples/cfd/mesh_transformer/`.
+ 
+ The audience is applied mathematicians and ML researchers. The style is
+ first-principles: every architectural decision is stated as a hypothesis, and
+ the chapters record which hypotheses survived falsification and which did not.
+ 
++::: {.callout-important title="Read the 2026-07-27 program review first"}
++The synthesis below is the program's historical thesis, not its current
++verdict. The evidence audit in @sec-program-review supersedes stale status
++language in earlier chapters. In particular, the intrinsic-gauge transfer
++repair failed, the held-out calibration was contaminated, the production
++effective-weight path is disconnected, and the industrial checkpoints do not
++transfer a useful field pattern to SHIFT-SUV. The current recommendation is to
++separate the credible controlled synthetic program from a major-revision
++industrial program centered on conservative, full-cover surface
++representations.
++:::
++
+ ## The thesis, in one paragraph
+ 
+ > The `MeshTransformer` treats physical structure as a set of **declared,
+@@ -31,7 +44,8 @@ the chapters record which hypotheses survived falsification and which did not.
+ 
+ One scope line the industrial campaign added (2026-07-18): the
+ paragraph above is the *synthetic-program* thesis, and there it is
+-proven. At industrial scale the causal picture measured differently —
++best supported within the tested controlled suites. At industrial scale
++the causal picture measured differently —
+ the completed attribution factorials showed the DrivAerML gains are
+ DOMINATED by the trace formulation — measured 3.8× at flagship
+ capacity, its two sub-mechanisms (exact jump correction, learned
+@@ -44,24 +58,24 @@ members match eight learned ones, @sec-drivaerml-factorial). The
+ industrial model is honestly described as boundary-integral-inspired;
+ its strongest measured industrial asset is out-of-distribution
+ behavior (@sec-drivaerml), where the deep-S1 wall-shear-direction
+-differential against the strongest baseline is sealed at five seeds
+-per side (the pressure differential remains suggestive only).
++degradation-ratio differential against the strongest baseline is
++consistent at five seeds per side but remains provisional: the paired
++sample is too small for a two-sided 5% exact sign decision, the metric
++record is contradictory, and the baseline's absolute WSS error is
++still 2.5–2.7× lower. The pressure differential is suggestive only
++(@sec-program-review).
+ 
+-A second scope line, added 2026-07-22, because the program's own
+-identity claim took the hardest hit on record. That
++A second scope line, corrected by the 2026-07-27 audit: the
+ out-of-distribution asset is measured **within** the DrivAer family.
+-Pushed to a *different* vehicle family, zero-shot, the shipped
+-configuration did not merely degrade — it diverged to non-physical
+-output on every checkpoint, while a gauge-agnostic baseline stayed
+-structured (@sec-drivaerml-crossfamily). The mechanism is localized,
+-by a clean dose-response, to a fixed declared scale gauge in the
+-industrial pipeline rather than to the architecture: the very
+-convention the intrinsic-gauge design of @sec-forward-pass exists to
+-abolish, reintroduced through its licensed override. The repair is
+-built, calibrated once on the training split, and its confirmatory
+-re-run is pre-registered and unrun. Until that returns, the honest
+-statement of this program's generalization claim is
+-**within-family**.
++Pushed to a different vehicle family, zero-shot, every shipped
++checkpoint diverged while a gauge-agnostic baseline stayed structured
++(@sec-drivaerml-crossfamily). The exploratory gauge dose-response did
++not identify the cause: intrinsic-gauge retraining also failed, and
++the supposedly train-only calibration included held-out cases. More
++decisively, offset-free diagnostics show that every tested field
++pattern is essentially unrelated to truth. The honest industrial
++generalization claim is therefore within-family and provisional
++(@sec-program-review).
+ 
+ ## Problem statement and scope
+ 

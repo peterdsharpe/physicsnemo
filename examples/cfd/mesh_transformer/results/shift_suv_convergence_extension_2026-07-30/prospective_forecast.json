@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "issued_at": "2026-07-30T12:18:43-04:00",
+  "parent_result_sha256": "f57eb93618ff2ec90089b5e21528a0a9ce5f74c1435309ff2adb124fea033bd1",
+  "information_used": "The completed parent fixed-validation reduction only. No convergence-extension validation result existed, and no convergence-extension training metric was inspected.",
+  "purpose": "Record a mechanistic forecast before the matched-update result is observed; this forecast is not a decision rule.",
+  "derivation": "At the parent horizon, H = pretrained_64 / scratch_128 = (scratch_64 / scratch_128) / (scratch_64 / pretrained_64). Thus half-label success H <= 0.95 would require a same-budget transfer gain of at least (scratch_64 / scratch_128) / 0.95.",
+  "conditions": [
+    {
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "parent_scratch_64_over_scratch_128": 1.328811,
+      "required_scratch_64_over_pretrained_64_for_half_label_success": 1.398749,
+      "observed_parent_scratch_64_over_pretrained_64": 1.026842,
+      "required_gain_over_observed_gain": 1.362185,
+      "forecast": "Half-label success is unlikely unless longer optimization creates a substantially larger transfer advantage than the parent horizon showed."
+    },
+    {
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "parent_scratch_64_over_scratch_128": 1.333859,
+      "required_scratch_64_over_pretrained_64_for_half_label_success": 1.404062,
+      "observed_parent_scratch_64_over_pretrained_64": 1.072619,
+      "required_gain_over_observed_gain": 1.309003,
+      "forecast": "Half-label success is unlikely unless longer optimization creates a substantially larger transfer advantage than the parent horizon showed."
+    },
+    {
+      "architecture": "geotransolver",
+      "family": "estate",
+      "parent_scratch_64_over_scratch_128": 1.196957,
+      "required_scratch_64_over_pretrained_64_for_half_label_success": 1.259955,
+      "observed_parent_scratch_64_over_pretrained_64": 1.148781,
+      "required_gain_over_observed_gain": 1.096776,
+      "forecast": "The outcome is genuinely discriminating: a modest strengthening of persistent transfer could cross the half-label threshold, while scratch catch-up would close the branch."
+    },
+    {
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "parent_scratch_64_over_scratch_128": 1.22046,
+      "required_scratch_64_over_pretrained_64_for_half_label_success": 1.284695,
+      "observed_parent_scratch_64_over_pretrained_64": 1.184689,
+      "required_gain_over_observed_gain": 1.084416,
+      "forecast": "The outcome is genuinely discriminating: a modest strengthening of persistent transfer could cross the half-label threshold, while scratch catch-up would close the branch."
+    }
+  ],
+  "qualitative_prediction": {
+    "mesh_transformer": "Persistent half-label success on both families is unlikely.",
+    "geotransolver": "The two families are close enough to the threshold that the matched-update experiment can plausibly decide either way."
+  },
+  "amendments": [
+    {
+      "issued_at": "2026-07-30T12:33:29-04:00",
+      "information_used": "The fixed-validation curves of the parent-selected runs only. No convergence-extension validation result existed, and no convergence-extension training metric was inspected.",
+      "model": "For each role, fit log(error) as a linear function of log(total target updates) over the final four parent checkpoints, then extrapolate that local slope to the early and final matched-update points.",
+      "predictions": [
+        {
+          "architecture": "mesh_transformer",
+          "family": "estate",
+          "pretrained_64_late_log_slope": 0.0675844032,
+          "scratch_128_late_log_slope": 0.1443392142,
+          "predicted_H_early": 1.2342574941,
+          "predicted_H_final": 1.3023274119
+        },
+        {
+          "architecture": "mesh_transformer",
+          "family": "fastback",
+          "pretrained_64_late_log_slope": 0.0807661327,
+          "scratch_128_late_log_slope": 0.1561235625,
+          "predicted_H_early": 1.175172274,
+          "predicted_H_final": 1.2388993858
+        },
+        {
+          "architecture": "geotransolver",
+          "family": "estate",
+          "pretrained_64_late_log_slope": 0.183539054,
+          "scratch_128_late_log_slope": 0.2510499674,
+          "predicted_H_early": 0.9162696346,
+          "predicted_H_final": 0.9614206313
+        },
+        {
+          "architecture": "geotransolver",
+          "family": "fastback",
+          "pretrained_64_late_log_slope": 0.1726749217,
+          "scratch_128_late_log_slope": 0.2776515213,
+          "predicted_H_early": 0.9128623500,
+          "predicted_H_final": 0.9829697483
+        }
+      ],
+      "paired_case_bootstrap": {
+        "replicates": 10000,
+        "seed": 20260730,
+        "method": "Resample the 99 validation cases jointly across roles and parent checkpoints, refit both local slopes, and recompute the extrapolated ratios.",
+        "predicted_H_final_95_intervals": [
+          {
+            "architecture": "mesh_transformer",
+            "family": "estate",
+            "interval": [
+              1.2818738222,
+              1.3230979919
+            ]
+          },
+          {
+            "architecture": "mesh_transformer",
+            "family": "fastback",
+            "interval": [
+              1.2201668658,
+              1.2583937866
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "estate",
+            "interval": [
+              0.9262027411,
+              0.9936684102
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "fastback",
+            "interval": [
+              0.9447169184,
+              1.0372052343
+            ]
+          }
+        ],
+        "interpretation": "Case-sampling uncertainty leaves both GeoTransolver families near the decision boundary, while it does not make MeshTransformer remotely competitive. These are conditional forecast intervals, not calibrated probabilities, because model-form uncertainty dominates."
+      },
+      "fit_window_sensitivity": {
+        "method": "Repeat the local power-law extrapolation with the final 2, 3, 4, and 5 parent checkpoints.",
+        "predicted_H_final_ranges": [
+          {
+            "architecture": "mesh_transformer",
+            "family": "estate",
+            "range": [
+              1.2581776602,
+              1.3360747902
+            ]
+          },
+          {
+            "architecture": "mesh_transformer",
+            "family": "fastback",
+            "range": [
+              1.1729096043,
+              1.280901119
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "estate",
+            "range": [
+              0.8358979175,
+              0.9614206313
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "fastback",
+            "range": [
+              0.9209697766,
+              1.0483450414
+            ]
+          }
+        ],
+        "predicted_W_final_ranges": [
+          {
+            "architecture": "mesh_transformer",
+            "family": "estate",
+            "range": [
+              1.1227675574,
+              1.1886041934
+            ]
+          },
+          {
+            "architecture": "mesh_transformer",
+            "family": "fastback",
+            "range": [
+              1.0312847029,
+              1.1297281972
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "estate",
+            "range": [
+              0.9103523779,
+              1.0566570295
+            ]
+          },
+          {
+            "architecture": "geotransolver",
+            "family": "fastback",
+            "range": [
+              0.8856723743,
+              1.1253790987
+            ]
+          }
+        ],
+        "interpretation": "MeshTransformer's pressure failure is robust, and its estate WSS ratio is predicted to exceed the 1.10 safety gate under every fit window. GeoTransolver's final pressure classification changes with a reasonable fit window; its estate WSS prediction remains safe, while its fastback WSS prediction is also model-sensitive."
+      },
+      "mechanistic_prediction": "The central four-checkpoint fit predicts temporary GeoTransolver half-label success followed by scratch catch-up, but that final GeoTransolver prediction is model-sensitive. The robust forecast is only that MeshTransformer remains above H = 0.95 on both families.",
+      "falsifier": "A plateaued MeshTransformer H <= 0.95 on both families rejects the robust forecast. For the central four-checkpoint GeoTransolver account specifically, final success on both families or failure to show scratch catch-up rejects its predicted trajectory.",
+      "limitations": "This is an extrapolation, not a decision rule. It reuses validation-selected parent runs, assumes a local power law beyond the observed horizon, and ignores optimizer restart, scheduler changes, error floors, and the refined continuation-rate search. The explicit fit-window sensitivity shows that model-form uncertainty dominates GeoTransolver's case-sampling uncertainty."
+    }
+  ],
+  "test_policy": "No test case may be read, trained on, or evaluated."
+}

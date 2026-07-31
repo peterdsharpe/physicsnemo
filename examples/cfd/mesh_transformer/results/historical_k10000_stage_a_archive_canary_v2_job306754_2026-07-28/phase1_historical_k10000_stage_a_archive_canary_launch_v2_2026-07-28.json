@@ -1,0 +1,95 @@
+{
+  "schema_version": 2,
+  "artifact_kind": "phase1_historical_k10000_stage_a_archive_domain_canary_launch_manifest",
+  "status": "FROZEN_STAGED_PRELAUNCH_GO",
+  "frozen_at_utc": "2026-07-28T22:18:12Z",
+  "scope": {
+    "stage": "Stage A archive-domain current-model canary",
+    "package_version": 2,
+    "case_id": "run_118",
+    "reader_index": 21,
+    "resolution": 10000,
+    "precision": "bfloat16",
+    "compile": false,
+    "lane_count": 2,
+    "model_call_count_per_lane": 1,
+    "checkpoint_load_epoch": 491,
+    "checkpoint_selection": "explicit load_checkpoint(..., epoch=491)",
+    "scientific_role": "compatibility gate before any freshly frozen corrected Stage-B replay"
+  },
+  "task": {
+    "cluster": "oci-aga-slurm-1",
+    "logical_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-historical-k10k-stage-a-v2",
+    "physical_directory": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-historical-k10k-stage-a-v2",
+    "job_name": "mt-k10k-stagea-v2",
+    "remote_task_staged": true,
+    "scheduler_test_only_passed": false,
+    "scheduler_submission_count": 0,
+    "scheduler_submission_permitted_after_test_only": 1,
+    "model_or_reducer_output_exists": false
+  },
+  "frozen_files": {
+    "producer_sha256": "b596cb3d4a82b30255324b982f5d84d1260f53963b1697c7b2fd9d12049ed8c0",
+    "reducer_sha256": "fdb232e337eeb54be4f1782f6b619f53e5ad4ed0c2aca366b504d035cab023e0",
+    "wrapper_sha256": "c702a7fb070a6e213a734f67f08182f3842e431a5ae7ecc7197b66016a6b675c",
+    "preregistration_sha256": "3e0eacdd5a7f098e73d1f573b9d4a1f03f7609e28ef5348145a9f48589595950",
+    "producer_test_sha256": "99624760c64cfc382a37fa8aabbfe45c30e73c6e281cab851dda9bb5b903af5e",
+    "wrapper_test_sha256": "21ad3613803cde12d86b71c96251d5de466b5087b60aea2e354184ee365fb1c2",
+    "execution_source_manifest_sha256": "e8edb80f34c005f85e1e87ebc27567ddf0a74fe2bc34e06ba40c35c92e54cfb4",
+    "execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "historical_prediction_tree_manifest_sha256": "545b1f6e906002231415b84277db00eec04f3666233b8da637514e9077a585eb",
+    "historical_input_freeze_record_sha256": "fce9444a11b0a6b71497d927573728c3d10f9da3e480a9b05dacd50505b6fe10",
+    "checkpoint_epoch_binding_correction_sha256": "a0e409e7807be14678d02996886567864ed561c5b2a7ff659a06ec041a79ede9"
+  },
+  "stable_runtime_inputs": {
+    "dataset_config_sha256": "a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3",
+    "resolved_config_sha256": "a71987df4d49d38cc7f6b43c08ba0a0592fd39cf16a50aef04bf1b0d4f080fe1",
+    "model_checkpoint_filename": "MeshTransformer.0.491.mdlus",
+    "model_checkpoint_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+    "training_state_filename": "checkpoint.0.491.pt",
+    "training_state_sha256": "3783bda98ed561db95638d1c6fbb914b73be1bf36ed91ad79872f7f19763cea7",
+    "normalization_state_filename": "norm_stats.pt",
+    "normalization_state_sha256": "31a73b08f3e3f6b2d8c60ed659247deae996d2596e752f5423cabbb29f186b94",
+    "current_infer_source_sha256": "47aec675e54d58ee4202831ae0d20039b1ff5ec40e69cc8b5087ce00bd5234ed",
+    "current_model_source_sha256": "9096f61a5c54a6f92d14c586aaa8cf51a8bc22fc797f50bd0cbfdf86ef042892",
+    "checkpoint_max_model_epoch_observed": 491,
+    "checkpoint_max_training_state_epoch_observed": 491,
+    "sibling_checkpoint_policy": "nondeciding because the producer explicitly requests epoch 491"
+  },
+  "staged_input_audit": {
+    "exact_byte_audit_passed": true,
+    "audited_at_utc": "2026-07-28T22:17:56Z",
+    "source_manifest_entry_count": 919,
+    "archive_input_file_count": 10,
+    "archive_input_size_bytes": 719432,
+    "historical_archive_file_count": 1656,
+    "historical_archive_size_bytes": 44790588,
+    "prior_scheduler_rows_with_job_name": 0,
+    "preexisting_output_or_marker_files": 0
+  },
+  "verification": {
+    "focused_tests": "39 passed",
+    "ruff_check": "passed",
+    "ruff_format_check": "passed",
+    "python_compile": "passed",
+    "bash_syntax": "passed",
+    "shellcheck": "passed",
+    "json_parse": "passed",
+    "independent_operational_launch_audit": "GO",
+    "independent_scientific_launch_audit": "GO",
+    "remote_exact_byte_audit": "GO"
+  },
+  "v1_license_withdrawal": {
+    "prior_job_id": 306623,
+    "prior_observation": "two v1 lanes and archived pressure/WSS were raw-byte exact",
+    "license_status": "WITHDRAWN",
+    "reason": "the v1 producer omitted epoch=491, so loaded_epoch=491 did not intrinsically attest that model weights came from MeshTransformer.0.491.mdlus",
+    "v2_remedy": "a fresh run of this hash-bound package explicitly selects and attests epoch 491"
+  },
+  "decision_guard": {
+    "exact_pass": "licenses freezing and launching a corrected Stage B reconstructed historical replay only",
+    "valid_refutation": "blocks Stage B and requires diagnosis of the archive-domain compatibility difference",
+    "invalid_or_incomplete": "licenses only repair of the instrument and a newly frozen rerun",
+    "accuracy_claims": "Stage A alone cannot establish accuracy, metric noninferiority, or architectural superiority"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "schema_version": 2,
+  "title": "Prospective scientific branches after the matched-update adaptation test",
+  "frozen_at": "2026-07-30T13:09:53-04:00",
+  "amended_at": "2026-07-30T14:24:37-04:00",
+  "amendment": {
+    "original_sha256": "153fec9ced063318eb94bbe74040781ff4f4af9433297488ed60c2e330bc37aa",
+    "reason": "The original map sent a failed half-label result directly to source-diversity work, although H_U alone cannot distinguish an absent same-budget gain from a gain smaller than the target-data penalty. It also lacked a family-conditional branch and sometimes generalized a cell-level optimization failure to the whole study.",
+    "correction": "Apply stabilization and materiality gates per architecture-family cell; test persistent G_U before source-distribution changes; preserve family-conditional outcomes; and use H_U = D_U / G_U before attributing cross-architecture differences.",
+    "information_boundary": "This correction was made while the convergence extension was still running and without inspecting any continuation loss, validation metric, or test result."
+  },
+  "information_boundary": "Uses the completed parent validation result, the frozen convergence protocol and forecast, and primary literature. No convergence-extension training loss or validation result was inspected. Test sets remain sealed.",
+  "decomposition": {
+    "half_label_ratio": "H_U = error(pretrained_64, U) / error(scratch_128, U)",
+    "target_data_penalty": "D_U = error(scratch_64, U) / error(scratch_128, U)",
+    "same_budget_pretraining_gain": "G_U = error(scratch_64, U) / error(pretrained_64, U)",
+    "identity": "H_U = D_U / G_U",
+    "scientific_consequence": "A cross-architecture difference in H_U is not, by itself, an architectural transfer effect: it can arise from reusable source knowledge G_U, the target-only sample-complexity penalty D_U, or both."
+  },
+  "literature_prior": [
+    {
+      "source": "https://arxiv.org/abs/2406.08473",
+      "finding": "Pretraining gains vary strongly with architecture and downstream-data regime and are generally larger for scarce, source-similar downstream data.",
+      "limit": "The paper compares pretraining strategies at common target sample counts; it does not turn every gain into an equivalent target-label saving."
+    },
+    {
+      "source": "https://arxiv.org/abs/2602.20399",
+      "finding": "Dynamics-lifted geometry pretraining reduces labeled-data requirements across several industrial tasks, and diverse geometry sources usually outperform a matched single-category source.",
+      "limit": "Source diversity, synthetic dynamics, and scale change together in several comparisons."
+    },
+    {
+      "source": "https://arxiv.org/abs/2606.15512",
+      "finding": "Across held-out tokamak geometries, multi-geometry pretraining adapts better than single-geometry pretraining and the architecture ordering changes across transfer regimes.",
+      "limit": "The target adaptation curves are not paired with target-from-scratch curves, so they establish useful representation reuse rather than target-label savings."
+    }
+  ],
+  "branches": [
+    {
+      "observed_pattern": "An architecture-family cell has an unresolved learning-rate edge or fails the plateau gate.",
+      "scientific_verdict": "No transfer interpretation is licensed for that cell; stabilized cells remain interpretable on their own.",
+      "next_question": "Does the censored cell stabilize after resolving the pre-registered optimization boundary?",
+      "restriction": "Resolve only that comparison; do not introduce a new model or generalize the censoring to other cells."
+    },
+    {
+      "observed_pattern": "Within one architecture, the half-label gate advances on one target family but closes or remains materially below the gate on the other after both stabilize.",
+      "scientific_verdict": "Half-label replacement is geometry-family-conditional under this source protocol; neither broad success nor broad failure is licensed.",
+      "next_question": "Does the family split replicate, and does a smaller persistent same-budget gain survive on the family that failed the half-label gate?",
+      "restriction": "Replicate the advancing family and apply the scratch-64 decomposition to the non-advancing family; never average the two into a broad verdict."
+    },
+    {
+      "observed_pattern": "Both architectures close the broad half-label branch after plateauing.",
+      "scientific_verdict": "DrivAerML initialization does not replace half of the SHIFT-SUV labels under this single-source protocol. H_U alone does not say whether a smaller same-budget gain persists.",
+      "next_question": "For each architecture-family cell, does G_U remain material against scratch-64 at the same target-update budget?",
+      "restriction": "Run the registered scratch-64 decomposition first. Quantify any persistent gain in label equivalents before changing the source distribution; move to source selection only if the gain is absent or remains the highest-value unresolved cause."
+    },
+    {
+      "observed_pattern": "GeoTransolver advances while MeshTransformer closes.",
+      "scientific_verdict": "A cross-architecture ordering is observed at the level of H_U, but it is neither replicated nor causally attributed.",
+      "next_question": "Is the split caused by a larger persistent pretraining gain G_U for GeoTransolver, or by its smaller target-only data penalty D_U?",
+      "deciding_test": "At the same final target-update budget, add scratch-64 curves and evaluate the exact H_U = D_U / G_U decomposition. Attribute an architectural transfer advantage only if the difference is carried by G_U rather than solely by D_U."
+    },
+    {
+      "observed_pattern": "MeshTransformer advances while GeoTransolver closes.",
+      "scientific_verdict": "The prospective forecast is falsified at H_U, but boundary-aware reuse is not yet identified because H_U also contains the target-only data penalty D_U.",
+      "next_question": "Is the reversal carried by a larger persistent G_U for MeshTransformer, and does it survive independent target seeds and source checkpoints?",
+      "restriction": "Run the scratch-64 decomposition and replicate the frozen comparison before inspecting components or proposing new structure."
+    },
+    {
+      "observed_pattern": "Both architectures advance.",
+      "scientific_verdict": "Persistent source reuse is plausible, but a single target seed and source checkpoint cannot establish a general transfer law.",
+      "next_question": "Does the half-label saving survive independent target seeds and source checkpoints on both target families?",
+      "restriction": "Confirm the effect before asking which component carries it."
+    },
+    {
+      "observed_pattern": "A plateaued architecture-family cell satisfies neither advancement nor closure.",
+      "scientific_verdict": "That cell is quantitatively inconclusive; this does not erase decisive cells.",
+      "next_question": "What replication count would distinguish the smallest effect that matters?",
+      "restriction": "Estimate training-seed variance and preregister the required replication; do not reinterpret proximity to a threshold as success."
+    }
+  ],
+  "architecture_policy": "No single-seed outcome in this study licenses adding an architectural component."
+}

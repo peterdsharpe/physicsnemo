@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_historical_k10000_microtrajectory_preregistration",
+  "status": "PREREGISTERED_CONDITIONAL_PREIMPLEMENTATION",
+  "registered_at_utc": "2026-07-29T06:20:54Z",
+  "experiment_id": "HISTORICAL_K10000_16STEP_GEOMETRY_PATH_MICROTRAJECTORY_V1",
+  "question": "If the valid v3 one-step parity comparison finds a material legacy-versus-canonical path difference, does divergence between two persistent 16-update current-protocol trajectories remain bounded or grow to the preregistered material parameter and prediction thresholds?",
+  "hypothesis": {
+    "bounded_prediction": "The two persistent trajectory histories remain within D_theta=0.01 at step 16, and every terminal same-path cross-state pressure and WSS prediction divergence remains at most 0.01 in both initialization regimes.",
+    "amplification_prediction": "In both initialization regimes, terminal D_theta is at least 0.10 and the median terminal pressure divergence is at least 0.01 and at least four times the direct t=0 geometry-path pressure floor.",
+    "mixed_result": "Any complete valid BF16 result satisfying neither the joint bounded rule nor the joint amplification rule is mixed.",
+    "causal_language_limit": "The experiment can report operational boundedness or growth under the complete frozen forward/loss/backward/CombinedOptimizer protocol for two fixed state regimes and four repeated K=10000 cases. It cannot attribute growth uniquely to CombinedOptimizer, Muon, AdamW, the geometry construction, the loss, or any one interaction, and cannot establish long-horizon, population, or architectural behavior."
+  },
+  "conditional_activation": {
+    "required_artifact_kind": "drivaerml_historical_k10000_one_step_parity_adjudication",
+    "required_status": "VALID_HISTORICAL_K10000_ONE_STEP_PARITY_ADJUDICATION",
+    "required_decision_outcome": "MATERIAL_PARITY_DIFFERENCE_FAIL",
+    "v3_preregistration": {
+      "path": "studies/phase1_historical_k10000_one_step_parity_prereg_v3_2026-07-29.json",
+      "sha256": "697814c3959d3da1c427bca9c69cce189516090c550963550fefa502386ce8ee"
+    },
+    "v3_frozen_implementation": {
+      "producer_sha256": "f2458d95573b188f8523602204219df98c875c6cd4b2a4e9d306a594d4542500",
+      "adjudicator_sha256": "6b963971fe134671306530851e0e756ede80d4b5a3cad0e952fda8e22cc94048",
+      "producer_test_sha256": "b15a41517ecf222ac402af9c970d34d66e15f271eb833247cf77c6577bdabb9e",
+      "adjudicator_test_sha256": "ac746d68b98a3d44ce9fe50503c131a3ef88060338eccd89aa430f45c8568bad",
+      "launch_wrapper_sha256": "232362dc978d8d7002948cf26326821079da95d260d0cbfa52f48086dedc8c6f"
+    },
+    "sibling_pass_branch": {
+      "path": "studies/phase1_hqc_canonical_fixed_prefix_prereg_v1_2026-07-29.json",
+      "status_observed_at_this_freeze": "DRAFT_CONDITIONAL_PREOUTPUT",
+      "authorization": "Informational pointer only. A valid v3 pass forbids this microtrajectory but does not itself authorize the sibling; pass-side execution requires that sibling's own independently finalized preregistration, sidecar, implementation freeze, and launch controls."
+    },
+    "activation_validation": [
+      "The adjudication JSON and canonical sidecar must exist, be strict JSON, and be content-hash consistent.",
+      "The adjudication validity block must bind the exact frozen v3 producer source and raw producer JSON/NPZ artifacts. The frozen v3 adjudication schema does not self-report its adjudicator source SHA-256; exact adjudicator identity is established separately by verifying the exact v3 preregistration, adjudicator, and launch-wrapper bytes against the hashes pinned above. The sidecar-authenticated microtrajectory preregistration authenticates those bindings.",
+      "The immutable v3 task's exclusive content-bearing DONE marker must bind the same categorical outcome and the exact adjudication JSON SHA-256. A missing, malformed, mismatched, or nonexclusive completion marker is not valid activation.",
+      "A missing activation artifact is incomplete, and a present malformed, provenance-inconsistent, or non-fail activation artifact cannot activate this experiment.",
+      "A valid NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS forbids this microtrajectory and routes to the conditional fixed-prefix H-QC branch only after that sibling branch has been independently finalized and hash-bound."
+    ],
+    "preactivation_classification_policy": "Before exact valid MATERIAL_PARITY_DIFFERENCE_FAIL activation, the sole reducer may validate the activation and emit only an exit code plus stdout classification for INCOMPLETE, INVALID, or NOT_ACTIVATED. It may not create or modify an output path, sidecar, launch manifest, attempt namespace, producer entry, DONE marker, reducer artifact, or other microtrajectory artifact. Any durable record of that stdout-only preflight belongs in the append-only lab notebook, not in an experiment namespace.",
+    "rule": "No launch manifest, attempt namespace, temporary or final producer entry, DONE marker, persisted reducer entry, or other microtrajectory artifact may be produced unless the exact v3 experiment returns the required valid MATERIAL_PARITY_DIFFERENCE_FAIL. The stdout/exit-only preactivation classifier above is not a reducer entry or experiment artifact."
+  },
+  "fixed_panel": {
+    "resolution": 10000,
+    "ordered_cases": [
+      {
+        "cohort_ordinal": 0,
+        "case_id": "run_118"
+      },
+      {
+        "cohort_ordinal": 12,
+        "case_id": "run_271"
+      },
+      {
+        "cohort_ordinal": 24,
+        "case_id": "run_429"
+      },
+      {
+        "cohort_ordinal": 35,
+        "case_id": "run_86"
+      }
+    ],
+    "repetitions": 4,
+    "step_count": 16,
+    "ordered_step_schedule": [
+      "run_118",
+      "run_271",
+      "run_429",
+      "run_86",
+      "run_118",
+      "run_271",
+      "run_429",
+      "run_86",
+      "run_118",
+      "run_271",
+      "run_429",
+      "run_86",
+      "run_118",
+      "run_271",
+      "run_429",
+      "run_86"
+    ],
+    "state_regimes": [
+      "fresh_seed42",
+      "checkpoint_epoch491"
+    ],
+    "geometry_paths": [
+      "legacy",
+      "canonical"
+    ],
+    "precisions": {
+      "bfloat16": "sole deciding precision",
+      "float32": "optional diagnostic in a physically separate immutable artifact namespace; absence, partial production, malformed schema, or nonfinite values yield FP32_DIAGNOSTIC_UNAVAILABLE and cannot alter a complete valid BF16 result"
+    },
+    "state_checkpoint_steps": [
+      0,
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "crossover_steps": [
+      0,
+      4,
+      8,
+      16
+    ]
+  },
+  "frozen_state_contract": {
+    "fresh_seed42": "Initialize the exact model with seed 42 and construct a fresh exact CombinedOptimizer(Muon,AdamW) with empty member states. Clone the resulting model, optimizer, and RNG state raw-byte identically into the legacy and canonical trajectory histories at t=0.",
+    "checkpoint_epoch491": "Load the exact epoch-491 model and nonempty CombinedOptimizer member states licensed by the v3 checkpoint smoke. Clone model, optimizer, and RNG state raw-byte identically into the legacy and canonical trajectory histories at t=0.",
+    "checkpoint_identity": {
+      "run_id": "t2_mesh_transformer_surface_flagship_seed42",
+      "epoch": 491,
+      "model_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+      "training_state_sha256": "3783bda98ed561db95638d1c6fbb914b73be1bf36ed91ad79872f7f19763cea7",
+      "normalization_state_sha256": "31a73b08f3e3f6b2d8c60ed659247deae996d2596e752f5423cabbb29f186b94"
+    },
+    "persistence": "For each precision and initialization regime, the legacy and canonical model-plus-CombinedOptimizer packages are separate persistent trajectories. Each package takes all 16 ordered steps through its own geometry path; model or optimizer state is never reset, exchanged, or crossed between histories.",
+    "optimizer": "Use the exact current CombinedOptimizer with Muon for two-dimensional parameter tensors and AdamW for all other tensors. Take exactly one optimizer.step per scheduled case, use the v3-bound positive learning rates and parameter partition, and do not step a scheduler.",
+    "gradient_lifecycle": "Immediately before every main-run and crossover-probe forward/backward, call the exact optimizer.zero_grad(set_to_none=True) and require every trainable parameter .grad to be None. Each backward begins from that cleared state. Gradient accumulation, loss scaling beyond the frozen precision/autocast contract, gradient clipping, gradient normalization, and any extra backward or optimizer step are forbidden.",
+    "parameter_order": "Use one frozen complete ordered mapping of all 1,278,268 trainable parameters. The same mapping must index parameters, gradients, updates, optimizer tensor leaves, checkpoint vectors, and reducer calculations in every arm, state regime, and precision.",
+    "rng": "Before each matched main step, restore one frozen per-step RNG state into both trajectory histories and require identical post-step RNG hashes. Crossover probes use separately frozen probe RNG states and restore the main-run RNG state afterward.",
+    "complete_model_state": "A model package comprises every named parameter, every named registered buffer whether persistent or nonpersistent, and every module training/evaluation flag. These are cloned raw-byte identically at t=0, may evolve only within their declared persistent history, and are serialized at every checkpoint.",
+    "rng_components": "Persist and restore canonical raw states, not hashes alone, for Python random, NumPy, torch CPU, every visible CUDA device, and every explicitly used torch.Generator or sampler generator. Hashes verify those raw states. Backend determinism flags and device ordering are separately frozen execution controls.",
+    "checkpoint_replay": "For checkpoints t=0,1,2,4,8, reload the complete model state including buffers and module modes, complete CombinedOptimizer state, and complete RNG state, then reproduce the declared t-to-t+1 transition byte-exactly for predictions, loss, gradients, update, and post-step state hashes. Checkpoint t=16 must round-trip byte-exactly and reproduce every declared t=16 crossover probe.",
+    "stochastic_modules": "No stochastic module may be active. An active stochastic module or an unmatched RNG transition is invalid evidence."
+  },
+  "path_data_and_loss_controls": {
+    "legacy_path": "Historical pipeline centering/nondimensionalization followed by model-derived area centering and reference-length division.",
+    "canonical_path": "Complete raw-derived canonical source geometry supplied through CanonicalSourceGeometry and decoded at its canonical centroids.",
+    "exact_arithmetic_relation": "The two paths describe the same selected K=10000 geometry in exact arithmetic and differ only in finite-precision construction order, promotion, casting, and cache derivation.",
+    "source_measure_weights": "Explicitly absent in both paths for the complete frozen experiment. The live API's later ability to compose canonical geometry with weights does not change this unweighted v3 successor contract.",
+    "target_measure": "Positive, preserved, used by the exact current query-measure-weighted channel-normalized Huber loss, and raw-byte identical across all matched main steps and crossover cells.",
+    "objective_caveat": "This preserves the current v3 target-measure objective, not the historical flagship's uniform-over-retained-target-cells objective. The microtrajectory tests amplification of the v3 path difference under the current controlled loss and is not a 16-step replay of historical training.",
+    "shared_controls_per_step": [
+      "ordered case and K=10000 selected cell IDs",
+      "training-space pressure and WSS targets",
+      "query/target measure",
+      "global inputs and model-visible non-geometry fields",
+      "batch order and batch cardinality",
+      "raw-byte-identical model, every registered model buffer including nonpersistent buffers, module-mode mapping, optimizer, and complete raw RNG state only for the matched t=0 clones; at t>0 each arm must authenticate its pre-step state as the exact post-step continuation of its own prior declared trajectory history",
+      "parameter order, CombinedOptimizer partition, learning rates, and optimizer algorithm",
+      "precision/autocast state and matched RNG state"
+    ],
+    "allowed_arm_difference": "Within a matched main step, only the frozen legacy-versus-canonical source/query geometry construction path and state differences generated by preceding allowed path-specific updates may differ.",
+    "control_failure_rule": "Any selected-ID, target, target-measure, source-weight, batch, state-origin, parameter-layout, optimizer, precision, or RNG mismatch is invalid evidence, not scientific amplification."
+  },
+  "trajectory_execution": {
+    "main_steps": "At each t from 0 through 15, both persistent geometry-path histories consume the same scheduled case, call optimizer.zero_grad(set_to_none=True), require all .grad values absent, and take one forward, exact weighted-loss, backward, and CombinedOptimizer step with no accumulation, clipping, or extra scaling. Step t+1 state is saved only after the update and a second exact gradient clear.",
+    "checkpoint_semantics": "Checkpoint t is the complete state after exactly t main updates and after gradients have been cleared with optimizer.zero_grad(set_to_none=True). Each required checkpoint contains the full ordered model-parameter vector; every registered model buffer, persistent or nonpersistent, with exact name, dtype, shape, and bytes; every module training/evaluation flag; a canonical parameter-name-addressed serialization of every Muon and AdamW tensor/scalar state and param-group value; and canonical raw RNG states for Python random, NumPy, torch CPU, every visible CUDA device in frozen device order, and every explicitly used torch.Generator or sampler generator.",
+    "checkpoint_exactness": "At t=0 the legacy and canonical state packages must be raw-byte exact within each regime and precision. Checkpoints t=0,1,2,4,8 must reconstruct the next scheduled main step raw-byte exactly in an isolated replay, including predictions, loss, gradient, proposed update, parameters, every registered buffer, module modes, optimizer state, and every raw RNG transition. Checkpoint t=16 has no next step and instead must round-trip every serialized parameter, registered buffer, module mode, optimizer value, cleared-gradient record, and raw RNG byte exactly.",
+    "no_early_stopping": "All 16 BF16 steps and all required BF16 raw artifacts must be produced for every arm and regime. A threshold crossing cannot stop or alter the schedule. An attempted FP32 diagnostic follows the same schedule but is handled under the nondeciding FP32 rule."
+  },
+  "crossover_contract": {
+    "factor_1_trajectory_history": [
+      "legacy_updated_state",
+      "canonical_updated_state"
+    ],
+    "factor_2_evaluation_geometry": [
+      "legacy_geometry",
+      "canonical_geometry"
+    ],
+    "cells_per_case_regime_precision_checkpoint": 4,
+    "case_coverage": "All four fixed cases are evaluated in all four crossover cells at t=0,4,8,16.",
+    "state_package_rule": "A trajectory-history model and its own CombinedOptimizer state remain one indivisible package. Model state and optimizer state are never crossed.",
+    "probe_execution": "For each cell, clone the declared checkpoint package, restore one matched probe RNG state, call optimizer.zero_grad(set_to_none=True), require all .grad values absent, run one forward/loss/backward/proposed CombinedOptimizer update with no accumulation, clipping, or extra scaling on the declared evaluation geometry, persist raw predictions, loss, gradient, and proposed update, then destroy the clone.",
+    "nonmutation": "Crossover probes may not mutate a persistent trajectory package, its parameters, buffers, module modes, optimizer, RNG stream, or the 16-step schedule. Pre-probe and post-probe hashes of every main-run state component must match.",
+    "t0_identity": "The two trajectory-history packages are exact at t=0. For a fixed t=0 evaluation geometry, their predictions, losses, gradients, and proposed updates must therefore be raw-byte exact; otherwise the instrument is invalid."
+  },
+  "raw_artifact_contract": {
+    "producer_outputs": [
+      "one required BF16 strict JSON manifest and canonical SHA-256 sidecar",
+      "one required BF16 raw NPZ and canonical SHA-256 sidecar",
+      "one required BF16 external content-bearing exclusive DONE marker written only after both BF16 sidecars and manifests validate",
+      "an optional FP32 diagnostic, if attempted, in a separate JSON/NPZ/DONE namespace whose absence or failure cannot alter the committed BF16 bundle"
+    ],
+    "main_step_arrays": [
+      "training-space pressure and WSS predictions",
+      "training-space pressure and WSS targets",
+      "positive target measure",
+      "selected cell IDs",
+      "scalar weighted Huber loss",
+      "full ordered float32 gradient vector",
+      "full ordered float32 parameter-update vector",
+      "pre-step and post-step complete model-runtime-state SHA-256 values covering parameters, buffers, and module modes",
+      "pre-step and post-step CombinedOptimizer state SHA-256 values",
+      "pre-step and post-step RNG SHA-256 values",
+      "canonical raw pre-step and post-step Python, NumPy, torch CPU, CUDA-device, and explicit-generator RNG state payloads",
+      "all member learning rates"
+    ],
+    "state_checkpoint_arrays": [
+      "full ordered float32 model-parameter vector at t=0,1,2,4,8,16",
+      "every registered model buffer, persistent or nonpersistent, with exact name, dtype, shape, bytes, and SHA-256 at t=0,1,2,4,8,16",
+      "every parameter-name-addressed Muon and AdamW tensor state at t=0,1,2,4,8,16",
+      "all optimizer scalar state, param-group metadata, and learning rates at t=0,1,2,4,8,16",
+      "the complete module training/evaluation-mode mapping at t=0,1,2,4,8,16",
+      "canonical raw RNG-state payloads for Python random, NumPy, torch CPU, every visible CUDA device in frozen device order, and every explicitly used torch.Generator or sampler generator at t=0,1,2,4,8,16",
+      "a cleared-gradient manifest proving every trainable parameter .grad is None at each saved checkpoint"
+    ],
+    "crossover_arrays": [
+      "training-space pressure and WSS predictions for every 2x2 cell and fixed case at t=0,4,8,16",
+      "training-space targets and positive target measure for raw-byte controls",
+      "scalar weighted Huber loss",
+      "full ordered float32 gradient vector",
+      "full ordered float32 proposed CombinedOptimizer update vector",
+      "cloned parameter, buffer, module-mode, optimizer, and RNG state hashes plus raw RNG state before and after each probe"
+    ],
+    "required_bfloat16_array_rules": "Every required BF16 array has one exact declared key, shape, little-endian dtype, byte count, and SHA-256 entry. Object arrays, duplicate keys, missing or extra keys, NaN/Inf, absent measured gradients, nonpositive target measure, nonfinite optimizer state, unaddressed optimizer tensor leaves, any registered persistent or nonpersistent model buffer or module-mode flag not serialized, residual .grad state, and absent Python/NumPy/torch-CPU/every-visible-CUDA-device/explicit-generator raw RNG bytes are forbidden and invalidate BF16 evidence.",
+    "optional_float32_failure_rule": "The optional FP32 diagnostic uses a separate artifact namespace. Its absence, incomplete publication, malformed schema, invalid values, or failed controls yields FP32_DIAGNOSTIC_UNAVAILABLE and is excluded wholesale; none of those conditions invalidates a complete finite schema-valid required BF16 bundle.",
+    "precision_namespace_rule": "Required BF16 evidence and optional FP32 evidence use separate JSON, NPZ, sidecars, and DONE markers. No file, NPZ member, temporary path, or final path may be shared or aliased across precisions.",
+    "fp32_isolation_rule": "A bad or absent FP32 package makes only the FP32 diagnostic unavailable. If FP32 execution mutates, overwrites, aliases, or contaminates required BF16 state or artifacts, that independently constitutes a BF16 control failure and INVALID evidence.",
+    "producer_limit": "The producer may publish raw arrays, hashes, schema/provenance facts, and a non-scientific completion status only. It may not publish D_theta, direct-floor, terminal-divergence, bounded, amplified, mixed, or any equivalent deciding statistic or category."
+  },
+  "reduction_definitions": {
+    "precision": "Convert persisted float32 arrays to float64 before subtraction, norms, medians, comparisons, and aggregation. No recomputation may use runtime model tensors.",
+    "symmetric_relative_l2": "srel2(a,b)=2*norm(a-b,2)/(norm(a,2)+norm(b,2)); WSS is flattened before the norm. Both inputs must be finite and the denominator must be positive.",
+    "parameter_trajectory_divergence": {
+      "definition": "For regime r and t>0, D_theta_r(t)=2*norm(theta_legacy_r(t)-theta_canonical_r(t),2)/(norm(theta_legacy_r(t)-theta_0_r,2)+norm(theta_canonical_r(t)-theta_0_r,2)). Define D_theta_r(0)=0 after requiring the two t=0 vectors to be raw-byte exact.",
+      "requirements": "The t>0 denominator must be finite and positive. theta_0_r is the one shared t=0 parameter vector for the regime. Report D_theta at t=0,1,2,4,8,16, but only BF16 t=16 is deciding."
+    },
+    "direct_pressure_floor": {
+      "per_case": "At t=0 within one trajectory-history state, compare its legacy-geometry and canonical-geometry training-space pressure predictions with srel2.",
+      "t0_duplicate_control": "Because both trajectory-history states are exact at t=0, their two per-case path differences must be raw-byte reproducible; use the legacy_updated_state copy only after that equality check.",
+      "regime_aggregate": "F_pressure_r is statistics.median of the four ordered per-case t=0 pressure path differences. For four values this is the arithmetic mean of the two middle sorted values."
+    },
+    "terminal_same_path_cross_state_divergence": {
+      "per_case_path_pressure": "At t=16 and a fixed evaluation geometry, srel2 between pressure predictions from legacy_updated_state and canonical_updated_state.",
+      "per_case_path_wss": "At t=16 and a fixed evaluation geometry, srel2 between flattened WSS predictions from legacy_updated_state and canonical_updated_state.",
+      "values_per_field_per_regime": 8,
+      "pressure_aggregate": "T_pressure_r is statistics.median of the eight values from four cases times two evaluation geometries. For eight values this is the arithmetic mean of the two middle sorted values.",
+      "bounded_safety_values": "Every one of the eight pressure values and every one of the eight WSS values is tested separately against the inclusive bounded threshold."
+    },
+    "no_pseudoreplication": "The four cycles are one ordered persistent trajectory, not 16 independent cases. Repeated steps are never treated as independent observations or used to inflate a case count."
+  },
+  "decision_gates": {
+    "bfloat16_bounded_per_regime": {
+      "terminal_D_theta_inclusive_maximum": 0.01,
+      "each_of_8_terminal_pressure_srel2_inclusive_maximum": 0.01,
+      "each_of_8_terminal_wss_srel2_inclusive_maximum": 0.01,
+      "joint_rule": "All three conditions must hold."
+    },
+    "bfloat16_amplified_per_regime": {
+      "terminal_D_theta_inclusive_minimum": 0.1,
+      "median_of_8_terminal_pressure_srel2_inclusive_minimum": 0.01,
+      "terminal_pressure_median_over_direct_floor_inclusive_minimum": 4.0,
+      "ratio_definition": "T_pressure_r/F_pressure_r. If F_pressure_r=0, the ratio condition passes only when T_pressure_r>0 and is recorded as positive divergence from an exact-zero direct floor.",
+      "wss_role": "WSS cannot establish amplification, rescue a failed pressure amplification gate, or change an otherwise valid amplification classification.",
+      "joint_rule": "All three deciding conditions must hold."
+    },
+    "across_regime_aggregation": {
+      "bounded": "Both fresh_seed42 and checkpoint_epoch491 must satisfy every bounded gate.",
+      "amplified": "Both fresh_seed42 and checkpoint_epoch491 must satisfy every amplified gate.",
+      "mixed": "Every other complete valid BF16 combination is mixed, including one bounded and one amplified regime, one amplified regime only, or a threshold-gap result."
+    },
+    "threshold_equality": "Every <= or >= comparison is inclusive exactly as written.",
+    "fp32_rule": "If the complete FP32 trajectory is available, report its terminal D_theta, direct pressure floor, and terminal pressure/WSS divergences as diagnostics. Missing, incomplete, malformed, or nonfinite FP32 evidence is reported as FP32_DIAGNOSTIC_UNAVAILABLE and cannot pass, fail, rescue, or invalidate a finite schema-valid BF16 scientific result."
+  },
+  "outcome_precedence": [
+    "Stage 1 validates only the required v3 activation artifact: a missing activation is INCOMPLETE, while a present malformed or provenance-inconsistent activation is INVALID.",
+    "Stage 2 branches on a valid activation before requiring any experiment evidence: exact NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS is NOT_ACTIVATED only when no launch manifest, attempt namespace, temporary or final producer entry, DONE marker, reducer entry, BF16 evidence, or FP32 evidence exists. Any one of those entries on the forbidden pass branch is INVALID protocol-violating evidence; any unrecognized decision outcome is INVALID rather than NOT_ACTIVATED.",
+    "Stage 3 applies only after valid MATERIAL_PARITY_DIFFERENCE_FAIL activation: any present malformed, nonfinite, provenance-inconsistent, control-inconsistent, state-mutating, or schema-invalid required BF16 artifact is INVALID.",
+    "Stage 4 applies only to the activated branch when no required BF16 evidence establishes invalidity: any absent BF16 artifact, sidecar, DONE marker, case, step, state, checkpoint, crossover cell, or raw array is INCOMPLETE.",
+    "Stage 5 treats the separately namespaced optional FP32 diagnostic as reportable or FP32_DIAGNOSTIC_UNAVAILABLE; it cannot change any BF16 category.",
+    "Stage 6 evaluates BOUNDED first. BOUNDED and AMPLIFIED are disjoint because their inclusive D_theta bounds do not overlap.",
+    "Stage 7 evaluates AMPLIFIED.",
+    "Every remaining complete valid activated BF16 result is MIXED."
+  ],
+  "truth_table": [
+    {
+      "outcome": "INVALID_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The required activation is present-invalid; a valid NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS is accompanied by any launch manifest, attempt namespace, temporary or final producer entry, DONE marker, reducer entry, BF16 evidence, or FP32 evidence; or, after valid fail activation, any present required BF16 evidence is malformed, nonfinite, provenance-inconsistent, control-inconsistent, state-mutating, or schema-invalid. Optional separately namespaced FP32 defects alone are excluded and are not invalidating.",
+      "next_step": "Only a valid MATERIAL_PARITY_DIFFERENCE_FAIL permits repair and retry of a blocked, incomplete, or instrument-invalid BF16 attempt in a new namespace. An unauthorized pass-branch attempt may not be retried; preserve it as invalid protocol evidence. No trajectory evidence and no retraining license exist."
+    },
+    {
+      "outcome": "INCOMPLETE_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The activation artifact is absent; or, after a valid MATERIAL_PARITY_DIFFERENCE_FAIL activation and with no required BF16 invalidity, any required BF16 experiment artifact is absent or incomplete.",
+      "next_step": "After a valid MATERIAL_PARITY_DIFFERENCE_FAIL only, complete or rerun the missing BF16 instrument in a new namespace. No trajectory evidence and no retraining license exist."
+    },
+    {
+      "outcome": "NOT_ACTIVATED_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The exact v3 adjudication is valid with decision outcome NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS and no microtrajectory launch, attempt namespace, producer artifact, DONE marker, or reducer artifact exists.",
+      "next_step": "Do not run or interpret this branch. A valid v3 pass may follow the conditional fixed-prefix H-QC branch only after that sibling protocol is independently finalized and hash-bound."
+    },
+    {
+      "outcome": "BOUNDED_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The experiment is valid and activated, and both BF16 state regimes satisfy every bounded gate.",
+      "next_step": "Retire a flagship same-cell legacy-versus-canonical retrain as unsupported by this short-horizon path-difference question. Develop the next information-support hypothesis separately."
+    },
+    {
+      "outcome": "AMPLIFIED_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The experiment is valid and activated, BOUNDED does not hold, and both BF16 state regimes satisfy every amplification gate.",
+      "next_step": "Record short-horizon compound training/update amplification under this fixed CombinedOptimizer and derive a smaller mechanism-specific follow-up. Without an optimizer counterfactual, do not call the optimizer itself causal. Sixteen steps and four repeated cases do not license a flagship retrain."
+    },
+    {
+      "outcome": "MIXED_HISTORICAL_K10000_MICROTRAJECTORY",
+      "condition": "The experiment is valid and activated but satisfies neither the joint bounded nor the joint amplified rule.",
+      "next_step": "Resolve the state-, path-, case-, or metric-specific pattern with a separately preregistered targeted diagnostic. Do not launch a flagship retrain."
+    }
+  ],
+  "blindness_and_publication": {
+    "frozen_before_v3_decision_exists": true,
+    "frozen_before_microtrajectory_implementation_or_output_exists": true,
+    "producer_is_raw_evidence_only": true,
+    "reducer_is_sole_categorical_publisher": true,
+    "producer_and_reducer_must_be_hashed_and_tested_before_launch": true,
+    "reducer_output_is_publish_once": true,
+    "preactivation_reducer_output": "Before activation, classifications are stdout/exit-only and no reducer output path may be created. After exact valid MATERIAL_PARITY_DIFFERENCE_FAIL activation, the attempt-scoped persisted reducer output is exclusive and publish-once.",
+    "attempt_namespace_rule": "After valid MATERIAL_PARITY_DIFFERENCE_FAIL activation, every producer/reducer attempt uses a new immutable attempt-scoped namespace. JSON, NPZ, sidecars, DONE, and adjudication are publish-once within that attempt. Only a blocked, incomplete, or instrument-invalid fail-activated BF16 attempt may be repaired in a new namespace. A complete valid BF16 adjudication is terminal and forbids another BF16 attempt; a valid pass forbids every attempt.",
+    "all_complete_valid_bfloat16_outcomes_are_reported": true,
+    "no_gate_or_aggregation_may_change_after_activation_or_raw_output_exposure": true,
+    "k2500_or_k40000_targets_required_or_permitted": false,
+    "no_early_peeking": "No raw trajectory, crossover, D_theta, direct-floor, terminal-divergence, or partial aggregate may be inspected before the independently frozen reducer publishes once."
+  },
+  "attempt_namespace_contract": {
+    "authorization": "No microtrajectory attempt namespace may be created before exact valid MATERIAL_PARITY_DIFFERENCE_FAIL activation.",
+    "declaration": "The external launch manifest declares one unique attempt_id and distinct immutable required_bfloat16 and optional_float32 namespace paths before execution.",
+    "single_attempt_rule": "The reducer consumes activation, launch manifest, BF16 JSON/NPZ/sidecars/DONE, and output paths from exactly one attempt_id. Cross-attempt artifact mixing or cherry-picking is INVALID.",
+    "precision_isolation": "The optional FP32 namespace is physically disjoint from required BF16 and may be absent.",
+    "immutability": "Existing files, symlinks, directories, sidecars, DONE markers, and reducer outputs are never overwritten or reused. JSON and DONE publication are exclusive and publish-once.",
+    "retry": "Only after valid MATERIAL_PARITY_DIFFERENCE_FAIL activation, a blocked, incomplete, or instrument-invalid required-BF16 attempt is retained unchanged and may be retried under a new attempt_id and new namespaces. A complete valid BF16 adjudication is terminal and forbids another BF16 attempt. A valid NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS forbids every attempt and never authorizes retry. Optional isolated FP32 handling cannot reopen the terminal BF16 decision. Earlier attempts are recorded in correction history or the lab notebook.",
+    "binding": "Every artifact embeds the same attempt_id and external launch-manifest SHA-256; the reducer rejects mismatches.",
+    "publication_order": "Validate raw artifacts and sidecars first, publish the content-bearing exclusive DONE marker last, then run the publish-once reducer."
+  },
+  "scientific_scope": {
+    "supports_if_bounded": "For the two frozen initial states and one four-case repeated K=10000 schedule, legacy-versus-canonical finite-precision construction-order differences remain small after 16 exact current CombinedOptimizer steps under the inclusive gates.",
+    "supports_if_amplified": "For both frozen initial states and the one repeated K=10000 schedule, the two trajectories reach the preregistered parameter and pressure divergence thresholds by step 16 under the complete frozen update protocol; this does not isolate any component-specific causality.",
+    "does_not_support": [
+      "a flagship or full same-cell retrain",
+      "long-horizon convergence or divergence",
+      "historical 500-epoch trajectory replay",
+      "population, OOD, or other-case generalization",
+      "other source resolutions",
+      "independent or disjoint source/query generalization",
+      "training-time benefit",
+      "architecture superiority",
+      "measure-aware source training",
+      "force accuracy",
+      "WSS-only amplification causality",
+      "optimizer-specific causality without an optimizer counterfactual"
+    ],
+    "global_rule": "No outcome in this preregistration licenses a flagship retrain. Any later retraining proposal requires a new hypothesis, its own prospective preregistration, and independent authorization."
+  },
+  "provenance_bindings": {
+    "v3_execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "dataset_manifest_sha256": "51c2268df5b9b365f4ef6147c6ec390f10c55f733ad967f6617bd5e52f62e7ca",
+    "historical_dataset_config_sha256": "a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3",
+    "resolved_config_sha256": "a71987df4d49d38cc7f6b43c08ba0a0592fd39cf16a50aef04bf1b0d4f080fe1",
+    "geometry_manifest_sha256": "3d33209f775513a690d61be560e640a348268132e14dd56675d256ee380bf4b0",
+    "target_input_manifest_sha256": "d7502e9539b983de07ccb58a6313ab844aa5ea5ef4e3e165dd49c6bbfa1a2e49",
+    "legacy_replay_support_sha256": "bce26e1e55d9231843c2255ed7e57fe20166e6fd6098b77d9a63944e8b1dd7a5",
+    "runtime_helper_sha256": "dc4d2a71a0c9c72ff62166801433b21ae6f9b672801dfe5388c7975e887f4896",
+    "canonical_geometry_helper_v5_sha256": "694c45556acd3d002fcd34ffaac2872761ce61eaa60f842c8040f71edd1af7ac"
+  },
+  "external_launch_manifest_policy": {
+    "preregistration_binds": "The finalized preregistration binds the producer, sole reducer, focused tests, schemas, helpers, source tree, and frozen scientific inputs.",
+    "preregistration_excludes": [
+      "final launch-wrapper SHA-256",
+      "external launch-manifest SHA-256",
+      "activation-adjudication SHA-256 that does not yet exist"
+    ],
+    "reason": "Those values are downstream of this preregistration; embedding them here would create a self-referential hash cycle or require mutating the scientific preregistration after activation.",
+    "wrapper_rule": "After valid activation, only the exact activation SHA-256 may mechanically replace the wrapper's unresolved sentinel. The wrapper verifies a strict sidecar-authenticated external launch manifest and verifies that the manifest's declared wrapper SHA-256 equals its own bytes.",
+    "manifest_rule": "Before scheduler submission, publish one immutable external launch manifest plus canonical sidecar binding the finalized preregistration, exact activation, final wrapper, producer, reducer, focused tests, helpers, source/input manifests, environment, and attempt namespaces. Every produced artifact and DONE marker binds the external manifest SHA-256.",
+    "no_self_binding": "The wrapper does not embed the external manifest SHA-256, and the manifest does not embed its own SHA-256; its canonical sidecar authenticates it."
+  },
+  "future_implementation_freeze": {
+    "required_before_launch": [
+      "producer path and SHA-256",
+      "sole reducer path and SHA-256",
+      "focused producer and reducer test paths and SHA-256 values",
+      "strict schemas for JSON, NPZ keys, dtypes, shapes, state serialization, and sidecars",
+      "attempt-namespace schema to be instantiated only in the post-activation external launch manifest",
+      "execution-source manifest and tree SHA-256 values"
+    ],
+    "hash_direction": "The finalized preregistration amendment pins producer, reducer, focused tests, and implementation-level schemas. The launch wrapper then pins that finalized preregistration and the exact activation. A separate external launch manifest pins the wrapper, finalized preregistration, activation, source tree, and attempt namespace. The preregistration never pins the wrapper, avoiding a wrapper/preregistration hash cycle.",
+    "allowed_scope": "A later pre-activation implementation amendment may add only implementation identities, paths, environment identities, exact schemas that mechanically encode the already frozen prose contract, and the sibling fixed-prefix preregistration identity if finalized. The exact activation, wrapper, and instantiated attempt paths belong only in the downstream external launch manifest. No amendment may alter the panel, schedule, formulas, gates, aggregation, precedence, truth table, or scientific scope."
+  },
+  "launch_state": {
+    "v3_activation_adjudication_exists": false,
+    "producer_implemented": false,
+    "reducer_implemented": false,
+    "task_staged": false,
+    "scheduler_job_submitted": false,
+    "producer_output_exists": false,
+    "reducer_output_exists": false
+  }
+}

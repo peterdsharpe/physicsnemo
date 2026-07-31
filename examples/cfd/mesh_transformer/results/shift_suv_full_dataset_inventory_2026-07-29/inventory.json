@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "purpose": "Prospective feasibility audit for a geometry-bearing target-data adaptation experiment.",
+  "remote_dataset": {
+    "cluster": "HSG",
+    "root": "/lustre/fs1/portfolios/coreai/projects/coreai_modulus_cae/datasets/PhysicsNeMo-ShiftSUV"
+  },
+  "families": {
+    "estate": {
+      "manifest_sha256": "f4e4cdc660fcddeae57212c7dfcafa39902a11cce7e02e930d926a9eb99870d0",
+      "train_cases": 794,
+      "validation_cases": 99,
+      "test_cases": 100,
+      "previously_touched_test_cases": 20,
+      "fresh_test_cases": 80
+    },
+    "fastback": {
+      "manifest_sha256": "f6fb7c05b4b2caaca1bf6b9b90892ba4ceb84730132da398403cfcef936e5d5e",
+      "train_cases": 796,
+      "validation_cases": 99,
+      "test_cases": 99,
+      "previously_touched_test_cases": 0,
+      "fresh_test_cases": 99
+    }
+  },
+  "prior_pilot": {
+    "manifest_sha256": "f66e114028f06221acc12f4279daa63e59e0177198cff4fc92fe5338d037a6c9",
+    "cases": 20,
+    "relation_to_full_manifests": "All 20 cases belong to the estate test split; none belongs to either training or validation split.",
+    "policy": "Exclude all 20 from every future confirmatory test. They remain development-only."
+  },
+  "prospective_use": {
+    "pilot": "Use training subsets and validation splits only to choose optimization duration and estimate stochastic variance.",
+    "formal": "Freeze nested training subsets and seed count before evaluating the 80 fresh estate test cases or any fastback test case.",
+    "primary_comparison": "Within each architecture, compare source-pretrained adaptation with target-only training at the same target-example and optimization budgets.",
+    "architecture_question": "Compare the pretraining benefit, not only absolute error, between the boundary-aware model and a strong generic operator."
+  }
+}

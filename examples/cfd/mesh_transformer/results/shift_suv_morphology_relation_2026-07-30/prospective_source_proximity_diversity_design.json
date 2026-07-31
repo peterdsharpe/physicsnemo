@@ -1,0 +1,106 @@
+{
+  "schema_version": 2,
+  "title": "Prospective equal-count source proximity and diversity experiment",
+  "frozen_at": "2026-07-30T13:32:54-04:00",
+  "amended_at": "2026-07-30T14:17:20-04:00",
+  "status": "prospectively amended conditional future experiment; not launched",
+  "amendment": {
+    "original_sha256": "f9f65cf4dec7c2e55785ffae0b7e4edbe58faa392865d35d289a9ca76f85b797",
+    "reason": "The original two-arm target-near versus maximin-diverse comparison changed source-target proximity and within-source diversity simultaneously. It could rank the two selection strategies, but it could not identify proximity as the cause of a difference.",
+    "correction": "Promote the already frozen random anchor to a scored third arm. Its within-source diversity differs from the target-near arm by only 0.14%, while it is about 30% farther from both target families, providing the clean proximity contrast that the two-arm design lacked.",
+    "information_boundary": "This correction was made before launch and without inspecting any convergence-extension result, SHIFT-SUV validation or test geometry, flow field, or adaptation metric."
+  },
+  "information_boundary": "The source subsets use only DrivAerML training geometries and the frozen SHIFT-SUV target-training geometries. No SHIFT-SUV validation or test geometry, flow field, adaptation metric, or convergence-extension result was inspected.",
+  "scientific_question": "Holding the source PDE family, source-example count, and target adaptation protocol fixed, does target proximity predict reusable source knowledge, and can a diversity-maximizing source strategy overcome a large proximity disadvantage?",
+  "input": {
+    "artifact": "formal_morphology_relation.json",
+    "sha256": "62cf5dea0901585a9ecf6a61f15e72894d5113a1b7e44032b256dc687bd32168",
+    "source_cases": 435,
+    "target_training_cases_per_family": 128,
+    "descriptor": "The frozen 15-dimensional scale-free, area-weighted surface-position and surface-normal descriptor, standardized by the full DrivAerML training distribution."
+  },
+  "instrument_calibration": {
+    "status": "Exploratory calibration used to choose a source-set size before any adaptation outcome.",
+    "selected_source_count": 192,
+    "reason": "This retains 44% of the available source vehicles while preserving an opposed treatment contrast larger than 10% in source diversity and 25% in source-target distance.",
+    "target_near": {
+      "selection": "Greedily minimize the mean of the energy distances to the estate and fastback target-training distributions. Start empty; at each step add the candidate giving the smallest joint objective. Sort candidates lexicographically by case ID before selection, which supplies the tie break.",
+      "energy_distance_to_estate": 2.6015,
+      "energy_distance_to_fastback": 2.1870,
+      "mean_within_source_pair_distance": 5.1995
+    },
+    "maximin_diverse": {
+      "selection": "Choose the source case nearest the full-source centroid first, then repeatedly add the candidate whose nearest selected neighbor is farthest away. Sort candidates lexicographically by case ID before selection, which supplies the tie break.",
+      "energy_distance_to_estate": 3.5401,
+      "energy_distance_to_fastback": 2.9160,
+      "mean_within_source_pair_distance": 5.7944
+    },
+    "random_anchor": {
+      "selection": "NumPy default_rng seed 20260733, sample 192 source cases without replacement from lexicographically sorted case IDs.",
+      "energy_distance_to_estate": 3.701689,
+      "energy_distance_to_fastback": 3.128851,
+      "mean_within_source_pair_distance": 5.206559
+    },
+    "contrast": "Relative to the maximin set, the target-near set is 26.5% closer to estate and 25.0% closer to fastback; the maximin set has 11.4% larger within-source pair distance. Relative to the random anchor, the target-near set is 29.7% closer to estate and 30.1% closer to fastback while its within-source pair distance differs by only 0.14%.",
+    "sampling_stability": "The ordering survives both independent descriptor samples: the target-near construction remains closer to each target and the maximin construction remains more diverse."
+  },
+  "rival_hypotheses": {
+    "proximity": "The target-near source checkpoint adapts materially better than the diversity-matched random anchor on both target families; beating the maximin-diverse checkpoint would further show that proximity dominates the opposed strategy contrast.",
+    "diversity": "The maximin-diverse checkpoint adapts materially better than the target-near checkpoint on both target families despite its roughly 25% larger source-target morphology distance.",
+    "both_contribute": "Target-near and maximin-diverse each materially beat the random anchor, but neither materially beats the other on both target families.",
+    "conditional_relation": "The ordering reverses across target families, so neither proximity nor diversity is a broad source-selection law.",
+    "source_distribution_null": "The stabilized ordering is smaller than the materiality threshold; changing which DrivAerML vehicles are seen does not explain the reusable signal."
+  },
+  "activation_policy": {
+    "if_full_source_half_label_succeeds": "Defer this experiment until the positive result survives independent target seeds and source checkpoints.",
+    "if_full_source_half_label_fails_but_same_budget_gain_persists": "First quantify the label-equivalent saving. Activate this experiment only if improving that persistent gain remains the highest-value question.",
+    "if_full_source_same_budget_gain_does_not_persist": "Activate this as the smallest controlled test of whether source distribution can create reusable information rather than a transient initialization advantage."
+  },
+  "staged_test": {
+    "stage_one": "Use GeoTransolver as the source-relation instrument and score all three frozen source sets: target-near, maximin-diverse, and random-anchor. The completed parent pilot showed the larger same-budget pretraining response for this model. This stage cannot support an architectural claim.",
+    "stage_two": "Only if one source relation wins materially for GeoTransolver, repeat the identical frozen three-arm source contrast with MeshTransformer to test whether boundary-aware structure changes that relation.",
+    "controls": [
+      "Use exactly 192 source cases in each of the three source conditions.",
+      "Match source-example exposures, target examples, target-update counts, optimizer-selection protocol, and fixed validation cases.",
+      "Use the same frozen target-training subsets and compare only after the existing plateau and learning-rate-boundary gates pass.",
+      "Report source validation quality as a possible mediator; do not post-hoc equalize it by changing compute."
+    ]
+  },
+  "prospective_decision_rules": {
+    "proximity_effect": "At the final matched target-update budget, target-near pressure error divided by random-anchor pressure error is <= 0.95 on both target families in both full-validation and cross-fit reductions, with no more than 10% wall-shear-stress degradation.",
+    "proximity_dominates_opposed_strategy": "The proximity-effect gate passes and target-near pressure error divided by maximin-diverse pressure error is <= 0.95 on both target families in both reductions, with the same wall-shear-stress guard.",
+    "diversity_favored_strategy": "Maximin-diverse pressure error divided by both target-near and random-anchor pressure error is <= 0.95 on both target families in both reductions, with no more than 10% wall-shear-stress degradation. This supports the diversity-maximizing strategy but does not estimate a pure diversity main effect.",
+    "both_contribute": "The proximity-effect gate passes and maximin-diverse materially beats random-anchor on both families, while the target-near versus maximin-diverse comparison is smaller than 5% or reverses by family.",
+    "conditional": "The material ordering reverses between estate and fastback.",
+    "null_or_inconclusive": "No three-arm pattern above passes after optimization stabilizes. Estimate seed uncertainty before distinguishing a small effect from a null.",
+    "test_policy": "No SHIFT-SUV test result is opened for this experiment."
+  },
+  "literature_audit": {
+    "audited_at": "2026-07-30T13:35:06-04:00",
+    "outcome": "Prior evidence supports both rivals, so the controlled contrast remains genuinely discriminating.",
+    "sources": [
+      {
+        "url": "https://arxiv.org/abs/2401.08715",
+        "finding": "Similarity-selected source subsets can outperform using all available source data in metal-additive-manufacturing regression.",
+        "bearing": "Supports the proximity rival, but not in PDE operator learning."
+      },
+      {
+        "url": "https://arxiv.org/abs/2306.00258",
+        "finding": "Mixed-physics pretraining can yield large downstream data savings across PDE tasks.",
+        "bearing": "Supports broad-source reuse, but does not isolate proximity from diversity at equal source count."
+      },
+      {
+        "url": "https://arxiv.org/abs/2204.09810",
+        "finding": "Distribution-aware transfer improves operator learning under geometry and dynamics shifts.",
+        "bearing": "Shows that matching the target conditional distribution can matter, but changes the transfer objective rather than only the source set."
+      },
+      {
+        "url": "https://arxiv.org/abs/2602.20399",
+        "finding": "Diverse geometry sources usually improve adaptation and reduce labeled-data needs in industrial surrogate tasks.",
+        "bearing": "Supports the diversity rival, while source diversity and other source factors remain partly confounded."
+      }
+    ],
+    "novelty_boundary": "The intended contribution is not a new data-selection algorithm. It is an equal-count, same-PDE test of a clean target-proximity contrast plus an opposed proximity-versus-diversity source-selection strategy for geometry-bearing boundary-driven surrogates."
+  },
+  "claim_limit": "The target-near versus random-anchor contrast identifies the effect of the frozen proximity selection at essentially matched measured diversity. The maximin-diverse comparisons rank a diversity-maximizing strategy but do not identify a pure diversity main effect because target distance is not matched. The design remains within one external-flow dataset and does not establish a universal source-selection law or isolate response-physics differences across datasets."
+}

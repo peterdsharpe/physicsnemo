@@ -1,0 +1,194 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_center_cause_diagnostic_result",
+  "generated_at_utc": "2026-07-28T04:41:43Z",
+  "status": "VALID_NONDECIDING_DIAGNOSTIC",
+  "job": {
+    "cluster": "AGA",
+    "slurm_job_id": 304002,
+    "state": "COMPLETED",
+    "exit_code": "0:0",
+    "elapsed": "00:01:14",
+    "completed_cases": 4,
+    "planned_cases": 4,
+    "precisions": [
+      "bfloat16",
+      "float32"
+    ]
+  },
+  "provenance": {
+    "preregistration": {
+      "path": "results/phase1_hqc_center_cause_diagnostic_preregistration_v2_2026-07-28.json",
+      "sha256": "6e86a16a73869d382b8b98bd4cd3c0059ffb1c65334542c5eb25715267db8594"
+    },
+    "launch_manifest": {
+      "path": "results/phase1_hqc_center_cause_diagnostic_launch_manifest_v2_2026-07-28.json",
+      "sha256": "57058286d32625f46d6a43ffaebdca7a71f7ba9e595f5ad361da6c1e8fda4e24"
+    },
+    "job_bundle": {
+      "path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28",
+      "manifest_sha256": "919a91461acc9b5427661ccac67671e187e5551a213622c108bc4e867ca0e369"
+    },
+    "diagnostic_json": {
+      "path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28/artifacts/hqc_center_diagnostic_four_canaries_k2500_v2.json",
+      "sha256": "26aed78264e9fd66f329941ce000fc438cb26f6835f9f05ff128567d29444bf5"
+    },
+    "diagnostic_npz": {
+      "path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28/artifacts/hqc_center_diagnostic_four_canaries_k2500_v2.npz",
+      "sha256": "d1e6a9fa1a39aa78a9cca26e52eb783a9e78aecbb961ce917164e25fac75a7ea"
+    }
+  },
+  "scope": {
+    "case_ids": [
+      "run_118",
+      "run_129",
+      "run_145",
+      "run_149"
+    ],
+    "resolution": 2500,
+    "truth_fields_read_for_scoring": false,
+    "hqc_endpoint_statistics_computed": false,
+    "scientific_role": "Validity and causal-localization diagnostic only; not an H-QC verdict."
+  },
+  "validity": {
+    "all_cases_and_precisions_passed": true,
+    "required_exactness_gates": {
+      "same_input_replay": true,
+      "zero_saved_normals_null": true,
+      "copied_saved_normals_null": true,
+      "canonical_primary_decode": true,
+      "canonical_fixed_decode": true,
+      "full_internal_geometry_pin": true
+    },
+    "schema_version": 2,
+    "forbidden_target_truth_error_force_data_keys": []
+  },
+  "center_drift_relative_l2": {
+    "run_118": {
+      "bfloat16": {
+        "pressure": 0.03539704597626496,
+        "wss": 0.044822457843621134
+      },
+      "float32": {
+        "pressure": 0.0007696076599774174,
+        "wss": 0.001291424783082374
+      }
+    },
+    "run_129": {
+      "bfloat16": {
+        "pressure": 0.029129926559616784,
+        "wss": 0.0592850178244338
+      },
+      "float32": {
+        "pressure": 0.001326400463127422,
+        "wss": 0.0016626510685088854
+      }
+    },
+    "run_145": {
+      "bfloat16": {
+        "pressure": 0.02899189686188912,
+        "wss": 0.04095791213290671
+      },
+      "float32": {
+        "pressure": 0.0009192892910220888,
+        "wss": 0.0011783356271782874
+      }
+    },
+    "run_149": {
+      "bfloat16": {
+        "pressure": 0.06557050483371747,
+        "wss": 0.07853658059557297
+      },
+      "float32": {
+        "pressure": 0.0008332828611135059,
+        "wss": 0.0028188449306721223
+      }
+    }
+  },
+  "preregistered_decisions": {
+    "threshold_relative_l2": 0.001,
+    "fp32_pressure_candidate_gate": {
+      "passed": false,
+      "failed_cases": [
+        "run_129"
+      ],
+      "consequence": "A whole-forward FP32 historical replay and full-cohort center-validity stage is not licensed."
+    },
+    "fp32_full_output_stability": {
+      "passed": false,
+      "pressure_failed_cases": [
+        "run_129"
+      ],
+      "wss_failed_cases": [
+        "run_118",
+        "run_129",
+        "run_145",
+        "run_149"
+      ]
+    },
+    "bf16_hqc_rerun_licensed": false,
+    "fixed_center_selection_licensed": false,
+    "hqc_support_futility_mixed_or_ineligible_claim_licensed": false
+  },
+  "causal_localization": {
+    "saved_pipeline_normal_field_is_null": {
+      "passed": true,
+      "basis": "Zeroing the primary saved-normal field and copying it into the fixed path were bitwise null for pressure and WSS in every case and precision."
+    },
+    "query_route_is_practically_negligible": {
+      "passed_for_pressure": true,
+      "passed_for_wss": true,
+      "maximum_pressure_relative_l2": 0.00048539755755757735,
+      "maximum_wss_relative_l2": 0.00038852758081885195
+    },
+    "source_geometry_differences_maximum_over_cases_and_precisions": {
+      "points_relative_l2": 0.000001600091050502901,
+      "centroids_relative_l2": 0.0000016020561426502427,
+      "areas_relative_l2": 0.00001530829491018212,
+      "normals_relative_l2": 0.00017062428339076875,
+      "normals_maximum_angle_degrees": 0.08063434162192673
+    },
+    "primary_derived_geometry_pin": {
+      "fields": [
+        "centroids",
+        "areas",
+        "normals"
+      ],
+      "sufficient_at_threshold_for_every_case_and_precision": true,
+      "maximum_pressure_relative_l2": 0.000030911241371051174,
+      "maximum_wss_relative_l2": 0.00017493872979202873,
+      "bitwise_exact_for_every_case_and_precision": false
+    },
+    "primary_full_internal_geometry_pin": {
+      "fields": [
+        "points",
+        "centroids",
+        "areas",
+        "normals"
+      ],
+      "bitwise_exact_for_pressure_and_wss_in_every_case_and_precision": true
+    },
+    "single_and_pair_component_pins_sufficient_for_every_case_and_precision": false,
+    "nonadditivity_warning": "Pin interventions establish sufficiency only; componentwise causal shares must not be added or inferred from differences between pins."
+  },
+  "instrumentation_note": {
+    "severity": "cosmetic",
+    "field": "normal maximum_angle_degrees",
+    "detail": "The corrected renormalized acos calculation has a 1.7075e-6 degree floating-point floor even for elementwise-identical normal arrays. Exact, nonzero-count, maximum-absolute, and relative-L2 fields correctly report zero. This does not affect the observed 0.046-0.081 degree primary-versus-fixed angles or any exactness gate; a reused implementation should special-case exact equality or use atan2(cross, dot)."
+  },
+  "conclusions": [
+    "The corrected four-canary diagnostic is valid.",
+    "The saved pipeline-normal field does not enter this checkpoint's predictions.",
+    "The normalized-query coordinate route is practically negligible under the frozen fieldwise threshold.",
+    "Tiny differences in internally reconstructed source geometry are causally sufficient for the material center drift; bfloat16 strongly amplifies them.",
+    "Whole-forward float32 reduces but does not eliminate center sensitivity and fails its preregistered pressure gate.",
+    "The next licensed work is a translation-stable internal-geometry repair and a fresh target-free invariance validation, not an unchanged H-QC rerun."
+  ],
+  "prohibited_interpretations": [
+    "This is not evidence for H-QC support, futility, mixed, or ineligibility.",
+    "Do not select either centering arm post hoc.",
+    "Do not rerun H-QC v1 or v2 unchanged.",
+    "Do not treat pin contrasts as additive causal shares.",
+    "Do not expose H-QC endpoints until the repaired geometry path passes a newly frozen validity contract."
+  ]
+}

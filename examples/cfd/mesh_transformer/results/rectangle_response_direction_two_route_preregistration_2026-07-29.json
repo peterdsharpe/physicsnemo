@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "analytic_preregistration_before_any_learning_result",
+  "extends": "rectangle_response_direction_sweep_preregistration_2026-07-29.json",
+  "scientific_question": "Does source-transfer contrast collapse on exact response direction when that direction is changed by two physically different routes?",
+  "common_controls": {
+    "equation": "(Delta-lambda^2)u=0 on a rectangle",
+    "target_aspect_ratio": 1.0,
+    "number_of_independent_boundary_modes": 16,
+    "target_mode_energy": "exactly equal for all 16 modes by prospective drive-variance weighting",
+    "effective_response_dimension_at_one_percent": 16,
+    "source_target_relative_rms_distance": 0.15,
+    "observation_measure": "uniform in normalized interior coordinates",
+    "source_P_relation": "screening-aligned: same lambda as target, changed aspect ratio",
+    "source_G_relation": "aspect-aligned: same aspect ratio as target, changed lambda",
+    "target_example_budgets": [0, 1, 2, 4, 8, 12, 15, 16],
+    "exact_minimum_change_aggregate_curve": "0.15 sqrt(1-n/16)"
+  },
+  "route_A_screening": {
+    "description": "Keep boundary-mode support fixed at 1-8 and 17-24; change target screening.",
+    "reference": "rectangle_response_direction_sweep_preregistration_2026-07-29.json",
+    "levels": [
+      {
+        "level": "separated",
+        "target_screening_over_pi": 1.0,
+        "response_angle_degrees": 55.951559254433676,
+        "source_source_chord_over_radius": 0.9381965532151796
+      },
+      {
+        "level": "intermediate",
+        "target_screening_over_pi": 8.0,
+        "response_angle_degrees": 32.1925165580813,
+        "source_source_chord_over_radius": 0.5545038173834572
+      },
+      {
+        "level": "near_collinear",
+        "target_screening_over_pi": 16.0,
+        "response_angle_degrees": 18.560555649656376,
+        "source_source_chord_over_radius": 0.3225282382565627
+      }
+    ]
+  },
+  "route_B_excitation_support": {
+    "description": "Keep target screening fixed at pi; shift one contiguous 16-mode boundary band upward.",
+    "target_screening_over_pi": 1.0,
+    "levels": [
+      {
+        "level": "separated",
+        "mode_support": "1-16",
+        "source_P_aspect_ratio": 1.2521341613463841,
+        "source_G_screening_over_pi": 2.9527691096242235,
+        "response_direction_cosine": 0.5968804523912747,
+        "response_angle_degrees": 53.353198302585646,
+        "source_source_chord_over_radius": 0.8979081774978166,
+        "source_P_lower_half_distance_fraction": 0.49903688925173734,
+        "source_G_lower_half_distance_fraction": 0.9913198696537122,
+        "relative_drive_variance_dynamic_range": 11.311043225740104
+      },
+      {
+        "level": "intermediate",
+        "mode_support": "5-20",
+        "source_P_aspect_ratio": 1.2518466860095276,
+        "source_G_screening_over_pi": 7.097415731286543,
+        "response_direction_cosine": 0.8279315318181263,
+        "response_angle_degrees": 34.11316106361117,
+        "source_source_chord_over_radius": 0.5866318576106717,
+        "source_P_lower_half_distance_fraction": 0.49999999999925665,
+        "source_G_lower_half_distance_fraction": 0.9142684619888048,
+        "relative_drive_variance_dynamic_range": 3.9272225456474703
+      },
+      {
+        "level": "near_collinear",
+        "mode_support": "15-30",
+        "source_P_aspect_ratio": 1.25184668600932,
+        "source_G_screening_over_pi": 15.695279582221886,
+        "response_direction_cosine": 0.9499994437371736,
+        "response_angle_degrees": 18.19497440901849,
+        "source_source_chord_over_radius": 0.31622952506945456,
+        "source_P_lower_half_distance_fraction": 0.5000000000000303,
+        "source_G_lower_half_distance_fraction": 0.7576135638090732,
+        "relative_drive_variance_dynamic_range": 1.9966786581005709
+      }
+    ]
+  },
+  "paired_angle_match": [
+    {
+      "level": "separated",
+      "route_A_angle_degrees": 55.951559254433676,
+      "route_B_angle_degrees": 53.353198302585646,
+      "absolute_angle_difference_degrees": 2.59836095184803
+    },
+    {
+      "level": "intermediate",
+      "route_A_angle_degrees": 32.1925165580813,
+      "route_B_angle_degrees": 34.11316106361117,
+      "absolute_angle_difference_degrees": 1.920644505529868
+    },
+    {
+      "level": "near_collinear",
+      "route_A_angle_degrees": 18.560555649656376,
+      "route_B_angle_degrees": 18.19497440901849,
+      "absolute_angle_difference_degrees": 0.3655812406378871
+    }
+  ],
+  "registered_rivals": {
+    "response_direction": "After accounting for exact bandwise distance and the small residual angle mismatch, normalized source contrast agrees across the two routes and weakens as the response directions converge.",
+    "screening_regime": "Matched-angle pairs differ systematically because changing lambda alters propagation in a way response angle does not capture.",
+    "excitation_support": "Matched-angle pairs differ systematically because the boundary-frequency support carries information not captured by response angle.",
+    "categorical_screening_alignment": "P wins both mode halves across both routes.",
+    "categorical_aspect_alignment": "G wins both mode halves across both routes.",
+    "learner_specificity": "The paired pattern reverses across prospectively declared learner classes."
+  },
+  "outcomes": {
+    "primary": "Paired-route difference in the signed, band-resolved P-versus-G target-error contrast, reported beside each route's exact minimum-change null.",
+    "secondary": [
+      "source contrast versus exact source-source chord",
+      "aggregate deviation from the exact P/G tie",
+      "target-only and linear-reconstruction fidelity in every route"
+    ],
+    "interpretation": "Agreement across routes supports response direction; a route-specific residual supports the corresponding global-regime or excitation-support account."
+  },
+  "validity_gates": [
+    "Every target must retain 16 equal-energy response modes and every source must remain exactly 15% from its target.",
+    "The source P/G total-distance tie and opposite-half distance crossover must hold before learning.",
+    "A route comparison is invalid if target-only or exact-linear-reference fidelity differs enough to explain the source contrast.",
+    "No architecture-robust claim is permitted from one learner class.",
+    "The paired angles are close, not identical; exact angle and chord remain covariates rather than being rounded into categorical bins."
+  ],
+  "rejected_observation_measure_route": {
+    "status": "exploratory_rejection_before_learning",
+    "reason": "Changing where the same target field was observed produced little clean rotation. Achieving a material angle change required extreme target drive reweighting.",
+    "example": "A far-interior exponential observation density with rate 16 reduced the angle to about 37.9 degrees but required a target drive-variance dynamic range of about 9.2e3.",
+    "decision": "Do not use observation weighting as the second causal route."
+  },
+  "numerical_verification": {
+    "method": "Closed-form modal responses, equal-energy drive weights, Gauss-Legendre quadrature, and scalar root solves for equal-radius sources.",
+    "quadrature_orders_checked": [64, 128, 256, 512, 1024],
+    "route_B_source_parameters_and_angles_stable_to_reported_12_decimal_places": true,
+    "no_learning_result_inspected": true
+  },
+  "scope_limits": [
+    "Both routes remain within one separable screened elliptic family.",
+    "Higher mode support creates thinner excitation-driven spatial structure even though the PDE screening stays fixed.",
+    "A positive paired result would justify testing response direction on a nonseparable geometry; it would not yet establish a universal transfer law."
+  ]
+}

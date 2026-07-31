@@ -11,7 +11,12 @@
     "`exploratory` blocks are test-set-touching diagnostics and CANNOT",
     "support a claim -- they exist to localize a mechanism, not to score it.",
     "`pre_registration` blocks are predictions frozen before any",
-    "corresponding measurement."
+    "corresponding measurement.",
+    "",
+    "EDIT 2026-07-27: the block labeled intrinsic_gauge_calibration was",
+    "not train-only: job 285486 iterated all 484 cases rather than the",
+    "435-index training sampler. Its constant and every dependent run are",
+    "historical/exploratory evidence, not a clean frozen-protocol result."
   ],
   "provenance": {
     "notebook_entries": [
@@ -109,7 +114,8 @@
   },
 
   "intrinsic_gauge_calibration": {
-    "status": "frozen_protocol",
+    "status": "invalid_split_leak_historical_reproduction_only",
+    "EDIT_2026-07-27": "The 484-case loop included all 49 held-out cases. Recompute from the exact 435-case sampler before reuse.",
     "description": [
       "reference_length = C * r_RMS(sample), with r_RMS the",
       "measure-weighted RMS boundary radius about the measure-weighted",
@@ -119,7 +125,9 @@
       "C is never re-fit per evaluation set."
     ],
     "job": "AGA 285486",
-    "n_train_samples": 484,
+    "n_train_samples_claimed": 484,
+    "n_actual_all_cases": 484,
+    "n_expected_train_cases": 435,
     "sampling_resolution": 10000,
     "r_rms_mean": 0.3021536821,
     "r_rms_std": 0.0089,
@@ -132,7 +140,8 @@
   },
 
   "acceptance_gates": {
-    "status": "frozen_protocol",
+    "status": "historical_frozen_gates_with_contaminated_calibration",
+    "EDIT_2026-07-27": "The measured lanes are retained, but the intrinsic-gauge constant was fit with held-out cases.",
     "description": "Gates declared at sec-nb-gauge-calib BEFORE any acceptance number existed.",
     "job": "AGA 285531 (paired 4-lane, id_reference, same node, current code)",
     "lanes": {
@@ -161,7 +170,8 @@
   },
 
   "intrinsic_retrain": {
-    "status": "frozen_protocol",
+    "status": "historical_run_with_contaminated_calibration",
+    "EDIT_2026-07-27": "Training numbers are real; the intervention is not a clean train-only protocol because C leaked the held-out split.",
     "description": [
       "Flagship architecture retrained under the intrinsic gauge, protocol",
       "otherwise identical to t2 (500 epochs, 1 node, lr 3.0e-3)."

@@ -1,0 +1,120 @@
+{
+  "schema_version": 2,
+  "artifact_kind": "phase1_canonical_geometry_input_freeze_launch_manifest",
+  "status": "FROZEN_BEFORE_TASK_CREATION_OR_GEOMETRY_MANIFEST_OUTPUT",
+  "frozen_at_utc": "2026-07-28T15:38:44Z",
+  "supersedes": {
+    "path": "phase1_canonical_geometry_input_freeze_launch_manifest_v1_2026-07-28.json",
+    "sha256": "a769c0a2b8db8c2fab49009dec3db7a65b5190d357dd4bac084f851705fb543e",
+    "state": "SUPERSEDED_PREOUTPUT",
+    "reason": [
+      "The v1 wrapper selected the batch/short GPU partition contract without requesting GPUs, so AGA rejected it at sbatch preflight.",
+      "The v1 producer validated output absence before its long scan but published with os.replace, leaving a definite time-of-check/time-of-use overwrite race.",
+      "The v1 wrapper installed its EXIT trap after failure-prone setup, relied on a log directory that Slurm needs before shell start, and did not freeze the required submission working directory."
+    ],
+    "task_created_under_v1": false,
+    "job_submitted_under_v1": false,
+    "geometry_manifest_output_generated_under_v1": false
+  },
+  "purpose": "Freeze target-free raw geometry identity for the preregistered successor to the adjudicated four-canary canonical-geometry diagnostic. This is input provenance, not model inference or an H-QC result.",
+  "scope": {
+    "cohort": "exact ordered 36-case ID-reference cohort embedded in the producer",
+    "cohort_sha256": "ec947a48495b1ddcaa9ec81e96ad299a4f34e438940d57fe5f053db47aecdf9d",
+    "geometry": [
+      "vehicle points.memmap",
+      "vehicle cells.memmap",
+      "structural TensorDict metadata"
+    ],
+    "allowed_global_inputs": [
+      "U_inf",
+      "p_inf",
+      "rho_inf",
+      "nu",
+      "L_ref"
+    ],
+    "required_l_ref": 5.0,
+    "forbidden_associations": [
+      "point_data",
+      "cell_data",
+      "interior"
+    ],
+    "supervision_values_may_be_opened": false,
+    "supervision_values_may_be_hashed": false,
+    "supervision_values_may_be_serialized": false
+  },
+  "frozen_files": {
+    "producer": {
+      "path": "studies/drivaerml_geometry_input_manifest.py",
+      "sha256": "a8000bab74cfa78d01b16dc7fb0abb243d345778582f056ed65e5eeaa6254ba5"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_geometry_input_manifest.py",
+      "sha256": "b8129d910e8c8f993880b7dcce8a7b2f85688a39a3197b28f1a0f922768f302f",
+      "result": "7 passed; Ruff format/check passed"
+    },
+    "aga_wrapper": {
+      "path": "studies/drivaerml_geometry_input_manifest_aga.sbatch",
+      "sha256": "586ce4759fb463160c5ce209e1a51831b10eaec09e0e887a4137fdd5871b8c3e",
+      "bash_and_shellcheck_passed": true
+    },
+    "readme": {
+      "path": "studies/drivaerml_geometry_input_manifest_aga_README.md",
+      "sha256": "d7c451459ed79436ae0e29979b4470202642a2ae8a9622ae7a1dfb4c1b1d4612"
+    }
+  },
+  "frozen_external_input": {
+    "dataset_root": "/home/psharpe/coreai_modulus_cae/users/psharpe/mt_datasets/drivaerml_ood_shadow",
+    "dataset_manifest_sha256": "51c2268df5b9b365f4ef6147c6ec390f10c55f733ad967f6617bd5e52f62e7ca"
+  },
+  "task": {
+    "logical_path": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1",
+    "physical_path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1",
+    "logical_path_absent_at_v2_freeze": true,
+    "physical_path_absent_at_v2_freeze": true,
+    "create_exactly_once": true,
+    "required_precreated_directories": [
+      "artifacts",
+      "sbatch_logs"
+    ],
+    "required_submission_working_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1"
+  },
+  "execution": {
+    "cluster": "oci-aga-slurm-1",
+    "partition": "cpu",
+    "qos": "cpu-short",
+    "walltime": "00:30:00",
+    "nodes": 1,
+    "tasks": 1,
+    "cpus_per_task": 8,
+    "memory": "32G",
+    "producer_timeout": "25m",
+    "hash_workers": 4,
+    "submit_count": 1,
+    "requeue": false,
+    "scheduler_test_only_passed": true,
+    "submission_command": "cd /home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1 && sbatch --export=ALL drivaerml_geometry_input_manifest_aga.sbatch",
+    "environment_contract": "Reuse the repaired eight-variable clean Slurm caller and stable semantic controller checks from canonical-geometry launch supplement v7."
+  },
+  "publication_contract": {
+    "method": "fsynced same-directory temporary files followed by atomic no-clobber POSIX hard links",
+    "json_or_sidecar_may_be_replaced": false,
+    "partial_pair_is_rolled_back_on_collision_or_verification_failure": true,
+    "post_validation_output_collision_tests": [
+      "JSON sentinel survives and no sidecar is published",
+      "sidecar sentinel survives and the newly linked JSON is removed"
+    ]
+  },
+  "expected_output": {
+    "relative_path": "artifacts/drivaerml_geometry_input_manifest_36cases_v1.json",
+    "sha256_sidecar": true,
+    "atomic_no_overwrite": true,
+    "case_count": 36,
+    "status": "PASSED_TARGET_FREE_GEOMETRY_INPUT_FREEZE"
+  },
+  "preoutput_state": {
+    "remote_task_created": false,
+    "job_submitted": false,
+    "geometry_manifest_output_existed": false,
+    "model_output_generated": false
+  }
+}

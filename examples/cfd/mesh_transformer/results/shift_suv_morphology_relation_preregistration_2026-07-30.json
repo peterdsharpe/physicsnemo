@@ -1,0 +1,81 @@
+{
+  "title": "Outcome-independent DrivAerML-to-SHIFT-SUV morphology relation",
+  "frozen_at": "2026-07-30T06:15:55-04:00",
+  "status": "prospective; no adaptation outcome inspected",
+  "scientific_question": "Is the DrivAerML source morphology measurably closer to SHIFT-SUV estate or fastback vehicles before source-initialization benefits are revealed?",
+  "role": "This is an independent test of the geometry-scaffold rival, not a surrogate-accuracy result.",
+  "information_boundary": {
+    "allowed": [
+      "DrivAerML train geometry",
+      "the frozen SHIFT-SUV train_128 geometry subsets",
+      "mesh coordinates and connectivity"
+    ],
+    "forbidden": [
+      "pressure or wall-shear-stress values",
+      "any validation or test case",
+      "online or fixed-validation adaptation outcomes"
+    ]
+  },
+  "data": {
+    "drivaer_train": {
+      "cases": 435,
+      "manifest_sha256": "60775de5708dc53276b5d437306787339afe16b32b9c9bccdf6668a2814ecc52",
+      "ordered_case_ids_sha256": "872600e275d0994ca16c1a33f29dd548ee9b0c130bb1e2e67fa0a0adbc15b3d9"
+    },
+    "shift_suv_estate_train_128": {
+      "cases": 128,
+      "manifest_sha256": "8b0a4d28bf5c0c3f0ea0fc5c6ac2c4da36f2f3221dcfefbc3e3a7b7a9718d144",
+      "ordered_case_ids_sha256": "798c425eebf3d13c54ff1757033ab0960b412d1bfadd74f93c0aed5066758037"
+    },
+    "shift_suv_fastback_train_128": {
+      "cases": 128,
+      "manifest_sha256": "9506ef308e21fa4d1753d3a34716cd7cfd25c02ebdbc5d76306596f67ed0f8fd",
+      "ordered_case_ids_sha256": "f7c1a3dea9e404c40c1ce4bf422176fa1e7789cb7ee93e580c1390642305a53b"
+    }
+  },
+  "geometry_measurement": {
+    "surface": "vehicle boundary only",
+    "cell_samples_per_pass": 20000,
+    "sampling_seeds": [
+      20260730,
+      20260731
+    ],
+    "within_case_aggregation": "average the two descriptor vectors",
+    "descriptor": [
+      "area-weighted 5th-to-95th percentile span along the freestream-aligned x, y, and z axes",
+      "upper triangle of the area-weighted centroid second-moment matrix",
+      "upper triangle of the area-weighted surface-normal second-moment matrix"
+    ],
+    "invariances": [
+      "translation",
+      "uniform scale",
+      "normal orientation sign"
+    ],
+    "intentional_noninvariance": "The common freestream-aligned axes are retained because longitudinal, lateral, and vertical morphology have different physical roles."
+  },
+  "analysis": {
+    "standardization": "Use the 435 averaged DrivAerML descriptors to center and scale every feature; drop only features with source standard deviation below 1e-8.",
+    "distance": "Euclidean energy distance in the standardized descriptor space.",
+    "primary_contrast": "source-to-estate distance minus source-to-fastback distance",
+    "bootstrap": {
+      "replicates": 2000,
+      "seed": 20260730,
+      "resampling": "resample source, estate, and fastback cases independently; use the same source resample for both distances"
+    }
+  },
+  "validity_gates": {
+    "case_identity": "All three consumed case sets and manifest hashes must exactly match this preregistration.",
+    "sampling_stability": "Within every domain, the median relative L2 difference between the two per-case descriptor passes must be at most 5%, and the 95th percentile at most 15%.",
+    "direction_stability": "The two sampling passes must give the same source-to-family distance ordering as the averaged descriptors.",
+    "no_test_access": "Only the three declared training case sets may be loaded."
+  },
+  "decision_rule": {
+    "decisive_morphology_ordering": "Name one target family as closer only if all validity gates pass, the paired-bootstrap 95% interval for the primary contrast excludes zero, and the farther-to-nearer point distance ratio is at least 1.10.",
+    "otherwise": "Record that this descriptor provides no decisive morphology ordering; do not retrofit another geometry metric after viewing adaptation outcomes."
+  },
+  "joint_prediction_for_the_adaptation_pilot": {
+    "geometry_scaffold": "If a closer family is established, its geometric-mean same-budget pretraining gain should exceed the farther family's by at least 10% for both architectures.",
+    "falsifier": "A decisive morphology ordering with the opposite transfer ordering in either architecture rejects morphology proximity as a sufficient explanation of the pilot effect.",
+    "limit": "Agreement is directional support only. This descriptor is not the model's learned representation, and DrivAerML-to-SHIFT-SUV also changes flow regime."
+  }
+}

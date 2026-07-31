@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "analytic_correction_before_any_learning_result",
+  "corrects": [
+    "rectangle_broadband_transfer_preregistration_2026-07-29.json",
+    "rectangle_broadband_adaptation_null_2026-07-29.json",
+    "rectangle_response_direction_sweep_preregistration_2026-07-29.json",
+    "rectangle_response_direction_two_route_preregistration_2026-07-29.json"
+  ],
+  "incorrect_claim": "Sixteen equal-energy boundary modes make sixteen target field solutions necessary to identify the target response at one-percent accuracy.",
+  "reason": "That statement is true only for an unrestricted linear operator observed through generic input-output constraints. The rectangle operator is diagonal in a known sine basis. One full-field target solution with every modal coefficient nonzero contains all sixteen modal response profiles simultaneously.",
+  "derivation": {
+    "field": "u(xi,y)=sum_m c_m f_m(xi) sin(m pi y)",
+    "projection": "2 integral_0^1 u(xi,y) sin(k pi y) dy = c_k f_k(xi)",
+    "consequence": "For c_k nonzero, every f_k is recovered from the same target field by division by c_k."
+  },
+  "numerical_witness": {
+    "target": {
+      "aspect_ratio": 1.0,
+      "screening_over_pi": 1.0
+    },
+    "modes": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24
+    ],
+    "target_fields": 1,
+    "streamwise_samples": 65,
+    "transverse_interior_samples": 64,
+    "coefficient_seed": 20260729,
+    "minimum_absolute_coefficient": 0.5668914769230116,
+    "discrete_sine_gram_max_absolute_error": 3.2545775723846324e-15,
+    "recovered_modal_profile_max_absolute_error": 7.105427357601002e-15,
+    "recovered_modal_profile_relative_l2_error": 2.058797028979277e-15
+  },
+  "scientific_implications": [
+    "The effective response-energy dimension remains sixteen, but it is not a lower bound on the number of target simulations.",
+    "The minimum-change curve 0.15 sqrt(1-n/16) remains an exact conditional null for an unstructured operator update; it is not architecture-independent and is not an information-theoretic transfer baseline for this separable task.",
+    "Target-example budgets from zero to sixteen full fields do not isolate reusable knowledge because one field can reveal all modes to a representation that exploits the known output basis.",
+    "The response-distance, tangent-angle, and two-route analytic constructions remain valid descriptions of task geometry, but their proposed learning test is withdrawn."
+  ],
+  "decision": "Do not launch the rectangle learning study as a target-simulation-efficiency experiment. Retain the rectangle as an analytic causal probe and move the empirical question to a nonseparable geometry or to an observation protocol whose information unit cannot be spectrally demixed from one field.",
+  "learning_results_inspected_before_correction": false
+}

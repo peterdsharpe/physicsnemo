@@ -1,0 +1,81 @@
+precision: bfloat16
+profile: false
+augment: false
+benchmark_io: false
+training:
+  seed: 42
+  save_interval: 10
+  loss_type: huber
+  batch_size: 1
+  scheduler_update_mode: epoch
+  optimizer:
+    weight_decay: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    eps: 1.0e-08
+    lr: 0.003
+  num_epochs: 500
+  scheduler:
+    _target_: torch.optim.lr_scheduler.StepLR
+    step_size: 100
+    gamma: 0.1
+dataloader:
+  prefetch_factor: 1
+  num_streams: 1
+  use_streams: false
+  num_workers: 1
+  pin_memory: true
+logging:
+  log_every_n_steps: 10
+input_type: mesh
+output_type: mesh
+forward_kwargs:
+  domain: ''
+model:
+  _target_: physicsnemo.experimental.nn.MeshTransformer
+  n_spatial_dims: 3
+  output_field_ranks:
+    pressure: 0
+    wss: 1
+  boundary_field_ranks:
+    vehicle:
+      operator: {}
+      drive: {}
+  global_field_ranks:
+    operator: {}
+    drive:
+      U_inf_dir: 1
+  reference_length_key: reference_length
+  field_mode: zero_preserving_nonlinear
+  query_decoder: kernel
+  trace_of: vehicle
+  kernel_mlp_members: 8
+  kernel_include_polynomial_members: false
+  kernel_include_single_layer_member: true
+  kernel_monopole_free_single_layer: false
+  kernel_checkpoint_query_chunks: true
+  operator_scalar_dim: 64
+  operator_vector_dim: 16
+  drive_scalar_dim: 96
+  drive_vector_dim: 24
+  operator_layers: 2
+  drive_layers: 1
+  query_layers: 1
+  heads: 1
+  scalar_rank: 96
+  vector_rank: 32
+  query_chunk_size: 65536
+  attention_chunk_size: 65536
+dataset: drivaer_ml_surface_intrinsic
+extra_datasets: []
+train_split: train
+val_split: val
+sampling_resolution: 10000
+metrics:
+- l2
+run_id: t2_mesh_transformer_surface_flagship_intrinsic_seed42_lr3.0e-3
+output_dir: runs
+checkpoint_dir: null
+compile: true
+out_dim: 4

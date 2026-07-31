@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_prelaunch_correction",
+  "status": "ABANDONED_BEFORE_SUBMISSION_OR_OUTPUT",
+  "recorded_at_utc": "2026-07-28T06:31:51Z",
+  "affected_protocol": "neutral canonical-geometry diagnostic schema v3",
+  "definite_bug": {
+    "summary": "The v3 producer's raw-byte tensor helper did not support rank-zero tensors.",
+    "mechanism": "torch.Tensor.view(torch.uint8) with a dtype change rejects a rank-zero float tensor. The frozen model contract stores encoded reference_length as a scalar tensor, and the v3 neutral-decode validity gate calls the helper on that state.",
+    "minimal_reproduction": {
+      "operation": "torch.tensor(1.0, dtype=torch.float32).contiguous().view(torch.uint8)",
+      "observed_exception": "RuntimeError: self.dim() cannot be 0 to view Float as Byte (different element sizes)"
+    },
+    "consequence": "A scientifically valid run would fail during instrumentation before producing a valid outcome. This is a false invalidation/crash path, not evidence about the canonical geometry hypothesis."
+  },
+  "affected_frozen_artifacts": {
+    "diagnostic": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_diagnostic_v3.py",
+      "sha256": "eeb13eceb9cd080f88e259f93581671e7cf201057492969a327da8f0ae863840"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_diagnostic_v3.py",
+      "sha256": "e9883112cd670c2d43a67f89869b1921996aca86a9575087d972d2ff81e80a09"
+    },
+    "preregistration": {
+      "path": "results/phase1_hqc_neutral_canonical_geometry_preregistration_v3_2026-07-28.json",
+      "sha256": "6ca385f55c0f662b32933378ac271f168405be72817f80b4a14f4322caa14bcf"
+    },
+    "aga_wrapper": {
+      "path": "studies/drivaerml_hqc_neutral_canonical_geometry_v3_aga.sbatch",
+      "sha256": "a059b5adce773d2988b3ed3c3559c48b0c0d2d83569cdaa4d4f53485f02a5e49"
+    },
+    "readme": {
+      "path": "studies/drivaerml_hqc_neutral_canonical_geometry_v3_aga_README.md",
+      "sha256": "ff8d413671303843aa890d1300e34e4a389f0736c135a1fc4d8469be501f0e6c"
+    },
+    "launch_manifest": {
+      "path": "results/phase1_hqc_neutral_canonical_geometry_launch_manifest_v3_2026-07-28.json",
+      "sha256": "318506ba30c8ce35892fb91d77fcbf9586233a77f9794c76df1ed7634f3c8cbe"
+    },
+    "candidate_adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v3.py",
+      "sha256": "9338cdf3afae486cc344ef9ff889a55c28b9ff8cadf8f18d83eab4b0167cffc5"
+    },
+    "candidate_adjudicator_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v3.py",
+      "sha256": "64531c1d5cbf2f89a8f231c3723e1f06c87cd2f67fa37ec981599839726c7cc5"
+    }
+  },
+  "scope": {
+    "job_was_submitted": false,
+    "remote_task_was_created": false,
+    "diagnostic_output_existed": false,
+    "adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "repair": {
+    "replacement_protocol": "schema v4",
+    "implementation": "After shape/dtype checks, flatten each contiguous detached tensor to a one-dimensional element view before viewing its raw uint8 bytes.",
+    "new_regression": "Verify byte identity and signed-zero distinction on rank-zero float32 tensors.",
+    "scientific_protocol_changed": false
+  }
+}

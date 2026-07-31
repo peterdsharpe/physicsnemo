@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "preregistered_before_any_diagonal_carrier_learning_result",
+  "extends": [
+    "nonseparable_response_relation_formal_2026-07-29.json",
+    "nonseparable_target_saturation_orthogonal_amendment_2026-07-29.json"
+  ],
+  "scientific_hypothesis": "Exact propagation through the diagonal part of the local spectral operator is the missing prior. It should make target data responsible only for the nonseparable mode-conversion correction, producing a stable partial-coverage learning curve.",
+  "rival": "The coupled correction is still too direction-specific or optimization-sensitive; even with the uncoupled carrier supplied from the PDE, partial target fields do not improve held-out response progressively.",
+  "carrier": {
+    "construction": "Set every off-diagonal entry of the known local cosine-Galerkin coefficient matrix to zero, solve the resulting uncoupled two-point boundary problems exactly, and use that response as the fixed prediction before learning.",
+    "uses_target_labels": false,
+    "reference_relative_error_before_learning": 0.05661766088537156,
+    "interpretation": "The carrier captures uncoupled propagation; learning is restricted to the 5.66% mode-conversion residual."
+  },
+  "residual_instrument": {
+    "role": "Measurement instrument only.",
+    "contract": "Exactly linear in the eight boundary coefficients. The previously tested coordinate kernel predicts an additive residual over the fixed carrier.",
+    "initialization": "The residual readout is initialized exactly to zero, so the initial prediction is the carrier.",
+    "network": "Propagation Fourier features plus one-hot output-mode identity; three hidden SiLU layers of width 128; eight residual kernel coefficients.",
+    "optimization": {
+      "steps": 6000,
+      "optimizer": "AdamW",
+      "learning_rate": 0.001,
+      "weight_decay": 1e-06,
+      "gradient_norm_clip": 1.0,
+      "checkpoint_selection": "None; frozen final step."
+    }
+  },
+  "protocol": {
+    "capacity_seeds": [
+      17,
+      29,
+      43
+    ],
+    "target_field_budgets": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "target_seeds": [
+      17,
+      29,
+      43
+    ],
+    "target_design": "Nested orthogonal boundary drives from nonseparable_target_saturation_orthogonal_amendment_2026-07-29.json.",
+    "evaluation": "Expected relative root-mean-square error of carrier plus learned residual on held-out boundary drives."
+  },
+  "registered_gates": {
+    "capacity": "Capacity-control geometric-mean error at most 0.5%, with every seed at most 0.75%.",
+    "target_threshold": "Eight-field geometric-mean target-only error at most 1.5%.",
+    "one_field_not_saturated": "One-field geometric-mean target-only error at least 2.5%.",
+    "material_improvement": "Four-field error at most 80% and eight-field error at most 50% of one-field error.",
+    "monotonicity": "Geometric-mean target-only error strictly decreases at every budget."
+  },
+  "decision_rule": "All gates must pass before source transfer is measured. Capacity failure rejects the residual instrument; saturation failure refutes the diagonal-carrier hypothesis as a sufficient measurement prior.",
+  "scope": [
+    "A pass would establish a useful controlled prior on one nonseparable elliptic family, not a final architecture.",
+    "The carrier is boundary-aware and equation-derived; it cannot establish that a generic learner would behave similarly.",
+    "No source-trained result is run or inspected during this gate."
+  ]
+}

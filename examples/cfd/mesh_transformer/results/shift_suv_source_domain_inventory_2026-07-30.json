@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-30T05:55:55-04:00",
+  "status": "prospective candidate; no adaptation outcome inspected",
+  "question": "If source initialization helps on SHIFT-SUV, is the benefit driven by nearby vehicle geometry, reusable external-flow response experience, or source diversity?",
+  "activation_gate": "Do not launch this comparison unless the validation-only DrivAerML adaptation pilot shows a reusable-initialization effect worth explaining.",
+  "available_sources": [
+    {
+      "name": "DrivAerML",
+      "training_cases": 435,
+      "geometry": "parametric notchback vehicles",
+      "response_problem": "low-speed external RANS",
+      "compatible_target_fields": [
+        "pressure",
+        "wall shear stress"
+      ],
+      "scientific_role": "geometry-near and response-related source"
+    },
+    {
+      "name": "HighLiftAeroML",
+      "training_cases_available": 1260,
+      "matched_training_cases": 435,
+      "geometry": "high-lift aircraft",
+      "response_problem": "compressible external aerodynamics",
+      "compatible_target_fields": [
+        "pressure",
+        "wall shear stress"
+      ],
+      "scientific_role": "geometry-distant but response-related source"
+    }
+  ],
+  "prospective_matched_sources": [
+    {
+      "name": "vehicle",
+      "composition": "435 DrivAerML cases"
+    },
+    {
+      "name": "aircraft",
+      "composition": "435 HighLiftAeroML cases"
+    },
+    {
+      "name": "mixed",
+      "composition": "a fixed 435-case mixture split as evenly as possible between DrivAerML and HighLiftAeroML"
+    },
+    {
+      "name": "scratch",
+      "composition": "no source cases"
+    }
+  ],
+  "fairness_requirements": [
+    "Use the same architecture, source-example count, source optimization budget, target subsets, and target adaptation rule across source conditions.",
+    "Train only the two target-compatible physical fields under common nondimensional conventions.",
+    "Freeze source subsets and all target-selection rules before inspecting adaptation outcomes."
+  ],
+  "rival_predictions": {
+    "geometry_scaffold": "The vehicle source transfers better than the aircraft source, and the matched mixture does not improve on the vehicle source.",
+    "response_reuse": "The geometry-distant aircraft source still improves over scratch on both target body styles.",
+    "diversity": "The matched mixture improves on both single-domain sources despite containing fewer vehicle cases.",
+    "specialist_families": "The aircraft source is neutral or harmful and no source ordering is stable across target body styles."
+  },
+  "limits": [
+    "Vehicle versus aircraft also changes flow regime, so one comparison cannot fully separate geometry from every notion of response compatibility.",
+    "A source effect shared by both architectures would support reusable data experience, not a boundary-specific architectural claim.",
+    "Source-checkpoint quality and target-training seed uncertainty require explicit controls before any test split is opened."
+  ]
+}

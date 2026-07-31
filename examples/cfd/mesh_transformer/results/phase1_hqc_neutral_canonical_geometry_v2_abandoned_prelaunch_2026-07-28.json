@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_prelaunch_correction",
+  "status": "ABANDONED_BEFORE_SUBMISSION_OR_OUTPUT",
+  "recorded_at_utc": "2026-07-28T06:24:13Z",
+  "affected_protocol": "neutral canonical-geometry diagnostic schema v2",
+  "definite_bug": {
+    "summary": "The v2 producer and candidate adjudicator described value-equality checks as bitwise equality.",
+    "producer_mechanism": "The producer used torch.equal for exact comparisons. torch.equal(float32(+0.0), float32(-0.0)) is true although the contiguous bytes are 00000000 and 00000080 on this little-endian host.",
+    "adjudicator_mechanism": "The candidate adjudicator used numpy.array_equal, which has the same signed-zero false-pass behavior.",
+    "scientific_risk": "A full-arm or same-input artifact differing only in signed-zero bytes could have passed a preregistered raw-bit identity gate.",
+    "minimal_reproduction": {
+      "dtype": "float32",
+      "left_value": 0.0,
+      "right_value": -0.0,
+      "torch_equal": true,
+      "numpy_array_equal": true,
+      "left_uint32_hex": "0x00000000",
+      "right_uint32_hex": "0x80000000"
+    }
+  },
+  "affected_frozen_artifacts": {
+    "diagnostic": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_diagnostic_v2.py",
+      "sha256": "2519ad31e6dbf3e198068228b70c69b8c66ea158986c524452169af5a23e0bb3"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_diagnostic_v2.py",
+      "sha256": "a33da381e3cc7d6bea32152ad13ef1dd8cf1b5cde4962d2221f12d4f3aab3a3f"
+    },
+    "preregistration": {
+      "path": "results/phase1_hqc_neutral_canonical_geometry_preregistration_v2_2026-07-28.json",
+      "sha256": "7c2a10796fd430d59746cbe83992dc51cec25c283d9a4abe4b855967e836c2d0"
+    },
+    "aga_wrapper": {
+      "path": "studies/drivaerml_hqc_neutral_canonical_geometry_v2_aga.sbatch",
+      "sha256": "c0200f3eb6d9e77eb308dc6e513273e4ffcfcf46f815eb7695bc408919c4cbb4"
+    },
+    "readme": {
+      "path": "studies/drivaerml_hqc_neutral_canonical_geometry_v2_aga_README.md",
+      "sha256": "39baa78b5a8e2fbb0aa070fb6a44858d38969a622b07eeac7849b5227b60b115"
+    },
+    "launch_manifest": {
+      "path": "results/phase1_hqc_neutral_canonical_geometry_launch_manifest_v2_2026-07-28.json",
+      "sha256": "d5f49962c655b8335a696e805449520ab09bb3638d2451273e0ee1654c00808b"
+    },
+    "candidate_adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v2.py",
+      "sha256": "1f87aa817710861f848cd131687397cc28427b6638369dc5318316b78e1cc8c3"
+    },
+    "candidate_adjudicator_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v2.py",
+      "sha256": "136cb546be0e3325f3db02fdff34304c5b00124f64ee34cbbaa66bce7f390120"
+    }
+  },
+  "scope": {
+    "job_was_submitted": false,
+    "remote_task_was_created": false,
+    "diagnostic_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "prior_job_304002_recheck": {
+    "npz_path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28/artifacts/hqc_center_diagnostic_four_canaries_k2500_v2.npz",
+    "npz_sha256": "d1e6a9fa1a39aa78a9cca26e52eb783a9e78aecbb961ce917164e25fac75a7ea",
+    "method": "Independent equal-shape/equal-dtype comparison of contiguous raw bytes.",
+    "prediction_pairs_checked": 16,
+    "scope": "full primary-geometry pin versus primary prediction for pressure and WSS, four cases, bfloat16 and float32 model contexts",
+    "all_raw_byte_exact": true,
+    "interpretation": "The v2 semantic bug does not overturn the saved job-304002 full-pin observation, but the original producer's torch.equal gate was not sufficient evidence for that wording."
+  },
+  "repair": {
+    "replacement_protocol": "schema v3",
+    "exactness_definition": "Same shape and dtype plus byte-identical contiguous storage. Signed zero is distinguished.",
+    "requirements": [
+      "Route every producer exactness gate through raw-byte comparison.",
+      "Route every independent-adjudicator exactness gate through raw-byte comparison.",
+      "Add signed-zero unit and end-to-end adversarial regressions.",
+      "Freeze new hashes before any submission or output."
+    ]
+  }
+}

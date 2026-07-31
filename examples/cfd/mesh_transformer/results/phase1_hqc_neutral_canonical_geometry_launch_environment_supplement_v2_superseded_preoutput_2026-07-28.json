@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_launch_environment_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T08:37:23Z",
+  "status": "LAUNCH_ENVIRONMENT_SUPPLEMENT_V2_SUPERSEDED_BEFORE_REMOTE_TASK_CREATION_OR_SCHEMA_V5_OUTPUT",
+  "superseded_supplement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v2_2026-07-28.json",
+    "sha256": "205b1ed108d320c8df03d7d55f94d29abc1b1252c32f83e4a47796ab58eec2fe",
+    "bound_adjudicator_sha256": "8eb10838862342dd26d77cf9a6b4650c7ba9b0d46282d78e45b26f32d82a2091"
+  },
+  "definite_issues": [
+    {
+      "channel": "Residual caller environment under --export=ALL",
+      "kind": "execution and launch-contract false guarantee",
+      "evidence": "Even with atomic values for three variables, ALL still admitted BASH_ENV, exported shell functions, loader hooks, SBATCH_* options, Slurm-routing variables, and other PYTHON* values that can execute code, alter submission directives, or change Python behavior.",
+      "required_repair": "Start sbatch under /usr/bin/env -i and use explicit no-ALL --export with only the frozen job variables."
+    },
+    {
+      "channel": "Broad warning filter",
+      "kind": "legitimate-output false rejection",
+      "evidence": "PYTHONWARNINGS=default enabled real Warp and Torch DeprecationWarning lines in addition to the expected ExperimentalFeatureWarning. The publication gate's exhaustive log grammar correctly rejects those unrelated lines.",
+      "required_repair": "Leave PYTHONWARNINGS absent under the clean caller and job environments. Normal CPython filters emit the ExperimentalFeatureWarning UserWarning once while suppressing unrelated DeprecationWarnings."
+    },
+    {
+      "channel": "Ambiguous staged inventory",
+      "kind": "launch-contract ambiguity",
+      "evidence": "Revision 2 did not enumerate the exact root files. The launch manifest references older pre-v5 correction records, but the publication gate permits only the v4 correction and would reject a plausible stage-all interpretation.",
+      "required_repair": "Enumerate the exact 14 regular root files and hashes, the two empty directories, and the prohibition on every other entry before submission."
+    }
+  ],
+  "scientific_effect": "No remote task was created or submitted and no schema-v5 output existed under revision 2. These issues changed no scientific result or interpretation.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false
+  },
+  "replacement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v3_2026-07-28.json",
+    "sha256": "4e5375cb5e909728ff6bdaf702db42ff5eecc81b557540cb1abcd5e694056559",
+    "bound_adjudicator_sha256": "4440a0278857a6da97959c8d3dbd31279269cf34253c6d19fab5b904ae182e04",
+    "bound_test_sha256": "d584cf6f64a218e9c2f757d4a711ebef6ed574b616d3f49c83ce39b3443e62ef"
+  }
+}

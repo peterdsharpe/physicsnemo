@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_preregistration",
+  "status": "FROZEN_BEFORE_ANY_NEUTRAL_CANONICAL_OUTPUT",
+  "registered_at_utc": "2026-07-28T05:06:51Z",
+  "scientific_role": "Target-free engineering-validity and causal-transfer diagnostic only. It is not an H-QC rerun, an accuracy experiment, or an architecture verdict.",
+  "question": "Does one prespecified source/query geometry frame built from the raw selected subset before either historical CenterMesh remove primary-versus-fixed translation sensitivity without choosing either observed arm?",
+  "hypotheses": {
+    "H_CANONICAL_FULL": "Sharing one coherent neutral points/centroids/areas/normals bundle and its trace centroids makes primary- and fixed-path pressure and WSS predictions bitwise identical.",
+    "H_CANONICAL_DERIVED": "Sharing only the neutral centroids/areas/normals and trace centroids while retaining each historical path's internal source points keeps both prediction fields within relative L2 0.001."
+  },
+  "prior_knowledge": {
+    "job_303890": "All four bfloat16 K=2500 canaries exceeded the frozen pressure-prediction center tolerance; no H-QC case or lane completed.",
+    "job_304002": [
+      "Saved pipeline normals were bitwise null and the normalized-query route was below 0.001 for both fields in every case and precision.",
+      "Pinning primary centroids, areas, and normals into the fixed path was already below 0.001 for every case, field, and precision; maxima were 0.0000309113 for pressure and 0.000174939 for WSS.",
+      "Pinning full primary points, centroids, areas, and normals was already bitwise exact.",
+      "Whole-forward float32 failed its all-four pressure gate and WSS failed on all four cases."
+    ],
+    "epistemic_status": "This is not an independent confirmation of geometry-pin sufficiency or H-QC. The only new engineering evidence is whether a neutral raw-derived third frame, owned by neither historical arm and supplied symmetrically, satisfies the frozen contracts. The four cases are mechanism canaries, not a new population holdout."
+  },
+  "frozen_inputs": {
+    "case_ids_in_order": [
+      "run_118",
+      "run_129",
+      "run_145",
+      "run_149"
+    ],
+    "resolution": 2500,
+    "precisions_in_order": [
+      "bfloat16",
+      "float32"
+    ],
+    "checkpoint_run": "t2_mesh_transformer_surface_flagship_seed42",
+    "checkpoint_epoch": 491,
+    "frozen_hqc_producer": {
+      "path": "studies/drivaerml_trace_fixed_query_audit.py",
+      "sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f"
+    },
+    "diagnostic_script": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_diagnostic.py",
+      "sha256": "11125cac3e738531f0dea321dbcc1c5ed69ed99bb993f1525fea2cf48a4117f7"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_diagnostic.py",
+      "sha256": "6e1e5e7edc7036cb5f7f97d1a6dca21c0c7858fd4b74d616ddb0bec3659f354d",
+      "result": "6 passed; Ruff check/format and py_compile passed"
+    },
+    "execution_source_tree_manifest_sha256": "fa6a7b683fa9aa02e4537ef69e8e977906df7c9fa6964cb759edfcee8d7b90cd",
+    "prior_corrected_diagnostic": {
+      "json_path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28/artifacts/hqc_center_diagnostic_four_canaries_k2500_v2.json",
+      "json_sha256": "26aed78264e9fd66f329941ce000fc438cb26f6835f9f05ff128567d29444bf5",
+      "npz_path": "results/hqc_center_diagnostic_four_canaries_v2_job304002_2026-07-28/artifacts/hqc_center_diagnostic_four_canaries_k2500_v2.npz",
+      "npz_sha256": "d1e6a9fa1a39aa78a9cca26e52eb783a9e78aecbb961ce917164e25fac75a7ea",
+      "job_bundle_manifest_sha256": "919a91461acc9b5427661ccac67671e187e5551a213622c108bc4e867ca0e369"
+    },
+    "prior_result_record": {
+      "path": "results/phase1_hqc_center_cause_diagnostic_result_v2_2026-07-28.json",
+      "sha256": "26bb6505a9f14463d57cd79486462310b4c2dd853ede18b09edef869cf573822"
+    },
+    "no_case_substitution_resolution_change_or_precision_pooling_after_freeze": true
+  },
+  "canonical_geometry_contract": {
+    "input": "The selected raw float32 point coordinates and exact compacted topology before either per-K or fixed-S10000 external CenterMesh.",
+    "construction": [
+      "Promote the selected raw coordinates exactly once to float64.",
+      "In float64 compute oriented triangle cross products, geometric areas, unit normals, and centroids.",
+      "Compute c0 = sum(area * centroid) / sum(area).",
+      "Use the prespecified physical scale L_ref * model_reference_length = 5 * 8 = 40.",
+      "Define points=(X-c0)/40, centroids=(C-c0)/40, areas=A/40^2, and leave unit normals unchanged.",
+      "Cast each completed points/centroids/areas/normals tensor exactly once to float32.",
+      "Use canonical centroids as the trace-query tensor."
+    ],
+    "neutrality": "Neither historical center nor either arm's prediction enters c0, the scale, or any bundle field. There is no primary/fixed averaging, nearest-arm selection, grid snapping, or outcome-dependent alternate formula.",
+    "reuse": "Build the bundle once per case and reuse the identical tensors in both historical paths."
+  },
+  "arms": {
+    "historical_replay": "Untouched primary-per-K and fixed-S10000 encode/decode paths, included only as bitwise provenance controls against job 304002.",
+    "canonical_derived": "Retain each path's internally constructed source points; inject the identical neutral centroids, areas, and normals at the earliest source consumer; decode with center zero and reference length one at identical canonical trace centroids.",
+    "canonical_full": "Inject the identical neutral points, centroids, areas, and normals at the earliest source consumer; decode with center zero and reference length one at identical canonical trace centroids.",
+    "same_input_replay": "Repeat the primary model arm once for each intervention, case, and precision."
+  },
+  "target_exclusion_and_blinding": {
+    "raw_reader_container_caveat": "Raw supervision arrays may exist in the reader container, but their keys and values may not be indexed, copied, transformed, passed to the model, logged, hashed individually, scored, or persisted.",
+    "implementation": "Construct a geometry-only compacted mesh with synthetic zero placeholders required only to traverse the historical field transforms, then strip every interior and boundary point/cell data association before model encode. Retain only topology and required global metadata.",
+    "allowed_outputs": [
+      "Selected IDs and topology",
+      "Geometry tensors and hashes",
+      "Predictions and prediction-to-prediction differences",
+      "Exactness and validity statuses"
+    ],
+    "forbidden_outputs_or_labels": [
+      "Target or truth arrays",
+      "Truth-relative or absolute errors",
+      "Force metrics",
+      "Area-weighted objective metrics",
+      "H-QC endpoint ratios or log cliffs",
+      "Reducer output",
+      "Support, futility, mixed, or eligibility labels"
+    ],
+    "atomic_immutable_outputs": true
+  },
+  "comparison_definition": {
+    "fields": [
+      "pressure",
+      "wss flattened jointly"
+    ],
+    "relative_l2": "norm(a-b)_2 / max(norm(a)_2, norm(b)_2, 1e-12), accumulated in float64",
+    "exact": "Same shape and dtype and torch.equal; relative L2 zero alone is insufficient.",
+    "no_pooling": "Never average across fields, cases, or precisions."
+  },
+  "required_validity_gates": [
+    "All frozen input, prior JSON/NPZ, source-tree, script, and checkpoint hashes pass.",
+    "Selected IDs, ordering, compacted cells, primary/fixed transformed points, and primary/fixed query points replay job 304002 bitwise.",
+    "Historical primary/fixed predictions and internal source points/centroids/areas/normals replay job 304002 bitwise in each precision.",
+    "Running the canonical builder twice gives bitwise-identical float32 bundle tensors and identical topology.",
+    "Canonical tensors have exact expected shapes/order, are finite, have strictly positive areas, unit normals within 1e-6, and area-centred centroids within 1e-6 after the one float32 cast.",
+    "Injected centroids/areas/normals equal the canonical tensors exactly in both derived paths.",
+    "Injected points/centroids/areas/normals equal the canonical tensors exactly in both full paths.",
+    "Canonical trace queries are exact, and neutral decode uses center exactly zero and reference length exactly one.",
+    "Same-input primary replay is fieldwise bitwise exact for both interventions.",
+    "JSON/NPZ hashes and independent recomputation pass; output schema contains no forbidden scientific keys."
+  ],
+  "decision_rules": {
+    "derived_pass": "Pressure and WSS relative L2 are each at most 0.001 for every primary-versus-fixed comparison across four cases and both precisions. One field/case/precision failure fails this arm.",
+    "full_pass": "Pressure and WSS are each bitwise exact for every primary-versus-fixed comparison across four cases and both precisions. A merely small nonzero difference fails this arm.",
+    "FULL_AND_DERIVED_PASS": "All validity gates plus both decision gates pass. This licenses implementation of the coherent full canonical path as an opt-in production candidate, not permanent use of the hybrid derived pin.",
+    "FULL_ONLY_PASS": "All validity gates and full_pass hold, but derived_pass fails. This refutes the reduced derived-only repair and licenses only full coherent-bundle production prototyping.",
+    "CANONICAL_REPAIR_REFUTED": "Validity passes but full_pass fails. Do not implement this design; audit remaining frame-dependent state and escalate to preserving raw geometry or float64 farther upstream, with no arm selection.",
+    "INVALID_DIAGNOSTIC": "Any required validity gate fails. Preserve safe artifacts, repair only the instrument, and make no mechanistic interpretation."
+  },
+  "licensed_follow_up": {
+    "after_full_pass": [
+      "Implement the full coherent canonical geometry path behind an opt-in production contract without changing trained weights.",
+      "Add unit, gradient, compile, similarity/translation, topology/permutation, and performance tests.",
+      "Freeze and run target-free full-36-case by five-resolution center/translation validity.",
+      "Only after target-free validity, separately preregister an exact historical-10k truth-replay accuracy/noninferiority gate."
+    ],
+    "not_licensed": [
+      "Any H-QC endpoint computation or verdict",
+      "A bfloat16 or float32 H-QC rerun",
+      "Selection of primary, fixed-S10000, or whichever arm is closer",
+      "A new architecture campaign"
+    ]
+  },
+  "interpretation_limits": [
+    "A pass establishes neutral-frame engineering stability only for this checkpoint, four K=2500 canaries, two precision contexts, and two historical translations.",
+    "Shared-full exactness is an integration gate partly guaranteed by construction, not new causal confirmation.",
+    "The result is not accuracy, generalization, full-cohort, multiresolution, training, gradient, compile, memory, or runtime evidence.",
+    "Distances from the neutral output to either historical arm may be reported symmetrically but are never gates or selection criteria.",
+    "Pin interventions do not support additive component shares.",
+    "No outcome decides H-QC or an architecture hypothesis."
+  ],
+  "planned_output_basename": "hqc_neutral_canonical_geometry_four_canaries_k2500_v1"
+}

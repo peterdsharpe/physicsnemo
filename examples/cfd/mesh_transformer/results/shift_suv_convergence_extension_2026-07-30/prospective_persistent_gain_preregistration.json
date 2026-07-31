@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "title": "Prospective test of persistent same-budget source reuse",
+  "frozen_at": "2026-07-30T13:26:05-04:00",
+  "amended_at": "2026-07-30T14:19:23-04:00",
+  "amendment": {
+    "original_sha256": "dcf277e9335d50c7713aa561674656e66b3afadb71c7665e577cf55b374d7ee7",
+    "reason": "The original null rule labeled the source effect transient or immaterial when either target family had G_U <= 1.02. That inference was too broad: a persistent gain on the other family would instead support geometry-family-conditional reuse.",
+    "correction": "Apply the gates separately to each architecture-family cell, then distinguish broad persistence, broad null, family-conditional persistence, and unresolved intermediate effects.",
+    "information_boundary": "This correction was made while the convergence extension was still running and without inspecting any continuation loss, validation metric, or test result."
+  },
+  "information_boundary": "Written while all 32 pretrained-64 versus scratch-128 continuation runs were still in progress. No convergence-extension loss, validation metric, or test result was inspected.",
+  "scientific_question": "After equal target optimization, does DrivAerML initialization still improve prediction from the same 64 SHIFT-SUV training vehicles, even if it does not replace all 64 additional target vehicles in the scratch-128 arm?",
+  "rival_hypotheses": {
+    "persistent_reuse": "Pretrained-64 retains a material pressure-error advantage over scratch-64 after both have the same target-update budget and have plateaued.",
+    "transient_warm_start": "The pretrained-64 advantage disappears once scratch-64 receives the same target-update budget.",
+    "family_conditional_reuse": "The persistent advantage survives on one target body family but not the other.",
+    "optimizer_censoring": "The answer remains sensitive to the continuation learning-rate boundary or an unclosed learning curve and cannot yet be interpreted."
+  },
+  "activation_gate": {
+    "activate": "Run this contrast if either architecture fails or is inconclusive at the registered half-label gate.",
+    "defer": "If both architectures pass the half-label gate, first perform the registered multi-seed, multi-source-checkpoint confirmation."
+  },
+  "contrast": {
+    "numerator": "error(scratch_64, U)",
+    "denominator": "error(pretrained_64, U)",
+    "same_budget_gain": "G_U = error(scratch_64, U) / error(pretrained_64, U)",
+    "architectures": [
+      "mesh_transformer",
+      "geotransolver"
+    ],
+    "target_families": [
+      "estate",
+      "fastback"
+    ],
+    "target_cases": "Use exactly the frozen nested 64-case target-training subsets from the parent adaptation pilot.",
+    "common_target_update_points": [
+      9024,
+      13504,
+      17920
+    ],
+    "scratch_64_start": "Use exactly the parent pilot's epoch-70 scratch-64 model weights, at 4480 target updates.",
+    "pretrained_64_reference": "Use the already-registered pretrained-64 continuation results at the same three total target-update points.",
+    "optimizer_policy": "Load model weights only; reset optimizer and scheduler exactly as in the ongoing convergence extension.",
+    "continuation_learning_rates": [
+      0.0001,
+      0.0003,
+      0.001,
+      0.003
+    ],
+    "fixed_controls": "Target seed, examples, batch size, sampling resolution, precision, loss, weight decay, augmentation policy, validation cases, and validation surface samples remain identical to the ongoing convergence extension."
+  },
+  "analysis": {
+    "primary": "At each registered update point, select the scratch-64 continuation rate on the full 99-case validation set and compare against the already-selected pretrained-64 model using identical cases and point samples. Treat paired-case intervals as descriptive because selection uses the same validation cases.",
+    "selection_sensitivity": "Repeat with the already-frozen deterministic five-fold case cross-fit: select the learning rate on four folds and evaluate it on the held-out fold. Cross-fit may block advancement but may not create it.",
+    "decision_scope": "Apply every numerical gate separately to each architecture-family cell. Combine cells only through the explicitly named broad or family-conditional rules below.",
+    "test_policy": "No SHIFT-SUV test case may be read or evaluated."
+  },
+  "prospective_decision_rules": {
+    "cell_material_gain": "For one architecture-family cell at U=17920, G_U >= 1.05 in both the full-validation and cross-fit reductions; pretrained-64/scratch-64 wall-shear-stress error is <= 1.10; both curves pass the existing plateau gate; and no selected rate requires an untested outward flank.",
+    "cell_null_or_immaterial": "For one architecture-family cell at U=17920, G_U <= 1.02 in both reductions after the plateau and learning-rate gates pass.",
+    "broad_persistent_gain": "For one architecture, the cell-material-gain rule passes on both estate and fastback.",
+    "broad_null_or_immaterial": "For one architecture, the cell-null-or-immaterial rule passes on both estate and fastback.",
+    "family_conditional_gain": "For one architecture, the cell-material-gain rule passes on exactly one family and the cell-null-or-immaterial rule passes on the other. This supports family-conditional reuse and must not be reported as either broad persistence or a broad transient warm start.",
+    "inconclusive": "Any stabilized cell between the two materiality gates, disagreement between full-validation and cross-fit ordering, or a failed plateau or learning-rate-boundary gate requires seed-variance estimation or additional convergence evidence rather than a directional claim.",
+    "architecture_claim_limit": "A difference between architectures advances to seed replication; one target seed and one source checkpoint cannot establish an architectural transfer advantage."
+  },
+  "next_question_if_gain_persists": "For each architecture-family cell that passes the material-gain rule, what target-only sample count between 64 and 128 matches pretrained-64 error at the same update budget? Answer with frozen nested scratch counts before changing the source distribution or model architecture.",
+  "next_question_if_gain_does_not_persist": "If every activated architecture-family cell passes the null-or-immaterial rule, can a different source distribution create reusable target information rather than merely a favorable initialization?"
+}

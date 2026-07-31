@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "issued_at": "2026-07-30T12:18:43-04:00",
+  "frozen_preregistration_sha256": "91a065af59e3bd2a712457bf50bf27e7c13a0d3ca97fc648cd978631839a22e3",
+  "information_used": "Logical audit of the frozen comparison only. No convergence-extension validation result existed, and no convergence-extension training metric was inspected.",
+  "clarifications": [
+    {
+      "ambiguity": "The phrase 'checkpoints available by that point' could be misread as allowing an earlier-update checkpoint to compete at a later matched-update stage.",
+      "rule": "At each comparison stage, select only across continuation learning rates at that stage's designated checkpoint for each role. Earlier-stage checkpoints are not eligible at later stages. The early scratch-128 comparator is its frozen parent epoch-70 checkpoint.",
+      "reason": "Allowing earlier checkpoints at later stages would make the numerator and denominator represent different update budgets and would invalidate H_U as a matched-update quantity."
+    },
+    {
+      "ambiguity": "A signed 'improvement below 2%' would incorrectly pass a materially worsening curve through the plateau gate.",
+      "rule": "For each role and family, the plateau component requires abs(final_pressure / middle_pressure - 1) < 0.02. The ratio component requires abs(H_final / H_middle - 1) < 0.02.",
+      "reason": "A convergence claim requires stability in either direction; a large deterioration is not a plateau."
+    },
+    {
+      "amended_at": "2026-07-30T12:51:51-04:00",
+      "ambiguity": "A paired-case bootstrap applied only after selecting the learning rate on all 99 validation cases conditions on that selection and does not provide nominal post-selection coverage.",
+      "rule": "Keep the frozen full-validation selection and paired bootstrap as the primary result. Add a prospective five-fold selection cross-fit: assign cases to balanced folds using a permutation from NumPy default_rng seed 20260732; within each fold, select the pressure-minimizing continuation rate on the other four folds and evaluate pressure and WSS on the held-out cases. Advance or close a branch only when the primary and cross-fitted materiality, uncertainty, and field-safety gates agree. Cross-fitting may block a decision but may not create success or closure when the primary rule fails.",
+      "reason": "Held-out-fold evaluation prevents each case from both choosing and evaluating its continuation rate. Requiring agreement is a conservative sensitivity check that preserves the frozen primary analysis while preventing an ignored selection effect from deciding the research branch."
+    }
+  ],
+  "test_policy": "No test case may be read, trained on, or evaluated."
+}

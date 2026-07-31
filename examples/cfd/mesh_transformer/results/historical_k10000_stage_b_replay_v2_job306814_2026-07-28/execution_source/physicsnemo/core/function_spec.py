@@ -1,0 +1,807 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from __future__ import annotations
+
+import contextlib
+import importlib
+import importlib.util
+import inspect
+import re
+import warnings
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, Literal, Sequence, Tuple
+
+import torch
+import warp as wp
+from packaging.requirements import Requirement
+
+from physicsnemo.core.version_check import check_version_spec
+
+
+@dataclass(frozen=True)
+class Implementation:
+    """Stores data for a functional implementation.
+
+    Attributes
+    ----------
+    name : str
+        Implementation name used for registration and dispatch.
+    func : Callable
+        Callable that executes the backend implementation.
+    required_imports : Tuple[str, ...]
+        Optional dependency requirements for the implementation.
+    rank : int
+        Lower rank is preferred during default dispatch.
+    baseline : bool
+        Marks the reference implementation for benchmarking.
+    available : bool, optional
+        Whether required imports are satisfied, by default True.
+    """
+
+    name: str
+    func: Callable
+    required_imports: Tuple[str, ...]
+    rank: int
+    baseline: bool
+    available: bool = True
+
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
+class FunctionSpec:
+    """Base class for PhysicsNeMo function wrappers.
+
+    ``FunctionSpec`` ties together multiple backend implementations of the same
+    operation (Warp, PyTorch, cuML, SciPy, ...) while providing a consistent
+    surface for benchmarking and correctness comparisons. It gives a single
+    place to register implementations and to describe how they are selected at
+    runtime.
+
+    Overview
+    --------
+    ``FunctionSpec`` provides a small registry and dispatch layer for functions
+    that have multiple backend implementations. Implementations are registered
+    on the subclass using :meth:`FunctionSpec.register` and selected by
+    :meth:`FunctionSpec.dispatch`.
+
+    The default dispatch path selects the *lowest-rank* available implementation
+    (rank is an integer; lower is preferred). Users can override selection with
+    ``implementation="name"``.
+
+    Implementing a FunctionSpec
+    ---------------------------
+    1. Subclass ``FunctionSpec``.
+    2. Register one or more backend implementations with the decorator
+       ``@FunctionSpec.register``. Provide a ``name`` and a ``rank`` (lower
+       wins). Optionally set ``baseline=True`` for the reference implementation
+       used in benchmarking. The decorator must be used inside the class body.
+    3. Implement :meth:`make_inputs_forward` for every functional so it can be
+       benchmarked. Implement :meth:`compare_forward` when a functional has
+       multiple implementations and needs cross-backend forward parity checks.
+       Implement :meth:`make_inputs_backward` only for functionals with a
+       meaningful backward pass (for example differentiable functionals).
+       Implement :meth:`compare_backward` when backward support exists and
+       multiple implementations need backward parity checks.
+       Each input generator should yield ``(label, args, kwargs)`` items in
+       roughly increasing workload order (for example from smaller to larger
+       cases). Labels do not need to be exactly ``small/medium/large`` and are
+       used in benchmark plots and summaries.
+    4. Expose a functional entry point with :meth:`make_function`.
+
+    Dispatch rules
+    --------------
+    The ``required_imports`` field on registrations accepts requirement strings
+    like ``"warp>=0.6.0"``. Dispatch skips implementations whose requirements
+    are not satisfied, then selects the available implementation with the
+    lowest rank. If a lower-rank implementation is unavailable and a higher-rank
+    fallback is used, a one-time warning is emitted describing the fallback.
+    Users can override selection with ``implementation="name"``.
+
+    Examples
+    --------
+    A minimal identity function with both Warp and PyTorch implementations
+    (modeled after ``sdf.py``):
+
+    .. code-block:: python
+
+        import torch
+        import warp as wp
+
+        from physicsnemo.core.function_spec import FunctionSpec
+
+        wp.init()
+        wp.config.log_level = wp.LOG_WARNING
+
+        @wp.kernel
+        def _identity_kernel(
+            x: wp.array(dtype=wp.float32),
+            y: wp.array(dtype=wp.float32),
+        ):
+            i = wp.tid()
+            y[i] = x[i]
+
+        @torch.library.custom_op("physicsnemo::identity_warp", mutates_args=())
+        def identity_impl(x: torch.Tensor) -> torch.Tensor:
+            out = torch.empty_like(x)
+            device, stream = FunctionSpec.warp_launch_context(x)
+            wp_x = wp.from_torch(x, dtype=wp.float32, return_ctype=True)
+            wp_y = wp.from_torch(out, dtype=wp.float32, return_ctype=True)
+            with FunctionSpec.warp_stream_scope(stream):
+                wp.launch(
+                    kernel=_identity_kernel,
+                    dim=x.numel(),
+                    inputs=[wp_x, wp_y],
+                    device=device,
+                    stream=stream,
+                )
+            return out
+
+        @identity_impl.register_fake
+        def identity_impl_fake(x: torch.Tensor) -> torch.Tensor:
+            return torch.empty_like(x)
+
+        def identity_torch(x: torch.Tensor) -> torch.Tensor:
+            return x.clone()
+
+        class Identity(FunctionSpec):
+            \"\"\"Identity function with Warp and PyTorch backends.\"\"\"
+
+            @FunctionSpec.register(
+                name="warp",
+                required_imports=("warp>=0.6.0",),
+                rank=0,
+            )
+            def warp_forward(x: torch.Tensor) -> torch.Tensor:
+                return identity_impl(x)
+
+            @FunctionSpec.register(name="torch", rank=1, baseline=True)
+            def torch_forward(x: torch.Tensor) -> torch.Tensor:
+                return identity_torch(x)
+
+            @classmethod
+            def make_inputs_forward(cls, device: torch.device | str = "cpu"):
+                device = torch.device(device)
+                yield ("small", (torch.randn(1024, device=device),), {})
+                yield ("medium", (torch.randn(4096, device=device),), {})
+                yield ("large", (torch.randn(16384, device=device),), {})
+
+            @classmethod
+            def make_inputs_backward(cls, device: torch.device | str = "cpu"):
+                device = torch.device(device)
+                yield (
+                    "small_grad",
+                    (torch.randn(1024, device=device, requires_grad=True),),
+                    {},
+                )
+                yield (
+                    "medium_grad",
+                    (torch.randn(4096, device=device, requires_grad=True),),
+                    {},
+                )
+
+            @classmethod
+            def compare_forward(
+                cls, output: torch.Tensor, reference: torch.Tensor
+            ) -> None:
+                torch.testing.assert_close(output, reference)
+
+            @classmethod
+            def compare_backward(
+                cls, output: torch.Tensor, reference: torch.Tensor
+            ) -> None:
+                torch.testing.assert_close(output, reference)
+
+        identity = Identity.make_function("identity")
+
+        x = torch.arange(8, device="cuda")
+        y = identity(x)
+
+    Notes
+    -----
+    - Only one implementation may be marked as ``baseline=True``; this is the
+      reference used when benchmarking.
+    - The function returned by
+      :meth:`~physicsnemo.core.function_spec.FunctionSpec.make_function` copies
+      the class ``__doc__``. Keep this docstring up to date so the public API
+      documentation for the function wrapper stays accurate.
+
+
+    """
+
+    _impl_registry: Dict[str, Dict[str, Implementation]] = {}
+    _fallback_warned: set[str] = set()
+
+    @classmethod
+    def register(
+        cls,
+        name: str,
+        required_imports: Sequence[str] | None = None,
+        rank: int = 0,
+        baseline: bool = False,
+    ):
+        """Decorator to register an implementation on a subclass.
+
+        Parameters
+        ----------
+        name : str
+            Implementation name.
+        required_imports : Sequence[str] | None, optional
+            Optional import requirements, by default None.
+        rank : int, optional
+            Rank for selection, by default 0.
+        baseline : bool, optional
+            Whether this is the baseline implementation, by default False.
+
+        Returns
+        -------
+        Callable
+            Decorator that registers the implementation immediately.
+            The decorator returns a ``staticmethod`` wrapper so the implementation
+            can be called directly on the class.
+        """
+
+        def decorator(func: Callable):
+            # Unwrap staticmethod/classmethod to the underlying function before registering.
+            # This is a safeguard if users add @staticmethod or @classmethod decorators
+            # to the implementation function.
+            if isinstance(func, (staticmethod, classmethod)):
+                target = func.__func__
+            else:
+                target = func
+
+            # infer the class key from the function's qualname
+            # This requires the implementation decorator to
+            # be called inside the class definition.
+            qualname = getattr(target, "__qualname__", "")
+            if "." not in qualname:
+                raise ValueError(
+                    "FunctionSpec.register must be used inside a class body. "
+                    "Use it to decorate methods defined on the FunctionSpec subclass."
+                )
+            owner = qualname.rsplit(".", 1)[0]
+            class_key = f"{target.__module__}.{owner}"
+
+            # Register the implementation
+            imports = tuple(required_imports or ())
+            available = cls._check_imports(imports)
+            impl = Implementation(
+                name=name,
+                func=target,
+                required_imports=imports,
+                rank=rank,
+                baseline=baseline,
+                available=available,
+            )
+            cls._register_impl(impl=impl, class_key=class_key)
+
+            # Return the function as a staticmethod
+            # (makes it callable without an instance)
+            # Not necessary but keeping for now
+            return staticmethod(target)
+
+        return decorator
+
+    @classmethod
+    def make_inputs_forward(
+        cls, device: torch.device | str
+    ) -> Iterable[tuple[str, tuple[Any, ...], dict[str, Any]]]:
+        """Generator for labeled forward-pass benchmark inputs.
+
+        This method is used for benchmarking and testing and should be
+        implemented for every functional. Generated inputs should be
+        representative of expected usage and suitable for both code coverage
+        and performance measurement.
+
+        Yield each case as ``(label, args, kwargs)`` in roughly increasing
+        workload order (for example from smaller to larger inputs). Labels should
+        use a descriptive naming scheme.
+
+        Parameters
+        ----------
+        device : torch.device | str
+            Device for generated tensors.
+
+        Returns
+        -------
+        Iterable[tuple[str, tuple[Any, ...], dict[str, Any]]]
+            Iterable of labeled forward input cases.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__}.make_inputs_forward must be implemented"
+        )
+
+    @classmethod
+    def make_inputs_backward(
+        cls, device: torch.device | str
+    ) -> Iterable[tuple[str, tuple[Any, ...], dict[str, Any]]]:
+        """Generator for labeled backward-pass benchmark inputs.
+
+        Backward benchmarks are optional. Functionals with a meaningful
+        backward pass should override this method and yield ``(label, args,
+        kwargs)`` items that exercise representative backward workloads.
+        By default, no backward benchmark cases are provided.
+
+        Parameters
+        ----------
+        device : torch.device | str
+            Device for generated tensors.
+
+        Returns
+        -------
+        Iterable[tuple[str, tuple[Any, ...], dict[str, Any]]]
+            Iterable of labeled backward input cases.
+        """
+        return ()
+
+    @classmethod
+    def compare_forward(cls, output: object, reference: object) -> None:
+        """Compare forward outputs for validation.
+        This is typically implemented when a functional has multiple
+        implementations and needs forward parity validation against a baseline.
+
+        Parameters
+        ----------
+        output : object
+            Output from the implementation to compare.
+        reference : object
+            Reference output to compare against.
+        """
+        raise NotImplementedError(f"{cls.__name__}.compare_forward must be implemented")
+
+    @classmethod
+    def compare_backward(cls, output: object, reference: object) -> None:
+        """Compare backward outputs for validation.
+
+        By default this method raises ``NotImplementedError``. Functionals
+        should implement this when they provide backward support across
+        multiple implementations and need backward parity checks.
+
+        Parameters
+        ----------
+        output : object
+            Backward result from the implementation to compare.
+        reference : object
+            Reference backward result to compare against.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__}.compare_backward must be implemented"
+        )
+
+    def __call__(self, *args, **kwargs):
+        """Dispatch to the selected implementation.
+
+        Parameters
+        ----------
+        *args, **kwargs
+            Arguments forwarded to the implementation.
+
+        Returns
+        -------
+        object
+            The implementation result.
+        """
+        return self.dispatch(*args, **kwargs)
+
+    @classmethod
+    def make_function(cls, name: str | None = None):
+        """Create a functional wrapper around the class dispatch.
+
+        The generated function is the public functional API.
+
+        Parameters
+        ----------
+        name : str | None, optional
+            Function name override, by default None.
+
+        Returns
+        -------
+        Callable
+            Callable that forwards to ``dispatch``.
+        """
+
+        # Define the function
+        def _function(*args, **kwargs):
+            return cls.dispatch(*args, **kwargs)
+
+        # Prefer a subclass's public dispatcher because it may expose selection
+        # logic or a more precise signature than any one backend. Classes using
+        # the generic dispatcher inherit their argument list from the preferred
+        # implementation and receive a synthesized backend selector.
+        impls = cls._get_impls()
+        if impls:
+            preferred_impl = sorted(impls.values(), key=lambda impl: impl.rank)[0]
+            dispatch_owner = next(
+                base for base in cls.__mro__ if "dispatch" in base.__dict__
+            )
+            custom_dispatch = dispatch_owner is not FunctionSpec
+            signature_source = cls.dispatch if custom_dispatch else preferred_impl.func
+            try:
+                signature = inspect.signature(signature_source, eval_str=True)
+            except NameError:
+                # Preserve valid forward references whose definitions are only
+                # available to static type checkers.
+                signature = inspect.signature(signature_source)
+            annotations = {
+                parameter.name: parameter.annotation
+                for parameter in signature.parameters.values()
+                if parameter.annotation is not inspect.Parameter.empty
+            }
+            if signature.return_annotation is not inspect.Signature.empty:
+                annotations["return"] = signature.return_annotation
+
+            if not custom_dispatch and "implementation" not in signature.parameters:
+                implementation_names = tuple(impls)
+                implementation_annotation = Literal[implementation_names] | None
+                implementation = inspect.Parameter(
+                    "implementation",
+                    kind=inspect.Parameter.KEYWORD_ONLY,
+                    default=None,
+                    annotation=implementation_annotation,
+                )
+                parameters = list(signature.parameters.values())
+                insertion = next(
+                    (
+                        index
+                        for index, parameter in enumerate(parameters)
+                        if parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    ),
+                    len(parameters),
+                )
+                parameters.insert(insertion, implementation)
+                signature = signature.replace(parameters=parameters)
+                annotations["implementation"] = implementation_annotation
+            _function.__signature__ = signature
+            _function.__annotations__ = annotations
+            _function.__wrapped__ = signature_source
+
+        # Set the function attributes
+        # This keeps things like docstrings for API documentation.
+        _function.__name__ = name or cls.__name__
+        _function.__qualname__ = _function.__name__
+        _function.__module__ = cls.__module__
+        _function.__doc__ = cls.__doc__
+        return _function
+
+    @classmethod
+    def dispatch(cls, *args, **kwargs):
+        """Dispatch to the chosen implementation.
+
+        Parameters
+        ----------
+        *args, **kwargs
+            Arguments forwarded to the implementation.
+
+        Returns
+        -------
+        object
+            Implementation output.
+        """
+
+        # Resolve explicit implementation selection (implementation in kwargs).
+        implementation = kwargs.pop("implementation", None)
+
+        # Lookup the implementation registry for this FunctionSpec.
+        impls = cls._get_impls()
+
+        # Check if the implementation is registered
+        cls._check_impl(implementation, impls)
+
+        # If a specific implementation is requested, validate and call it.
+        if implementation is not None:
+            # Get the implementation
+            impl = impls[implementation]
+
+            # Check if the implementation's required imports are available
+            if not impl.available:
+                raise ImportError(
+                    f"Implementation '{implementation}' is not available for {cls.__name__}"
+                )
+
+            # Execute the implementation
+            return impl.func(*args, **kwargs)
+
+        # Otherwise, find all available implementations and select the lowest-rank one.
+        available = [impl for impl in impls.values() if impl.available]
+        if not available:
+            raise ImportError(f"No available implementations found for {cls.__name__}")
+
+        # Select the lowest-rank implementation
+        selected = sorted(available, key=lambda impl: impl.rank)[0]
+
+        # Get the preferred implementation
+        preferred = sorted(impls.values(), key=lambda impl: impl.rank)[0]
+
+        # Emit a one-time warning if we had to fall back from the preferred impl.
+        cls._warn_fallback(preferred, selected)
+
+        # Execute the selected implementation.
+        return selected.func(*args, **kwargs)
+
+    @classmethod
+    def _get_impls(cls) -> Dict[str, Implementation]:
+        """Return the implementation registry for the class.
+
+        Returns
+        -------
+        Dict[str, Implementation]
+            Mapping of implementation names to Implementation objects.
+        """
+        return cls._impl_registry.get(cls._class_key(), {})
+
+    @classmethod
+    def _check_impl(
+        cls, implementation: str | None, impls: Dict[str, Implementation] | None = None
+    ) -> None:
+        """Validate that the implementation name is registered.
+
+        Parameters
+        ----------
+        implementation : str | None
+            Implementation name to validate. ``None`` is a no-op.
+        impls : Dict[str, Implementation] | None, optional
+            Registry mapping to validate against, by default None.
+
+        Raises
+        ------
+        KeyError
+            If the implementation is not registered.
+        """
+        if impls is None:
+            impls = cls._get_impls()
+        if implementation is None:
+            return
+        if implementation not in impls:
+            raise KeyError(
+                f"No implementation named '{implementation}' for {cls.__name__}"
+            )
+
+    @classmethod
+    def _warn_fallback(
+        cls, preferred: Implementation | None, selected: Implementation
+    ) -> None:
+        """Emit a one-time warning if we fall back to a lower-priority implementation.
+
+        Parameters
+        ----------
+        preferred : Implementation | None
+            Preferred implementation (may be None if not registered).
+        selected : Implementation
+            Selected implementation after availability checks.
+        """
+        if preferred is None:
+            return
+        if selected.rank == preferred.rank:
+            return
+        key = cls._class_key()
+        if key in cls._fallback_warned:
+            return
+        cls._fallback_warned.add(key)
+        warnings.warn(
+            f"{cls.__name__} falling back to implementation '{selected.name}' "
+            f"(rank {selected.rank}); preferred is '{preferred.name}' "
+            f"(rank {preferred.rank}) but is unavailable.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    @classmethod
+    def _class_key(cls) -> str:
+        """Return the registry key for the class.
+        This is used to make sure implementations with the same name
+        but different FunctionSpecs are not overridden.
+
+        Returns
+        -------
+        str
+            Fully qualified class name.
+        """
+        return f"{cls.__module__}.{cls.__qualname__}"
+
+    @classmethod
+    def _register_impl(
+        cls,
+        impl: Implementation,
+        class_key: str | None = None,
+    ) -> None:
+        """Register a new implementation for the class.
+
+        Parameters
+        ----------
+        impl : Implementation
+            Implementation to register.
+        class_key : str | None
+            Optional class key override.
+        """
+
+        # Get the class key
+        key = class_key or cls._class_key()
+
+        # Set default implementation registry for the class key
+        impls = cls._impl_registry.setdefault(key, {})
+
+        # Check if we can register the implementation
+        for existing in impls.values():
+            if existing.rank == impl.rank:
+                raise ValueError(
+                    f"{cls.__name__}: duplicate rank {impl.rank} for '{impl.name}'"
+                )
+            if impl.baseline and existing.baseline:
+                raise ValueError(
+                    f"{cls.__name__}: baseline already set to '{existing.name}'"
+                )
+        if impl.name in impls:
+            raise ValueError(
+                f"{cls.__name__}: implementation '{impl.name}' already registered"
+            )
+
+        # Create and register the implementation
+        impls[impl.name] = impl
+
+    @classmethod
+    def _check_imports(cls, required_imports: Sequence[str]) -> bool:
+        """Check whether all required imports are available.
+
+        Parameters
+        ----------
+        required_imports : Sequence[str]
+            Import requirement strings.
+
+        Returns
+        -------
+        bool
+            True if all requirements are satisfied.
+        """
+        for requirement in required_imports:
+            req = Requirement(requirement)
+            module_name = req.name
+            spec = str(req.specifier) or None
+            if spec:
+                normalized = spec.split(",")[0].strip()
+                normalized = re.sub(r"^[<>=!~]+", "", normalized)
+                if not normalized:
+                    return False
+                if not check_version_spec(module_name, normalized, hard_fail=False):
+                    return False
+            else:
+                if importlib.util.find_spec(module_name) is None:
+                    return False
+        return True
+
+    @classmethod
+    def implementations(cls) -> Tuple[str, ...]:
+        """Return all registered implementation names for this function.
+        This is used for introspection and debugging.
+
+        Returns
+        -------
+        Tuple[str, ...]
+            Implementation names ordered by rank then name.
+        """
+        impls = cls._get_impls()
+        ordered = sorted(impls.values(), key=lambda impl: (impl.rank, impl.name))
+        return tuple(impl.name for impl in ordered)
+
+    @classmethod
+    def available_implementations(cls) -> Tuple[str, ...]:
+        """Return implementation names whose required imports are satisfied.
+        This is used for introspection and debugging.
+
+        Returns
+        -------
+        Tuple[str, ...]
+            Available implementation names ordered by rank then name.
+        """
+        impls = cls._get_impls()
+        available = [impl for impl in impls.values() if impl.available]
+        ordered = sorted(available, key=lambda impl: (impl.rank, impl.name))
+        return tuple(impl.name for impl in ordered)
+
+    ############################################################
+    # Helper functions for converting between different backends
+    ############################################################
+
+    @staticmethod
+    def warp_launch_context(tensor: torch.Tensor):
+        """Helper for getting Warp device and stream for a torch tensor.
+
+        Parameters
+        ----------
+        tensor : torch.Tensor
+            Tensor used to infer device/stream.
+
+        Returns
+        -------
+        tuple[str | None, object | None]
+            Warp device and stream.
+        """
+        try:
+            wp = importlib.import_module("warp")
+        except ImportError as exc:
+            raise ImportError("warp is not available") from exc
+        if tensor.device.type == "cuda":
+            stream = wp.stream_from_torch(torch.cuda.current_stream(tensor.device))
+            device = None
+        else:
+            stream = None
+            device = "cpu"
+        return device, stream
+
+    @staticmethod
+    @contextlib.contextmanager
+    def warp_stream_scope(
+        wp_launch_stream: wp.Stream | None,
+        *,
+        sync_enter: bool = True,
+        sync_exit: bool = False,
+    ):
+        """Scope Warp work on a borrowed torch stream with a cleanup guard.
+
+        Warp and torch have different stream semantics: Warp streams are
+        blocking (they implicitly synchronize with the NULL stream) while torch
+        streams are non-blocking. Launching Warp work directly on torch's
+        borrowed (non-blocking) current stream -- the stream returned by
+        :meth:`warp_launch_context` -- lets Warp's stream-ordered allocator
+        assume blocking behavior and free mesh / BVH / scratch buffers before
+        the launch finishes, which crashes.
+
+        This context manager runs the enclosed Warp work inside
+        ``wp.ScopedStream(wp_launch_stream)``. On exit, a temporary Warp-owned
+        (blocking) stream waits on the borrowed stream so Warp's cleanup is
+        ordered after the compute instead of firing early.
+
+        Parameters
+        ----------
+        wp_launch_stream : wp.Stream or None
+            The borrowed Warp stream to launch on (as returned by
+            :meth:`warp_launch_context`). ``None`` selects the CPU / no-stream
+            path, where the scope is a no-op and no guard is installed.
+        sync_enter : bool, optional
+            Whether the borrowed stream should wait on Warp's previous stream
+            when entering the scope. Set to ``False`` for CUDA Graph capture,
+            where that cross-stream dependency is invalid. Default is ``True``.
+        sync_exit : bool, optional
+            Whether Warp's previous stream should wait on the borrowed stream
+            when leaving the scope. Default is ``False``.
+
+        Yields
+        ------
+        None
+            Control is yielded with ``wp_launch_stream`` installed as the active
+            Warp stream for the duration of the ``with`` block.
+        """
+        # CPU / no-stream path: no-op scope, no guard needed.
+        if wp_launch_stream is None:
+            with wp.ScopedStream(None):
+                yield
+            return
+
+        # Blocking, Warp-owned guard stream on the same device as the borrowed
+        # stream. Created before the scope so it is ready to install the guard
+        # once the launch has been enqueued.
+        guard = wp.Stream(wp_launch_stream.device)
+        try:
+            with wp.ScopedStream(
+                wp_launch_stream,
+                sync_enter=sync_enter,
+                sync_exit=sync_exit,
+            ):
+                yield
+        finally:
+            # Order Warp's stream-ordered cleanup after the compute so mesh /
+            # BVH / scratch buffers are not freed before the launch finishes.
+            guard.wait_stream(wp_launch_stream)

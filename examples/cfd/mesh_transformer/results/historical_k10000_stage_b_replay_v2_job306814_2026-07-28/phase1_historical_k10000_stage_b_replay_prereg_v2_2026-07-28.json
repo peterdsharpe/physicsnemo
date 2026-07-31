@@ -1,0 +1,236 @@
+{
+  "schema_version": 2,
+  "artifact_kind": "phase1_historical_k10000_stage_b_replay_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-07-28T22:40:36Z",
+  "question": "Can the frozen current legacy runtime reconstruct the exact job-293567 K=10000 baseline on all 36 cases, including model-consumed primitive inputs, physical predictions, and a corrected metric reduction?",
+  "hypothesis": {
+    "prediction": "Two process-isolated BF16 lanes will independently reconstruct the frozen 10,000-cell block for every case, agree as raw bytes for every persisted array, pass all model-consumed primitive-input and training-to-physical controls, and reproduce all 72 archived physical prediction fields as raw float32 bytes.",
+    "falsifier": "Both complete lanes and every deciding input/control artifact are structurally and provenance-valid, all input-parity gates pass, and at least one archived physical prediction field or the frozen historical pressure reduction fails its preregistered exact/tolerance gate.",
+    "not_a_falsifier": [
+      "a missing lane, sidecar, archive payload, manifest, metric log, normalization state, Stage-A license artifact, or reducer artifact",
+      "a producer, helper, reducer, source, config, checkpoint, manifest, metric, Stage-A-license, or Stage-A-seal hash mismatch",
+      "an A-versus-B raw-byte mismatch",
+      "a selected-cell, selected-target, primitive-input, pipeline-normal, truth-chain, or training-to-physical control failure",
+      "a malformed, aliased, non-transactional, non-finite, or schema-invalid artifact"
+    ]
+  },
+  "scope": {
+    "stage": "Stage B v2 exact reconstructed historical replay",
+    "case_count": 36,
+    "resolution": 10000,
+    "precision": "bfloat16",
+    "compile": false,
+    "model_path": "frozen execution-source snapshot of the legacy/default path",
+    "model_call": "one domain-only model forward per case in each lane, invoked through the frozen {'domain': domain} forward-kwargs contract",
+    "checkpoint_load_epoch": 491,
+    "checkpoint_selection": "explicit load_checkpoint(..., epoch=491)",
+    "canonical_source_geometry_supplied": false,
+    "historical_predictions_passed_to_producer": false,
+    "historical_predictions_opened_by_producer": false,
+    "historical_metrics_passed_to_producer": false,
+    "historical_metrics_opened_by_producer": false,
+    "stage_a_license_passed_to_producer": false,
+    "stage_a_license_opened_by_producer": false,
+    "categorical_result_passed_to_producer": false,
+    "categorical_result_opened_by_producer": false,
+    "producer_reads_selected_raw_targets": true,
+    "producer_publishes_outcome": false,
+    "isolation_semantics": "interface and observed-open isolation, not an operating-system filesystem sandbox",
+    "scientific_role": "recover the exact frozen legacy baseline and corrected prospective comparison endpoints before any canonical accuracy arm"
+  },
+  "producer_input_contract": {
+    "passed_paths": [
+      "frozen execution-source snapshot",
+      "raw dataset root",
+      "resolved training configuration",
+      "frozen dataset configuration",
+      "epoch-491 checkpoint directory",
+      "target-free primitive-geometry manifest",
+      "selected raw-target manifest",
+      "producer JSON and NPZ output paths"
+    ],
+    "not_passed_or_opened": [
+      "historical predictions",
+      "historical prediction manifest",
+      "historical metrics",
+      "historical input-freeze record",
+      "Stage-A adjudication, seal, and result record",
+      "categorical outcome or corrected baseline"
+    ],
+    "producer_source_contains": "no archived prediction hashes, metric endpoints, categorical outcomes, or reducer logic",
+    "reducer_only_inputs": "historical archive, historical manifest, historical metrics, normalization state, and outcome logic"
+  },
+  "lane_contract": {
+    "labels": [
+      "A",
+      "B"
+    ],
+    "process_isolation": "two concurrent, separate one-rank torchrun processes",
+    "cuda_visible_devices": {
+      "A": "0",
+      "B": "1"
+    },
+    "output_sets": "distinct immutable JSON, NPZ, JSON sidecar, NPZ sidecar, and log for each lane",
+    "case_count_per_lane": 36,
+    "arrays_per_case": 20,
+    "array_count_per_lane": 720,
+    "replica_requirement": "raw-byte equality of every persisted array, including signed zero",
+    "direct_model_consumed_primitive_parity": [
+      "boundary connectivity",
+      "boundary vertex points",
+      "global inputs",
+      "query points"
+    ],
+    "derived_geometry_semantics": "encoded centroids and areas are deterministic internal functions of exact primitive points/connectivity under the frozen source; no direct all-36 archived encoded-centroid or encoded-area oracle exists",
+    "pipeline_normal_control": "redundant compatibility control at absolute tolerance 2e-6, not a substitute for primitive-geometry parity",
+    "archive_derived_target_measure_weights_are_model_consumed": false
+  },
+  "deciding_controls": {
+    "historical_prediction_equality": "raw float32 bytes, including signed zero",
+    "selected_cell_ids": "raw-byte exact int64 interval for every case",
+    "selected_target_bytes": "raw-byte exact against the frozen selected-target manifest",
+    "primitive_connectivity_points_globals_queries": "raw-byte exact against the manifest-bound archive",
+    "derived_centroids_and_areas": "deterministic consequences under the frozen implementation, not directly compared to an archived all-36 encoded oracle",
+    "pipeline_normal_absolute_tolerance": 0.000002,
+    "archive_stored_normals": "redundant control: must agree within 2e-6 with float64 normals independently derived from archived primitive points and connectivity",
+    "truth_chain": "raw-byte exact physical truth against the archive",
+    "training_physical_absolute_tolerance": 0.000002,
+    "training_physical_relative_tolerance": 0.0,
+    "historical_pressure_case_absolute_tolerance": 0.001,
+    "historical_pressure_mean_absolute_tolerance": 0.000005
+  },
+  "stage_a_license": {
+    "required_outcome": "EXACT_STAGE_A_ARCHIVE_DOMAIN_PASS",
+    "job_id": 306754,
+    "adjudication_sha256": "e309ca89ae7f2506797e871e6bac44a808a5a6fc224346b6b92495f6d06da3e5",
+    "sealed_task_tree_manifest_sha256": "deb2a02e5567474f1134ea8f646d965bb1c6811c0fc3e1cf307bf09b323c759b",
+    "sealed_task_file_count": 954,
+    "sealed_task_size_bytes": 14889440,
+    "result_record_sha256": "a845ad02217fe0aedaa782ae1f842bba714fdfb09d731dac01f9ed7ac42b2684",
+    "producer_sha256": "b596cb3d4a82b30255324b982f5d84d1260f53963b1697c7b2fd9d12049ed8c0",
+    "reducer_sha256": "fdb232e337eeb54be4f1782f6b619f53e5ad4ed0c2aca366b504d035cab023e0",
+    "checkpoint_load_epoch": 491,
+    "scope": "licenses only this freshly frozen Stage-B v2 reconstructed replay"
+  },
+  "superseded_artifacts": {
+    "stage_a_v1_job": "prior v1 canary; not accepted by this package",
+    "stage_a_v1_observation": "retained as an exact descriptive byte-replay observation",
+    "stage_a_v1_license": "withdrawn and not accepted by this package",
+    "stage_b_v1_package": "abandoned before staging and not accepted by this package"
+  },
+  "corrected_baseline_contract": {
+    "licensed_only_on_exact_outcome": true,
+    "prospective_noninferiority_ratio": 1.02,
+    "reported_endpoints": [
+      "uniform pressure relative L2",
+      "uniform WSS Frobenius relative L2",
+      "archive-normalized-area-weighted pressure relative L2",
+      "archive-normalized-area-weighted WSS Frobenius relative L2"
+    ],
+    "area_weight_source": "float64 triangle areas independently derived by the reducer from manifest-bound archived primitive points and connectivity, normalized within each retained panel; these are metric inputs only",
+    "historical_pointwise_mean_wss_relative_l2": "descriptive only; confirmed historical reduction bug and not a licensing endpoint",
+    "does_not_support": [
+      "absolute native areas",
+      "absolute force integration",
+      "canonical-path accuracy",
+      "noninferiority or superiority before a separate canonical arm",
+      "other resolutions",
+      "OOD or population generalization",
+      "training-time invariance",
+      "architecture or causal claims"
+    ]
+  },
+  "adjudication": {
+    "sole_categorical_publisher": "drivaerml_historical_k10000_replay_adjudicate.py",
+    "truth_table": [
+      {
+        "outcome": "EXACT_HISTORICAL_REPLAY_PASS",
+        "condition": "both structurally valid lanes are raw-byte identical, every deciding control passes, all 72 physical prediction fields equal the archive, and the frozen historical pressure reduction passes tolerance"
+      },
+      {
+        "outcome": "VALID_EXACT_REPLAY_REFUTATION",
+        "condition": "both structurally valid lanes are raw-byte identical and every deciding input/control gate passes, but at least one archived prediction or frozen historical pressure reduction fails"
+      },
+      {
+        "outcome": "INVALID_REPLAY",
+        "condition": "a present artifact, provenance binding, input/control gate, lane separation check, or A/B comparison is invalid"
+      },
+      {
+        "outcome": "INCOMPLETE_REPLAY",
+        "condition": "at least one required artifact is absent and no present artifact is invalid"
+      }
+    ],
+    "execution_exit_semantics": {
+      "EXACT_HISTORICAL_REPLAY_PASS": "successful completed job",
+      "VALID_EXACT_REPLAY_REFUTATION": "successful completed job; scientific refutation must not be converted into infrastructure failure",
+      "INVALID_REPLAY": "blocked nonzero wrapper exit",
+      "INCOMPLETE_REPLAY": "blocked nonzero wrapper exit"
+    }
+  },
+  "decision_order": {
+    "EXACT_HISTORICAL_REPLAY_PASS": "licenses freezing one paired canonical-versus-legacy accuracy/noninferiority experiment",
+    "VALID_EXACT_REPLAY_REFUTATION": "blocks the canonical accuracy arm until the exact replay difference is explained",
+    "INVALID_REPLAY": "repair and rerun this instrument; no model evidence",
+    "INCOMPLETE_REPLAY": "complete or rerun this instrument; no model evidence",
+    "new_hypotheses_or_architectures": "remain downstream of an exact replay and the paired canonical comparison"
+  },
+  "frozen_provenance": {
+    "producer_sha256": "bce26e1e55d9231843c2255ed7e57fe20166e6fd6098b77d9a63944e8b1dd7a5",
+    "runtime_helper_sha256": "dc4d2a71a0c9c72ff62166801433b21ae6f9b672801dfe5388c7975e887f4896",
+    "reducer_sha256": "4b4f4c893ca154b589b9d1276bf4f43cd52008664f75f3c56fcc66aa26ce8f68",
+    "execution_source_manifest_sha256": "e8edb80f34c005f85e1e87ebc27567ddf0a74fe2bc34e06ba40c35c92e54cfb4",
+    "execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "dataset_config_sha256": "a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3",
+    "resolved_config_sha256": "a71987df4d49d38cc7f6b43c08ba0a0592fd39cf16a50aef04bf1b0d4f080fe1",
+    "checkpoint_load_epoch": 491,
+    "model_checkpoint_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+    "training_state_sha256": "3783bda98ed561db95638d1c6fbb914b73be1bf36ed91ad79872f7f19763cea7",
+    "normalization_state_sha256": "31a73b08f3e3f6b2d8c60ed659247deae996d2596e752f5423cabbb29f186b94",
+    "current_infer_source_sha256": "47aec675e54d58ee4202831ae0d20039b1ff5ec40e69cc8b5087ce00bd5234ed",
+    "current_model_source_sha256": "9096f61a5c54a6f92d14c586aaa8cf51a8bc22fc797f50bd0cbfdf86ef042892",
+    "target_free_geometry_manifest_sha256": "3d33209f775513a690d61be560e640a348268132e14dd56675d256ee380bf4b0",
+    "selected_target_manifest_sha256": "d7502e9539b983de07ccb58a6313ab844aa5ea5ef4e3e165dd49c6bbfa1a2e49",
+    "historical_prediction_tree_manifest_sha256": "545b1f6e906002231415b84277db00eec04f3666233b8da637514e9077a585eb",
+    "historical_metrics_sha256": "423ec28e0212f0762ea814e6179da2b7a9a1feb95011b4b83c06605835b7c43a",
+    "historical_input_freeze_record_sha256": "fce9444a11b0a6b71497d927573728c3d10f9da3e480a9b05dacd50505b6fe10",
+    "stage_a_adjudication_sha256": "e309ca89ae7f2506797e871e6bac44a808a5a6fc224346b6b92495f6d06da3e5",
+    "stage_a_sealed_task_tree_manifest_sha256": "deb2a02e5567474f1134ea8f646d965bb1c6811c0fc3e1cf307bf09b323c759b",
+    "stage_a_result_record_sha256": "a845ad02217fe0aedaa782ae1f842bba714fdfb09d731dac01f9ed7ac42b2684"
+  },
+  "checkpoint_selection": {
+    "epoch": 491,
+    "api_contract": "load_checkpoint(path=checkpoint_dir, models=model, device=device, epoch=491)",
+    "model_filename": "MeshTransformer.0.491.mdlus",
+    "training_state_filename": "checkpoint.0.491.pt",
+    "sibling_policy": "other checkpoint siblings are permitted and nondeciding because explicit epoch 491 bypasses latest-file discovery"
+  },
+  "aga_execution_contract": {
+    "cluster": "oci-aga-slurm-1",
+    "task_logical": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-historical-k10k-stage-b-v2",
+    "task_physical": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-historical-k10k-stage-b-v2",
+    "job_name": "mt-k10k-stageb-v2",
+    "nodes": 1,
+    "scheduler_gpu_allocation": 4,
+    "scheduler_gpu_allocation_reason": "AGA requires whole four-GPU nodes",
+    "payload_gpu_count": 2,
+    "payload_gpu_indices": [
+      0,
+      1
+    ],
+    "slurm_export": "NIL",
+    "wall_time": "00:45:00",
+    "lane_timeout": "32m",
+    "reducer_timeout": "8m",
+    "immutable_outputs": true,
+    "task_lock_required": true,
+    "status_marker_on_shell_exit": true,
+    "done_marker_only_for_exact_pass_or_valid_refutation": true
+  },
+  "launch_state": {
+    "task_staging_performed_by_this_change": false,
+    "scheduler_test_performed_by_this_change": false,
+    "job_submitted_by_this_change": false,
+    "model_or_reducer_output_exists_under_this_preregistration": false
+  }
+}

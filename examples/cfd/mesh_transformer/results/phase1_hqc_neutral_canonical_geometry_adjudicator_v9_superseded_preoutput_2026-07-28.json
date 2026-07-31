@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T07:40:57Z",
+  "status": "ADJUDICATOR_V9_FREEZE_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_freeze": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_adjudicator_freeze_v9_2026-07-28.json",
+    "sha256": "acd9128039871cd48c927b89d82b30e7911f7f99304af4355ec2cf13f7acc881"
+  },
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v9.py",
+      "sha256": "6b101245e08e23e69888e5a88a06e809d8626ce192d2f49a19ad24b3c447cc86",
+      "audit_output_schema_version": 6
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v9.py",
+      "sha256": "1f24d208bd166216c240c7bc38afc7394cdefacfa60a605e796886683f43cbf6",
+      "result": "55 passed before the independent full-bundle HOLD"
+    }
+  },
+  "audit_reconciliation": {
+    "two_exact_hash_reviews": "Returned GO for JSON/ZIP/NPY integrity, construction binding, schema coverage, and legitimate AGA path compatibility.",
+    "third_exact_hash_review": "Returned HOLD for uninspected contents of the one dynamic allowlisted Slurm log.",
+    "decision": "The full-bundle HOLD controls. The v9 freeze must not be used."
+  },
+  "definite_false_pass_path": {
+    "channel": "Explicit forbidden labeled payload in the allowlisted Slurm log",
+    "evidence": [
+      "Appending target_pressure=[1.0,2.0,3.0] to sbatch_logs/mt-hqc-canon-v5_<job>.log and refreshing only manifest.sha256 still returned PASSED_PUBLICATION_GATE with FULL_AND_DERIVED_PASS.",
+      "Appending HQC_verdict=eligible independently produced the same false pass."
+    ],
+    "why_the_documented_limitation_does_not_cover_it": "The limitation conceded that arbitrary unlabeled numeric telemetry cannot be classified as supervision. These reproductions carry explicit target and verdict labels, and the preregistration says target values may not be logged.",
+    "required_repair": [
+      "Require the dynamic Slurm log to be bounded UTF-8 text without control characters.",
+      "Reject all frozen forbidden-vocabulary tokens in its content.",
+      "Require the successful wrapper's completed-unit, exit-code, and diagnostic-done markers."
+    ]
+  },
+  "scientific_effect": "No schema-v5 diagnostic output existed. Revision 9 produced no publication pass, canonical-repair inference, or H-QC verdict. Its other independently cleared repairs remain valid and are carried forward.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v10.py",
+      "sha256": "dda4a283b4122f4e6af48bc3dcdf44d59252cf8ba00659783c739c06ce1088d0",
+      "audit_output_schema_version": 7
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v10.py",
+      "sha256": "52f8bae88c2e54a8a5296d7bfd0a9cd457b18de238b05c77b94344933dc612a9",
+      "result": "58 passed; Ruff check/format, py_compile, and CLI help passed; independent exact-hash re-audits pending"
+    },
+    "prior_log_compatibility": "The successful job-304002 Slurm log contains none of the frozen forbidden tokens."
+  }
+}

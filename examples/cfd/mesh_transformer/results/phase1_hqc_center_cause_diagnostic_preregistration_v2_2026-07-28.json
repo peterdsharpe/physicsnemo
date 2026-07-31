@@ -1,0 +1,162 @@
+{
+  "artifact_kind": "phase1_hqc_center_cause_diagnostic_preregistration",
+  "case_design": {
+    "case_ids": [
+      "run_118",
+      "run_129",
+      "run_145",
+      "run_149"
+    ],
+    "case_role": {
+      "run_118": "corrected replication and expanded pin ladder after exploratory job 303951",
+      "run_129": "mechanism-decomposition holdout",
+      "run_145": "mechanism-decomposition holdout",
+      "run_149": "mechanism-decomposition holdout"
+    },
+    "precision_modes": [
+      "bfloat16",
+      "float32"
+    ],
+    "resolution": 2500,
+    "selection_reason": "These are the predetermined first cases of the four H-QC lanes; all four independently triggered job 303890's center blocker before this causal diagnostic was designed."
+  },
+  "diagnostic_arms": {
+    "canonical_query_replays": [
+      "primary encoded source decoded at its explicitly normalized query tensor",
+      "fixed encoded source decoded at its explicitly normalized query tensor"
+    ],
+    "input_arms": [
+      "primary historical per-K external center",
+      "fixed S_10000 external center",
+      "same-input primary replay",
+      "primary with stored pipeline normals zeroed",
+      "fixed with primary stored pipeline normals copied"
+    ],
+    "query_crossovers": [
+      "primary encoded source at fixed normalized queries",
+      "fixed encoded source at primary normalized queries"
+    ],
+    "source_geometry_pin_ladder": [
+      "normals",
+      "centroids",
+      "areas",
+      "centroids_areas",
+      "centroids_normals",
+      "areas_normals",
+      "derived_centroids_areas_normals",
+      "full_points_centroids_areas_normals"
+    ]
+  },
+  "frozen_at_utc": "2026-07-28T04:27:43Z",
+  "implementation": {
+    "diagnostic": {
+      "path": "studies/drivaerml_hqc_center_diagnostic.py",
+      "sha256": "342fdc9c19e5fceca73b8fe08102ac3c2fe18321ec90c99f216d1d47905fb086"
+    },
+    "execution_source_tree_manifest_sha256": "fa6a7b683fa9aa02e4537ef69e8e977906df7c9fa6964cb759edfcee8d7b90cd",
+    "frozen_hqc_producer": {
+      "path": "studies/drivaerml_trace_fixed_query_audit.py",
+      "sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f"
+    },
+    "notebook_snapshot": {
+      "path": "book/18-notebook.qmd",
+      "sha256": "bd4e8394e322f561d252ff022642376d0edbead7f7833f28413cd74a4bd35dcd"
+    },
+    "remote_task_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-hqc-center-diagnostic-v2",
+    "validation": {
+      "bash_syntax_passed": true,
+      "help_smoke_passed": true,
+      "python_compile_passed": true,
+      "ruff_check_and_format_passed": true,
+      "shellcheck_passed": true
+    },
+    "wrapper_freeze_policy": "The final wrapper contains this preregistration's SHA-256 and is frozen separately in a subsequent launch manifest."
+  },
+  "interpretation_rules": {
+    "bf16_hqc_rerun_licensed": false,
+    "diagnostic_valid_only_if": "Every required exactness gate passes for every case and both precisions.",
+    "fixed_center_selection_licensed": false,
+    "fp32_candidate_gate": {
+      "pressure_center_drift_relative_l2_at_most": 0.001,
+      "required_on_all_four_cases": true,
+      "wss_center_drift_must_be_reported_separately": true,
+      "wording": "Passing licenses only a separately preregistered FP32 historical-replay and full-cohort center-validity stage; it is not an H-QC verdict or permission to inspect endpoints."
+    },
+    "full_output_stability_wording_requires": "Both pressure and WSS center-drift relative L2 are at most 0.001 on all four cases.",
+    "internal_source_geometry_is_causally_sufficient_if": [
+      "unmodified center drift exceeds 0.001",
+      "the full internal-geometry pin is bitwise exact",
+      "the corresponding exactness gate passes"
+    ],
+    "pin_sufficiency_threshold": {
+      "fieldwise_prediction_relative_l2_at_most": 0.001,
+      "nonadditivity_warning": "A sufficient pin set is an intervention result; componentwise causal shares may not be added or inferred from pin differences."
+    },
+    "query_route_is_practically_negligible_for_a_field_if": "Primary encoded source at fixed normalized queries differs from primary by relative L2 at most 0.001 on all four cases and both precisions.",
+    "saved_pipeline_normal_field_is_null_if": "Zeroing it in primary and copying primary into fixed are bitwise null for pressure and WSS on every case and precision.",
+    "support_futility_mixed_or_area_objective_claim_licensed": false
+  },
+  "model_and_data_contract": {
+    "checkpoint_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+    "configured_boundary_drive_fields": {},
+    "configured_boundary_operator_fields": {},
+    "normal_angle_definition": "acos(clamp(dot(n1/||n1||_float64,n2/||n2||_float64),-1,1))",
+    "stored_pipeline_normals_declared_as_model_field": false,
+    "target_values_used_or_persisted": false,
+    "truth_fields_read_for_scoring": false
+  },
+  "outputs": {
+    "allowed": [
+      "raw selected-cell IDs and identity hashes",
+      "external boundary/query coordinates and stored normals",
+      "internal normalized source points, centroids, areas, normals, and normalized queries",
+      "encoded-state and kernel-cache tensor differences",
+      "prediction-to-prediction pressure and WSS differences",
+      "diagnostic prediction tensors without targets"
+    ],
+    "atomic_json_status": [
+      "PASSED_NONDECIDING_DIAGNOSTIC_VALIDITY",
+      "FAILED_NONDECIDING_DIAGNOSTIC_VALIDITY"
+    ],
+    "forbidden": [
+      "target arrays",
+      "truth-error metrics",
+      "H-QC endpoint ratios or log cliffs",
+      "force or area-weighted truth metrics",
+      "an H-QC support, futility, mixed, or eligibility verdict"
+    ],
+    "output_basename": "hqc_center_diagnostic_four_canaries_k2500_v2"
+  },
+  "prior_knowledge_and_nonindependence": {
+    "blocked_execution": {
+      "path": "results/phase1_hqc_blocked_centering_2026-07-27.json",
+      "sha256": "8c44190d84ac9bbe1a7b31b2f61615907faaf689de73d5086df6aeb3bbab9374",
+      "known_before_freeze": "All four named cases have bfloat16 primary/fixed pressure-prediction drift above 0.001 at K=2500."
+    },
+    "exploratory_diagnostic": {
+      "bundle_manifest_path": "results/hqc_center_diagnostic_job303951_2026-07-28/manifest.sha256",
+      "bundle_manifest_sha256": "e32d42528c3534218d2677e2c632df3ae5f45c89f69380457e5d06b25d635ff8",
+      "case_id": "run_118",
+      "job_id": 303951,
+      "known_before_freeze": [
+        "stored pipeline normals are null for this checkpoint",
+        "query crossover is negligible on run_118",
+        "pinning internally regenerated normals helps but is insufficient",
+        "pinning centroids, areas, and normals makes run_118 pressure bitwise exact",
+        "float32 run_118 pressure center drift is below 0.001"
+      ],
+      "superseded_scope": "Only normal-angle summaries are superseded; v1 did not renormalize nominally unit float32 vectors in float64 before acos."
+    },
+    "statement": "This is a transparent post-failure mechanism diagnostic. It confirms and expands known run_118 behavior; only the component pin ladders and FP32 behavior of run_129, run_145, and run_149 are holdout observations."
+  },
+  "required_exactness_gates": [
+    "same_input_replay",
+    "zero_saved_normals_null",
+    "copied_saved_normals_null",
+    "canonical_primary_decode",
+    "canonical_fixed_decode",
+    "full_internal_geometry_pin"
+  ],
+  "schema_version": 1,
+  "status": "FROZEN_BEFORE_CORRECTED_DIAGNOSTIC_OUTPUT"
+}

@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "title": "Matched-update convergence test for DrivAerML-to-SHIFT-SUV adaptation",
+  "frozen_at": "2026-07-30T12:02:17-04:00",
+  "parent_result": {
+    "path": "../shift_suv_adaptation_pilot_2026-07-29/analysis/formal_validation_summary.json",
+    "sha256": "f57eb93618ff2ec90089b5e21528a0a9ce5f74c1435309ff2adb124fea033bd1",
+    "status": "complete",
+    "information_used": "The complete fixed-validation reduction only; no test case or test metric was accessed."
+  },
+  "scientific_question": "Are the pilot's same-budget pretraining gains persistent target-data savings, or transient warm-start effects caused by unequal total optimizer updates and a truncated optimization horizon?",
+  "scope": {
+    "status": "single-source-checkpoint, single-target-seed convergence pilot",
+    "source_checkpoints": 1,
+    "target_training_seed": 42,
+    "claim_limit": "This experiment can decide whether multi-seed confirmation is warranted; it cannot establish a general transfer law.",
+    "test_policy": "No test case may be read, trained on, or evaluated."
+  },
+  "rival_hypotheses": {
+    "persistent_reuse": "After symmetric optimizer restart and matched total optimizer updates, the selected pretrained model using 64 target cases reaches materially lower error than the selected scratch model using 128 cases.",
+    "transient_warm_start": "The pilot gain shrinks as total optimizer updates are matched; pretraining remains useful for early optimization but does not replace target labels.",
+    "optimizer_censoring": "The pilot ordering changes materially across the refined continuation-rate grid, showing that the original final-epoch and learning-rate-edge selections were not stable enough to adjudicate transfer.",
+    "specialist_limit": "Even after fair convergence, the 64-case model cannot recover information supplied by the additional 64 target geometries."
+  },
+  "design": {
+    "architectures": [
+      "mesh_transformer",
+      "geotransolver"
+    ],
+    "families": [
+      "estate",
+      "fastback"
+    ],
+    "half_label_roles": {
+      "pretrained_64": {
+        "initialization": "pretrained",
+        "sample_count": 64,
+        "parent_updates": 4480,
+        "continuation_epochs": 210,
+        "continuation_updates": 13440,
+        "final_total_updates": 17920,
+        "registered_continuation_epochs": [
+          71,
+          141,
+          210
+        ]
+      },
+      "scratch_128": {
+        "initialization": "scratch",
+        "sample_count": 128,
+        "parent_updates": 8960,
+        "continuation_epochs": 70,
+        "continuation_updates": 8960,
+        "final_total_updates": 17920,
+        "registered_continuation_epochs": [
+          36,
+          70
+        ]
+      }
+    },
+    "parent_checkpoint_rule": "For each architecture, family, and role, use exactly the epoch-70 checkpoint selected by the complete parent validation reduction. Load model weights only; reset optimizer and scheduler state for both roles.",
+    "continuation_learning_rates": [
+      0.0001,
+      0.0003,
+      0.001,
+      0.003
+    ],
+    "continuation_scheduler": {
+      "type": "StepLR",
+      "gamma": 0.1,
+      "step_after_additional_updates": 4480,
+      "step_size_epochs": {
+        "pretrained_64": 70,
+        "scratch_128": 35
+      }
+    },
+    "comparison_stages": [
+      {
+        "name": "early",
+        "pretrained_64_continuation_epoch": 71,
+        "pretrained_64_total_updates": 9024,
+        "scratch_128_parent_epoch": 70,
+        "scratch_128_total_updates": 8960
+      },
+      {
+        "name": "middle",
+        "pretrained_64_continuation_epoch": 141,
+        "pretrained_64_total_updates": 13504,
+        "scratch_128_continuation_epoch": 36,
+        "scratch_128_total_updates": 13568
+      },
+      {
+        "name": "final",
+        "pretrained_64_continuation_epoch": 210,
+        "pretrained_64_total_updates": 17920,
+        "scratch_128_continuation_epoch": 70,
+        "scratch_128_total_updates": 17920
+      }
+    ],
+    "common_controls": {
+      "target_seed": 42,
+      "batch_size": 1,
+      "sampling_resolution": 10000,
+      "precision": "bfloat16",
+      "loss": "Huber",
+      "weight_decay": 0.0001,
+      "augmentation": false,
+      "compile": false,
+      "nested_target_subsets": true
+    },
+    "total_training_runs": 32
+  },
+  "protocol_amendments": [
+    {
+      "amended_at": "2026-07-30T12:04:30-04:00",
+      "information_used": "Trainer checkpoint-index semantics only; no continuation run or new validation result existed.",
+      "change": "Use the nearest periodic checkpoints at continuation epochs 71/141 for pretrained-64 and 36 for scratch-128. Their paired total-update mismatches are 64 updates (below 0.8%); the final epoch-210/70 comparison remains exactly matched at 17,920 total updates.",
+      "reason": "The trainer saves at completed epochs 1, 6, 11, and so on when save_interval=5, plus the final epoch."
+    }
+  ],
+  "formal_validation": {
+    "selection_data": "validation only",
+    "cases_per_family": 99,
+    "point_sample_seeds": [
+      20260730,
+      20260731
+    ],
+    "aggregation": "Average the two fixed point-sample measurements within each case, then average across the 99 cases.",
+    "selection_rule": "At each matched total-update point, choose the continuation learning rate with the lowest pressure error among checkpoints available by that point. Apply the same rule to both roles. Exact ties choose the smaller continuation rate.",
+    "non_finite_rule": "A non-finite continuation checkpoint is ineligible; other registered checkpoints and rates remain eligible.",
+    "primary_quantity": "H_U = pressure_error(pretrained_64, U) / pressure_error(scratch_128, U)",
+    "secondary_quantity": "W_U = WSS_error(pretrained_64, U) / WSS_error(scratch_128, U)",
+    "uncertainty": "Paired bootstrap over the 99 validation cases within each family."
+  },
+  "prospective_decision_rules": {
+    "material_half_label_success": "At U=17920, H_U <= 0.95 on both families.",
+    "strong_validation_signal": "At U=17920, the paired-case bootstrap 95% upper bound for H_U is below 1.0 on both families.",
+    "field_safety": "At U=17920, W_U <= 1.10 on both families.",
+    "plateau_gate": "For both roles and both families, the selected pressure error improves by less than 2% from U=13440 to U=17920, and H_U changes by less than 2% over the same interval.",
+    "optimization_grid_flag": "A selected continuation rate at either edge of the registered grid is within-grid evidence only and requires another flanking rate before an optimized claim.",
+    "advance_to_multiseed_confirmation": "Advance an architecture only if material half-label success, strong validation signal, field safety, and the plateau gate hold on both families.",
+    "close_as_optimization_only": "For an architecture, close the broad half-label branch if the plateau gate holds and the 95% lower bound for H_17920 exceeds 0.95 on either family.",
+    "extend_without_interpretation": "If the plateau gate fails, continue the same checkpoints to the next matched-update point before deciding. If the rate-edge flag fires, refine the continuation-rate grid before deciding.",
+    "do_not_open_test": "The test sets remain sealed regardless of this pilot outcome. A positive result must first survive multiple target seeds and source checkpoints under frozen settings."
+  }
+}

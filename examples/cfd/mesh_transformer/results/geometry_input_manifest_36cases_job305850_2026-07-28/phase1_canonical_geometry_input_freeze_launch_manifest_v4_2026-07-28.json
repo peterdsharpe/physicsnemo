@@ -1,0 +1,139 @@
+{
+  "schema_version": 4,
+  "artifact_kind": "phase1_canonical_geometry_input_freeze_launch_manifest",
+  "status": "FROZEN_BEFORE_TASK_CREATION_OR_GEOMETRY_MANIFEST_OUTPUT",
+  "frozen_at_utc": "2026-07-28T15:52:17Z",
+  "supersedes": {
+    "path": "phase1_canonical_geometry_input_freeze_launch_manifest_v3_2026-07-28.json",
+    "sha256": "4579b09ee2ca194f1503719a5c28841c82114fa3125e35a368774d3a075a2971",
+    "state": "SUPERSEDED_PREOUTPUT",
+    "reason": "The v3 wrapper still embedded the superseded producer SHA and would have failed before scanning. V4 corrects that binding and adds a cross-file regression test.",
+    "task_created_under_v3": false,
+    "job_submitted_under_v3": false,
+    "geometry_manifest_output_generated_under_v3": false
+  },
+  "earlier_freeze_chain": [
+    {
+      "path": "phase1_canonical_geometry_input_freeze_launch_manifest_v2_2026-07-28.json",
+      "sha256": "18063c3bf31e634409a87c84f4e3e70e09acf7c78c906c28e62ca26c3e28abb8",
+      "state": "SUPERSEDED_PREOUTPUT"
+    },
+    {
+      "path": "phase1_canonical_geometry_input_freeze_launch_manifest_v1_2026-07-28.json",
+      "sha256": "a769c0a2b8db8c2fab49009dec3db7a65b5190d357dd4bac084f851705fb543e",
+      "state": "SUPERSEDED_PREOUTPUT"
+    }
+  ],
+  "purpose": "Freeze target-free raw geometry identity for the preregistered successor to the adjudicated four-canary canonical-geometry diagnostic. This is input provenance, not model inference or an H-QC result.",
+  "scope": {
+    "cohort": "exact ordered 36-case ID-reference cohort embedded in the producer",
+    "cohort_sha256": "ec947a48495b1ddcaa9ec81e96ad299a4f34e438940d57fe5f053db47aecdf9d",
+    "case_count": 36,
+    "allowed_inputs": [
+      "vehicle points.memmap",
+      "vehicle cells.memmap",
+      "structural TensorDict metadata",
+      "U_inf",
+      "p_inf",
+      "rho_inf",
+      "nu",
+      "L_ref"
+    ],
+    "required_l_ref": 5.0,
+    "forbidden_associations": [
+      "point_data",
+      "cell_data",
+      "interior"
+    ],
+    "supervision_values_may_be_opened": false,
+    "supervision_values_may_be_hashed": false,
+    "supervision_values_may_be_serialized": false
+  },
+  "frozen_files": {
+    "producer": {
+      "path": "studies/drivaerml_geometry_input_manifest.py",
+      "sha256": "1cae95d1fbc68d9396d9e1be208fc97b55656d9c21dff72cd8de89dfa9cb0d7a"
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_geometry_input_manifest.py",
+      "sha256": "cda358590f1241c878e18c9d7bb1b5a1b56d1105f88f430d646f437800afad36",
+      "result": "9 passed; Ruff format/check passed",
+      "wrapper_producer_cross_hash_test_passed": true
+    },
+    "aga_wrapper": {
+      "path": "studies/drivaerml_geometry_input_manifest_aga.sbatch",
+      "sha256": "e5b182d9a89bfc5a53ef2198b4fb4159678aea95748e8c4e9e083a96e505f1ef",
+      "bash_and_shellcheck_passed": true,
+      "embedded_producer_sha256": "1cae95d1fbc68d9396d9e1be208fc97b55656d9c21dff72cd8de89dfa9cb0d7a"
+    },
+    "readme": {
+      "path": "studies/drivaerml_geometry_input_manifest_aga_README.md",
+      "sha256": "0cc2f25d4ebae78e6e137a45f1d3d6e678064253e12154721efc4e80119e5cad"
+    }
+  },
+  "frozen_external_input": {
+    "dataset_root": "/home/psharpe/coreai_modulus_cae/users/psharpe/mt_datasets/drivaerml_ood_shadow",
+    "dataset_manifest_sha256": "51c2268df5b9b365f4ef6147c6ec390f10c55f733ad967f6617bd5e52f62e7ca"
+  },
+  "task": {
+    "logical_path": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1",
+    "physical_path": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1",
+    "logical_path_absent_at_v4_freeze": true,
+    "physical_path_absent_at_v4_freeze": true,
+    "create_exactly_once": true,
+    "required_precreated_directories": [
+      "artifacts",
+      "sbatch_logs"
+    ],
+    "submit_directory_validation": "Canonicalize SLURM_SUBMIT_DIR and require the exact frozen physical path; retain the frozen logical spelling for output provenance."
+  },
+  "execution": {
+    "cluster": "oci-aga-slurm-1",
+    "partition": "cpu",
+    "qos": "cpu-short",
+    "walltime": "00:30:00",
+    "nodes": 1,
+    "tasks": 1,
+    "cpus_per_task": 8,
+    "memory": "32G",
+    "producer_timeout": "25m",
+    "hash_workers": 4,
+    "submit_count": 1,
+    "requeue": false,
+    "scheduler_test_only_passed": true,
+    "clean_environment_precedent": {
+      "path": "phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v7_2026-07-28.json",
+      "sha256": "48a2de4211fd11b6c86b641ad590551926369bd1d105eb114bc51146c6126c0c"
+    },
+    "environment_allowlist": [
+      "HOME=/home/psharpe",
+      "USER=psharpe",
+      "LOGNAME=psharpe",
+      "PATH=/usr/bin:/bin:/cm/local/apps/slurm/current/bin",
+      "PYTHONDONTWRITEBYTECODE=1",
+      "LANG=C.UTF-8",
+      "LC_ALL=C.UTF-8",
+      "SLURM_CONF=/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf"
+    ],
+    "submission_command": "cd /home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-geometry-input-freeze-v1 && env -i HOME=/home/psharpe USER=psharpe LOGNAME=psharpe PATH=/usr/bin:/bin:/cm/local/apps/slurm/current/bin PYTHONDONTWRITEBYTECODE=1 LANG=C.UTF-8 LC_ALL=C.UTF-8 SLURM_CONF=/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf /cm/local/apps/slurm/current/bin/sbatch --export=ALL drivaerml_geometry_input_manifest_aga.sbatch"
+  },
+  "publication_contract": {
+    "method": "fsynced same-directory temporary files followed by atomic no-clobber POSIX hard links",
+    "json_or_sidecar_may_be_replaced": false,
+    "all_temporary_preparation_paths_are_cleanup_protected": true,
+    "partial_pair_is_rolled_back_on_collision_or_verification_failure": true
+  },
+  "expected_output": {
+    "relative_path": "artifacts/drivaerml_geometry_input_manifest_36cases_v1.json",
+    "sha256_sidecar": true,
+    "atomic_no_overwrite": true,
+    "case_count": 36,
+    "status": "PASSED_TARGET_FREE_GEOMETRY_INPUT_FREEZE"
+  },
+  "preoutput_state": {
+    "remote_task_created": false,
+    "job_submitted": false,
+    "geometry_manifest_output_existed": false,
+    "model_output_generated": false
+  }
+}

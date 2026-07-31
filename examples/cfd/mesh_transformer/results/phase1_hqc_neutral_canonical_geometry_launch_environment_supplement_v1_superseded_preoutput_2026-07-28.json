@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_launch_environment_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T08:24:38Z",
+  "status": "LAUNCH_ENVIRONMENT_SUPPLEMENT_V1_SUPERSEDED_BEFORE_REMOTE_TASK_CREATION_OR_SCHEMA_V5_OUTPUT",
+  "superseded_supplement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v1_2026-07-28.json",
+    "sha256": "f34a729e4d2972820f74e4d76d473ba0050a677010620306fb31cad7a9ccb3af",
+    "bound_adjudicator_revision": 12
+  },
+  "definite_issue": {
+    "channel": "Slurm ALL export precedence",
+    "kind": "launch-condition false guarantee",
+    "evidence": "Slurm documents that with --export=ALL,NAME=value, an existing value in the sbatch caller environment takes precedence over the explicit value. Revision 1 did not set or verify the caller's PYTHONDONTWRITEBYTECODE. An inherited empty or zero value therefore defeated the intended bytecode suppression; both make sys.dont_write_bytecode false in the frozen Python.",
+    "required_repair": "Set PYTHONDONTWRITEBYTECODE=1 atomically in the sbatch caller process as well as in --export. Also bind deterministic warning and locale values used by the exact log grammar."
+  },
+  "scientific_effect": "No remote task was created or submitted and no schema-v5 output existed under revision 1, so the flaw affected only the prelaunch guarantee and no scientific interpretation.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false
+  },
+  "replacement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v2_2026-07-28.json",
+    "sha256": "205b1ed108d320c8df03d7d55f94d29abc1b1252c32f83e4a47796ab58eec2fe",
+    "bound_adjudicator_revision": 13,
+    "submission_repair": "env PYTHONDONTWRITEBYTECODE=1 PYTHONWARNINGS=default LC_ALL=C sbatch --parsable --export=ALL,PYTHONDONTWRITEBYTECODE=1,PYTHONWARNINGS=default,LC_ALL=C drivaerml_hqc_neutral_canonical_geometry_v5_aga.sbatch"
+  }
+}

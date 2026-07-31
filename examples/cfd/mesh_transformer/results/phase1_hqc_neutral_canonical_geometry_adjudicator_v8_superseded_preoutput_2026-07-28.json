@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T07:33:48Z",
+  "status": "ADJUDICATOR_V8_CANDIDATE_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v8.py",
+      "sha256": "a5efa21373df3abc0fa4f5055dd69caf90e105fd105dba9c21b43af5d7355de6",
+      "audit_output_schema_version": 5
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v8.py",
+      "sha256": "75d1440b7f86f8a92da7cc200a93937c3e162a52fa5d9f1089fdca7b13f18778",
+      "result": "54 passed before two independent exact-hash HOLD findings"
+    }
+  },
+  "definite_issues": [
+    {
+      "channel": "Unbound canonical-frame construction value",
+      "kind": "false pass",
+      "evidence": "The adjudicator required the canonical_frame key set but did not type-check or bind construction. Replacing it with false, an arbitrary safe string, or a numeric list still returned PASSED_PUBLICATION_GATE with FULL_AND_DERIVED_PASS after canonical JSON serialization and refreshed hashes.",
+      "latent_fixture_drift": "The v8 synthetic fixture used a shortened construction string that already differed from the frozen producer's emitted string, yet the nominal publication test passed.",
+      "required_repair": "Bind construction to the frozen producer's exact full label."
+    },
+    {
+      "channel": "Logical versus physical AGA task-local paths",
+      "kind": "false rejection of legitimate output",
+      "evidence": "Revision 8 bound task-local command and provenance paths to /home/psharpe/coreai_modulus_cae/..., but the established AGA Slurm mount records these paths under /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/... . Completed job 304002 demonstrates this behavior, and the schema-v5 producer also resolves producer and output arguments before recording provenance.",
+      "required_repair": "Bind task-local script, producer, prior, and output values to the physical /scratch/fsw/portfolios path while retaining the wrapper's static repo, dataset, and historical paths under /home."
+    }
+  ],
+  "validated_repairs_carried_forward": [
+    "Canonical finite JSON bytes with one final newline",
+    "Canonical UTC generated timestamp",
+    "Exact wrapper command and task-local provenance path structure",
+    "Strict runtime and hardware type/shape schema plus forbidden string-value scanning",
+    "Canonical ZIP and complete NPY member bytes",
+    "JSON nonzero-underflow rejection and all earlier array, geometry, replay, decision, and validity checks"
+  ],
+  "scientific_effect": "Revision 8 was not frozen and no schema-v5 diagnostic output existed. It produced no publication pass, canonical-repair inference, or H-QC verdict.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v9.py",
+      "sha256": "6b101245e08e23e69888e5a88a06e809d8626ce192d2f49a19ad24b3c447cc86",
+      "audit_output_schema_version": 6
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v9.py",
+      "sha256": "1f24d208bd166216c240c7bc38afc7394cdefacfa60a605e796886683f43cbf6",
+      "result": "55 passed; Ruff check/format, py_compile, and CLI help passed; independent exact-hash re-audits pending"
+    },
+    "systematic_schema_probe": "All 621 representative numeric-list node mutations failed closed. Of 485 same-type leaf mutations, only the three producer-only geometric-center scalars and six intentionally variable runtime/hardware strings passed; no decision, validity, intervention, array, command, path, contract, or status leaf passed."
+  }
+}

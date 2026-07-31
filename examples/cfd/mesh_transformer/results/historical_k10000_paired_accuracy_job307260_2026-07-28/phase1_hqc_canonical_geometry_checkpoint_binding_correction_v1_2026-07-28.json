@@ -1,0 +1,40 @@
+{
+  "artifact_kind": "phase1_hqc_canonical_geometry_checkpoint_binding_correction",
+  "schema_version": 1,
+  "status": "CHECKPOINT_BINDING_LICENSE_WITHDRAWN",
+  "recorded_date": "2026-07-28",
+  "affected_experiment": {
+    "job_id": "306114",
+    "outcome": "CANONICAL_FULL_VALIDITY_PASS",
+    "sealed_bundle": "hqc_canonical_geometry_validity_36x5_job306114_2026-07-28",
+    "compute_adjudication_sha256": "a3be29a43cafbcb7d915222c4fb046cf8c09c2c4aed7771f8f3340bcade9a2c3",
+    "frozen_runtime_loader_sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f",
+    "frozen_validity_producer_sha256": "f96e272dd5d34d0a7e7d708b312f5b2856218715f22e5a489a6acbf5192baab5"
+  },
+  "defect": {
+    "call": "load_checkpoint(path=str(checkpoint_dir), models=model, device=device)",
+    "missing_argument": "epoch=491",
+    "returned_epoch_semantics": "The return value is read from the independently selected training-state checkpoint; it does not attest which model checkpoint file was opened.",
+    "artifact_gap": "The lane artifacts hash the named epoch-491 files but do not persist the resolved model filename opened by load_checkpoint or a frozen checkpoint-directory inventory.",
+    "relationship": "This is the same checkpoint-binding defect that withdrew the Stage A v1 archive-canary license."
+  },
+  "post_run_observation": {
+    "current_remote_inventory": "Model and training-state files are presently paired through epoch 491, with 491 the largest numeric index.",
+    "interpretation": "This makes an actual wrong-weight load unlikely, but current mutable directory state is not execution-time evidence and cannot repair the missing attestation."
+  },
+  "retained_claims": [
+    "The target-free canonical source-geometry construction executed successfully for all 36 cases, five resolutions, and two precision contexts under the model weights actually loaded in each lane.",
+    "Within each lane, primary, fixed-center, and replay paths shared one in-memory model, so the reported path-invariance and replay comparisons remain valid for that loaded model.",
+    "The public canonical source-geometry API satisfied the frozen shape, topology, storage, finite-value, and decode contracts."
+  ],
+  "withdrawn_claims": [
+    "The saved job-306114 predictions are intrinsically bound to the frozen epoch-491 model checkpoint.",
+    "The saved job-306114 predictions may serve as the canonical arm of an epoch-491 accuracy or noninferiority comparison."
+  ],
+  "required_repair": [
+    "Load with epoch=491 explicitly.",
+    "Verify and persist the resolved epoch-491 model, training-state, and normalization filenames and SHA-256 digests.",
+    "Run the K=10000 canonical accuracy arm in two process-isolated replicas over the frozen 36-case cohort.",
+    "Adjudicate against the sealed exact Stage B v2 legacy baseline without reusing job-306114 predictions."
+  ]
+}

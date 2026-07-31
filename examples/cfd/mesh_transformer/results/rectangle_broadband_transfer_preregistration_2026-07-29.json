@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "preregistered_from_closed_form_response_before_any_learning_result",
+  "scientific_question": "Does target-data saving follow a categorical source relation, or the modewise direction of boundary-response mismatch?",
+  "task": {
+    "domain": "(0,a) x (0,1)",
+    "equation": "(Delta - lambda^2) u = 0",
+    "boundary_condition": "u(0,y) = sum_m c_m sin(m pi y), zero Dirichlet data on the other three sides",
+    "observation_measure": "uniform in normalized coordinates xi=x/a and y",
+    "drive_coefficients": "independent, zero mean, with the frozen relative variances below"
+  },
+  "target": {
+    "aspect_ratio": 1.0,
+    "screening": 3.141592653589793
+  },
+  "sources": {
+    "P_physical_regime_aligned": {
+      "aspect_ratio": 1.25,
+      "screening": 3.141592653589793
+    },
+    "G_morphology_aligned": {
+      "aspect_ratio": 1.0,
+      "screening": 7.063436390777
+    },
+    "N_double_mismatch": {
+      "aspect_ratio": 1.25,
+      "screening": 7.063436390777
+    }
+  },
+  "drive_spectrum": {
+    "low_modes": [1, 2, 3, 4, 5, 6, 7, 8],
+    "high_modes": [17, 18, 19, 20, 21, 22, 23, 24],
+    "relative_variance_per_low_mode": 1.0,
+    "relative_variance_per_high_mode": 5.9217893970095155,
+    "common_variance_normalization": "arbitrary and identical for every task",
+    "target_output_energy_fraction_low_band": 0.5,
+    "target_output_energy_fraction_high_band": 0.5
+  },
+  "information_gate": {
+    "relative_rms_accuracy": 0.01,
+    "effective_response_dimension": 16,
+    "target_example_budgets": [1, 2, 4, 8],
+    "all_claimed_low_data_budgets_below_effective_dimension": true,
+    "exact_linear_reconstruction_dimension": 16
+  },
+  "distance_control": {
+    "definition": "D^2(S,T) = sum_m w_m integral_0^1 [f(d_m^S,xi)-f(d_m^T,xi)]^2 dxi, with f(d,xi)=sinh(d(1-xi))/sinh(d)",
+    "source_P_total_distance_squared": 0.0002972082580859021,
+    "source_G_total_distance_squared": 0.0002972082580859021,
+    "source_P_fraction_low_band": 0.497668459333,
+    "source_P_fraction_high_band": 0.502331540667,
+    "source_G_fraction_low_band": 0.99969225765,
+    "source_G_fraction_high_band": 0.00030774235,
+    "low_band_distance_ratio_P_over_G": 0.7055647809666313,
+    "high_band_distance_ratio_P_over_G": 40.40188156857332,
+    "registered_crossover": "P is closer in the low band; G is closer in the high band"
+  },
+  "primary_outcome": "mode-band-resolved target examples required to reach 1% relative RMS error",
+  "secondary_outcomes": [
+    "band-resolved error at each frozen target-example budget",
+    "aggregate target-data saving",
+    "distance from the exact linear reconstruction oracle"
+  ],
+  "interpretation_limits": [
+    "This is a designed causal stress test, not a representative natural boundary spectrum.",
+    "The high-frequency coefficient variance is deliberately increased to keep the attenuated high band visible.",
+    "A positive result requires later replication under a smooth natural spectrum and non-rectangular geometry.",
+    "No model training or transfer result was inspected when selecting these values."
+  ]
+}

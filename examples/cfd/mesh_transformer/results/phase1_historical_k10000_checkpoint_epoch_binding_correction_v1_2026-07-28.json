@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_historical_k10000_checkpoint_epoch_binding_correction",
+  "status": "STAGE_A_V1_LICENSE_WITHDRAWN_AND_STAGE_B_V1_ABANDONED_PRELAUNCH",
+  "recorded_at_utc": "2026-07-28T21:56:09Z",
+  "definite_bug": {
+    "summary": "Both draft replay helpers called PhysicsNeMo load_checkpoint without an explicit epoch.",
+    "mechanism": "With epoch=None, PhysicsNeMo resolves the largest model index and the largest training-state index independently. An asymmetric newer model file can therefore be loaded while checkpoint.0.491.pt still reports loaded_epoch=491.",
+    "consequence": "The epoch guard did not intrinsically prove that MeshTransformer.0.491.mdlus supplied the loaded weights. A wrong-weight prediction could be misclassified as a valid compatibility refutation or, logically, an exact pass.",
+    "required_fix": "Pass epoch=491 explicitly, retain the named-file SHA-256 gates, add an asymmetric-newer-model regression, rerun Stage A, and bind the new Stage-A exact-pass license before Stage B."
+  },
+  "stage_a_v1": {
+    "job_id": 306623,
+    "observed_outcome": "EXACT_STAGE_A_ARCHIVE_DOMAIN_PASS",
+    "adjudication_sha256": "74b482c39501c556798fb7ab6c611912c33dc9aea336718b92cec210d243dbb7",
+    "producer_sha256": "2aa6e518ddea77d54fba3ab5060458c86a2fd72f8dc37e8fd2cc963c4484c8e3",
+    "reducer_sha256": "98281da54489e7c54731d35ade345824949686f931ccbde3b77ebf46cce27b60",
+    "wrapper_sha256": "0155616caa00ad72bf14b44b246296d8a71054d7a44a63514a6d00b45f6a2175",
+    "preregistration_sha256": "8f35dd8b558c883bd75242d9b15062257f87638a871201321aceebeef578c1d3",
+    "empirical_result_retained": "Two isolated lanes and the archive predictions were raw-byte exact for run_118.",
+    "withdrawn_claim": "Job 306623 no longer licenses Stage B because its actual loaded model-file identity was not intrinsically epoch-pinned.",
+    "current_remote_checkpoint_inventory_observation": "The directory presently contains paired model/training-state epochs through 491 and norm_stats.pt; no model index above 491 is present. This makes the observed run plausibly correct but is not a contemporaneous launch attestation."
+  },
+  "stage_b_v1": {
+    "task_staged": false,
+    "scheduler_test_performed": false,
+    "job_submitted": false,
+    "model_or_reducer_output_exists": false,
+    "runtime_helper_sha256": "7fb49c676fd894e13b0e5710ca4185babb99b09b1d73453b91dd1988bc3956ed",
+    "producer_sha256": "8cf6f8351df329cacaeb0f90030686c211ba895eebd2d5c60c788c7b967bc75d",
+    "reducer_sha256": "c0eaa523726573afc2c5cabf11064dad864986d3ad70aff92d3c279177593d95",
+    "preregistration_sha256": "80b6bae5a696610158d3a06095e8af711f529f9970ce7a057ca4047c6883eb97",
+    "wrapper_sha256": "963cc2ed7523ed8209ba2273df17347b644557a2af731c6303a6cb3866169cb4",
+    "wrapper_test_sha256": "6d4be8691c4b35d2760951f270bc0d4ee66f4a0aba7fc24e163653c3c1e40577",
+    "disposition": "abandoned before staging; it must never be submitted"
+  },
+  "corrected_stage_b_code_pending_new_license": {
+    "runtime_helper_sha256": "dc4d2a71a0c9c72ff62166801433b21ae6f9b672801dfe5388c7975e887f4896",
+    "producer_sha256": "bce26e1e55d9231843c2255ed7e57fe20166e6fd6098b77d9a63944e8b1dd7a5",
+    "reducer_sha256": "4b4f4c893ca154b589b9d1276bf4f43cd52008664f75f3c56fcc66aa26ce8f68",
+    "runtime_test_sha256": "370a31d842974d36b4c86dacc2342265a5875b861be9005a95a7b9d90c1dd5c4",
+    "producer_test_sha256": "9d560ba1ab981d225ace981f810b8d54a71792a63a67101e15fcc8b42e4a246f",
+    "reducer_test_sha256": "ab05e92b8ef90b098527c179e61eab9b2999b554130bf209f8d68894fc57c205",
+    "focused_tests": "58 passed",
+    "launch_state": "blocked pending a newly epoch-pinned Stage-A exact-pass license"
+  },
+  "audit_history": {
+    "operations_launch_audit": "GO, but did not detect the checkpoint-selection defect",
+    "independent_scientific_audit": "NO-GO; detected the checkpoint-selection defect",
+    "decision": "NO-GO takes precedence"
+  },
+  "interpretation_guard": "This correction does not turn the exact job-306623 prediction match into evidence against the model. It withdraws only the stronger provenance/license claim and requires a clean rerun."
+}

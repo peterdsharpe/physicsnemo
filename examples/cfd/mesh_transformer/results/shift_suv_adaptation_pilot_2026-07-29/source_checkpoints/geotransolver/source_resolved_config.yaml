@@ -1,0 +1,77 @@
+precision: bfloat16
+profile: false
+augment: false
+benchmark_io: false
+training:
+  seed: 42
+  save_interval: 10
+  loss_type: huber
+  batch_size: 1
+  scheduler_update_mode: epoch
+  optimizer:
+    weight_decay: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    eps: 1.0e-08
+    lr: 0.003
+  num_epochs: 500
+  scheduler:
+    _target_: torch.optim.lr_scheduler.StepLR
+    step_size: 100
+    gamma: 0.1
+dataloader:
+  prefetch_factor: 1
+  num_streams: 1
+  use_streams: false
+  num_workers: 1
+  pin_memory: true
+logging:
+  log_every_n_steps: 10
+input_type: tensors
+output_type: tensors
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+  - interior.points
+  - boundaries.vehicle.cell_data.normals
+  local_positions: interior.points
+  global_embedding: global_data.U_inf
+model:
+  _target_: physicsnemo.experimental.models.geotransolver.GeoTransolver
+  out_dim: 4
+  functional_dim: 6
+  geometry_dim: 3
+  global_dim: 3
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: gelu
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: false
+  radii:
+  - 0.1
+  - 0.5
+  - 2.0
+  neighbors_in_radius:
+  - 16
+  - 32
+  - 64
+  n_hidden_local: 32
+  state_mixing_mode: weighted
+dataset: drivaer_ml_surface
+extra_datasets: []
+train_split: train
+val_split: val
+sampling_resolution: 10000
+metrics:
+- l2
+run_id: t2_geotransolver_surface
+output_dir: runs
+checkpoint_dir: null
+compile: true
+out_dim: 4

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "preregistered_before_any_spectral_local_instrument_result",
+  "extends": [
+    "nonseparable_response_relation_formal_2026-07-29.json",
+    "nonseparable_target_saturation_orthogonal_amendment_2026-07-29.json"
+  ],
+  "scientific_hypothesis": "Because the coefficient field contains only the first three transverse harmonics, the boundary-response kernel is locally structured in input/output frequency. A learner that shares one scalar kernel across both mode indices should infer unseen drive directions progressively from partial orthogonal coverage.",
+  "rival": "The coupled response remains direction-specific at the required accuracy; spectral locality either cannot represent the exact operator or does not turn partial target fields into held-out directional accuracy.",
+  "instrument": {
+    "role": "Measurement of the spectral-locality hypothesis, not a proposed final architecture.",
+    "contract": "Exact linearity in the eight boundary coefficients. One scalar coordinate network is evaluated for every propagation location, retained output mode, and input mode.",
+    "features": [
+      "raw propagation coordinate",
+      "sine and cosine propagation features at 1, 2, 4, and 8 cycles",
+      "normalized input-mode index",
+      "normalized output-mode index",
+      "signed and absolute mode-index separation",
+      "same-mode indicator"
+    ],
+    "network": "Three hidden SiLU layers of width 128 and one scalar output.",
+    "optimization": {
+      "steps": 6000,
+      "optimizer": "AdamW",
+      "learning_rate": 0.001,
+      "weight_decay": 1e-06,
+      "gradient_norm_clip": 1.0,
+      "checkpoint_selection": "None; frozen final step."
+    }
+  },
+  "protocol": {
+    "capacity_seeds": [
+      17,
+      29,
+      43
+    ],
+    "target_field_budgets": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "target_seeds": [
+      17,
+      29,
+      43
+    ],
+    "target_design": "The nested orthogonal design frozen in nonseparable_target_saturation_orthogonal_amendment_2026-07-29.json.",
+    "evaluation": "Exact expected relative root-mean-square error on held-out boundary drives, computed from the learned response matrix."
+  },
+  "registered_gates": {
+    "capacity": "Capacity-control geometric-mean error at most 0.5%, with every seed at most 0.75%.",
+    "target_threshold": "Eight-field geometric-mean target-only error at most 1.5%.",
+    "one_field_not_saturated": "One-field geometric-mean target-only error at least 2.5%.",
+    "material_improvement": "Four-field error at most 80% and eight-field error at most 50% of one-field error.",
+    "monotonicity": "Geometric-mean target-only error strictly decreases at every budget."
+  },
+  "decision_rule": "All gates must pass before source transfer is measured. Capacity failure refutes this spectral-local representation at the declared size and schedule. Saturation failure refutes its use as the transfer instrument even if capacity passes.",
+  "scope": [
+    "A pass would validate one exploratory instrument on one nonseparable elliptic family, not establish architecture robustness.",
+    "A failure does not refute all cross-frequency priors; it refutes this explicit local-coordinate hypothesis at the declared resolution.",
+    "No source-trained result is run or inspected during this gate."
+  ]
+}

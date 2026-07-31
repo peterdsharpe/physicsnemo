@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "analytic_preregistration_amendment_before_any_learning_result",
+  "amends": "rectangle_broadband_transfer_preregistration_2026-07-29.json",
+  "correction_history": [
+    "Before any learning result, an internal verification caught that the first draft of this amendment compared a distance using drive weights normalized to sum one with an output energy using unnormalized relative variances. All relative-error values and threshold crossings below use one consistent normalization."
+  ],
+  "unchanged_parts": [
+    "PDE family",
+    "target and source parameters",
+    "boundary-drive spectrum",
+    "response-distance definition",
+    "registered low-band and high-band distance crossover"
+  ],
+  "reason_for_amendment": "The original target-example budgets 1, 2, 4, and 8 do not span the registered 1% aggregate relative-RMS threshold under the exact minimum-change adaptation null. The phrase 'band-resolved 1% relative RMS' also left its normalization implicit.",
+  "analytic_null": {
+    "description": "Adapt the exact source response operator by the smallest Hilbert-Schmidt-norm change that interpolates n noiseless target excitations.",
+    "assumptions": [
+      "The 16 boundary coefficients are whitened to an isotropic drive vector z.",
+      "Source and target response operators B_S and B_T map z to the observed field.",
+      "The n target drive vectors are independent and isotropic.",
+      "The adapted operator exactly interpolates the n target observations.",
+      "Among exact interpolants, adaptation minimizes ||B-B_S||_HS."
+    ],
+    "solution": "B_hat = B_S + (B_T-B_S) P_Z, where P_Z projects onto the span of the n target drive vectors.",
+    "remaining_error": "B_hat-B_T = (B_S-B_T)(I-P_Z)",
+    "expected_squared_error": "E ||B_hat-B_T||_HS^2 = (1-n/16) ||B_S-B_T||_HS^2 for 0 <= n <= 16",
+    "bandwise_extension": "The same factor multiplies the squared error after projection onto either orthogonal output-mode band."
+  },
+  "frozen_task_quantities": {
+    "sum_of_relative_drive_variances": 55.374315176076124,
+    "target_total_field_energy_under_unnormalized_relative_variances": 0.3720250657656915,
+    "target_profile_energy_under_normalized_drive_weights": 0.013436737396489588,
+    "target_profile_energy_per_band_under_normalized_drive_weights": 0.006718368698244794,
+    "source_P_total_profile_distance_squared_under_normalized_drive_weights": 0.0002972082580859021,
+    "source_G_total_profile_distance_squared_under_normalized_drive_weights": 0.0002972082580859021,
+    "matched_source_zero_target_data_relative_rms": 0.14872484377898623
+  },
+  "null_predictions": {
+    "aggregate": {
+      "prediction": "P and G tie at every target-data budget because their total squared response distances are matched.",
+      "expected_relative_rms_by_target_examples": {
+        "0": 0.14872484377898623,
+        "1": 0.14400221078082837,
+        "2": 0.13911935258061106,
+        "4": 0.1287994928864741,
+        "8": 0.1051643455670311,
+        "12": 0.07436242188949312,
+        "14": 0.05258217278351555,
+        "15": 0.03718121094474656,
+        "16": 0.0
+      },
+      "first_integer_budget_below_one_percent_relative_rms": 16
+    },
+    "bandwise": {
+      "prediction": "P has lower expected error in modes 1-8 and G has lower expected error in modes 17-24 at every nonterminal budget.",
+      "first_integer_budget_below_one_percent_per_band_relative_rms": {
+        "P_low": 16,
+        "P_high": 16,
+        "G_low": 16,
+        "G_high": 0
+      }
+    }
+  },
+  "registered_rivals_after_amendment": {
+    "minimum_change_response_reuse": "Aggregate P/G tie plus the preregistered opposite band winners, with the exact 1-n/16 retention law.",
+    "categorical_physical_regime_reuse": "P has lower error than G in both bands, overturning the null's high-band winner.",
+    "categorical_geometry_scaffold_reuse": "G has lower error than P in both bands, overturning the null's low-band winner.",
+    "representation_dependent_transfer": "Departures from the null change sign across prospectively declared learner classes.",
+    "no_useful_transfer": "Source initialization does not improve on an equally capable target-only learner."
+  },
+  "amended_outcomes": {
+    "primary": "Band-resolved error curves relative to the exact minimum-change null, rather than a threshold crossing alone.",
+    "target_example_budgets": [0, 1, 2, 4, 8, 12, 14, 15, 16],
+    "threshold_reporting": "Report aggregate-relative and per-band-relative normalization separately.",
+    "architecture_language": "Call a pattern architecture-robust only over prospectively declared learner classes; do not call it architecture-independent."
+  },
+  "interpretation_limits": [
+    "The null assumes exact source operators, noiseless labels, isotropic whitened drives, and minimum-Hilbert-Schmidt-change interpolation.",
+    "It is a mechanistic reference, not a claim that neural fine-tuning obeys this rule.",
+    "A practical learner can differ because of representation, optimization, finite source error, regularization, or coupling among modes.",
+    "No learning result was inspected before deriving or recording this amendment."
+  ]
+}

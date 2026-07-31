@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T08:01:48Z",
+  "status": "ADJUDICATOR_V11_CANDIDATE_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v11.py",
+      "sha256": "f32f8116965aaac272673fa7f3cd86c3b00d0683c76b7f8508a4815cd0976062",
+      "audit_output_schema_version": 8
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v11.py",
+      "sha256": "83a7e05aa2615fa870eff999f5def7b4c3244bc9f87c33653feb9250d53d4e59",
+      "result": "68 passed before three independent exact-hash HOLD reviews"
+    }
+  },
+  "validated_v10_repairs": [
+    "DEL, C1-control, zero-width-format, tab, space, and backslash-u log-label splits failed closed.",
+    "Contradictory failure lines plus substring-spoofed success markers failed closed.",
+    "Forbidden empty directories, renamed manifest, and renamed copied root failed closed.",
+    "Printable successful wrapper/job304002-compatible output remained accepted."
+  ],
+  "definite_issues": [
+    {
+      "channel": "Literal supervision field aliases omitted from log vocabulary",
+      "kind": "false pass",
+      "evidence": "Each of pMeanTrim, wallShearStressMeanTrim, true_pressure, and true_wss with numeric values could be inserted in the allowlisted log and pass. These are exact frozen diagnostic/producer supervision-field names.",
+      "required_repair": "Add the normalized aliases to the log-only forbidden vocabulary."
+    },
+    {
+      "channel": "Separator-obfuscated target content in variable JSON runtime strings",
+      "kind": "false pass",
+      "evidence": "provenance.platform set to ordinary ASCII 'tar get_pressure=[1,2,3]' or a zero-width equivalent passed canonical JSON and the publication gate.",
+      "required_repair": "Require variable runtime strings to be printable ASCII without escape metacharacters and screen their separator-free normalized representation."
+    },
+    {
+      "channel": "Semantic rather than raw-byte validation of manifest, sidecars, and STATUS",
+      "kind": "noncanonical artifact false pass",
+      "evidence": "CRLF or vertical-tab sidecars, CRLF STATUS, and a reversed manifest without terminal LF passed.",
+      "required_repair": "Require exact sidecar and STATUS bytes and a sorted canonical manifest with one LF-terminated line per member."
+    },
+    {
+      "channel": "Extended attributes and post-validation audit output placement",
+      "kind": "metadata and mutation false pass",
+      "evidence": "A user.target_pressure extended attribute was invisible to inventory/hash checks, and CLI output could be placed inside the already-validated bundle.",
+      "required_repair": "Reject all copied-bundle xattrs and require adjudication output outside the immutable input bundle."
+    },
+    {
+      "channel": "Legitimate task-root bytecode cache unless launch environment is explicit",
+      "kind": "false rejection",
+      "evidence": "The frozen wrapper does not set PYTHONDONTWRITEBYTECODE; dynamic import of the staged producer creates __pycache__, as job304002 confirms, while the closed directory allowlist correctly rejects it.",
+      "required_repair": "Freeze submission with sbatch --export=ALL,PYTHONDONTWRITEBYTECODE=1 and prohibit any pre-submission Python execution inside the fresh staged task."
+    },
+    {
+      "channel": "Background heartbeat can race around final log lines",
+      "kind": "false rejection",
+      "evidence": "The wrapper kills but does not wait for the sampler process tree, so screened GPU output is not guaranteed to leave the three success lines literally last.",
+      "required_repair": "Require the exact unique success lines in causal order, while permitting otherwise validated sampler lines around them."
+    }
+  ],
+  "scientific_effect": "Revision 11 was not frozen and no schema-v5 diagnostic output existed. It produced no publication pass, canonical-repair inference, or H-QC verdict.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v12.py",
+      "sha256": "090915123cba7cf12dec7f5f5e87095e2669c5b7ebe11c5638d639ef1750377f",
+      "audit_output_schema_version": 9
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v12.py",
+      "sha256": "b49173ece557b322173b9a6daf767dee24ef3e813c6a061279150e145c69772c",
+      "result": "82 passed; Ruff check/format, py_compile, and CLI help passed; independent exact-hash re-audits pending"
+    },
+    "launch_environment_requirement": "A separately frozen prelaunch supplement must bind PYTHONDONTWRITEBYTECODE=1 into sbatch submission and the exact cache-free copied-directory contract."
+  }
+}

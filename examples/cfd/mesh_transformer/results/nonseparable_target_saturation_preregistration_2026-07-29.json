@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-29",
+  "status": "preregistered_before_any_target_saturation_learning_result",
+  "extends": "nonseparable_response_relation_formal_2026-07-29.json",
+  "scientific_question": "Does the admitted nonseparable task retain a meaningful multi-field target-learning regime for a capable, boundary-linear learner?",
+  "instrument": {
+    "role": "Measurement instrument only; not a proposed surrogate architecture.",
+    "contract": "The prediction is exactly linear in the eight boundary coefficients. A coordinate network represents the response kernel over 64 propagation locations and 18 retained output modes.",
+    "coordinate_features": "Raw propagation coordinate; sine and cosine features at 1, 2, 4, and 8 cycles; one-hot output-mode identity.",
+    "network": "Three hidden SiLU layers of width 128 followed by eight kernel coefficients.",
+    "optimization": {
+      "steps": 6000,
+      "optimizer": "AdamW",
+      "learning_rate": 0.001,
+      "weight_decay": 1e-06,
+      "gradient_norm_clip": 1.0,
+      "checkpoint_selection": "None; every run uses the frozen final step."
+    }
+  },
+  "arms": {
+    "capacity_control": "Train directly against the exact target response matrix. This asks only whether the instrument can represent the operator.",
+    "target_only": {
+      "target_field_budgets": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "seeds": [
+        17,
+        29,
+        43
+      ],
+      "training_data": "At each seed and budget, freeze independent Gaussian boundary drives with the exact variances from the admitted analytic instrument.",
+      "evaluation": "Expected relative root-mean-square error on held-out drives, computed exactly from the learned response matrix."
+    }
+  },
+  "registered_gates": {
+    "capacity": "The direct-operator capacity control reaches at most 0.5% relative response error.",
+    "target_threshold": "The three-seed geometric-mean target-only error at eight fields is at most 1.5%.",
+    "one_field_not_saturated": "The three-seed geometric-mean target-only error at one field is at least 2.5%.",
+    "material_improvement": "The four-field geometric-mean error is at most 80% of the one-field error, and the eight-field error is at most 50% of the one-field error.",
+    "monotonicity": "The geometric-mean error strictly decreases at every registered budget."
+  },
+  "decision_rule": "Only if every gate passes may source-transfer curves be measured with this instrument. Failure means the learner or information unit is invalid for the causal transfer question; it is not evidence against response-direction reuse.",
+  "scope": [
+    "One learner class can validate an exploratory instrument but cannot establish architecture-robust transfer.",
+    "The target operator is known only for evaluation and the capacity control; target-only runs train solely on their frozen fields.",
+    "No source-trained result is inspected in this gate."
+  ]
+}

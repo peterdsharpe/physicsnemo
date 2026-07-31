@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "hqc_canonical_geometry_full_cohort_validity_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-07-28T17:57:45Z",
+  "question": "Does the public cast-once canonical source-geometry API make the frozen primary-center and fixed-center inference paths raw-byte identical throughout the complete 36-case ID-reference cohort?",
+  "hypothesis": {
+    "candidate": "Supplying one coherent canonical source bundle through CanonicalSourceGeometry removes center-path dependence without changing topology, source identity, query identity, or replay determinism.",
+    "prediction": "After every validity gate passes, all 720 preregistered full-trace primary-versus-fixed pressure and WSS tensors are raw-byte identical.",
+    "falsifier": "One or more raw-byte mismatches among the 720 full-trace tensors, provided every instrument-validity and primary-replay gate passes.",
+    "not_a_falsifier": [
+      "a missing, timed-out, out-of-memory, or unreadable lane",
+      "a canonical construction, topology, query-prefix, source-storage, anchor-replay, or primary-replay failure",
+      "a changed cohort, resolution, precision, input hash, producer hash, reducer hash, or execution-source hash"
+    ]
+  },
+  "scope": {
+    "target_free": true,
+    "supervision_arrays_indexed": false,
+    "supervision_files_opened_by_model_producer": false,
+    "raw_dataset_sample_loader_called": false,
+    "allowed_raw_case_inputs": [
+      "vehicle points",
+      "vehicle cells",
+      "U_inf",
+      "p_inf",
+      "rho_inf",
+      "nu",
+      "L_ref",
+      "structural TensorDict metadata"
+    ],
+    "forbidden_raw_input_subtrees": [
+      "cell_data",
+      "point_data",
+      "interior"
+    ],
+    "truth_relative_metrics_computed": false,
+    "force_or_area_objective_statistics_computed": false,
+    "hqc_eligibility_support_futility_or_mixed_statistics_computed": false,
+    "may_be_interpreted_as_hqc_or_accuracy_evidence": false
+  },
+  "cohort": {
+    "case_ids_in_frozen_order": [
+      "run_118",
+      "run_129",
+      "run_145",
+      "run_149",
+      "run_17",
+      "run_171",
+      "run_18",
+      "run_183",
+      "run_197",
+      "run_202",
+      "run_225",
+      "run_270",
+      "run_271",
+      "run_298",
+      "run_305",
+      "run_320",
+      "run_367",
+      "run_380",
+      "run_382",
+      "run_399",
+      "run_4",
+      "run_409",
+      "run_419",
+      "run_424",
+      "run_429",
+      "run_431",
+      "run_439",
+      "run_465",
+      "run_468",
+      "run_469",
+      "run_478",
+      "run_489",
+      "run_490",
+      "run_495",
+      "run_71",
+      "run_86"
+    ],
+    "case_count": 36,
+    "resolutions": [
+      2500,
+      5000,
+      10000,
+      20000,
+      40000
+    ],
+    "precisions": [
+      "bfloat16",
+      "float32"
+    ],
+    "fields": [
+      "pressure",
+      "wss"
+    ],
+    "lane_count": 4,
+    "lane_assignment": "cohort_ordinal modulo 4",
+    "cases_per_lane": 9
+  },
+  "intervention": {
+    "public_api_only": true,
+    "api": "MeshTransformer.encode(domain, canonical_source_geometry=CanonicalSourceGeometry(...))",
+    "canonical_bundle_fields": [
+      "points",
+      "cells",
+      "centroids",
+      "areas",
+      "normals",
+      "center",
+      "reference_length"
+    ],
+    "construction": "Promote raw selected geometry to float64, compute a physical area-weighted center, remove that center coherently from points and centroids, divide points and centroids by L_ref times model_reference_length, divide areas by the squared scale, retain unit normals and selected topology, then cast each completed field once to float32.",
+    "paths_per_precision": [
+      "historical primary-center path",
+      "historical fixed-S_10000-center path",
+      "historical primary-center replay path"
+    ],
+    "canonical_bundle_supplied_symmetrically": true,
+    "private_derived_geometry_intervention_executed": false
+  },
+  "query_contract": {
+    "trace_of": "vehicle",
+    "coupled_query": "S_K canonical trace centroids in source cell-identity order",
+    "decodes_per_encoded_path_and_precision": 1,
+    "standalone_fixed_2500_decode_at_larger_k": false,
+    "fixed_panel_Q": "the first 2500 cell-identity rows of the one coupled S_K decode",
+    "Q_is_prefix_identity_not_fixed_coordinate_query": true,
+    "required_prefix_gate": "For every K, the first 2500 selected cell IDs equal the independently reconstructed S_2500 identity prefix exactly; persisted prefix arrays must be exact slices of persisted coupled arrays.",
+    "prefix_panel_is_an_independent_licensing_decision": false
+  },
+  "registered_counts": {
+    "case_resolution_precision_units": 360,
+    "licensing_full_field_tensors": 720,
+    "licensing_count_formula": "36 cases * 5 resolutions * 2 precisions * 2 fields",
+    "deduplicated_panel_field_summaries": 1296,
+    "deduplicated_summary_formula": "720 full-trace summaries plus 576 nonduplicate Q-prefix summaries for K greater than 2500",
+    "emitted_panel_field_records": 1440,
+    "emitted_record_formula": "36 cases * 5 resolutions * 2 precisions * 2 panels * 2 fields",
+    "K_2500_prefix_records_duplicate_full_trace_records": true,
+    "recomputed_primary_replay_and_prefix_tensor_comparisons": 3600,
+    "recomputed_nonlicensing_fixed_panel_consistency_tensor_comparisons": 720,
+    "recomputed_frozen_anchor_tensor_comparisons": 120,
+    "averaging_or_statistical_selection_used": false
+  },
+  "validity_gates": {
+    "universal_conjunction": true,
+    "required": [
+      "all four lane artifacts are present, readable, sidecar-verified, schema-exact, and uniquely cover the frozen modulo-4 cohort",
+      "all stable-input, producer, reducer, helper, geometry-manifest, anchor, and execution-source hashes match",
+      "the staged full execution-source manifest has its frozen hash, exactly enumerates every non-cache regular file below physicsnemo, every direct regular file in recipe src, and the one staged dataset YAML with no missing or extra files, and passes sha256sum verification",
+      "no symlink, __pycache__ directory, or .pyc file exists anywhere in the task-local execution source before Python import",
+      "the task-local execution source is the imported PhysicsNeMo and recipe source",
+      "canonical geometry is finite, correctly shaped, positive-area, unit-normal, topology-preserving, centered at positive zero, and scaled by positive one",
+      "the public canonical tensors are the authoritative encoded tensors without a private replacement",
+      "independent canonical construction replay is raw-byte exact",
+      "the primary encoded path replay is raw-byte exact for pressure and WSS on the coupled trace and its prefix",
+      "the Q panel is an exact persisted slice of the coupled S_K trace and preserves the frozen cell-identity prefix",
+      "the reducer same-byte verifies and directly loads the frozen job-305691 anchor NPZ, then all 120 tensor comparisons from the four overlapping K=2500 canaries replay that anchor exactly in both precisions"
+    ],
+    "missing_or_unreadable_lane_result": "INCOMPLETE_COHORT",
+    "failed_instrument_validity_result": "INVALID_COHORT",
+    "oom_or_timeout_result": "INCOMPLETE_COHORT",
+    "no_failed_validity_gate_may_refute_the_candidate": true
+  },
+  "decision_rule": {
+    "authority": "The independently recomputed reducer result, not a lane exit code or producer summary, controls the cohort outcome.",
+    "pass": {
+      "status": "VALID_TARGET_FREE_CANONICAL_GEOMETRY_VALIDITY_COHORT",
+      "outcome": "CANONICAL_FULL_VALIDITY_PASS",
+      "criterion": "Every validity gate and every one of the 720 full-trace primary-versus-fixed raw-byte comparisons passes."
+    },
+    "refuted": {
+      "status": "VALID_TARGET_FREE_CANONICAL_GEOMETRY_VALIDITY_COHORT",
+      "outcome": "CANONICAL_FULL_VALIDITY_REFUTED",
+      "criterion": "Every validity gate passes and at least one of the 720 full-trace primary-versus-fixed raw-byte comparisons mismatches."
+    },
+    "invalid": {
+      "status": "INVALID_TARGET_FREE_CANONICAL_GEOMETRY_VALIDITY_COHORT",
+      "outcome": "INVALID_COHORT",
+      "criterion": "A readable artifact or a recomputed validity contract fails."
+    },
+    "incomplete": {
+      "status": "INCOMPLETE_TARGET_FREE_CANONICAL_GEOMETRY_VALIDITY_COHORT",
+      "outcome": "INCOMPLETE_COHORT",
+      "criterion": "One or more required lane artifacts are absent, unreadable, timed out, or otherwise unavailable."
+    },
+    "valid_refutation_exits_successfully_from_lane_producer": true,
+    "wrapper_exits_zero_only_for_valid_pass_or_valid_refutation": true
+  },
+  "four_canary_anchor": {
+    "slurm_job_id": 305691,
+    "case_ids": [
+      "run_118",
+      "run_129",
+      "run_145",
+      "run_149"
+    ],
+    "resolution": 2500,
+    "precisions": [
+      "bfloat16",
+      "float32"
+    ],
+    "artifact_json_sha256": "09e336442881f0641c14c91c17dd80ac440d474f996925cf79f2174bc4cacd88",
+    "artifact_npz_sha256": "edee836e0cc5c66690276e6787496cbd6b81fb08decb7d54ecf1f36b333ddc9f",
+    "artifact_npz_sidecar_sha256": "ecb00237458f08432976329c2ac28582a3719be49943f1d59ced30ec1d7a7b73",
+    "independent_adjudication_v13_sha256": "2ab01e02a4bc68c2e69d90f9754f1377cec8ae474440f658baba0895f518a4b4",
+    "role": "An exact overlap replay is an instrument-validity gate only; the four canaries do not license the 36-case conclusion by themselves."
+  },
+  "frozen_provenance": {
+    "lane_producer_sha256": "f96e272dd5d34d0a7e7d708b312f5b2856218715f22e5a489a6acbf5192baab5",
+    "reducer_sha256": "ea5769b927f5a3ada3030ca8849706f391b4cb0aa0c61384098e698a1538d9c9",
+    "execution_source_manifest_sha256": "e8edb80f34c005f85e1e87ebc27567ddf0a74fe2bc34e06ba40c35c92e54cfb4",
+    "execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "frozen_canonical_helper_sha256": "694c45556acd3d002fcd34ffaac2872761ce61eaa60f842c8040f71edd1af7ac",
+    "frozen_hqc_loader_sha256": "8b6e8055e3563e4eec6a4ff311f567dda68f9b743092aad5805c7457ffde611f",
+    "geometry_input_manifest_sha256": "3d33209f775513a690d61be560e640a348268132e14dd56675d256ee380bf4b0",
+    "dataset_manifest_sha256": "51c2268df5b9b365f4ef6147c6ec390f10c55f733ad967f6617bd5e52f62e7ca",
+    "dataset_config_sha256": "a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3",
+    "resolved_config_sha256": "a71987df4d49d38cc7f6b43c08ba0a0592fd39cf16a50aef04bf1b0d4f080fe1",
+    "model_checkpoint_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+    "normalization_stats_sha256": "31a73b08f3e3f6b2d8c60ed659247deae996d2596e752f5423cabbb29f186b94",
+    "training_state_sha256": "3783bda98ed561db95638d1c6fbb914b73be1bf36ed91ad79872f7f19763cea7"
+  },
+  "launch_contract": {
+    "cluster": "AGA",
+    "logical_task_directory": "/home/psharpe/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-canonical-validity-36x5-v1",
+    "physical_task_directory": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-07-28-mt-canonical-validity-36x5-v1",
+    "runtime_task_path_basis": "After proving that the logical task directory resolves exactly to the frozen physical task directory, derive every task-local input, lane output, reducer input/output, lock, marker, log, execution-source path, and PYTHONPATH entry from the physical /scratch path so the reducer's component-wise O_NOFOLLOW walk encounters no symlinked parent.",
+    "task_local_execution_source": "execution_source",
+    "task_local_execution_source_manifest": "execution_source_manifest.sha256",
+    "execution_source_manifest_inventory": "all non-cache regular files recursively below physicsnemo, all non-cache regular files directly below recipe src, and recipe datasets/drivaer_ml_surface.yaml; no unrelated recipe files",
+    "dataset_yaml_staging_source": "the launch bundle frozen_inputs/drivaer_ml_surface.yaml artifact with SHA-256 a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3, not the dirty working-tree YAML",
+    "shared_physical_venv": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/physicsnemo-mesh-transformer/.venv-recipe",
+    "allocation": "one whole AGA node with four GB300 GPUs for at most two hours",
+    "parallelism": "four concurrent physical-/scratch venv Python -m torch.distributed.run --standalone --nproc_per_node=1 lanes, CUDA_VISIBLE_DEVICES 0 through 3, eight CPU threads per lane",
+    "upper_bound_gpu_hours": 8,
+    "lane_timeout_minutes": 95,
+    "reducer_runs_after_lane_waits_even_when_a_lane_fails": true,
+    "no_clobber_outputs": true,
+    "single_task_lock": true
+  },
+  "limitations": [
+    "This experiment tests center-path invariance of one public cast-once canonical geometry implementation; it does not establish surrogate accuracy.",
+    "It does not rerun or license H-QC, truth-relative error, force, endpoint, support, futility, eligibility, or mixed decisions.",
+    "It is limited to one frozen checkpoint, 36 cases, five nested source resolutions, two precision contexts, one trace contract, and the recorded software and input hashes.",
+    "A pass does not establish all-case, all-mesh, all-hardware, training-time, architectural, or out-of-distribution generality.",
+    "A refutation rejects this implementation candidate under the frozen contract; it does not prove that no canonical geometry repair can work.",
+    "The 1296 deduplicated summaries and 1440 emitted records are deterministic views of 720 licensing tensors, not independent statistical observations."
+  ],
+  "post_result_actions": {
+    "after_valid_pass": "Freeze and run a separate exact historical K=10000 truth replay, then preregister a target-using accuracy and noninferiority experiment. Do not infer accuracy or H-QC eligibility from this validity pass.",
+    "after_valid_refutation": "Preserve the refutation and use any private derived-geometry intervention only as a newly registered diagnostic; it cannot license the public implementation.",
+    "after_invalid_or_incomplete": "Repair or complete the instrument without treating the attempted run as evidence for or against the candidate, then rerun under a newly frozen launch record if any executable or contract changes."
+  }
+}

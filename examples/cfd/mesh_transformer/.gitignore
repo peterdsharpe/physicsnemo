@@ -15,9 +15,19 @@ book/.quarto/
 book/.jupyter_cache/
 book/*.quarto_ipynb*
 
+# Heavy replay/validity lane payloads (71-139 MB each, 2026-07-28 DrivAerML
+# campaign) exceed GitHub's 100 MB push limit. Their frozen record is the
+# committed .npz.sha256 sidecar written at job time; the payloads themselves
+# stay on this machine and on lustre.
+results/hqc_canonical_geometry_validity_36x5_job306114_2026-07-28/artifacts/*.npz
+results/historical_k10000_paired_accuracy_job307260_2026-07-28/artifacts/*.npz
+results/historical_k10000_paired_accuracy_job307260_2026-07-28/stage_b_v2_license/artifacts/*.npz
+results/historical_k10000_stage_b_replay_v2_job306814_2026-07-28/artifacts/*.npz
+
 # NOT ignored on purpose:
 # - results/       frozen result archives; the book's provenance requires them
-#                  checked in (every figure cell reads these JSONs).
+#                  checked in (every figure cell reads these JSONs; the lane
+#                  .npz exclusions above are the one size-forced exception).
 # - book/data/     precomputed inputs read by live figure cells at render time.
 # - book/figures/  pre-rendered images whose inputs (checkpoints, session
 #                  training histories) no longer exist.

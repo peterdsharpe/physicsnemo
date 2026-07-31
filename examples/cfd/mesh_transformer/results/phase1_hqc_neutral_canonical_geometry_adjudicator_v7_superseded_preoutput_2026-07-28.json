@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_adjudicator_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T07:26:28Z",
+  "status": "ADJUDICATOR_V7_FREEZE_SUPERSEDED_BEFORE_SCHEMA_V5_DIAGNOSTIC_OUTPUT",
+  "affected_protocol": "target-free neutral canonical-geometry diagnostic schema v5",
+  "superseded_freeze": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_adjudicator_freeze_v7_2026-07-28.json",
+    "sha256": "917f2da98884e7c95cbe1b9823dd5dc0fc3b26956da37a07a8bdab7ae886a045"
+  },
+  "superseded_software": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v7.py",
+      "sha256": "7243993c8623e6f77a242ca9769b0d2e464aef95cddcb330a48fbc591ca735d1",
+      "audit_output_schema_version": 4
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v7.py",
+      "sha256": "405be9b0eba79e4dc711cc3461a72648b090cdcacc1282f6245850a9ee49f38b",
+      "result": "50 passed before the independent end-to-end HOLD"
+    }
+  },
+  "audit_reconciliation": {
+    "binary_container_audits": "Two reviews returned GO for the complete ZIP and NPY byte contracts.",
+    "end_to_end_target_exclusion_audit": "A separate exact-hash review returned HOLD after reproducing three JSON-value false passes.",
+    "decision": "The end-to-end HOLD controls. The v7 freeze must not be used."
+  },
+  "definite_false_pass_paths": [
+    {
+      "channel": "Unvalidated generated_at_utc JSON value",
+      "evidence": "Replacing the timestamp with the literal string target_pressure=[1,2,3], then refreshing ordinary hashes and the bundle manifest, still returned PASSED_PUBLICATION_GATE with FULL_AND_DERIVED_PASS."
+    },
+    {
+      "channel": "Underconstrained provenance.command JSON value",
+      "evidence": "Appending the literal string target_pressure=[1,2,3] to the command array, then refreshing ordinary hashes and the bundle manifest, still returned PASSED_PUBLICATION_GATE with FULL_AND_DERIVED_PASS."
+    },
+    {
+      "channel": "Underconstrained provenance.hardware JSON value",
+      "evidence": "Replacing the hardware object with the numeric list [1.0,2.0,3.0], then refreshing ordinary hashes and the bundle manifest, still returned PASSED_PUBLICATION_GATE with FULL_AND_DERIVED_PASS."
+    }
+  ],
+  "root_cause": "The forbidden-content traversal inspected mapping keys but not string values, while the top-level timestamp and several provenance values were admitted without exact type, shape, or content contracts.",
+  "required_repair": [
+    "Require the JSON bytes to equal the producer's canonical sorted, indented, finite serialization with one final newline.",
+    "Require a canonical UTC timestamp.",
+    "Bind the full command and remote diagnostic/producer/output paths to the frozen wrapper.",
+    "Require exact runtime and hardware value schemas.",
+    "Apply forbidden-vocabulary screening to string values as well as mapping keys."
+  ],
+  "scientific_effect": "No schema-v5 diagnostic output existed. Revision 7 produced no publication pass, canonical-repair inference, or H-QC verdict. Its complete ZIP/NPY byte repair remains valid and is carried into the replacement.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false,
+    "scientific_outcome_existed": false,
+    "hqc_verdict_existed": false
+  },
+  "replacement_candidate": {
+    "adjudicator": {
+      "path": "studies/drivaerml_hqc_canonical_geometry_adjudicate_v8.py",
+      "sha256": "a5efa21373df3abc0fa4f5055dd69caf90e105fd105dba9c21b43af5d7355de6",
+      "audit_output_schema_version": 5
+    },
+    "focused_test": {
+      "path": "tests/test_drivaerml_hqc_canonical_geometry_adjudicate_v8.py",
+      "sha256": "75d1440b7f86f8a92da7cc200a93937c3e162a52fa5d9f1089fdca7b13f18778",
+      "result": "54 passed; Ruff check/format, py_compile, and CLI help passed; independent adversarial re-audits pending"
+    }
+  }
+}

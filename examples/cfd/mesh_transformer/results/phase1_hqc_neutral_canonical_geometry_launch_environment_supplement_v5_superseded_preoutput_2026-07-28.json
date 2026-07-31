@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_hqc_neutral_canonical_geometry_launch_environment_preoutput_correction",
+  "recorded_at_utc": "2026-07-28T14:29:01Z",
+  "status": "LAUNCH_ENVIRONMENT_SUPPLEMENT_V5_SUPERSEDED_BEFORE_REMOTE_TASK_CREATION_OR_SCHEMA_V5_OUTPUT",
+  "superseded_supplement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v5_2026-07-28.json",
+    "sha256": "b88a4dafea23955fdadd3bac87db35af7b8fd1a710d4075c8d9f65ce88f3006b"
+  },
+  "definite_issue": {
+    "channel": "Missing required AGA Slurm client configuration in the exact clean caller",
+    "kind": "failing prelaunch environment contract",
+    "evidence": "Under revision 5's exact seven-variable env -i caller, absolute sbatch --version and sinfo both exited nonzero with DNS SRV lookup failure and Could not establish a configuration source. The clean caller had removed SLURM_CONF, while the ordinary AGA login environment identifies /cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf as the client configuration path.",
+    "required_repair": "Add exactly SLURM_CONF=/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf as the eighth clean caller value, retain plain --export=ALL, and repeat every no-submit preflight before task creation."
+  },
+  "read_only_preflight_evidence": {
+    "seven_value_clean_sbatch_passed": false,
+    "seven_value_clean_sinfo_passed": false,
+    "seven_value_failure": "resolve_ctls_from_dns_srv: res_nsearch error: Unknown host; DNS SRV lookup failed; Could not establish a configuration source",
+    "slurm_conf_path": "/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf",
+    "slurm_conf_canonical_path": "/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf",
+    "slurm_conf_type": "regular file",
+    "slurm_conf_mode_octal": "0644",
+    "slurm_conf_owner": "root",
+    "slurm_conf_group": "root",
+    "slurm_conf_sha256": "03136d7379a8c9eb22f64d85ce42f9668635bbd6cb257c182ddbf4fa20ad610a",
+    "eight_value_clean_environment_contained_only_frozen_values": true,
+    "eight_value_clean_sbatch_version": "slurm 25.11.6",
+    "eight_value_clean_sinfo_partition": "batch*",
+    "eight_value_clean_python_version": "3.13.14",
+    "eight_value_clean_numpy_version": "2.4.6",
+    "eight_value_clean_torch_version": "2.12.0+cu130",
+    "eight_value_clean_physicsnemo_import_succeeded": true,
+    "remote_source_tree_manifest_sha256": "fa6a7b683fa9aa02e4537ef69e8e977906df7c9fa6964cb759edfcee8d7b90cd",
+    "logical_and_physical_task_paths_absent_including_dangling_symlinks": true
+  },
+  "alternative_rejected": {
+    "candidate": "SLURM_CONF_SERVER or a client --conf-server flag",
+    "reason": "AGA configless mode is disabled, and the installed sbatch client exposes no --conf-server or -f option. The documented and measured working client override is SLURM_CONF."
+  },
+  "affected_publication_freeze": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_adjudicator_freeze_v13_2026-07-28.json",
+    "sha256": "2cf752d9fcefa5f3aa57fb1029f4d4ffb4c07537922fb07e9adc5c2afd18db5f",
+    "superseded_scope": "Only the launch-supplement-v5 authorization condition is superseded. The v13 adjudicator code, focused tests, staged-bundle allowlist, scientific scope, and post-run publication checks remain valid and unchanged."
+  },
+  "scientific_effect": "No remote task was created or submitted and no schema-v5 diagnostic or adjudication output existed under revision 5. The failure was confined to prelaunch Slurm client discovery and changed no scientific result.",
+  "scope": {
+    "schema_v5_job_was_submitted": false,
+    "schema_v5_remote_task_was_created": false,
+    "schema_v5_diagnostic_output_existed": false,
+    "schema_v5_adjudication_output_existed": false
+  },
+  "replacement": {
+    "path": "results/phase1_hqc_neutral_canonical_geometry_launch_environment_supplement_v6_2026-07-28.json",
+    "sha256": "ccf99e14ab276811b3c673b372b553a5447aa6623940b0c8f7510ebb2ef80250",
+    "operational_argv_changed": true,
+    "only_added_assignment": "SLURM_CONF=/cm/shared/apps/slurm/etc/oci-aga-slurm-1/slurm.conf",
+    "staged_file_inventory_changed": false,
+    "scientific_protocol_or_publication_gate_changed": false
+  }
+}
