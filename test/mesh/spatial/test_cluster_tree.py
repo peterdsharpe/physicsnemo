@@ -112,85 +112,101 @@ def _subtree_point_ids(tree, node_id):
     return tree.sorted_source_order[start : start + n]
 
 
-def _assert_exact_cover(pts_t, pts_s, theta, leaf_size, expand_far_targets=False):
-    """Build trees, traverse, and assert the exactly-once cover property."""
-    tgt_tree = ClusterTree.from_points(pts_t, leaf_size=leaf_size)
-    src_tree = ClusterTree.from_points(pts_s, leaf_size=leaf_size)
-    plan = src_tree.find_dual_interaction_pairs(
-        tgt_tree, theta=theta, expand_far_targets=expand_far_targets
+def _assert_exact_cover(
+    target_points,
+    source_points=None,
+    *,
+    theta=1.0,
+    leaf_size=4,
+    expand_far_targets=False,
+    context="",
+):
+    """Build a plan and assert that it covers every pair exactly once."""
+    target_tree = ClusterTree.from_points(target_points, leaf_size=leaf_size)
+    if source_points is None:
+        source_points = target_points
+        source_tree = target_tree
+    else:
+        source_tree = ClusterTree.from_points(source_points, leaf_size=leaf_size)
+    plan = source_tree.find_dual_interaction_pairs(
+        target_tree,
+        theta=theta,
+        expand_far_targets=expand_far_targets,
     )
     plan.validate()
-    count = _coverage_counts(plan, tgt_tree, src_tree, pts_t.shape[0], pts_s.shape[0])
+    count = _coverage_counts(
+        plan,
+        target_tree,
+        source_tree,
+        target_points.shape[0],
+        source_points.shape[0],
+    )
     bad = (count != 1).nonzero(as_tuple=False)
     assert bad.numel() == 0, (
-        f"coverage violated at {bad.shape[0]} pairs "
-        f"(first few: {bad[:5].tolist()}; counts "
-        f"{count[bad[:5, 0], bad[:5, 1]].tolist()}) for theta={theta}, "
-        f"leaf_size={leaf_size}, expand={expand_far_targets}"
+        f"{context}: {bad.shape[0]} pairs were not covered exactly once; "
+        f"first pairs={bad[:5].tolist()}"
     )
-    return tgt_tree, src_tree, plan
+    return plan
 
 
-def _aabb_dist_sq_f64(points, aabb_min, aabb_max):
-    """Point-to-AABB squared distance, computed in float64."""
-    p = points.double()
-    lo = aabb_min.double()
-    hi = aabb_max.double()
-    clamped = torch.clamp(p, min=lo, max=hi)
-    return (p - clamped).pow(2).sum(dim=-1)
-
-
-# Relative slack for re-verifying float32 comparisons in float64: admits only
-# genuine rounding at the comparison boundary, not logic errors.
-_MAC_RTOL = 1e-5
+def _aabb_distance_squared_float64(points, aabb_min, aabb_max):
+    """Compute point-to-AABB squared distance independently in float64."""
+    points = points.double()
+    clamped = torch.clamp(points, min=aabb_min.double(), max=aabb_max.double())
+    return (points - clamped).pow(2).sum(dim=-1)
 
 
 def _adversarial_clouds(device, n_dims):
-    """Named adversarial point sets, each shape (n, n_dims), float32."""
-    g = torch.Generator(device="cpu").manual_seed(1234)
+    """Point sets covering common tree-code geometric degeneracies."""
+    generator = torch.Generator(device="cpu").manual_seed(1234)
 
-    def _rand(n):
-        return torch.randn(n, n_dims, generator=g)
+    def random_points(n):
+        return torch.randn(n, n_dims, generator=generator)
 
-    clouds = {}
-    ### Every point identical: morton codes all tie; AABBs are degenerate
-    ### (zero diameter); every distance is zero.
-    clouds["all_coincident"] = torch.zeros(37, n_dims)
-    ### Two tight clusters, far apart: the classic near/far split geometry,
-    ### with intra-cluster coincidence (zero-diameter leaves).
-    a = torch.zeros(20, n_dims)
-    b = torch.zeros(20, n_dims)
-    b[:, 0] = 100.0
-    clouds["two_tight_clusters"] = torch.cat([a, b])
-    ### Collinear points: degenerate extent in all-but-one axis.
+    first_cluster = torch.zeros(20, n_dims)
+    second_cluster = torch.zeros(20, n_dims)
+    second_cluster[:, 0] = 100.0
+
     line = torch.zeros(41, n_dims)
     line[:, 0] = torch.linspace(0, 1, 41)
-    clouds["collinear"] = line
-    ### Regular grid: massive morton ties and points exactly on split planes.
-    side = 5
-    axes = [torch.arange(side, dtype=torch.float32)] * n_dims
+
+    axes = [torch.arange(5, dtype=torch.float32)] * n_dims
     grid = torch.cartesian_prod(*axes).reshape(-1, n_dims)
-    clouds["integer_grid"] = grid
-    ### Large offset + small extent: catastrophic-cancellation bait for any
-    ### float32 centroid/AABB arithmetic.
-    clouds["offset_1e6"] = _rand(64) * 1e-3 + 1.0e6
-    ### One outlier at huge distance from a tight cluster: extreme AABB
-    ### aspect / diameter imbalance between siblings.
-    outlier = _rand(33) * 0.01
+
+    outlier = random_points(33) * 0.01
     outlier[0] = 1.0e4
-    clouds["single_outlier"] = outlier
-    ### Duplicates interleaved with distinct points.
-    base = _rand(11)
-    clouds["duplicates_mixed"] = torch.cat([base, base[:7], base[:3]])
-    ### Powers-of-two boundary counts around leaf sizes.
-    clouds["n_prime"] = _rand(31)
+
+    base = random_points(11)
+    clouds = {
+        "all coincident": torch.zeros(37, n_dims),
+        "two tight clusters": torch.cat([first_cluster, second_cluster]),
+        "collinear": line,
+        "integer grid": grid,
+        # At 1e4, a float32 cloud still retains the 0.1-scale perturbations.
+        "large offset": random_points(64) * 0.1 + 1.0e4,
+        "single outlier": outlier,
+        "mixed duplicates": torch.cat([base, base[:7], base[:3]]),
+    }
     if n_dims == 3:
-        ### Coplanar in 3D: zero extent along z.
-        plane = _rand(29)
+        plane = random_points(29)
         plane[:, 2] = 0.0
         clouds["coplanar"] = plane
-    return {k: v.to(device) for k, v in clouds.items()}
+    return {name: points.to(device) for name, points in clouds.items()}
 
+
+def _zero_survivor_clouds(device):
+    """Leaf-pair geometry with far targets but no broadcast survivors."""
+    generator = torch.Generator(device="cpu").manual_seed(17)
+    targets = torch.rand(8, 3, generator=generator) - 0.5
+    sources = targets.clone()
+    sources[:, 0] += 2.4
+    return targets.to(device), sources.to(device)
+
+
+
+# Relative slack for re-verifying float32 comparisons in float64: admits
+# only genuine rounding at the comparison boundary, not logic errors.
+_MAC_RTOL = 1e-5
 
 # ---------------------------------------------------------------------------
 # Coverage / no-double-count: the core dual-tree contract (random clouds)
@@ -250,6 +266,110 @@ def test_plan_validates_and_far_field_engages(device):
     assert plan.n_far_nodes + plan.n_nf + plan.n_fn > 0
 
 
+@pytest.mark.parametrize("n_dims", [2, 3])
+def test_adversarial_self_plan_coverage(device, n_dims):
+    """Hostile geometries still produce an exact self-interaction cover."""
+    for name, points in _adversarial_clouds(device, n_dims).items():
+        _assert_exact_cover(points, context=f"{n_dims}D {name}")
+
+
+@pytest.mark.parametrize("expand_far_targets", [False, True])
+def test_adversarial_cross_plan_coverage(device, expand_far_targets):
+    """Mismatched hostile trees and extreme size ratios remain exact."""
+    clouds = _adversarial_clouds(device, 3)
+    generator = torch.Generator(device="cpu").manual_seed(19)
+    singleton = torch.randn(1, 3, generator=generator).to(device)
+    many_points = torch.randn(200, 3, generator=generator).to(device)
+    pairs = [
+        ("clusters/coincident", clouds["two tight clusters"], clouds["all coincident"]),
+        ("grid/line", clouds["integer grid"], clouds["collinear"]),
+        ("offset/outlier", clouds["large offset"], clouds["single outlier"]),
+        ("singleton/many", singleton, many_points),
+        ("many/singleton", many_points, singleton),
+    ]
+    for name, target_points, source_points in pairs:
+        _assert_exact_cover(
+            target_points,
+            source_points,
+            expand_far_targets=expand_far_targets,
+            context=name,
+        )
+
+
+def test_float64_plan_coverage(device):
+    """Float64 trees preserve the exactly-once plan contract."""
+    points = _points(97, 3, device, seed=20, dtype=torch.float64)
+    _assert_exact_cover(points)
+
+
+def test_zero_survivor_leaf_pair_is_valid(device):
+    """Zero-count far/near broadcasts remain in bounds and cover exactly once."""
+    target_points, source_points = _zero_survivor_clouds(device)
+    plan = _assert_exact_cover(
+        target_points,
+        source_points,
+        leaf_size=target_points.shape[0],
+        context="zero-survivor leaf pair",
+    )
+
+    assert plan.n_fn > 0
+    assert plan.fn_broadcast_targets.numel() == 0
+    assert plan.fn_broadcast_counts.eq(0).all()
+
+
+def test_far_admissions_satisfy_mac_in_float64(device):
+    """Independently recompute every far-stream acceptance criterion."""
+    theta = 0.7
+    target_points = (_points(80, 3, device, seed=21) * 2.0).add(0.5)
+    source_points = (_points(70, 3, device, seed=22) * 2.0).add(1.5)
+    target_tree = ClusterTree.from_points(target_points, leaf_size=4)
+    source_tree = ClusterTree.from_points(source_points, leaf_size=4)
+    plan = source_tree.find_dual_interaction_pairs(target_tree, theta=theta)
+    plan.validate()
+
+    assert plan.n_far_nodes > 0 and plan.n_nf > 0 and plan.n_fn > 0
+    comparison_slack = 1.0 + 1.0e-5
+
+    target_min = target_tree.node_aabb_min[plan.far_target_node_ids].double()
+    target_max = target_tree.node_aabb_max[plan.far_target_node_ids].double()
+    source_min = source_tree.node_aabb_min[plan.far_source_node_ids].double()
+    source_max = source_tree.node_aabb_max[plan.far_source_node_ids].double()
+    gap = torch.clamp(
+        torch.maximum(target_min - source_max, source_min - target_max), min=0
+    )
+    distance_squared = gap.pow(2).sum(dim=-1)
+    target_diameter = (
+        target_tree.node_diameter_sq[plan.far_target_node_ids].double().sqrt()
+    )
+    source_diameter = (
+        source_tree.node_diameter_sq[plan.far_source_node_ids].double().sqrt()
+    )
+    assert (
+        distance_squared * theta**2 * comparison_slack
+        > (target_diameter + source_diameter).pow(2)
+    ).all()
+
+    distance_squared = _aabb_distance_squared_float64(
+        target_points[plan.nf_target_ids],
+        source_tree.node_aabb_min[plan.nf_source_node_ids],
+        source_tree.node_aabb_max[plan.nf_source_node_ids],
+    )
+    assert (
+        distance_squared * theta**2 * comparison_slack
+        > source_tree.node_diameter_sq[plan.nf_source_node_ids].double()
+    ).all()
+
+    distance_squared = _aabb_distance_squared_float64(
+        source_points[plan.fn_source_ids],
+        target_tree.node_aabb_min[plan.fn_target_node_ids],
+        target_tree.node_aabb_max[plan.fn_target_node_ids],
+    )
+    assert (
+        distance_squared * theta**2 * comparison_slack
+        > target_tree.node_diameter_sq[plan.fn_target_node_ids].double()
+    ).all()
+
+
 # ---------------------------------------------------------------------------
 # Coverage on the adversarial geometry battery + fuzz
 # ---------------------------------------------------------------------------
@@ -277,10 +397,10 @@ def test_adversarial_cross_coverage(device, theta, expand_far_targets):
     """Cross-tree plans (mismatched hostile geometries) cover exactly once."""
     clouds3 = _adversarial_clouds(device, 3)
     pairs = [
-        ("two_tight_clusters", "all_coincident"),
-        ("integer_grid", "collinear"),
-        ("offset_1e6", "single_outlier"),
-        ("duplicates_mixed", "integer_grid"),
+        ("two tight clusters", "all coincident"),
+        ("integer grid", "collinear"),
+        ("large offset", "single outlier"),
+        ("mixed duplicates", "integer grid"),
     ]
     for tname, sname in pairs:
         _assert_exact_cover(
@@ -344,9 +464,7 @@ def test_zero_survivor_leaf_pair_fn_entries(device):
     pts_s = b
     # leaf_size >= n so each cluster is a single leaf; the root pair is
     # (leaf, leaf) immediately.
-    tgt_tree, src_tree, plan = _assert_exact_cover(
-        pts_t, pts_s, theta=1.0, leaf_size=n
-    )
+    plan = _assert_exact_cover(pts_t, pts_s, theta=1.0, leaf_size=n)
     # The interesting regime: nf covers everything, near is empty.
     assert plan.n_near == 0, "expected the all-far-targets regime"
     assert plan.n_nf == n
@@ -487,7 +605,7 @@ def test_far_admissions_satisfy_mac_fp64(device, theta):
 
     ### (near, far): dist(target point, source node AABB) * theta > D_S.
     if plan.n_nf > 0:
-        d = _aabb_dist_sq_f64(
+        d = _aabb_distance_squared_float64(
             pts_t[plan.nf_target_ids],
             src_tree.node_aabb_min[plan.nf_source_node_ids],
             src_tree.node_aabb_max[plan.nf_source_node_ids],
@@ -499,7 +617,7 @@ def test_far_admissions_satisfy_mac_fp64(device, theta):
 
     ### (far, near): dist(source point, target node AABB) * theta > D_T.
     if plan.n_fn > 0:
-        d = _aabb_dist_sq_f64(
+        d = _aabb_distance_squared_float64(
             pts_s[plan.fn_source_ids],
             tgt_tree.node_aabb_min[plan.fn_target_node_ids],
             tgt_tree.node_aabb_max[plan.fn_target_node_ids],
@@ -719,17 +837,19 @@ def test_invalid_leaf_size_raises(device):
         ClusterTree.from_points(_points(10, 3, device), leaf_size=0)
 
 
-def test_validate_catches_corruption(device):
-    g = torch.Generator(device="cpu").manual_seed(31)
-    pts = torch.randn(50, 3, generator=g).to(device)
-    tree = ClusterTree.from_points(pts, leaf_size=4)
-    plan = tree.find_dual_interaction_pairs(tree, theta=1.0)
-    if plan.n_fn > 0 and plan.fn_broadcast_targets.numel() > 0:
-        plan.fn_broadcast_counts[-1] = plan.fn_broadcast_targets.shape[0] + 100
-        with pytest.raises(ValueError, match="out of bounds"):
-            plan.validate()
-    ### Shape-mismatch corruption is always constructible.
-    plan2 = tree.find_dual_interaction_pairs(tree, theta=1.0)
-    plan2.near_source_ids = plan2.near_source_ids[:-1]
+def test_validate_rejects_corrupted_plan(device):
+    """Plan validation fails loudly for shape and broadcast corruption."""
+    tree = ClusterTree.from_points(_points(10, 3, device, seed=23))
+    plan = tree.find_dual_interaction_pairs(tree, theta=0.0)
+    plan.near_source_ids = plan.near_source_ids[:-1]
     with pytest.raises(ValueError, match="Shape mismatch"):
-        plan2.validate()
+        plan.validate()
+
+    target_points, source_points = _zero_survivor_clouds(device)
+    target_tree = ClusterTree.from_points(target_points, leaf_size=8)
+    source_tree = ClusterTree.from_points(source_points, leaf_size=8)
+    plan = source_tree.find_dual_interaction_pairs(target_tree, theta=1.0)
+    assert plan.n_fn > 0 and plan.fn_broadcast_targets.numel() == 0
+    plan.fn_broadcast_counts[-1] = 1
+    with pytest.raises(ValueError, match="out of bounds"):
+        plan.validate()
