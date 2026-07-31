@@ -14,7 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Reproducibility metadata shared by the learning and timing benchmarks."""
+"""Reproducibility metadata shared by the learning and timing benchmarks.
+
+Also home to the small artifact-record helpers (``sha256_file``,
+``sha256_bytes``, ``utc_timestamp``) that study scripts should import
+instead of redefining -- dozens of frozen scripts carry drifted local
+copies; those stay as the historical record, but new studies use these.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +28,7 @@ import hashlib
 import platform
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -89,6 +96,28 @@ def source_provenance() -> dict[str, Any]:
     }
 
 
+def sha256_bytes(data: bytes) -> str:
+    """Hex SHA-256 of in-memory bytes (serialize arrays caller-side)."""
+
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path | str, *, chunk_bytes: int = 8 * 1024 * 1024) -> str:
+    """Hex SHA-256 of a file, streamed so large artifacts never load whole."""
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(chunk_bytes), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def utc_timestamp() -> str:
+    """ISO-8601 UTC timestamp for dating artifacts and result stamps."""
+
+    return datetime.now(timezone.utc).isoformat()
+
+
 def runtime_environment(device: torch.device) -> dict[str, Any]:
     """Describe the software and hardware relevant to numerical results."""
 
@@ -114,4 +143,10 @@ def runtime_environment(device: torch.device) -> dict[str, Any]:
     return result
 
 
-__all__ = ["runtime_environment", "source_provenance"]
+__all__ = [
+    "runtime_environment",
+    "sha256_bytes",
+    "sha256_file",
+    "source_provenance",
+    "utc_timestamp",
+]

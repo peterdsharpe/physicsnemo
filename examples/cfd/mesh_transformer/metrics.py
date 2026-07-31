@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+import numpy as np
 import torch
 
 
@@ -67,6 +68,25 @@ def weighted_relative_l2(
     if not torch.compiler.is_compiling() and target_energy.item() <= 0.0:
         raise ValueError("relative L2 error is undefined for a zero target")
     return torch.sqrt(error_energy / target_energy)
+
+
+def relative_l2(prediction, target) -> float:
+    """Plain (unweighted) relative :math:`L^2` error over all elements.
+
+    The one-line reduction dozens of study scripts used to redefine with
+    drifting signatures; import this instead of copying it.  Accepts any
+    array-like (CPU torch tensors included); returns a Python float in
+    float64.
+    """
+
+    prediction = np.asarray(prediction, dtype=np.float64)
+    target = np.asarray(target, dtype=np.float64)
+    if prediction.shape != target.shape:
+        raise ValueError("prediction and target shapes must match")
+    scale = float(np.linalg.norm(target.ravel()))
+    if scale <= 0.0:
+        raise ValueError("relative L2 error is undefined for a zero target")
+    return float(np.linalg.norm((prediction - target).ravel()) / scale)
 
 
 def relative_linf(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -256,6 +276,7 @@ __all__ = [
     "case_metrics",
     "certified_maximum_principle_violation",
     "paired_case_bootstrap",
+    "relative_l2",
     "relative_linf",
     "sampled_boundary_range_violation",
     "weighted_relative_l2",
