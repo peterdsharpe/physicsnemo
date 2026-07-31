@@ -16,12 +16,10 @@
 
 """Spatial-band (per-region) surface metrics over saved infer.py predictions.
 
-The all-boundary (H-ground) verdict needs more than a global aggregate: the
-hypothesized effects concentrate where ground/boundary physics lives
-(external review item 8; pre-registration in the lab notebook's allbc-launch
-entry).  This tool partitions each case's vehicle surface into
-physics-motivated regions and reports the corrected (direction-sensitive)
-relative-L2 metrics per region, plus a per-region pseudo-force decomposition.
+A global aggregate can hide effects that concentrate where ground/boundary
+physics lives.  This tool partitions each case's vehicle surface into
+physics-motivated regions and reports direction-sensitive relative-L2
+metrics per region, plus a per-region pseudo-force decomposition.
 
 VECTOR-METRIC SEMANTICS (discovered validating this tool): the recipe's
 ``_relative_l2`` on an (N, 3) vector reduces over ``dim=-1`` -- the fleet

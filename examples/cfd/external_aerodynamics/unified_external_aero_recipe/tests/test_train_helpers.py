@@ -336,7 +336,7 @@ class TestLossDivergenceGuard:
                 "profile": False,
                 "training": {
                     "scheduler_update_mode": "epoch",
-                    "divergence_loss_threshold": None,
+                    "divergence_loss_threshold": 1.0e6,
                 },
             }
         )
@@ -360,6 +360,43 @@ class TestLossDivergenceGuard:
                 **kwargs,
             )
         assert model.weight.grad is None
+
+    def test_default_null_threshold_runs_no_per_step_guard(self, monkeypatch):
+        """With the knob unset, the loop must not pay the guard's host sync."""
+
+        def forbidden_guard(*args, **kwargs):
+            raise AssertionError("guard must not run when threshold is null")
+
+        def finite_forward(*args, **kwargs):
+            loss = torch.tensor(0.5, requires_grad=True)
+            values = TensorDict({"loss/test": loss.detach()})
+            return loss, values, values.clone()
+
+        monkeypatch.setattr(train, "_raise_if_divergent_loss", forbidden_guard)
+        monkeypatch.setattr(train, "forward_pass", finite_forward)
+        cfg = OmegaConf.create(
+            {
+                "precision": "float32",
+                "profile": False,
+                "training": {
+                    "scheduler_update_mode": "epoch",
+                    "divergence_loss_threshold": None,
+                },
+            }
+        )
+        _run_epoch(
+            [{}],
+            torch.nn.Linear(1, 1),
+            None,
+            None,
+            SimpleNamespace(info=lambda *args, **kwargs: None),
+            0,
+            cfg,
+            self._dist_manager(),
+            mode="val",
+            output_type="tensors",
+            target_config={"pressure": "scalar"},
+        )
 
     def test_invalid_threshold_fails_before_forward(self, monkeypatch):
         called = False
@@ -423,12 +460,7 @@ class TestFinishEpoch:
         def save(**kwargs):
             metadata = kwargs["metadata"]["unified_external_aero_recipe"]
             events.append(
-                (
-                    "checkpoint",
-                    kwargs["epoch"],
-                    metadata["schema_version"],
-                    metadata["epoch_semantics"],
-                )
+                ("checkpoint", kwargs["epoch"], metadata["scaler_state_saved"])
             )
 
         monkeypatch.setattr(train, "save_checkpoint", save)
@@ -445,10 +477,7 @@ class TestFinishEpoch:
         assert saved
         ### Epoch 4 is both periodic and terminal, but is persisted once as
         ### five completed epochs / the next resume index.
-        assert events == [
-            "scheduler",
-            ("checkpoint", 5, 1, "completed_epochs_after_scheduler_step"),
-        ]
+        assert events == ["scheduler", ("checkpoint", 5, False)]
 
     def test_nonperiodic_terminal_is_always_saved(self, monkeypatch):
         saved_epochs = []
@@ -628,21 +657,19 @@ class TestFinishEpoch:
         assert "scaler" in report["non_exact_reason"]
         assert len(messages) == 1
 
-    def test_versioned_checkpoint_rejects_scheduler_mode_change(self):
-        metadata = {
-            "unified_external_aero_recipe": {
-                "schema_version": 1,
-                "epoch_semantics": "completed_epochs_after_scheduler_step",
-                "scheduler_update_mode": "step",
-                "scaler_state_saved": False,
-            }
-        }
-        with pytest.raises(RuntimeError, match="update mode does not match"):
-            _reconcile_loaded_checkpoint(
-                loaded_epoch=4,
-                metadata=metadata,
-                scheduler=SimpleNamespace(step=lambda: None),
-                scheduler_update_mode="epoch",
-                scaler=None,
-                logger=SimpleNamespace(warning=lambda _message: None),
-            )
+    def test_metadata_checkpoint_without_saved_scaler_is_nonexact(self):
+        """A post-fix fp32 checkpoint resumed under fp16 is flagged, not migrated."""
+        messages = []
+        report = _reconcile_loaded_checkpoint(
+            loaded_epoch=4,
+            metadata={"unified_external_aero_recipe": {"scaler_state_saved": False}},
+            scheduler=SimpleNamespace(step=lambda: pytest.fail("unexpected step")),
+            scheduler_update_mode="epoch",
+            scaler=SimpleNamespace(),
+            logger=SimpleNamespace(warning=messages.append),
+        )
+
+        assert not report["legacy_checkpoint"]
+        assert not report["legacy_scheduler_step_applied"]
+        assert not report["resume_exact"]
+        assert len(messages) == 1

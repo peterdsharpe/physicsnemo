@@ -27,8 +27,8 @@ Why this transform exists: the DrivAerML surface arms declared a FIXED
 measure-weighted RMS radius of the full DrivAerML boundary set).  That
 constant silently encodes DrivAerML's geometry statistics: on SHIFT-SUV the
 same constant put the norm-free drive stream outside its stable operating
-range and every MeshTransformer checkpoint diverged to non-physical output
-(notebook @sec-nb-crossfam-verdict), with a clean gauge dose-response
+range and every MeshTransformer checkpoint diverged to non-physical output,
+with a clean gauge dose-response
 (1.3e15 -> 5.1 -> 1.7 relative-L2 at gauge 8 -> 16 -> 48) localizing the
 failure to the gauge.  The exact flaw was called in the external review:
 "physical scaling equivariance is not presently guaranteed".

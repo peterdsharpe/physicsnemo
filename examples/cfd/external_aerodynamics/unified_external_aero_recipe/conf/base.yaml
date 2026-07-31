@@ -36,7 +36,9 @@ training:
   loss_type: "huber"
   batch_size: 1
   scheduler_update_mode: "epoch"
-  # Non-finite losses always stop; set a positive value to stop on large finite losses.
+  # Set a positive value to stop all ranks before backward on a non-finite
+  # loss or a finite loss above it. The guard costs one host sync (and a DDP
+  # all-reduce) per step, so the default null runs no per-step check.
   divergence_loss_threshold: null
   optimizer:
     weight_decay: 1.0e-4

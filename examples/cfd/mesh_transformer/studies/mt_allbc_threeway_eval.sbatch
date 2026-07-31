@@ -87,7 +87,7 @@ done
 for S in 42 43 44; do
   BAND_DIRS+=("$REPO/output/drivaer_ood/id_reference/t2_mesh_transformer_surface_flagship_seed${S}")
 done
-"$REPO/.venv-recipe/bin/python" "$RECIPE/src/band_metrics.py" \
+"$REPO/.venv-recipe/bin/python" "$RECIPE/tools/band_metrics.py" \
   "${BAND_DIRS[@]}" --out "$OUT/allbc_band_report.json" \
   >> "$OUT/band_metrics.log" 2>&1
 echo "BAND_METRICS_EXIT=$? report=$OUT/allbc_band_report.json"

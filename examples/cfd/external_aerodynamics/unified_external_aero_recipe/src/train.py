@@ -79,7 +79,6 @@ from physicsnemo.utils.profiling import Profiler, profile
 _PROFILE_MAX_STEPS = 10
 
 _CHECKPOINT_METADATA_KEY = "unified_external_aero_recipe"
-_CHECKPOINT_SCHEMA_VERSION = 1
 
 
 ### ---------------------------------------------------------------------------
@@ -293,11 +292,14 @@ def _raise_if_divergent_loss(
 ) -> None:
     """Stop every rank before backward when any rank reports a bad loss.
 
-    Non-finite losses are always fatal.  When *threshold* is set, a finite
-    loss above it is fatal as well.  The integer failure flag is reduced
-    across ranks before any rank raises, keeping DDP workers on the same
+    Non-finite losses are fatal; when *threshold* is set, a finite loss
+    above it is fatal as well.  The integer failure flag is reduced across
+    ranks before any rank raises, keeping DDP workers on the same
     control-flow path rather than letting healthy ranks enter backward while
-    another rank exits.
+    another rank exits.  Each call costs one device-to-host sync (plus the
+    all-reduce under DDP), so the epoch loop invokes this only when
+    ``training.divergence_loss_threshold`` is configured -- the default
+    path keeps the loop's no-per-step-sync discipline.
     """
     local_failure = ~torch.isfinite(loss.detach())
     if threshold is not None:
@@ -349,11 +351,12 @@ def _finish_epoch(
         return False
 
     completed_epochs = epoch + 1
+    ### The one fact resume needs: whether fp16 GradScaler state was
+    ### persisted.  The metadata block's presence also marks the checkpoint
+    ### as post-dating the scheduler-ordering fix (see
+    ### ``_reconcile_loaded_checkpoint``).
     checkpoint_metadata = {
         _CHECKPOINT_METADATA_KEY: {
-            "schema_version": _CHECKPOINT_SCHEMA_VERSION,
-            "epoch_semantics": "completed_epochs_after_scheduler_step",
-            "scheduler_update_mode": cfg.training.get("scheduler_update_mode", "epoch"),
             "scaler_state_saved": ckpt_args.get("scaler") is not None,
         }
     }
@@ -379,16 +382,17 @@ def _reconcile_loaded_checkpoint(
 ) -> dict[str, Any]:
     """Migrate legacy recipe checkpoint state and report resume fidelity.
 
-    Checkpoints written before schema 1 stored an epoch-mode scheduler before
-    its end-of-epoch ``step()``.  Their epoch value already meant "completed
-    epochs", so advancing the restored scheduler once recovers the state that
-    continuous training would have used next.  Those checkpoints did not save
-    the fp16 ``GradScaler`` at all; that state is not reconstructable and is
-    reported as a non-exact resume instead of being silently reset.
+    Checkpoints written before the recipe metadata block existed stored an
+    epoch-mode scheduler before its end-of-epoch ``step()``.  Their epoch
+    value already meant "completed epochs", so advancing the restored
+    scheduler once recovers the state that continuous training would have
+    used next.  Those checkpoints did not save the fp16 ``GradScaler`` at
+    all; that state is not reconstructable and is reported as a non-exact
+    resume instead of being silently reset.
     """
     report: dict[str, Any] = {
         "loaded_epoch": loaded_epoch,
-        "checkpoint_schema_version": None,
+        "legacy_checkpoint": False,
         "legacy_scheduler_step_applied": False,
         "resume_exact": True,
     }
@@ -399,27 +403,6 @@ def _reconcile_loaded_checkpoint(
     report["checkpoint_found"] = True
     recipe_metadata = metadata.get(_CHECKPOINT_METADATA_KEY)
     if recipe_metadata is not None:
-        schema_version = recipe_metadata.get("schema_version")
-        report["checkpoint_schema_version"] = schema_version
-        if schema_version != _CHECKPOINT_SCHEMA_VERSION:
-            raise RuntimeError(
-                "Unsupported unified external-aero checkpoint schema "
-                f"{schema_version!r}; expected {_CHECKPOINT_SCHEMA_VERSION}."
-            )
-        if (
-            recipe_metadata.get("epoch_semantics")
-            != "completed_epochs_after_scheduler_step"
-        ):
-            raise RuntimeError(
-                "Checkpoint has an unrecognized epoch/scheduler-state contract."
-            )
-        saved_update_mode = recipe_metadata.get("scheduler_update_mode")
-        if saved_update_mode != scheduler_update_mode:
-            raise RuntimeError(
-                "Checkpoint scheduler update mode does not match the live "
-                f"configuration: saved={saved_update_mode!r}, "
-                f"live={scheduler_update_mode!r}."
-            )
         if scaler is not None and not recipe_metadata.get("scaler_state_saved", False):
             report["resume_exact"] = False
             report["non_exact_reason"] = "checkpoint declared no fp16 scaler state"
@@ -429,7 +412,7 @@ def _reconcile_loaded_checkpoint(
             )
         return report
 
-    report["checkpoint_schema_version"] = "legacy_unversioned"
+    report["legacy_checkpoint"] = True
     if scheduler_update_mode == "epoch":
         scheduler.step()
         report["legacy_scheduler_step_applied"] = True
@@ -537,14 +520,15 @@ def _run_epoch(
                 target_config=target_config,
             )
 
-            _raise_if_divergent_loss(
-                loss,
-                mode=mode,
-                epoch=epoch,
-                step=i,
-                threshold=divergence_loss_threshold,
-                dist_manager=dist_manager,
-            )
+            if divergence_loss_threshold is not None:
+                _raise_if_divergent_loss(
+                    loss,
+                    mode=mode,
+                    epoch=epoch,
+                    step=i,
+                    threshold=divergence_loss_threshold,
+                    dist_manager=dist_manager,
+                )
 
             if is_train:
                 optimizer.zero_grad()
