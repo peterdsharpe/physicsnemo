@@ -228,13 +228,17 @@ print("\n".join(lines))
 The table's sharpest exhibit is the specialist's **low-screening
 detonation**: the Yukawa-basis oracle that dominates in-distribution
 (0.0033) reads **8.68** — 2,600× worse — when $\tilde\kappa$ drops
-below its training band, because the $K_0(\tilde\kappa r)$
-parameterization degenerates as $\tilde\kappa \to 0$, while the
-*conditioned* fixed-basis models degrade gracefully. That asymmetry —
-bases extrapolate physics until their parameterization degenerates;
-conditioning never detonates — is the design rule of @sec-parametric,
-and the reason the production architecture conditions kernels on
-$\tilde\kappa$ rather than baking parameters into the dictionary.
+below its training band. The failure is not unique to an unconditioned
+basis: conditioned Yukawa and Yukawa–harmonic union models score 28 and
+25, while the harmonic conditioner reaches 0.0035. The raw
+$K_0(\tilde\kappa r)$ single-layer member is a plausible cause because it
+has a logarithmically divergent constant term as $\tilde\kappa\to0$, but
+these measurements do not identify that cause: a vanishing coefficient or
+zero-total-charge density could cancel it, and the fixed-point solve and
+omitted self-panel term remain rival explanations. The established result
+is narrower and more useful: **conditioning cannot rescue a kernel family
+whose parameterized representation is not uniformly well behaved across
+the limit.**
 
 ## Variations
 
@@ -255,9 +259,12 @@ Moved from the benchmarks chapter: the screened suite through the full MeshTrans
 
 ### The screened suite through the full architecture {#sec-screened}
 
-The parametric study answered the basis-versus-conditioning question with
-specialist pair-kernel BIEs on the screened Laplace (modified Helmholtz)
-family $\Delta u - \kappa^2 u = 0$ (@sec-parametric). The same benchmark
+The parametric study posed the basis-versus-conditioning question with
+specialist pair-kernel prototypes on the screened Laplace (modified Helmholtz)
+family $\Delta u - \kappa^2 u = 0$ (@sec-parametric). A later audit found that
+their density iteration was not generally the boundary trace of the emitted
+potential, so those rows are retained as field-fit observations rather than
+valid BIE controls. The same benchmark
 also runs through the *full generalist architecture*: the kernel-decoder
 `MeshTransformer`, with the dimensionless parameter
 $\tilde\kappa = \kappa R$ entering **only** as an operator-side global
@@ -269,9 +276,9 @@ seeds (17/18/19), 2,000 steps, the same protocol as the @sec-parametric
 specialists they are compared against (checked-in key
 `iteration_9_screened_meshtransformer`; the best current arm,
 singular-only, is in @sec-singonly-universality). The framing rule matters
-most here: the specialists *know the PDE* — their kernel bases are exact
-Yukawa fundamental solutions — while the `MeshTransformer` is handed the
-number $\tilde\kappa$ but not its meaning.
+most here: the specialist bases use exact Yukawa fundamental solutions in the
+interior, while the `MeshTransformer` is handed the number
+$\tilde\kappa$ but not its meaning.
 
 | arm | seed | ID | low-$\tilde\kappa$ | high-$\tilde\kappa$ | unseen modes | PDE residual |
 |---|--:|--:|--:|--:|--:|--:|
@@ -299,23 +306,47 @@ budget (seed 17):
 | conditioned harmonic | 0.0613 | 0.0035 | 0.3101 | 0.0459 | 1.65 |
 | conditioned union | 0.0020 | 25.0 | 0.0663 | 0.0073 | 0.14 |
 
-: The specialist pair-kernel BIEs of @sec-parametric on the same splits
-(seed 17, 2,000 steps, checked-in artifact). The PDE-residual column is the
-basis-versus-conditioning finding in one glance: an exact Yukawa basis
-scores *exactly* 0 whatever its coefficients, the wrong (harmonic) basis
-cannot get below 1.65 however well conditioned, and the union basis lands
-between. {#tbl-screened-specialists}
+: The audited specialist prototypes of @sec-parametric on the same splits
+(seed 17, 2,000 steps, checked-in artifact). A Yukawa combination scores zero
+interior screened-operator residual for any coefficients; this does not
+certify the boundary trace used by its density iteration. The harmonic and
+union residuals still quantify interior operator mismatch. {#tbl-screened-specialists}
+
+::: {.callout-warning title="EDIT: interpret the specialist comparison provisionally"}
+The learned double-layer coefficient was not constrained to the jump assumed
+by the trace solve, and the deleted $K_0$ self-panel term grows like
+$h|\log\tilde\kappa|$. Consequently the specialist field errors cannot decide
+whether low-screening failure came from the raw basis, the missing diagonal,
+or Richardson instability. The full `MeshTransformer` rows above do not use
+that specialist solve and remain unchanged.
+:::
+
+::: {.callout-important title="Corrected known-PDE control"}
+The repaired parameter-free double layer gives the comparison the old
+specialist was intended to provide:
+
+| control (64 cases/split) | ID | low-$\tilde\kappa$ | high-$\tilde\kappa$ | unseen modes |
+|---|---:|---:|---:|---:|
+| dense canonical trace solve | 0.00110 | 0.000602 | 0.00349 | 0.00467 |
+| eight shared residual steps | 0.000974 | 0.000928 | 0.00281 | 0.00628 |
+
+The corrected control is 12--66× more accurate than the dictionary-only
+`MeshTransformer` means and has exact interior screened-operator conformity.
+Its eight-step approximation passes every field and trace bar but develops a
+$10^{-3}$ refinement floor; a residual-based stopping rule remains to be
+tested on deformed boundaries.
+:::
 
 ```{python}
 #| fig-cap: >
 #|   Screened Laplace through the full architecture (checked-in
 #|   learned_bie_2026-07-02.json, iteration 9; log scale). Filled dots are
 #|   the two MeshTransformer arms, seeds 17/18/19 left to right; open
-#|   markers are the iteration-3 seed-17 specialist references. The
-#|   exact-Yukawa-basis specialist wins high kappa-tilde but diverges
-#|   catastrophically at low kappa-tilde (K0 log-divergence); the
-#|   MeshTransformer degrades gracefully there. On unseen modes the two
-#|   arms split by 10x -- the dictionary-selection effect.
+#|   markers are the now-superseded iteration-3 seed-17 specialist
+#|   references. Their low-kappa detonation came from a trace-inconsistent
+#|   instrument; the corrected canonical control is tabulated above. On
+#|   unseen modes the two generalist arms split by 10x -- the
+#|   dictionary-selection effect.
 import json
 from pathlib import Path
 
@@ -350,7 +381,7 @@ ax.plot(range(4), [yukawa[k] for k in comparator_keys], "s", ms=8,
 ax.plot(range(4), [harmonic[k] for k in comparator_keys], "D", ms=7,
         mfc="none", mec="#898781", mew=1.5, zorder=2,
         label="conditioned-harmonic specialist (seed 17)")
-ax.annotate("$K_0$ log-divergence", (1, yukawa["lowK"]),
+ax.annotate("superseded trace-inconsistent control", (1, yukawa["lowK"]),
             textcoords="offset points", xytext=(-10, -3), ha="right",
             fontsize=8, color="#52514e")
 ax.set_yscale("log")
@@ -367,32 +398,28 @@ fig.tight_layout()
 plt.show()
 ```
 
-What this establishes — the specialist–generalist trade, measured
-honestly. In distribution, the generalist beats the harmonic-basis
+What the historical field fits show, provisionally: in distribution, the generalist
+beats the harmonic-basis
 specialist by $\sim$5$\times$ (mean ID 0.012 versus 0.061) *without
 knowing the PDE*, and stays within $\sim$4$\times$ of the
-exact-Yukawa-basis specialists (0.003–0.0005) that *do* know it.
-Parameter-OOD splits the ledger in two, and the asymmetry is the finding:
+old Yukawa-basis specialists (0.003–0.0005) that *do* know it.
+Parameter-OOD splits the observed ledger in two:
 
 - **High $\tilde\kappa$: the exact basis wins decisively** (0.016 versus
   0.18) — the expected price of not knowing the equation; conditioning
   does not extrapolate the parameter, only analytic structure does.
-- **Low $\tilde\kappa$: the Yukawa-basis specialists diverge
-  catastrophically** (8.7–28, as $K_0$ diverges logarithmically for
-  $\tilde\kappa \to 0$) **while the `MeshTransformer` degrades gracefully
-  to 0.03–0.05** — its harmonic-biased singular dictionary already
-  *contains* the $\tilde\kappa \to 0$ limit.
+- **Low $\tilde\kappa$: the historical specialists fail catastrophically**
+  (8.7–28) because their trace instrument is inconsistent. The corrected
+  canonical double layer scores 0.00060--0.00093, so this comparison cannot
+  support a graceful-degradation advantage for the generalist.
 
-That asymmetry is the **graceful-degradation argument** for
-harmonic-biased dictionaries in the unknown-PDE product setting: a
-specialist basis fails catastrophically outside its asymptotic regime; a
-dictionary containing the benign limit buys bounded degradation where the
-exact basis cannot go. The PDE-residual columns keep the trade honest in
-both directions: the generalist's 0.49–0.68 sits squarely between the
-exact-basis specialists' exact 0 and the wrong-basis conditioner's 1.65 —
-its excellent ID numbers are earned by fitting the field, not by
-satisfying the screened operator, and the column now says so in the same
-table as the $L^2$ scores. The suite
+**EDIT:** The graceful-degradation argument previously drawn from that
+asymmetry is withdrawn. The remaining unknown-PDE result is narrower: the
+generalist stays bounded without being given the equation, but when the
+operator is known the corrected analytic control is both much more accurate
+and operator-conforming. The PDE-residual columns keep that trade honest: the
+generalist's 0.49–0.68 reflects field fitting rather than satisfaction of the
+screened operator. The suite
 also delivered the strongest dictionary-selection replication of the
 linear-PDE pattern: MLP members leave ID and both $\tilde\kappa$-OOD
 splits unchanged but destroy unseen-modes generalization 10$\times$

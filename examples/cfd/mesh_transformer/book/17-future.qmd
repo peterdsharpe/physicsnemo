@@ -1,5 +1,12 @@
 # Where the program stands, and where it goes {#sec-future}
 
+::: {.callout-important title="Historical agenda; current agenda is in the notebook"}
+This chapter records the pre-audit agenda and its engineering closure. It is
+retained for provenance, not as the current research program. The
+authoritative questions and decisions are @sec-nb-current-agenda; the
+2026-07-29 altitude correction is @sec-nb-agenda-altitude-reset.
+:::
+
 This chapter does three things: it reviews what is established and what
 is honestly incomplete, it lays out the program's agenda — a deliberate
 redirect away from architecture-driven iteration, adopted once the
@@ -207,8 +214,7 @@ including one live bug found (and confirmed) during figure generation.
   (live item 1 of the agenda below).
 - ~~Product-scale training is gated on a memory fix~~ — **paid**:
   chunked decode closed the memory wall, and the subsequent decode
-  profiling campaign made every step 7–14× faster besides
-  (@sec-nb-decode-speedup).
+  profiling campaign made every step 7–14× faster besides.
 - ~~The trace-mode acceptance experiment is unpaid~~ — **run and
   verdicted** (@sec-nb-trace-verdict): 2.03×, the ≥5× acceptance
   refuted but the 0.10 plateau broken; the full ledger continuation
@@ -271,13 +277,13 @@ including one live bug found (and confirmed) during figure generation.
   NOT adopted — an exploratory ×2L8 reading (members removed costs
   ~9% at 9.6M, single seed vs ±12% rung spread) leaves the default
   configuration members-on.
-- **The incumbent-on-OOD differential: SEALED at deep-S1 on vector
-  WSS** (@sec-nb-seal-verdict). Five seeds per model, disjoint
-  ranges (ours 1.072–1.113 vs the incumbent's 1.126–1.136, exact
-  rank-sum p ≈ 0.008; incumbent excess degradation 1.4× ours — the
-  extension thinned the 3-seed estimate honestly). The pressure
-  differential DEMOTED to suggestive (ranges touch at 5 seeds). S2
-  and zero-shot depth show no differential for either model.
+- **The incumbent-on-OOD differential is provisional at deep-S1 on
+  vector WSS** (@sec-nb-seal-verdict, @sec-program-review). Five seeds
+  per model give disjoint degradation-ratio ranges (ours 1.072–1.113
+  versus 1.126–1.136), but the published rank-sum calculation discards
+  the matched-seed structure, the metric record is contradictory, and
+  the incumbent's absolute WSS error is 2.5–2.7× lower. Pressure is
+  suggestive only; S2 and zero-shot depth show no differential.
 - **Cross-family transfer: the falsifier fired maximally, and the
   mechanism is a protocol flaw** (@sec-drivaerml-crossfamily,
   @sec-nb-crossfam-verdict). The stronger test — DrivAerML-trained
@@ -286,21 +292,24 @@ including one live bug found (and confirmed) during figure generation.
   three seeds) diverged to non-physical output while the incumbent
   stayed structured at 0.677 through the identical frozen pipeline.
   **The generalization identity failed its decisive zero-shot test as
-  deployed.** A clean monotone dose-response localizes the failure to
-  the fixed declared scale gauge, not to the architecture; the
-  intrinsic-gauge repair was built, calibrated ($C = 26.4766$, fit once
-  on train), and **tested — it failed** (@sec-drivaerml-transferv2).
+  deployed.** A monotone but test-set-touching dose-response initially
+  implicated the fixed declared scale gauge; the intrinsic-gauge repair
+  was built, calibrated ($C=26.4766$), and **tested — it failed**
+  (@sec-drivaerml-transferv2). The audit then found that the loader used
+  for the supposedly train-only calibration included the held-out
+  cases.
   Retrained under the intrinsic gauge, all four gate-0-passing seeds
   still diverge zero-shot (5.97 × 10³ to 1.90 × 10¹³ against
   GeoTransolver's 0.677); gate 1 fails and gate 2 is moot. **The gauge
   was a lever that moved the magnitude, not the cause.** Odds, revised
   on evidence: "transfers at all, post-repair" was ~75% and is now
   measured false at the structural gate; cross-family *advantage*
-  35% → **< 5%**. Two side findings outlast the verdict: the intrinsic
-  gauge carries a ~20% per-seed risk of a worse training basin (one in
-  five, with lr/2 only partly rescuing it), and the seed that failed
-  in-family transferred *best* by two orders of magnitude — suggesting
-  in-family fit and cross-family robustness may be in tension.
+  35% → **< 5%**. Two exploratory side findings outlast the verdict:
+  one of five intrinsic-gauge seeds reached a worse training basin
+  (far too little evidence to estimate a 20% population risk), and
+  that seed transferred *best* by two orders of magnitude — suggesting
+  a possible tension between in-family fit and cross-family robustness
+  that would need a separate, prospectively designed study.
 - **True (full-mesh) OOD drag coefficients: blocked on research, not
   wiring.** The OOD verdict's drag numbers are subsample-integrated
   pseudo-coefficients; the upstream force/moment ground truth is
@@ -331,23 +340,16 @@ strongest mainstream baseline. Most of its original directions have
 since completed; their outcomes live in the ledger above and their
 numbers in @sec-benchmarks.
 
-**Item zero, ahead of the list below: finish the cross-family
-question.** It is not one more agenda entry, because it is the only
-open item that can invalidate the program's stated identity. The
-sequence is fixed and pre-registered
-(@sec-nb-transfer-v2-prereg): gate 0 (do the intrinsic-retrained
-checkpoints hold their in-family accuracy?), then transfer-v2's
-structural and comparability gates. Two outcomes are both
-informative and neither is a tuning exercise — if the repaired model
-transfers comparably, the architecture story rehabilitates and the
-industrial identity has evidence; if it still diverges, the
-brittleness is deeper than the gauge and the within-family
-differential (@sec-nb-seal-verdict) is the strongest generalization
-claim this architecture gets. Riding on the same thread: the
-seed-dependent training instability the intrinsic gauge introduced,
-which is worth a discriminating experiment in its own right (a
-half-learning-rate retrain of the divergent seed) because it
-concerns conditioning rather than one dataset pair.
+**Item zero is now representation consistency.** Transfer-v2 ran and
+failed its structural gate, so more gauge or optimizer arms cannot
+rehabilitate the industrial identity. Before retraining, repair the
+train/validation split, checkpoint/scheduler semantics, effective-weight
+plumbing, and run manifest. Then compare the current cyclic contiguous-block
+against a deterministic, nested, full-cover hierarchy at matched compute.
+The decisive measurement is convergence of the represented surface
+operator and its field pattern across levels, not another amplitude-only
+validation score. The exact protocol and stop rules are in
+@sec-program-review.
 
 What else remains live:
 
@@ -356,13 +358,13 @@ What else remains live:
    @sec-transolver-dataset as the label pipeline, and the
    operator-fidelity columns no longer optional (@sec-part-ns holds the
    first rung, Navier–Stokes).
-2. **Hierarchical decode backend** — now a *speed* lever, not a memory
-   necessity: the training-memory wall is measured closed
-   (@sec-scale-ckpt), and the remaining cost of the dense decode is
-   wall-clock ($\approx$978 s per product-scope forward,
-   $\approx$1.9$\times$ that for a checkpointed training step). An
-   FMM-style backend with the dense implementation as its oracle is
-   the standing answer.
+2. **Hierarchical decode backend — parked.** It is a possible speed
+   lever, not a memory necessity, but the current Morton/AABB
+   Barnes--Hut implementation has no measured dense crossover and
+   introduces percent-to-tens-of-percent rotation dependence. Reopen
+   only after the representation experiment establishes a real
+   wall-clock need and a hierarchy can meet an explicit rotation-error
+   contract (@sec-program-review).
 3. **Strong-form residuals on the original suites** — the open problem
    behind the fidelity columns: $L^2$-fit training fits fields, not
    operators (@sec-fidelity-columns).
@@ -612,9 +614,10 @@ certification is the family's boundary of validity;
 training histories, checkpoints, and the mode-response comparison behind
 @fig-kernel, @fig-convergence, and @sec-kernel-decoder are
 single-machine `/tmp` artifacts; and the cross-family transfer evidence
-(@sec-drivaerml-crossfamily) is **one family pair, one 20-case pilot,
-zero-shot only** — the verdict against the fixed-gauge protocol is
-frozen-protocol and stands, the gauge dose-response that explains it is
-test-set-touching and exploratory, and no post-repair transfer number
-exists yet. The checked-in JSONs under `results/` are the durable
-record.
+(@sec-drivaerml-crossfamily) is **one family pair, one reused 20-case
+pilot, zero-shot only**. Transfer-v2 exists and fails, but its gauge
+constant was calibrated through a loader containing held-out cases and
+the same pilot informed successive hypotheses, architectures, and
+diagnostics. The gauge dose-response is exploratory, not causal; raw
+industrial predictions, complete configs, and checkpoint provenance are
+not durably checked in. The complete audit is @sec-program-review.

@@ -1,10 +1,11 @@
 # Evaluation methodology and the benchmark suites {#sec-benchmarks}
 
 The program's claims are only as good as its evaluation. Three principles
-govern every suite: **exact analytic labels** (no numerical-solver error to
-hide behind), **frozen paired evaluation banks** (every model sees identical
-cases), and **contract checks as exact tests** (structural properties are
-asserted to floating point, never averaged into a soft score).
+govern every suite: **exact/manufactured labels where available and
+explicitly verified solver labels elsewhere**, **frozen paired evaluation
+banks** (every model sees identical cases), and **contract checks as exact
+tests** (structural properties are asserted to floating point, never
+averaged into a soft score).
 
 This chapter is the program's cross-cutting evidence: how every suite
 is evaluated, the walls that declared contracts predict and break, the
@@ -315,16 +316,16 @@ The current honest scorecard:
 | spatial equivariance | **holds**, by construction | $3\times10^{-7}$ on trained models under rotation, reflection, translation, rescaling (@sec-intrinsic-gauge) |
 | global interaction | **holds**, by construction | all-to-all boundary coupling, no cutoffs (@sec-global-flow) |
 | units invariance — *length* | **holds** | the intrinsic gauge; a 3× corrupted external gauge costs the explicit-key model 4.64×, the intrinsic model is bitwise immune (@sec-intrinsic-gauge) |
-| units invariance — *measure* | **was missing; now fixed** | see below |
-| discretization invariance — *refinement* | **holds** | converges, below |
-| discretization invariance — *subsampling* | **fails, and cannot be reweighted away** | below |
+| units invariance — *measure* | **implementation invalid** | upstream effective weights are stripped before use (@sec-program-review) |
+| discretization invariance — *refinement* | **strong random-init observation** | one sphere/query probe converges, below |
+| discretization invariance — *subsampling* | **fails in the current probe** | simple-random decimation is biased; production uses cyclic blocks and remains untested |
 
-### Units invariance had a hole in the measure dimension
+### Units invariance has an unresolved implementation hole
 
 Lengths are nondimensionalized by the gauge, and that half was solid.
 The **measure** — the quadrature weight each boundary cell carries —
-had no corresponding invariance. Holding the geometry fixed and scaling
-only the cell measures by $k$:
+has no validated production intervention. Holding the geometry fixed
+and scaling only internally reconstructed cell measures by $k$ produced:
 
 | $k$ | baseline drift | with `measure_normalization` |
 |---:|---:|---:|
@@ -332,20 +333,28 @@ only the cell measures by $k$:
 | 16 | 44.99% | $0.0$ |
 | 880 | **6.9 × 10⁷ %** | **2.9 × 10⁻⁵ %** |
 
-$k = 880$ is not hypothetical: it is the exact Horvitz--Thompson factor
-for the DrivAerML protocol (8.8M surface cells subsampled to 10k), i.e.
-the rescale the *statistically correct* estimator requires. The model
-could not survive its own correction.
+The historical diagnostic called $k=880$ the exact
+Horvitz--Thompson factor using roughly 8.8M **cells**. Preprocessing
+documentation describes that as the pre-triangulation quad-dominant
+population, whereas the curated reader reports roughly 17.7M triangles
+in its cited case. The sampler draws the latter cells, so a uniform
+sample instead requires the case-specific factor
+$N_\mathrm{cells}/10{,}000$ (roughly 1,770 there). This
+pre-/post-triangulation bookkeeping mismatch does not rescue the
+implementation: incoming weights are disconnected entirely.
 
-The repair is a one-line reweighting — the operator consumes
+The intended repair is a one-line reweighting — the operator consumes
 $\hat\omega_j = \omega_j/\sum_i\omega_i$, so it depends on the source
 measure's *distribution* rather than its magnitude, with the magnitude
-re-entering as a dimensionless global scalar. It is implemented through
-the existing effective-measure machinery, is bitwise-inert when off,
-and all four program contracts survive **by construction** rather than
-by training: zero-drive exactly 0.0, drive linearity to rtol $10^{-11}$,
-equivariance to $10^{-9}$, bitwise query independence — on the
-single-boundary *and* pooled/balanced paths.
+re-entering as a dimensionless global scalar. The audit found that this
+claim is not implemented end to end: `MeshTransformer.encode` removes
+incoming cell data and constructs fresh geometry-only meshes, so
+effective weights never reach the normalization or decoder and the
+purported global scalar is not subsequently used. The internal
+measure-rescale tests still pass, but a nonuniform public-input probe is
+bitwise unchanged when effective weights vary. These results cannot
+support H-MW or H-BOTH until the data path and test are repaired
+(@sec-program-review).
 
 ### Discretization invariance means two different things, and the model does well at one
 
@@ -359,12 +368,14 @@ been conflating the two readings.
 #|   REFINEMENT -- an icosphere at increasing subdivision, panels tiling
 #|   the surface, coverage always 100%. The operator converges (2.45% over
 #|   a 64x cell-count change, with shrinking increments), which is the
-#|   textbook test and the one the property names. Red: random cell
-#|   SUBSAMPLING, what the training pipeline actually does -- coverage
+#|   textbook test and the one the property names. Red: simple-random cell
+#|   SUBSAMPLING, a diagnostic approximation to the training pipeline --
+#|   production actually selects cyclic contiguous blocks in on-disk order; coverage
 #|   equals n/N, and nothing converges until coverage does. The two are
 #|   not the same experiment: subsampling is not a resolution change but a
 #|   different, systematically biased operator. The shaded band marks the
-#|   coverage DrivAerML trains at (0.11%: 10k cells of 8.8M), an order of
+#|   coverage DrivAerML trains at (about 0.06% in the documented
+#|   17.7M-cell case), an order of
 #|   magnitude sparser than the sparsest point measured here. Data:
 #|   studies/gauge_diagnostics/hdi_test.py.
 import matplotlib.pyplot as plt
@@ -396,7 +407,7 @@ ax_l.text(360, 0.42, "converges at\nsecond order", fontsize=8,
           color="#2a5fa8", va="top")
 
 ax_r.axvspan(0.02, 0.3, color="#e34948", alpha=0.10, lw=0)
-ax_r.text(0.115, 34, " DrivAerML\n trains here\n (0.11%)", fontsize=7.5,
+ax_r.text(0.115, 34, " historical marker\n (point/cell\n mismatch)", fontsize=7.5,
           color="#a83a39", va="top", ha="center")
 ax_r.plot(sub_cov, sub_err, "o-", ms=8, lw=2, color="#e34948",
           mec="white", mew=1.2)
@@ -426,8 +437,8 @@ the surface area's own convergence to $4\pi$. This is the test the
 property names, and as far as the notebook records it had never been run
 this way before.
 
-**Under random subsampling it does not, and no weighting fixes it.**
-Three independent interventions were measured and all failed: uniform
+**Under random subsampling the current probe does not converge.**
+Three interventions were measured and all failed in that probe: uniform
 Horvitz--Thompson reweighting (inert by construction once normalised),
 full measure normalisation (36.4% → 39.9%, i.e. slightly worse), and
 spatially stratified sampling (1.24× at 0.11% coverage, 1.40× at 0.45%,
@@ -435,8 +446,18 @@ gone by 2%). The forked branch's singularity subtraction, replicated
 independently, gives a comparable ~1.6×
 (@sec-nb-subtraction-replication).
 
-The reason is that the bias is a **completeness** effect, not a
-weighting one — and it is distributed the opposite way to intuition.
+This suggests a **completeness** effect, but it does not yet establish
+one as the trained industrial mechanism. The probe uses a random-init
+model, one sphere family, one query arrangement, and changes the source
+set without isolating the query-resolution effect seen in the trained
+campaign. Moreover, a classical constant-density double-layer
+counterexample shows that correct nonuniform weights can repair a
+decimated integral (93.8% observed error without them versus 0.4%
+Monte Carlo mean error with them in the audit probe; the HT total is
+design-unbiased). The universal claim that weighting cannot help is
+therefore false; whether learned nonlinear attention can exploit a
+correct empirical measure remains open. In the current probe, error is
+distributed opposite to the original intuition.
 Relative error against the full-coverage operator, by query depth:
 **222% at the sphere centre versus 0.3% at the wall.** Deep-interior
 values are global accumulations that need the whole surface (the
@@ -449,11 +470,12 @@ Two consequences the program should carry forward:
 1. **The surface task is the lucky configuration.** Trace-mode queries
    sit exactly where the bias is smallest. Interior and volume
    prediction at these coverages are the exposed cases.
-2. **There is no sampling-side rescue.** ~35% error at 0.11% coverage
-   is largely irreducible without more samples, which leaves two honest
-   options — train at higher coverage, or accept a coverage-specific
-   model — and the choice should be made deliberately rather than
-   discovered downstream (@sec-drivaerml).
+2. **The next rescue must preserve coverage.** The discriminating test
+   is a conservative nested hierarchy or aggregation scheme that covers
+   the whole surface at every level, compared against both the actual
+   cyclic-block sampler and simple-random decimation at matched compute.
+   Only that experiment can distinguish missing support, cell-order
+   correlation, model conditioning, and query-resolution effects.
 
 ## Part II — the declared contracts, and their walls {#sec-part-contracts}
 
@@ -1429,10 +1451,11 @@ The cost was measured, and it was total: on zero-shot transfer to a
 different vehicle family, **every** fixed-gauge checkpoint diverged to
 non-physical output (relative $L^2$ of $10^4$–$10^{15}$, and NaN at
 the largest capacity) while a gauge-agnostic baseline stayed
-structured at 0.677. A monotone dose-response in the gauge alone
-localizes the failure to that constant. The full account, the repair
-(a per-sample intrinsic gauge calibrated once on the training split),
-and its pre-registered acceptance are @sec-drivaerml-crossfamily.
+structured at 0.677. A monotone, test-set-touching dose-response in the
+gauge initially implicated that constant, but intrinsic retraining later
+failed too; it was a lever, not an identified cause. The audit also
+found that the calibration labeled train-only included held-out cases.
+The full corrected account is @sec-program-review.
 
 The lesson generalizes past this program: **a contract that holds by
 default and is escapable by an override is only as strong as the

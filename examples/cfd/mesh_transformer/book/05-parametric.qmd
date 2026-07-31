@@ -46,13 +46,29 @@ the screened equation. They differ only in where $\tilde\kappa$ enters:
 : The four arms. Training: $\tilde\kappa \in [0.5, 2]$, modes $\{0..3\}$, 2,000 steps, seed 17. Evaluation: OOD-high $\tilde\kappa \in [3,5]$, OOD-low $\tilde\kappa \in [0.05, 0.3]$, unseen modes $\{4,5,6\}$. {#tbl-arms}
 
 The Yukawa kernels have no elementary panel antiderivative, so panels use
-16-node Gauss–Legendre quadrature with the self-panel entry zeroed — a
-documented numerical knob that breaks exact resolution transfer (the omitted
-$O(h\log h)$ self-term is absorbed by the learned coefficients at fixed panel
-count). One infrastructure note with reuse value:
+16-node Gauss–Legendre quadrature. The original experiment zeroed the complete
+self-panel entry. That is not a benign fixed-resolution knob: the omitted
+$K_0$ single-layer contribution scales as
+$h[-\log(\tilde\kappa h)+O(1)]$ and therefore grows toward the low-screening
+limit. One infrastructure note with reuse value:
 `torch.special.modified_bessel_k0/k1` lack autograd derivatives, so the
 testbed adds custom `Function`s with the analytic recurrences
 $K_0' = -K_1$, $K_1' = -K_0 - K_1/z$, tested through nested derivatives.
+
+::: {.callout-warning title="EDIT: the specialist density solve is not yet a valid BIE control"}
+The density iteration fixes the trace jump at $+\tfrac12 I$ while learning the
+coefficient $c_d$ of a double-layer kernel. **A subsequent orientation audit
+corrected the sign in the first version of this warning:** the stored
+counter-clockwise panels receive inward line normals from `Mesh`, so the
+implemented interior jump is $+\pi c_d I$. It agrees with the fixed jump only
+at $c_d=+1/(2\pi)$, which was not enforced. The earlier
+$-\pi c_d$ statement implicitly assumed outward normals.
+Zeroing the single-layer diagonal creates a second, screening-dependent trace
+error. The field-error numbers below remain measurements of the executed
+models, and their interior PDE residual is still structural, but claims about
+a correct boundary trace or the mechanism of low-screening failure are
+withdrawn pending a corrected no-learning test.
+:::
 
 ## Results
 
@@ -115,64 +131,82 @@ plt.show()
 
 : The four-arm results (checked-in key `iteration_3_parametric_conditioning`). The harmonic arm's PDE residual $1.646 = \mathbb E[\tilde\kappa^2]$ over the training range — it measures precisely the operator mismatch $\|(\Delta - \kappa^2)u\|$ of a basis that satisfies the wrong PDE. {#tbl-screened}
 
+::: {.callout-important title="EDIT: the corrected canonical control reverses the low-screening conclusion"}
+A parameter-free replication fixed the double-layer coefficient at
+$c_d=1/(2\pi)$ in the implementation's inward-normal convention, retained
+the matching $+\tfrac12 I$ jump, removed the unstable single-layer charge
+mode, and used the complete trace. On 64 fresh cases per split, the dense and
+eight-step controls scored:
+
+| corrected control | ID | OOD-high | OOD-low | unseen modes |
+|---|---:|---:|---:|---:|
+| dense canonical double layer | 0.00110 | 0.00349 | 0.000602 | 0.00467 |
+| eight shared residual steps | 0.000974 | 0.00281 | 0.000928 | 0.00628 |
+
+The old 8.7--28 low-screening detonation is therefore **not inherent to
+placing $\tilde\kappa$ in a Yukawa kernel**. A separate manufactured test
+identified two independent failures in the old single-layer path:
+charge-mode Richardson instability and a deleted self panel. The archived
+coefficients are unavailable, so their individual shares of the historical
+error remain unknown. Data:
+[corrected full-bank control](../results/screened_canonical_double_layer_2026-07-29_job5689394/artifacts/report.json)
+and [mechanism discriminator](../results/screened_trace_mechanism_2026-07-29/report.json).
+:::
+
 ## Findings
 
-1. **Physics-in-basis gives exact operator fidelity and the best
-   parameter-OOD, with 10 parameters.** The Yukawa arm's PDE residual is
-   exactly 0 (its basis satisfies the operator identically) and its
-   high-screening extrapolation error is 3× smaller than any conditioned
-   arm's.
-2. **Each basis generalizes toward its own asymptotic regime.** The harmonic
-   conditioner — worst everywhere else — *wins* the $\tilde\kappa \to 0$
-   split at 0.0035, because the harmonic family *is* that limit; the Yukawa
-   arms blow up there (8.7–28) as $K_0$ diverges logarithmically and the
-   Richardson solve leaves its convergent regime. Extrapolation quality is a
-   property of the basis's asymptotics, not of parameter count.
-3. **Conditioning absorbs in-distribution numerics but never extrapolates.**
-   The conditioned Yukawa arm reaches ID $5\times10^{-4}$ — 6× better than
-   the pure basis — by learning the $\tilde\kappa$-dependence of the zeroed
-   Gauss self-panel term. That is a legitimate, useful role. But every
-   conditioned arm degrades OOD relative to its own basis.
-4. **A union basis does not rescue OOD** — this refuted the author's own
-   prediction. The union contains the harmonic family that solves the
-   low-$\tilde\kappa$ split, yet scores 25.0 there: the *coefficient
-   selection itself* must extrapolate, and the conditioning MLP does not.
+1. **Correct analytic structure is decisive.** The canonical double layer
+   satisfies the screened operator in the interior and remains below 0.0063
+   field error on every tested parameter and mode split without learned
+   coefficients.
+2. **The historical low-screening failure was an instrument failure, not a
+   kernel-family limit.** Its single-layer charge mode becomes
+   Richardson-unstable as $\tilde\kappa\to0$, while deleting the self panel
+   independently creates 22--53% error even for a zero-charge density.
+3. **Coefficient conditioning has not earned its place on disks.** The old
+   conditioned Yukawa arm improved interpolation inside a trace-inconsistent
+   model, then failed both screening extrapolations. The corrected fixed
+   coefficient is accurate in all four regimes.
+4. **Solver tolerance still matters.** Eight shared residual steps track the
+   dense field within 0.0021 on every case, but their $10^{-3}$ truncation
+   floor eventually masks boundary refinement. This identifies iteration
+   accuracy, not parameter conditioning, as the next controlled variable.
 
 ## The design rule
 
-> **The operator parameter must enter analytically through the
-> fundamental-solution basis; learned conditioning is for in-distribution
-> numerics, not physics extrapolation.**
+> **Disk-family result:** known operator dependence belongs in a correctly
+> normalized fundamental-solution kernel; the trace jump and singular
+> coefficient must be coupled analytically, and solver accuracy should be
+> controlled by a residual rather than a fixed iteration count.
 
 Read against @sec-mesh-attention, this fixes the division of labor for the
 `MeshTransformer` marriage: the *decoder* should be a kernel basis carrying
 all operator dependence analytically (PDE-conforming where the operator is
 known — which, under the product scope, it is not); the *encoder*'s
 evidence-backed role is conditioning coefficients on geometry and operator
-data **within** the training distribution — the same conclusion the
-factorial reached from the geometry side (encoder worthless for the moment
-decoder, +24% once joint source-query geometry existed).
+data **within** the training distribution. The screened experiment does not
+establish a general extrapolation law for learned conditioning.
 
-Caveats: single seed (17), disks only (exact Bessel labels), 2,000 steps, and
-the Gauss-quadrature self-panel knob noted above. The geometry-conditioning
-analogue — does *geometry* conditioning extrapolate any better than
-$\tilde\kappa$ conditioning did? — needs numerical labels on deformed
-screened domains and is future work (@sec-future).
+Caveats: the corrected result is parameter-free and uses 64 cases per split,
+but still covers disks only. The geometry analogue—whether the same
+residual-controlled trace solver survives deformed boundaries—is the next
+required test (@sec-future).
 
 ## Under the product scope
 
 The design rule assumes the operator's fundamental solutions are available
 to place in the basis. Under the problem statement in the front matter they
 are not — for the real targets the operator itself is not perfectly
-knowable. The rule then inverts into an honest limitation statement:
-**conditioning interpolates; only built-in structure extrapolates** — and
-when the equations are unknown, there is no exact structure to build in.
-Parameter and spectral extrapolation must therefore not be promised in the
-unknown-PDE setting; what can be promised is in-distribution fidelity, plus
-whatever extrapolation a learned singularity-dictionary prior (@sec-future)
+knowable. The experiment therefore supports a narrower limitation:
+coefficient conditioning cannot be assumed to extrapolate beyond its
+operator-parameter training range. Parameter and spectral extrapolation must
+not be promised in the unknown-PDE setting; what can be tested is
+in-distribution fidelity plus whatever transfer a learned
+singularity-dictionary prior (@sec-future)
 demonstrably earns on held-out axes. The study's value under this scope is
-diagnostic: it measures exactly how much is lost when the parameter cannot
-enter analytically — a factor of 3 at high screening, four orders of
-magnitude at low. The full architecture — $\tilde\kappa$ conditioning
-through the `MeshTransformer` operator encoder over a harmonic-biased
-kernel dictionary — answers this question directly in @sec-screened.
+diagnostic: a correct known-PDE double layer is accurate throughout the
+screening range, while the harmonic-biased generalist remains a fallback when
+the operator is unknown but gives up both accuracy and operator fidelity. The full
+architecture — $\tilde\kappa$ conditioning through the `MeshTransformer`
+operator encoder over a harmonic-biased kernel dictionary — is evaluated
+directly in @sec-screened.

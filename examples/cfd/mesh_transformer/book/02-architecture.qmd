@@ -1,5 +1,15 @@
 # The architecture, plainly {#sec-architecture}
 
+::: {.callout-warning title="Implementation audit correction"}
+This chapter describes the intended architecture. The 2026-07-27 audit found
+two material gaps between the contract and the public path: incoming effective
+measure weights are stripped during `encode`, and the Barnes--Hut
+approximation is not rotation equivariant because its spatial partition is
+axis aligned. The exact dense backend retains the tested similarity contract.
+See @sec-program-review before treating the opt-in measure or approximate
+far-field statements below as established.
+:::
+
 This chapter is the **source of truth** for what the MeshTransformer *is*:
 what goes in, what comes out, and what happens in between, in that order,
 with as little jargon as we can manage. The mathematics behind each piece
@@ -120,22 +130,26 @@ In words:
    targets of known drive degree (a Bernoulli pressure is exactly
    quadratic), after the nonlinear mode's *implicit* degree ~21 was
    measured detonating off-range (@sec-nonlinear-fragility). In
-   *homogeneous* mode the declared degree is **exactly one**: the field
-   state's O($D$)-invariant magnitude is factored out, a nonlinear typed
-   map acts on the resulting unit state, and the magnitude multiplies
-   back — $f(F) = \lVert F\rVert\,g(F/\lVert F\rVert)$. Three properties
-   follow by construction rather than by training, and the combination
-   is the reason the mode exists: a $k\times$ shift in drive statistics
-   produces a $k\times$ shift in output and never $k^{d}$; the learned
-   map $g$ only ever sees unit-magnitude states, so its internals are
-   bounded exactly as a normalization layer would bound them; and
+   *homogeneous* mode the intended degree is one: the field state's
+   O($D$)-invariant magnitude is factored out, a nonlinear typed map acts
+   on the resulting direction, and the magnitude multiplies back.
+   The implementation actually uses
+   $F/(\lVert F\rVert+\varepsilon)$ with
+   $\varepsilon=10^{-30}$, so degree one is approximate for positive
+   scales comfortably above that floor, not an exact all-magnitude
+   contract; it is also not odd after training. At ordinary tested
+   magnitudes, a $k\times$ shift in drive statistics produces a
+   $k\times$ shift in output rather than $k^{d}$; the learned map $g$
+   sees a bounded near-unit state; and
    zero-preservation stays *exact even though $g$ carries biases*,
    because the magnitude multiplies back rather than being discarded.
    That last point is what a normalization layer cannot offer — discard
    the magnitude and $f(0)\neq0$ the moment anything downstream has a
    bias — and it is why this mode recovers bounded activations without
-   surrendering the zero-drive contract. What it gives up is amplitude
-   nonlinearity ($u(\lambda g)=\lambda u(g)$), so it sits strictly
+   surrendering the zero-drive contract. What it approximately gives up
+   is amplitude nonlinearity
+   ($u(\lambda g)\approx\lambda u(g)$ for $\lambda>0$ away from the
+   floor), so it sits
    between *linear* (degree one **and** additive) and *nonlinear*
    (unbounded degree): the right declaration when the target depends
    nonlinearly on the drive's *shape* but roughly linearly on its
@@ -428,18 +442,17 @@ Each refusal is a falsifiable contract with a test attached, not a slogan:
 | Never respond to zero drive | homogeneous problems with no data have the zero solution | zero-drive eval, every field mode |
 | Never break superposition *in linear mode* | when the problem is linear, its law should be structural, not learned | drive-linearity contract eval |
 | Never point-sample a singular kernel | near-boundary accuracy | quadrature-vs-closed-form tests to ~1e-14 |
-| Never depend on the *magnitude* of the quadrature measure (opt-in) | units invariance in the measure dimension, not just the length dimension | measure-rescale test, $k$ to 880: $<10^{-9}$ (@sec-four-properties) |
+| Never depend on the *magnitude* of the quadrature measure (opt-in) | intended units invariance in the measure dimension | synthetic internal-rescale test only; upstream effective weights are currently stripped (@sec-program-review) |
 
-The last row is newer than the others and carries a caveat worth
-stating in the source-of-truth chapter: it is **opt-in**
-(`measure_normalization`, default off, bitwise-inert when off) because
-the reweighting changes the operator every existing checkpoint was
-trained under. With it off — which is every archived result in this
-book — the model is strongly sensitive to measure magnitude: 45% drift
-at a 16× rescale, and non-physical output at the 880× rescale the
-DrivAerML subsampling protocol's own statistics call for. Whether the
-default should flip is an empirical question with a training arm
-attached, not a matter of principle.
+The last row is newer than the others and is not yet a public-input
+contract. `measure_normalization` is opt-in and bitwise-inert when off,
+but `MeshTransformer.encode` reconstructs geometry-only meshes after
+deleting incoming cell data. Thus composed Horvitz--Thompson weights do
+not reach the normalization or decoder; only reconstructed geometric
+areas do. Existing measure-rescale tests establish an internal algebraic
+property, not correctness of the production intervention. Repair the
+data path and add an end-to-end nonuniform-weight test before deciding
+whether the default should flip.
 
 ## Reference configuration {#sec-reference-config}
 

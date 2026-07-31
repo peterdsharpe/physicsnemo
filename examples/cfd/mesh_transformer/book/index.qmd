@@ -3,11 +3,21 @@
 This book documents a research program on **surrogates for steady, homogeneous,
 boundary-driven PDEs**, developed around the `MeshTransformer` /
 `MeshAttention` stack in `physicsnemo/experimental/nn/mesh_attention/` and the
-exact-label benchmark suite in `examples/cfd/mesh_transformer/`.
+exact/manufactured-label and solver-verified benchmark suite in
+`examples/cfd/mesh_transformer/`.
 
 The audience is applied mathematicians and ML researchers. The style is
 first-principles: every architectural decision is stated as a hypothesis, and
 the chapters record which hypotheses survived falsification and which did not.
+
+::: {.callout-important title="Read the current research agenda first"}
+The synthesis below is the program's historical thesis, not its current
+verdict. The compact, authoritative agenda is @sec-nb-current-agenda, and the
+latest scope correction is @sec-nb-agenda-altitude-reset. The notebook
+separates established evidence, withdrawn interpretations, and the few
+scientific questions that remain live. Earlier chapters retain the fuller
+technical history but should not be read as the current research plan.
+:::
 
 ## The thesis, in one paragraph
 
@@ -31,7 +41,8 @@ the chapters record which hypotheses survived falsification and which did not.
 
 One scope line the industrial campaign added (2026-07-18): the
 paragraph above is the *synthetic-program* thesis, and there it is
-proven. At industrial scale the causal picture measured differently —
+best supported within the tested controlled suites. At industrial scale
+the causal picture measured differently —
 the completed attribution factorials showed the DrivAerML gains are
 DOMINATED by the trace formulation — measured 3.8× at flagship
 capacity, its two sub-mechanisms (exact jump correction, learned
@@ -44,24 +55,24 @@ members match eight learned ones, @sec-drivaerml-factorial). The
 industrial model is honestly described as boundary-integral-inspired;
 its strongest measured industrial asset is out-of-distribution
 behavior (@sec-drivaerml), where the deep-S1 wall-shear-direction
-differential against the strongest baseline is sealed at five seeds
-per side (the pressure differential remains suggestive only).
+degradation-ratio differential against the strongest baseline is
+consistent at five seeds per side but remains provisional: the paired
+sample is too small for a two-sided 5% exact sign decision, the metric
+record is contradictory, and the baseline's absolute WSS error is
+still 2.5–2.7× lower. The pressure differential is suggestive only
+(@sec-program-review).
 
-A second scope line, added 2026-07-22, because the program's own
-identity claim took the hardest hit on record. That
+A second scope line, corrected by the 2026-07-27 audit: the
 out-of-distribution asset is measured **within** the DrivAer family.
-Pushed to a *different* vehicle family, zero-shot, the shipped
-configuration did not merely degrade — it diverged to non-physical
-output on every checkpoint, while a gauge-agnostic baseline stayed
-structured (@sec-drivaerml-crossfamily). The mechanism is localized,
-by a clean dose-response, to a fixed declared scale gauge in the
-industrial pipeline rather than to the architecture: the very
-convention the intrinsic-gauge design of @sec-forward-pass exists to
-abolish, reintroduced through its licensed override. The repair is
-built, calibrated once on the training split, and its confirmatory
-re-run is pre-registered and unrun. Until that returns, the honest
-statement of this program's generalization claim is
-**within-family**.
+Pushed to a different vehicle family, zero-shot, every shipped
+checkpoint diverged while a gauge-agnostic baseline stayed structured
+(@sec-drivaerml-crossfamily). The exploratory gauge dose-response did
+not identify the cause: intrinsic-gauge retraining also failed, and
+the supposedly train-only calibration included held-out cases. More
+decisively, offset-free diagnostics show that every tested field
+pattern is essentially unrelated to truth. The honest industrial
+generalization claim is therefore within-family and provisional
+(@sec-program-review).
 
 ## Problem statement and scope
 

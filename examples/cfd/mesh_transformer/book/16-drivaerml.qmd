@@ -1,6 +1,18 @@
 # DrivAerML: the industrial target {#sec-drivaerml}
 
-::: {.callout-note title="Status: campaign run; results below"}
+::: {.callout-important title="Audit correction — current status is in the 2026-07-27 notebook entry"}
+This chapter preserves the campaign as it unfolded, including claims that later
+failed. The 2026-07-27 audit (@sec-program-review) is authoritative: the
+intrinsic-gauge repair did not restore transfer; its calibration leaked held-out
+cases; all tested SHIFT-SUV predictions have essentially unrelated field
+patterns; the effective-measure intervention is disconnected inside
+`MeshTransformer.encode`; and the five-versus-five WSS comparison is
+provisional, not statistically sealed. Read statements below about a localized
+gauge cause, completed measure repair, or a sealed industrial differential as
+historical interpretations.
+:::
+
+::: {.callout-note title="Historical campaign snapshot"}
 The pre-registration sections (standing hypothesis, integration plan)
 are preserved as written before any run. The results
 (@sec-drivaerml-results) close H-ground, the gap investigation, the
@@ -31,12 +43,10 @@ pressure differential to suggestive.
 Since that update the chapter's sharpest result landed, and it went
 against us: the **cross-family zero-shot test fired its falsifier
 maximally** — the model as shipped does not transfer to a different
-vehicle family at all (@sec-drivaerml-crossfamily). The mechanism is
-localized to a repairable protocol flaw (a fixed declared scale
-gauge), the repair is built and calibrated, and the confirmatory
-re-run is pre-registered and awaiting its first gate. PENDING now:
-transfer-v2's gate 0, the AirFRANS clean-protocol ranking, and the
-all-boundary redo.
+vehicle family at all (@sec-drivaerml-crossfamily). At this historical
+snapshot the fixed gauge was the leading explanation and transfer-v2
+was pending; later evidence rejected that explanation
+(@sec-program-review).
 :::
 
 ## The dataset, and what makes our variant special
@@ -741,7 +751,7 @@ excess degradation remains 11–100× smaller than the allowed excess.
 Integrated drag concurs: 4.5–5.4% relative CD error in-distribution
 vs 6–7% on the S1 extremes, 4–6% on both for S2.
 
-**The differential — sealed at five seeds on WSS; pressure demoted.**
+**The differential — provisional at five seeds on WSS; pressure demoted.**
 The incumbent's exclusion-retrain arms — same splits, harness,
 metric, and protocol — give the paired comparison the zero-shot
 read could not, now at five seeds per model
@@ -752,12 +762,15 @@ read could not, now at five seeds per model
 | this program (5 seeds) | 1.019–1.044 | **1.072–1.113** | 1.03 | 0.97–0.98 |
 | incumbent (5 seeds) | 1.043–1.069 | **1.126–1.136** | 1.03–1.05 | 0.99 |
 
-On S1 vector WSS the seed ranges are disjoint at 5-vs-5 (exact
-rank-sum p ≈ 0.008): the incumbent's mean excess degradation is
+On S1 vector WSS the seed ranges are disjoint at 5-vs-5. The historical
+independent rank-sum calculation gives $p \approx 0.008$, but it
+discards the matched-seed design; with only five same-sign paired
+differences, the minimum two-sided exact sign-test $p$ is 0.0625.
+The incumbent's mean excess degradation is
 1.4× ours (0.131 vs 0.092). The pre-registered extension sharpened
 the estimate honestly in both directions — the effect survived its
 falsifier (no overlap), but the original "ours ≤ 1.10" bound broke
-(seeds 45/46 came in at 1.113/1.104), so the sealed effect is
+(seeds 45/46 came in at 1.113/1.104), so the observed effect is
 thinner than the 3-seed read suggested (1.4×, not 1.65×). On
 pressure the extension ranges TOUCH (our 1.044 vs their 1.043):
 per the same falsifier logic the pressure differential is demoted
@@ -774,14 +787,16 @@ not comparable to full-mesh CD values); and the extremes are
 **parameter-space extrapolation within the DrivAer family** — real
 aerodynamic regime shifts (wake topology, ground effect), but not
 novel vehicle topologies. Within that stated scope: **geometry
-generalization on the industrial benchmark holds at ~3% (pressure)
+generalization on the industrial benchmark is observed at ~3% (pressure)
 and ~8% (vector WSS, S1 only) degradation — boundary and deep, both
-protocols — and, at deep-S1, measurably better than the incumbent's
-on vector WSS at five seeds per side (disjoint ranges, exact
-rank-sum $p \approx 0.008$). On pressure the five-seed extension
+protocols. At deep-S1 its vector-WSS degradation ratio is consistently
+smaller than the incumbent's at five seeds per side, but absolute WSS
+errors favor the incumbent by 2.5–2.7× and the paired uncertainty is
+too thin for “sealed” language. On pressure the five-seed extension
 demoted the differential to *suggestive*: the ranges touch, the
-means still order in our favour. One field sealed, one field
-softened — that is what the extension bought, in both directions.**
+means still order in our favour. One field remained consistent but
+provisional; one softened — that is what the extension bought, in both
+directions.**
 
 And one boundary this whole section does not cross: every split above
 is drawn from the DrivAer family's own design-of-experiments. The
@@ -991,9 +1006,12 @@ $$
 
 with $r_{\mathrm{RMS}}$ the sample's own measure-weighted RMS radius
 about its measure-weighted centroid — translation- and
-rotation-invariant, similarity-*covariant*, and Horvitz–Thompson
-subsample-robust. $C$ is calibrated **once on the DrivAerML training
-split** and never re-fit: 484 samples give
+rotation-invariant and similarity-*covariant*. The historical run
+claimed Horvitz–Thompson subsample robustness and a calibration
+performed **once on the DrivAerML training split**. The audit found both
+claims invalid in the executed path: effective weights are stripped,
+and the calibration iterated all 484 dataset cases rather than the
+435-case training sampler. Its artifact reports
 $r_{\mathrm{RMS}} = 0.30215 \pm 0.0089$ and hence
 $C = 26.476593$, putting DrivAerML's per-sample gauges in
 $[7.41, 8.64]$ — a ±3.5% spread around the historical 8.0, well
@@ -1102,10 +1120,11 @@ magnitude past the bar. Gate 2 is moot. The pre-registered structural
 prediction was $p \approx 0.75$; it was wrong.
 
 This refutes the previous section's own diagnosis. The divergence was
-localised to the fixed gauge on a clean, monotone dose-response and
+initially attributed to the fixed gauge from a monotone but
+test-set-touching dose-response and
 described as "a repairable protocol flaw, not deep architectural
 brittleness". Retraining under a similarity-covariant, per-sample
-intrinsic gauge — calibrated once on train, never re-fit — leaves the
+intrinsic gauge — using a constant mislabeled as train-only — leaves the
 model diverging. **The gauge was a lever that moved the magnitude, not
 the cause.** What the earlier section got right was insisting the
 dose-response was exploratory and could not support a rehabilitated
@@ -1129,11 +1148,26 @@ operating point, and the exact-kernel structure does not protect it
 outside that point.** That is consistent with the kernel factorial's
 0–8% (@sec-drivaerml-factorial): structure that is not load-bearing
 in-distribution should not have been expected to carry generalization.
-Cross-family *advantage* over the incumbent is now below 5%; the sealed
-within-family deep-S1 WSS differential is untouched and is likely to
-remain this architecture's strongest generalization claim.
+I now assign less than 5% probability to a cross-family *advantage* over the
+incumbent on the current mechanism; the
+provisional within-family deep-S1 WSS degradation-ratio differential is
+likely to remain this architecture's strongest industrial
+generalization observation, subject to the metric and paired-uncertainty
+audit above.
 
 ### The model is a coverage-specific regressor {#sec-drivaerml-coverage}
+
+::: {.callout-warning title="What this sweep does and does not identify"}
+The sweep below changes source and trace-query sets together, compares a
+trained car model to an unrelated sphere estimator, and mixes an
+approximately 8.8M pre-triangulation quad-dominant cell count with a
+post-triangulation sampler. The curated reader documents roughly 17.7M
+triangles in the cited case. Production selects a cyclic
+contiguous block in on-disk cell order, whereas the sphere diagnostic
+uses simple-random subsets. The U-shape is real; its
+coverage-specific-correction mechanism and the grey quantitative comparison
+are not identified. See @sec-program-review.
+:::
 
 Chapter @sec-future carries an item filed as *blocked on research, not
 wiring*: at full resolution — 17.7M query cells against 50k sources —
@@ -1164,7 +1198,9 @@ import matplotlib.pyplot as plt
 res = [2500, 5000, 10000, 20000, 40000]
 err = [0.8966, 0.7998, 0.167163, 0.4106, 24810.9]
 ### Exact-estimator field-level relative L2 at the matching coverages
-### (coverage = res / 8.8e6 vehicle cells).
+### Historical calculation used coverage = res / 8.8e6
+### pre-triangulation cells, while the reader samples post-triangulation
+### triangles; retained here as campaign history.
 ex_res = [10000, 20000, 40000]
 ex_err = [0.337, 0.248, 0.174]
 
@@ -1186,7 +1222,7 @@ ax.set_xscale("log"); ax.set_yscale("log")
 ax.set_xlim(1800, 62000); ax.set_ylim(0.08, 2e5)
 ax.set_xticks(res, [f"{r//1000}k" for r in res])
 ax.minorticks_off()
-ax.set_xlabel("source sampling resolution (cells of 8.8M)")
+ax.set_xlabel("source sampling resolution (historical pre-triangulation denominator)")
 ax.set_ylabel("id_reference pressure relative $L^2$")
 ax.grid(True, color="#e1e0d9", lw=0.8)
 ax.set_axisbelow(True)
@@ -1256,12 +1292,11 @@ floor that no reweighting scheme reduces (@sec-four-properties).
 
 ### Decode efficiency: the 14× repricing
 
-The profile that the cluster's idle-GPU telemetry forced
-(@sec-nb-decode-profile) found a 102k-launch dispatch storm in the
+The archived profile that the cluster's idle-GPU telemetry forced found a
+102k-launch dispatch storm in the
 shared closed-forms path (an `einsum` lowering to a 4.2×10⁷-batch
 bmm) and a deliberately-sequential bitwise member loop. Both fixed —
-the second under a physics-lined contract split
-(@sec-nb-contract-split): closed forms stay bitwise, learned members
+the second under a physics-lined contract split: closed forms stay bitwise, learned members
 move to measured-tolerance GEMMs with a bitwise reference mode
 retained. Result: **7.2× (singpair) and 14.2× (members) step
 speedups**, 474/474 tests, live on both clusters. Every wall-clock
