@@ -138,6 +138,23 @@ class ScalarVectorState:
         """Spatial dimension ``D`` of the vector sector."""
         return self.vectors.shape[-1]
 
+    def add(self, other: "ScalarVectorState") -> "ScalarVectorState":
+        """Sector-wise sum of two identically typed states, with an
+        informative shape failure (residual connections, drive read-outs)."""
+        for sector in ("scalars", "vectors", "pseudos"):
+            left = getattr(self, sector)
+            right = getattr(other, sector)
+            if left.shape != right.shape:
+                raise ValueError(
+                    f"{sector} residual shapes differ: "
+                    f"{tuple(left.shape)} != {tuple(right.shape)}"
+                )
+        return ScalarVectorState(
+            self.scalars + other.scalars,
+            self.vectors + other.vectors,
+            self.pseudos + other.pseudos,
+        )
+
     def validate(self, *, label: str = "state") -> None:
         """Raise ``ValueError`` unless all sectors have consistent shapes,
         entity counts, devices, and dtypes.  ``label`` names the offending

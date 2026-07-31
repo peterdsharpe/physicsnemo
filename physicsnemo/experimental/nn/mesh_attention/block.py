@@ -51,30 +51,6 @@ from .attention import (
 )
 
 
-def _add(left: ScalarVectorState, right: ScalarVectorState) -> ScalarVectorState:
-    """Add two identically typed states with an informative shape failure."""
-    if left.scalars.shape != right.scalars.shape:
-        raise ValueError(
-            "Scalar residual shapes differ: "
-            f"{tuple(left.scalars.shape)} != {tuple(right.scalars.shape)}"
-        )
-    if left.vectors.shape != right.vectors.shape:
-        raise ValueError(
-            "Vector residual shapes differ: "
-            f"{tuple(left.vectors.shape)} != {tuple(right.vectors.shape)}"
-        )
-    if left.pseudos.shape != right.pseudos.shape:
-        raise ValueError(
-            "Pseudoscalar residual shapes differ: "
-            f"{tuple(left.pseudos.shape)} != {tuple(right.pseudos.shape)}"
-        )
-    return ScalarVectorState(
-        left.scalars + right.scalars,
-        left.vectors + right.vectors,
-        left.pseudos + right.pseudos,
-    )
-
-
 def _apply_coefficients(
     coefficients: Float[torch.Tensor, "n channels_out basis"],
     basis: Float[torch.Tensor, "n basis spatial_dims"],
@@ -1108,7 +1084,7 @@ class QuadraticFieldReadIn(nn.Module):
                 pseudos.to(dtype=scalars.dtype),
             )
         )
-        return _add(field, quadratic)
+        return field.add(quadratic)
 
 
 def _init_moment_segment_gain(
@@ -1393,8 +1369,7 @@ class MeshOperatorBlock(nn.Module):
         """One residual step of global typed self-attention over the source
         mesh, then one residual typed feed-forward step."""
         normalized = self.attention_norm(state)
-        state = _add(
-            state,
+        state = state.add(
             self.attention_scale(
                 self.attention(
                     source_mesh,
@@ -1407,8 +1382,7 @@ class MeshOperatorBlock(nn.Module):
                 )
             ),
         )
-        return _add(
-            state,
+        return state.add(
             self.feed_forward_scale(self.feed_forward(self.feed_forward_norm(state))),
         )
 
@@ -1434,8 +1408,7 @@ class PointwiseGeometryBlock(nn.Module):
 
     def forward(self, state: ScalarVectorState) -> ScalarVectorState:
         """One residual pointwise equivariant feed-forward step."""
-        return _add(
-            state,
+        return state.add(
             self.scale(self.feed_forward(self.norm(state))),
         )
 
@@ -1553,9 +1526,8 @@ class LinearMeshFieldBlock(nn.Module):
         message = self.message_scale(
             self.attention.evaluate_moments(query_geometry, moments)
         )
-        state = message if query_field is None else _add(query_field, message)
-        return _add(
-            state,
+        state = message if query_field is None else query_field.add(message)
+        return state.add(
             self.pointwise_scale(self.pointwise(query_geometry, state)),
         )
 
@@ -1726,9 +1698,8 @@ class NonlinearZeroMeshFieldBlock(nn.Module):
         message = self.message_scale(
             self.attention.evaluate_moments(query_geometry.cat(query_field), moments)
         )
-        state = _add(query_field, message) if residual else message
-        return _add(
-            state,
+        state = query_field.add(message) if residual else message
+        return state.add(
             self.pointwise_scale(self.pointwise(query_geometry, state)),
         )
 

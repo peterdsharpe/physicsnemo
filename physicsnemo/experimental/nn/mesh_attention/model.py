@@ -477,7 +477,18 @@ class MeshTransformer(Module):
         explicitly for canonically dimensioned applications; with a key the
         model consumes exactly the declared scalar, bitwise identical to
         models predating the intrinsic default.
-    field_mode : {"linear", "zero_preserving_nonlinear", "quadratic"}
+    measure_normalization : bool, default=False
+        Compose one normalizing factor ``1 / sum(cell_measures)`` into the
+        source mesh's public measure weights at encode time, so every
+        quadrature consumer reads an effective measure of unit total: the
+        learned operator then depends on the source measure's
+        *distribution*, not its nuisance magnitude (the measure-scale
+        invariance the H-MS falsifier showed was otherwise missing).
+        Existing Horvitz--Thompson factors survive the composition, and the
+        physical panel geometry is untouched.  The default ``False`` is
+        bitwise identical to models predating the knob.
+    field_mode : {"linear", "zero_preserving_nonlinear", "quadratic", \
+"homogeneous"}
         ``linear`` guarantees fixed-geometry superposition.  The nonlinear
         mode guarantees zero drive produces zero output but does not claim
         superposition.  ``quadratic`` DECLARES the drive degree the way the
@@ -516,6 +527,20 @@ class MeshTransformer(Module):
         machine precision.  Falsifier: if the quadratic arm matches
         on-range but still detonates off-range, the degree diagnosis was
         incomplete.
+        ``homogeneous`` DECLARES drive degree exactly one without assuming
+        additivity: the drive-linear machinery plus one norm-factored
+        nonlinear read-in :math:`f(F)=\lVert F\rVert\,g(F/\lVert F\rVert)`
+        (:class:`~physicsnemo.experimental.nn.mesh_attention.block.HomogeneousFieldReadIn`),
+        so a :math:`k\times` shift in drive statistics moves the output by
+        exactly :math:`k\times` -- never :math:`k^{8}`, the measured
+        implicit degree of the multiplicative read-in on the industrial
+        configuration.  Zero preservation is exact and unconditional, the
+        nonlinearity only ever sees unit-magnitude states, and degree one
+        is closed under composition.  It is the right declaration when the
+        target's amplitude dependence is degree ~1 while its dependence on
+        drive *shape* is nonlinear (e.g. nondimensional surface loads under
+        a unit freestream direction), and the wrong one when amplitude
+        nonlinearity is the physics, as on Liouville.
     query_decoder : {"moment", "kernel"}
         Boundary-to-query decoding operator.  ``moment`` is the separable
         signed-moment decoder with :math:`O(N_s+N_q)` cost; in linear mode
@@ -2006,6 +2031,34 @@ class MeshTransformer(Module):
         """
         return measure_weighted_rms_radius(weights, centroids, dtype)
 
+    @staticmethod
+    def _declared_positive_scalar(
+        global_data: TensorDict,
+        key: str,
+        reference: torch.Tensor,
+        *,
+        what: str,
+    ) -> torch.Tensor:
+        r"""Fetch a declared positive scalar from ``global_data`` by dotted key.
+
+        Shared contract of both physical declarations read from the raw
+        global operator input (``reference_length_key``,
+        ``kernel_auxiliary_scale_key``): a 0-dim positive finite value on
+        the mesh's device/dtype.  A violation is a caller error rather than
+        data, so it raises instead of propagating.
+        """
+        value = _td_get(global_data, tuple(key.split(".")))
+        if value.numel() != 1:
+            raise ValueError(f"{what} {key!r} must be scalar")
+        if value.device != reference.device or value.dtype != reference.dtype:
+            raise ValueError(f"{what} {key!r} must share mesh device and dtype")
+        value = value.reshape(())
+        if not torch.compiler.is_compiling() and (
+            not torch.isfinite(value).item() or value.item() <= 0.0
+        ):
+            raise ValueError(f"{what} {key!r} must be finite and positive")
+        return value
+
     def _reference_length(
         self,
         global_data: TensorDict,
@@ -2016,20 +2069,12 @@ class MeshTransformer(Module):
         Only called with ``reference_length_key`` set; this override path is
         bitwise identical to models predating the intrinsic default gauge.
         """
-        path = tuple(self.reference_length_key.split("."))
-        length = _td_get(global_data, path)
-        if length.numel() != 1:
-            raise ValueError(
-                f"Reference length {self.reference_length_key!r} must be scalar"
-            )
-        if length.device != reference.device or length.dtype != reference.dtype:
-            raise ValueError("Reference length must share mesh device and dtype")
-        length = length.reshape(())
-        if not torch.compiler.is_compiling() and (
-            not torch.isfinite(length).item() or length.item() <= 0.0
-        ):
-            raise ValueError("Reference length must be finite and positive")
-        return length
+        return self._declared_positive_scalar(
+            global_data,
+            self.reference_length_key,
+            reference,
+            what="Reference length",
+        )
 
     def _kernel_auxiliary_scale(
         self,
@@ -2043,27 +2088,14 @@ class MeshTransformer(Module):
         operator lift: like ``reference_length_key``, it is a physical
         declaration (the dimensionless ratio
         :math:`\lambda=\delta/L_{\mathrm{ref}}`, e.g.
-        :math:`\mathrm{Re}^{-1/2}`), not a learned feature, and a
-        non-positive or non-finite value is a caller error rather than data.
+        :math:`\mathrm{Re}^{-1/2}`), not a learned feature.
         """
-        path = tuple(self.kernel_auxiliary_scale_key.split("."))
-        value = _td_get(global_data, path)
-        if value.numel() != 1:
-            raise ValueError(
-                f"Auxiliary scale {self.kernel_auxiliary_scale_key!r} must be scalar"
-            )
-        if value.device != reference.device or value.dtype != reference.dtype:
-            raise ValueError("Auxiliary scale must share mesh device and dtype")
-        value = value.reshape(())
-        if not torch.compiler.is_compiling() and (
-            not torch.isfinite(value).item() or value.item() <= 0.0
-        ):
-            raise ValueError(
-                f"Auxiliary scale {self.kernel_auxiliary_scale_key!r} must "
-                "be finite and positive: it declares the physical "
-                "length-scale ratio delta / L_ref"
-            )
-        return value
+        return self._declared_positive_scalar(
+            global_data,
+            self.kernel_auxiliary_scale_key,
+            reference,
+            what="Auxiliary scale",
+        )
 
     def _local_cell_scalars(
         self, source_mesh: Mesh, length: torch.Tensor
@@ -2103,6 +2135,23 @@ class MeshTransformer(Module):
         curvature = torch.tanh(torch.asinh(curvature) / 13.0)
         return torch.stack((log_rel_area, curvature), dim=-1)
 
+    def _boundary_slices(self, domain: DomainMesh) -> tuple[slice, ...]:
+        """Cell ranges of the merged source, one per declared boundary.
+
+        The source merge concatenates boundaries in ``self.boundary_names``
+        order with each boundary's cells in mesh order; every consumer of a
+        merged-source offset (the BC one-hot, the per-boundary moment-pool
+        segments, the declared trace slice) must read that layout from here
+        so the alignment invariant lives in exactly one place.
+        """
+        slices: list[slice] = []
+        offset = 0
+        for name in self.boundary_names:
+            count = domain.boundaries[name].n_cells
+            slices.append(slice(offset, offset + count))
+            offset += count
+        return tuple(slices)
+
     def _source_operator_input(
         self,
         domain: DomainMesh,
@@ -2116,11 +2165,8 @@ class MeshTransformer(Module):
         channels when that probe knob is on)."""
         n = source_mesh.n_cells
         bc_one_hot = source_mesh.points.new_zeros(n, len(self.boundary_names))
-        offset = 0
-        for index, name in enumerate(self.boundary_names):
-            count = domain.boundaries[name].n_cells
-            bc_one_hot[offset : offset + count, index] = 1.0
-            offset += count
+        for index, cells in enumerate(self._boundary_slices(domain)):
+            bc_one_hot[cells, index] = 1.0
         association = source_mesh.points.new_zeros(n, 2)
         association[:, 0] = 1.0
         scalar_parts = [
@@ -2374,13 +2420,7 @@ class MeshTransformer(Module):
         # (knob off) leaves every attention call on the historical path.
         moment_segments: tuple[slice, ...] | None = None
         if self.per_boundary_moment_pool:
-            segment_list: list[slice] = []
-            offset = 0
-            for name in self.boundary_names:
-                count = domain.boundaries[name].n_cells
-                segment_list.append(slice(offset, offset + count))
-                offset += count
-            moment_segments = tuple(segment_list)
+            moment_segments = self._boundary_slices(domain)
         for block in self.operator_blocks:
             operator = block(source_mesh, operator, moment_segments=moment_segments)
 
@@ -2452,13 +2492,12 @@ class MeshTransformer(Module):
         # so decode can align query i with its declared own cell.
         trace_slice: slice | None = None
         if self.trace_of is not None:
-            offset = 0
-            for name in self.boundary_names:
-                count = domain.boundaries[name].n_cells
+            for name, cells in zip(
+                self.boundary_names, self._boundary_slices(domain), strict=True
+            ):
                 if name == self.trace_of:
-                    trace_slice = slice(offset, offset + count)
+                    trace_slice = cells
                     break
-                offset += count
         diagnostic_query_features: tuple[torch.Tensor, torch.Tensor] | None = None
         if self.diagnostic_local_query_features and trace_slice is not None:
             # DIAGNOSTIC ONLY (see constructor): the trace boundary's
@@ -2612,11 +2651,7 @@ class MeshTransformer(Module):
                     own_operator = self.trace_operator_read_out(
                         encoded.operator_state.slice(own)
                     )
-                    query_operator = ScalarVectorState(
-                        query_operator.scalars + own_operator.scalars,
-                        query_operator.vectors + own_operator.vectors,
-                        query_operator.pseudos + own_operator.pseudos,
-                    )
+                    query_operator = query_operator.add(own_operator)
             n_chunk = normalized_points.shape[0]
             # Global drive quantities (for example a prescribed far field)
             # are legitimate pointwise query inputs as well as boundary
@@ -2698,11 +2733,7 @@ class MeshTransformer(Module):
                 if query_drive is None:
                     query_drive = message
                 else:
-                    query_drive = ScalarVectorState(
-                        query_drive.scalars + message.scalars,
-                        query_drive.vectors + message.vectors,
-                        query_drive.pseudos + message.pseudos,
-                    )
+                    query_drive = query_drive.add(message)
             else:
                 for block, source_moments in zip(
                     self.query_blocks, encoded.query_moments, strict=True
@@ -2721,11 +2752,7 @@ class MeshTransformer(Module):
                 # before the quadratic read-in so the declared drive degree
                 # counts it as part of the drive-linear state u.
                 trace_state = self.trace_drive_read_out(encoded.drive_state.slice(own))
-                query_drive = ScalarVectorState(
-                    query_drive.scalars + trace_state.scalars,
-                    query_drive.vectors + trace_state.vectors,
-                    query_drive.pseudos + trace_state.pseudos,
-                )
+                query_drive = query_drive.add(trace_state)
             if self.quadratic_read_in is not None:
                 # Every stage above is exactly linear in the drive at fixed
                 # geometry; this one bilinear composition raises the state to

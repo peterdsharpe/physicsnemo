@@ -59,7 +59,7 @@ def test_kernel_cache_preserves_historical_weights_constructor():
 
     assert cache.weights is weights
     assert cache.quadrature_measures is weights
-    assert cache.geometric_panel_areas is weights
+    assert cache.panel_areas is weights
     torch.testing.assert_close(
         cache.representation_measure_factors, torch.ones_like(weights)
     )
@@ -1019,6 +1019,60 @@ def test_single_layer_knob_default_is_bitwise_noop(device):
         expected = reference(domain).point_data["potential"]
         actual = explicit(domain).point_data["potential"]
     torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+
+
+def test_mlp_only_arm_constructs_and_keeps_field_contracts(device):
+    """The MLP-only arm (external-review P0 control) keeps its contracts.
+
+    ``kernel_include_double_layer_member=False`` with the single layer also
+    off leaves polynomial plus learned members only.  That branch reorders
+    the member axis the coefficients and any Barnes--Hut aggregation index
+    positionally, and until this test its only in-tree exerciser was a
+    recipe config.  Pin the cheap structural contracts: the dictionary
+    shrinks by exactly the double-layer member, zero drive still decodes
+    to exactly zero (linear mode), and query-subset decode agrees with
+    full decode at the split-contract GEMM tolerance.
+    """
+    model = _disk_model(
+        "kernel",
+        device,
+        seed=131,
+        kernel_include_double_layer_member=False,
+        kernel_include_single_layer_member=False,
+    )
+    decoder = model.kernel_decoder
+    assert decoder.include_double_layer_member is False
+    assert decoder.n_members == 3 + decoder.mlp_members
+
+    angles = 0.271 + 2.0 * torch.pi * torch.arange(48, dtype=torch.float64) / 48.0
+    queries = 0.57 * torch.stack((torch.cos(angles), torch.sin(angles)), dim=-1)
+    queries = queries.to(device)
+    generator = torch.Generator().manual_seed(132)
+    values = torch.randn(20, generator=generator, dtype=torch.float64).to(device)
+    subset = torch.tensor([11, 3, 30, 7], device=device)
+
+    with torch.no_grad():
+        zero_domain = _disk_domain(20, queries, torch.zeros_like(values))
+        zeros = model(zero_domain).point_data["potential"]
+        domain = _disk_domain(20, queries, values)
+        encoded = model.encode(domain)
+        message_full = model.kernel_decoder(queries, encoded.kernel_cache)
+        message_subset = model.kernel_decoder(queries[subset], encoded.kernel_cache)
+
+    torch.testing.assert_close(zeros, torch.zeros_like(zeros), rtol=0.0, atol=0.0)
+    assert torch.isfinite(message_full.scalars).all()
+    torch.testing.assert_close(
+        message_subset.scalars,
+        message_full.scalars[subset],
+        rtol=1.0e-13,
+        atol=1.0e-14,
+    )
+    torch.testing.assert_close(
+        message_subset.vectors,
+        message_full.vectors[subset],
+        rtol=1.0e-13,
+        atol=1.0e-14,
+    )
 
 
 def test_singpair_arm_constructs_trains_and_stays_row_stable_2d(device):

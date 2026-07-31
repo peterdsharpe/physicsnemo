@@ -1024,13 +1024,9 @@ class KernelDecoderCache:
         return self.weights * self.measure_factors
 
     @property
-    def geometric_panel_areas(self) -> Float[torch.Tensor, " s"]:
-        """Explicit alias for the historical geometric-area field."""
-        return self.weights
-
-    @property
     def panel_areas(self) -> Float[torch.Tensor, " s"]:
-        """Named geometric-panel alias introduced with the measure split."""
+        """Geometric panel area: the named alias for the historical
+        ``weights`` field, introduced with the measure split."""
         return self.weights
 
     @property
@@ -1688,7 +1684,7 @@ class KernelBasisCrossDecoder(nn.Module):
                 tree = ClusterTree.from_points(
                     cache.centroids,
                     leaf_size=self.bh_leaf_size,
-                    areas=cache.geometric_panel_areas,
+                    areas=cache.panel_areas,
                 )
                 aggregates = _bh.build_node_aggregates(
                     tree,
@@ -1747,7 +1743,7 @@ class KernelBasisCrossDecoder(nn.Module):
             block[..., 1] = pooled[1]
             return block
         theta = subtended_angle(
-            squared_distance, cache.geometric_panel_areas, self.n_spatial_dims - 1
+            squared_distance, cache.panel_areas, self.n_spatial_dims - 1
         )
         if self.local_pair_features == "windowed":
             # Smooth full-support window: bounded to [0, 1), -> 0 as
@@ -1829,11 +1825,14 @@ class KernelBasisCrossDecoder(nn.Module):
                 # The closed form already integrates over the geometric
                 # panel. Public inclusion/representation factors multiply
                 # that exact integral once; effective area would count the
-                # geometric panel a second time.
-                singular = (
-                    singular
-                    * cache.representation_measure_factors.to(singular.dtype)[None, :]
-                )
+                # geometric panel a second time. No-factor caches skip the
+                # multiply entirely: materializing unit factors is dead work
+                # in the dense hot loop (engineering review).
+                if cache.measure_factors is not None:
+                    singular = (
+                        singular
+                        * cache.measure_factors.to(singular.dtype)[None, :]
+                    )
                 if self_indices is not None:
                     # Declared boundary-trace queries: the closed form lands
                     # on an accidental signed-zero branch of the jump
@@ -1860,12 +1859,11 @@ class KernelBasisCrossDecoder(nn.Module):
                 single_layer = exact_single_layer_member(
                     query_points, cache.panel_vertices
                 )
-                single_layer = (
-                    single_layer
-                    * cache.representation_measure_factors.to(single_layer.dtype)[
-                        None, :
-                    ]
-                )
+                if cache.measure_factors is not None:
+                    single_layer = (
+                        single_layer
+                        * cache.measure_factors.to(single_layer.dtype)[None, :]
+                    )
                 if self.monopole_free_single_layer:
                     # Measure-weighted rank-one deflation (module docstring):
                     # subtract each member's share of the uniform-density
@@ -2131,7 +2129,8 @@ class KernelBasisCrossDecoder(nn.Module):
                     cache.panel_vertices[ns_s],
                     cache.normals[ns_s],
                 )
-                dl = dl * cache.representation_measure_factors[ns_s].to(dl.dtype)
+                if cache.measure_factors is not None:
+                    dl = dl * cache.measure_factors[ns_s].to(dl.dtype)
                 if self_indices is not None:
                     own = ns_s == self_indices[nq_s]
                     dl = torch.where(own, dl.new_full((), 0.5), dl)
@@ -2140,7 +2139,8 @@ class KernelBasisCrossDecoder(nn.Module):
                     sl = _bh.pair_triangle_single_layer(
                         query_points[nq_s], cache.panel_vertices[ns_s]
                     )
-                    sl = sl * cache.representation_measure_factors[ns_s].to(sl.dtype)
+                    if cache.measure_factors is not None:
+                        sl = sl * cache.measure_factors[ns_s].to(sl.dtype)
                     pieces.append(sl.unsqueeze(-1))
                 displacement = query_points[nq_s] - cache.centroids[ns_s]
             if self.member_mlp is not None:
@@ -2293,10 +2293,14 @@ class KernelBasisCrossDecoder(nn.Module):
         # gradients through the non-reentrant path.  ``preserve_rng_state``
         # is off because the decoder is RNG-free (no dropout anywhere), so
         # the recomputation is deterministic without the state round-trip.
-        # The optional cache fields (pseudo values, declared auxiliary
-        # scale) ride through the same explicit argument packing so their
-        # gradients survive checkpointing; the declared trace indices are
-        # gradient-free integers but ride the same packing for uniformity.
+        # The optional cache fields (measure factors, pseudo values,
+        # declared auxiliary scale) ride through the same explicit argument
+        # packing so their gradients survive checkpointing; a no-factor
+        # cache stays a no-factor cache inside the checkpoint so the
+        # rebuilt chunk skips the factor multiply exactly like the plain
+        # path.  The declared trace indices are gradient-free integers but
+        # ride the same packing for uniformity.
+        has_factors = cache.measure_factors is not None
         has_pseudos = cache.value_pseudos is not None
         has_auxiliary = cache.auxiliary_scale is not None
         has_local = cache.local_scalars is not None
@@ -2308,7 +2312,6 @@ class KernelBasisCrossDecoder(nn.Module):
             centroids: torch.Tensor,
             normals: torch.Tensor,
             panel_areas: torch.Tensor,
-            measure_factors: torch.Tensor,
             pair_vectors: torch.Tensor,
             coefficients: torch.Tensor,
             value_scalars: torch.Tensor,
@@ -2323,7 +2326,7 @@ class KernelBasisCrossDecoder(nn.Module):
                     centroids=centroids,
                     normals=normals,
                     weights=panel_areas,
-                    measure_factors=measure_factors,
+                    measure_factors=extras.pop(0) if has_factors else None,
                     pair_vectors=pair_vectors,
                     coefficients=coefficients,
                     value_scalars=value_scalars,
@@ -2341,13 +2344,14 @@ class KernelBasisCrossDecoder(nn.Module):
             cache.panel_vertices,
             cache.centroids,
             cache.normals,
-            cache.geometric_panel_areas,
-            cache.representation_measure_factors,
+            cache.panel_areas,
             cache.pair_vectors,
             cache.coefficients,
             cache.value_scalars,
             cache.value_vectors,
         )
+        if has_factors:
+            tensors = tensors + (cache.measure_factors,)
         if has_pseudos:
             tensors = tensors + (cache.value_pseudos,)
         if has_auxiliary:
