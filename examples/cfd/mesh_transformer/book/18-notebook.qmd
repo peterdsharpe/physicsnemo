@@ -500,6 +500,15 @@ fit as transfer evidence.
 The first gauge follow-up used target information in a way that prevented a
 clean transfer interpretation.
 
+### The repaired train-only recalibration reproduced the constant {#sec-nb-gauge-recalibration}
+
+Rerunning the calibration through the exact 435-case train sampler gives
+C = 26.48436 against the contaminated 26.47659 -- a 0.029% change. The
+protocol violation was real; its numerical effect on the constant was
+immaterial, so the dependent retrains stand as measurements while their
+protocol label stays historical
+([artifact](../results/intrinsic_gauge_recalibration_2026-07-27/intrinsic_gauge_calibration_train_only_2026-07-27.json)).
+
 ### The intrinsic gauge was not a drop-in transformation {#sec-nb-gauge-accept-verdict}
 
 When evaluated fairly, the theoretically natural scale did not preserve the
@@ -521,6 +530,53 @@ The normalization effect was visible before learning, suggesting that part of
 the observed behavior belonged to parameterization rather than learned
 physics.
 
+### Subsampling was a biased operator; the model's contract held {#sec-nb-hdi-summary}
+
+Under genuine boundary refinement the discretization-invariance contract
+held, while random subsampling changed the represented operator: its bias is
+a far-field completeness effect of the missing surface, which no reweighting
+of the retained cells can repair. "Random subsampling" also named two
+different operators across experiments (production cyclic contiguous blocks
+versus simple-random diagnostics). Full record: archived chronology,
+`sec-nb-hdi-verdict`.
+
+### A missing measure-scale invariance was found and fixed exactly {#sec-nb-hms-summary}
+
+The model was measurably sensitive to the nuisance magnitude of the source
+measure. The repair (`measure_normalization`) composes one normalizing factor
+into the public measure weights, restoring the invariance by construction;
+the unifying claim that this one mechanism explained the transfer failures
+was then demoted by its own falsifier. Full record: archived chronology,
+`sec-nb-hms-prereg`.
+
+### Accuracy was resolution-specific: a sharp minimum at the training resolution {#sec-nb-hcc-summary}
+
+Varying nothing but sampling resolution around one trained checkpoint showed
+pattern error minimized sharply at the training resolution and degrading
+catastrophically above it. Within-family accuracy was therefore partly a
+coverage-specific compensation, not resolution-transferable operator quality
+(@sec-drivaerml-coverage). Full record: archived chronology,
+`sec-nb-hcc-verdict`.
+
+### The declared-degree wave answered its secondary question, not its primary {#sec-nb-wave-summary}
+
+Six pre-registered arms (declared drive degrees and invariance fixes) all
+failed the resolution-bounding criterion; the size of that failure became the
+finding, and the homogeneous (degree-one) arm won the cross-family criterion
+reproducibly. Diagnostic tracing located the amplification in the member MLP
+and Gram-invariant formation rather than the predicted stage. Full record:
+archived chronology, `sec-nb-wave-verdict`.
+
+### The seed outranked the architecture at cross-family scale {#sec-nb-hseed-summary}
+
+Five seeds of one arm spanned a 2491x range of cross-family error against a
+pre-registered 3x reproducibility bar; an earlier 1.23x advantage was an
+n=2 mirage, and a deliberately sought third experiment broke the seed
+ranking. Any future cross-family comparison without seed replication is
+uninterpretable -- including the current adaptation branch, whose pilot is
+one training seed per cell by declared limitation. Full record: archived
+chronology, `sec-nb-homog-seeds-verdict` and `sec-nb-seed-transfer-caveat`.
+
 ### Coverage augmentation was not accepted as architecture evidence {#sec-nb-hca-launch}
 
 Adding broader source coverage could repair deployment performance, but such a
@@ -535,7 +591,43 @@ complete industrial-transfer explanation.
 ### The industrial branch stopped widening {#sec-program-review}
 
 The failed untouched-family test and unresolved measurement confounds shifted
-the branch from architecture search to evidence repair.
+the branch from architecture search to evidence repair. This anchor names
+the 2026-07-27 audit, whose concrete findings were: several post-07-20
+results were prose-only, with "preregistrations" committed minutes before
+their verdicts; the same 20-case SHIFT pilot served as a development set for
+successive hypotheses; exact configs and raw predictions were often absent;
+the supposedly train-only gauge calibration iterated all 484 cases including
+the held-out split (@sec-nb-gauge-calib); chained jobs silently replayed an
+end-of-epoch scheduler step and reset fp16 scaler state on resume, so
+chained trajectories were not the trajectories being compared (both defects
+are since fixed in the recipe's checkpoint path); the recorded wall-shear
+metric was a whole-field Frobenius norm while later prose described a
+pointwise mean; and "random subsampling" named two different operators
+(@sec-nb-hdi-summary). The audit's full text and per-claim relabeling are
+preserved in the archived chronology
+(`results/notebook_full_chronology_through_2026-07-29.qmd`) and in the
+EDIT-annotated artifacts themselves
+(`results/crossfamily_transfer_2026-07-22.json`); which defects justify
+reruns is decided in @sec-nb-validity-triage.
+
+### The replay campaign certified the canonical geometry path {#sec-nb-hqc-campaign}
+
+The evidence-repair campaign (H-QC and the historical-k10000 replays,
+2026-07-27..28) closed with three registered verdicts. The cast-once
+canonical source-geometry API is byte-valid: 720 of 720 full-field tensor
+comparisons across 36 cases, four resolutions, two precisions, and two
+fields are raw-byte identical between the primary-center and fixed-center
+paths
+([adjudication](../results/hqc_canonical_geometry_validity_36x5_job306114_2026-07-28/artifacts/phase1_hqc_canonical_geometry_validity_adjudication_v1.json)).
+On the frozen 36-case epoch-491 benchmark the canonical intervention is
+noninferior on all four registered endpoints (cohort-mean ratios
+0.99973--1.00132 against a 1.02 ceiling;
+[terminal result](../results/phase1_historical_k10000_paired_accuracy_result_v1_job307260_2026-07-28.json)).
+The H4 coverage hypothesis failed its common master gate: deterministic
+normal-aware coverage improved the pressure substrate floor by a real
+12--15% on both frozen cases but missed the pre-registered 20% on both, so
+covering-style training was deprioritized as registered
+([verdict](../results/phase1_h4_verdict_2026-07-27.json)).
 
 ## 2026-07-29 — Controlled reset sharpened what is actually known {#sec-nb-controlled-reset}
 
@@ -550,6 +642,58 @@ The reset produced three agenda-level conclusions:
 **EDIT:** the historical low-screening collapse was reproduced with a valid
 operator and disappeared. Any conclusion that treated it as a physical
 singularity of the learning problem is withdrawn.
+
+Per-experiment verdicts behind the three rows, each linked to its registered
+decision (five seeds unless noted):
+
+- *Licensed structure.* The pure exact-propagation readout is sufficient on
+  Laplace: the learned output gate and query contraction each earned zero
+  qualifying splits and carried large residual penalties
+  ([factorial](../results/laplace_readout_factorial_2026-07-29_job5688113/summary.json)).
+  The remaining error ceiling is split-dependent: density inference
+  dominates geometry stress; the 128-panel boundary representation
+  dominates near-boundary and unseen-frequency error
+  ([density ceiling](../results/laplace_solved_density_ceiling_2026-07-29_job5689064/summary.json)).
+  On the drifted screened family, the learned singular coefficient
+  converged to the analytic 1/(2*pi) within 0.12% and hard-fixing it was
+  not earned
+  ([principal part](../results/drifted_screened_principal_part_2026-07-29_job5689933/summary.json));
+  neither supervision mix
+  ([supervision](../results/drifted_screened_supervision_2026-07-29_job5690714/summary.json))
+  nor exact similarity coordinates
+  ([similarity](../results/drifted_screened_similarity_2026-07-29_job5691226/summary.json))
+  was the principal factor; the one clear win was the fixed two-limit
+  asymptotic carrier *with a learned transition*: every guard and every
+  joint transfer criterion passed in all seeds, with field errors improved
+  4--30x -- while the fixed carrier alone was 4.2x worse than raw
+  ([asymptotic](../results/drifted_screened_asymptotic_2026-07-29_job5692029/summary.json)).
+- *Physical-order composition.* Feed-forward coefficient context is not
+  sufficient: no arm met the 80% layer-permutation recovery gate
+  ([context](../results/layered_screened_context_2026-07-29_job5692619/summary.json)).
+  A path-ordered local generator recovered 97.9--99.2% of the true contrast
+  with 26x lower paired field error, though its local law did not transfer
+  to high coefficients
+  ([generator](../results/layered_screened_generator_2026-07-29_job5692915/summary.json));
+  with coupled local modes the composition claim closed at full strength --
+  98.3--99.5% contrast recovery, 17.7x over pooling, 44x/38x better on
+  unseen twist rates and doubled layer counts
+  ([coupled](../results/coupled_layered_composition_2026-07-29_job5693733/summary.json)).
+- *Compact state.* A rank-4 correction ceiling exists and per-case bases
+  beat any fixed subspace 2.6x
+  ([census](../results/nonseparable_rank_census_2026-07-29_job5694242/summary.json)),
+  and ordered compression was earned in-distribution -- but breadth
+  refuted it (0/5 on faster variation,
+  [latent composition](../results/nonseparable_latent_composition_2026-07-29_job5694690/summary.json)),
+  continuum scaling fixed discretization transfer while frequency transfer
+  still failed
+  ([continuum flow](../results/nonseparable_continuum_flow_2026-07-29_job5695143/summary.json)),
+  broader spectral training did not buy coverage
+  ([coverage](../results/nonseparable_frequency_coverage_2026-07-29_job5695543/summary.json)),
+  and a connection-aware moving subspace landed within 1% of fixed
+  truncation
+  ([adaptive subspace](../results/nonseparable_adaptive_subspace_2026-07-29_job5695916/summary.json)).
+  The registered decisions retire the learned rank-4 local-flow branch with
+  fixed reduced propagation as the baseline.
 
 The reset strengthened the case for conditional physical structure while
 weakening confidence in a single fixed latent representation. It did not
@@ -1789,3 +1933,29 @@ scratch-64 and, if so, how many labels it is actually worth. The
 [prospective interpretation amendment](../results/shift_suv_convergence_extension_2026-07-30/prospective_interpretation_amendment.json)
 records this boundary; no convergence result was inspected and the registered
 numerical gate is unchanged.
+
+## 2026-07-31 — The convergence extension stalled; the half-label gate is undecided {#sec-nb-convergence-stall}
+
+An infrastructure audit found the convergence-extension pool drained on the
+cluster without a completion marker: every restart-safe two-hour segment
+ended in its expected timeout, the last at 02:09 UTC, the queue then
+emptied, and formal validation never started. No result was inspected, so
+the registered decision rules of @sec-nb-adaptation-pilot-verdict remain
+unevaluated; the pool must be resubmitted unchanged. Separately, the
+historical one-step-parity diagnostic on the second cluster remains blocked
+on a producer failure (0 of 2 units) and was never rerun -- it is open, not
+resolved. Neither fact changes any belief in this notebook; both gate when
+beliefs can next change.
+
+## 2026-07-31 — Notebook coverage debt paid down {#sec-nb-coverage-debt}
+
+A full-program review found verdicts that existed only in untracked result
+directories or only in the archived chronology. This revision restores them
+as compressed entries with anchors into the archive: the
+subsampling/measure/resolution/reproducibility findings of 07-24..26
+(@sec-nb-hdi-summary through @sec-nb-hseed-summary), the audit content
+behind @sec-program-review, the per-experiment verdicts of the 07-29
+controlled-reset wave (@sec-nb-controlled-reset), and the repaired
+train-only gauge recalibration (@sec-nb-gauge-recalibration). The review
+also committed four days of working-tree state (results, studies, the
+notebook rewrite, and its archives) that had existed on one machine only.
