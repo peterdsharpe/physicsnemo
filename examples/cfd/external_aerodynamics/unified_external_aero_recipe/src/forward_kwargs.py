@@ -55,6 +55,7 @@ import torch
 from tensordict import TensorDict
 from utils import FieldType
 
+from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.mesh import DomainMesh, Mesh
 
 ### ---------------------------------------------------------------------------
@@ -285,6 +286,28 @@ def resolve_forward_kwargs(
 ### ---------------------------------------------------------------------------
 
 
+def _target_point_data(
+    domain: DomainMesh | Mesh,
+) -> tuple[TensorDict, str]:
+    """Return the point-data container that owns recipe targets."""
+    if isinstance(domain, DomainMesh):
+        return domain.interior.point_data, "interior.point_data"
+    if isinstance(domain, Mesh):
+        return domain.point_data, "point_data"
+    raise TypeError(f"Expected DomainMesh or Mesh, got {type(domain).__name__}.")
+
+
+def extract_target_measure(domain: DomainMesh | Mesh) -> torch.Tensor | None:
+    """Return the optional quadrature measure aligned with target points.
+
+    Centroid-producing ``MeshToDomainMesh`` transforms materialize the
+    effective source-cell measure under a private bookkeeping key. Native
+    point-cloud domains have no implied measure and return ``None``.
+    """
+    source_td, _ = _target_point_data(domain)
+    return source_td.get(TARGET_QUADRATURE_MEASURE_KEY, None)
+
+
 def extract_targets(
     domain: DomainMesh | Mesh,
     target_config: dict[str, FieldType],
@@ -312,14 +335,7 @@ def extract_targets(
         KeyError: If a name in ``target_config`` is not present in
             ``interior.point_data``.
     """
-    if isinstance(domain, DomainMesh):
-        source_td: TensorDict = domain.interior.point_data
-        location = "interior.point_data"
-    elif isinstance(domain, Mesh):
-        source_td = domain.point_data
-        location = "point_data"
-    else:
-        raise TypeError(f"Expected DomainMesh or Mesh, got {type(domain).__name__}.")
+    source_td, location = _target_point_data(domain)
 
     available = set(source_td.keys())
     missing = [name for name in target_config if name not in available]

@@ -32,10 +32,9 @@ from __future__ import annotations
 import pytest
 import torch
 import torch.nn.functional as F
-from tensordict import TensorDict
-
 from loss import DEFAULT_HUBER_DELTA, LossCalculator
 from output_normalize import split_concat_by_target
+from tensordict import TensorDict
 from utils import FieldType, field_dim
 
 
@@ -58,7 +57,7 @@ def _reference_total_huber(
     total_channels = sum(field_dim(t, n_spatial_dims) for t in target_config.values())
     total = torch.zeros((), dtype=pred.dtype, device=pred.device)
     idx = 0
-    for name, ftype in target_config.items():
+    for ftype in target_config.values():
         dim = field_dim(ftype, n_spatial_dims)
         p = pred[..., idx : idx + dim]
         t = target[..., idx : idx + dim]
@@ -164,6 +163,138 @@ class TestReferenceTotal:
         ### iterating it directly raises StopIteration (no batch dim to walk),
         ### so we materialise the keys explicitly.
         assert set(ldict.keys()) == {"loss/pressure", "loss/wss", "loss/total"}
+
+
+class TestTargetQuadratureMeasure:
+    """Quadrature weighting is invariant to unequal local refinement."""
+
+    @pytest.mark.parametrize(
+        ("loss_type", "expected"),
+        [
+            ("huber", 0.75),
+            ("mse", 2.0),
+            ("relative_mse", 2.0),
+            ("relative_l2", 2.0**0.5),
+        ],
+    )
+    def test_scalar_loss_matches_analytic_refinement_invariant_value(
+        self, loss_type, expected
+    ):
+        ### Two equal-area regions, then refine only the zero-error region
+        ### into three cells. Its three 1/3 measures must not triple-count it.
+        coarse_target = _make_td({"pressure": torch.ones(2)})
+        coarse_pred = _make_td({"pressure": torch.tensor([1.0, 3.0])})
+        coarse_measure = torch.tensor([1.0, 1.0])
+
+        refined_target = _make_td({"pressure": torch.ones(4)})
+        refined_pred = _make_td({"pressure": torch.tensor([1.0, 1.0, 1.0, 3.0])})
+        refined_measure = torch.tensor([1 / 3, 1 / 3, 1 / 3, 1.0])
+
+        calculator = LossCalculator({"pressure": "scalar"}, loss_type=loss_type)
+        coarse, _ = calculator(coarse_pred, coarse_target, coarse_measure)
+        refined, _ = calculator(refined_pred, refined_target, refined_measure)
+
+        assert coarse.item() == pytest.approx(expected)
+        assert torch.allclose(refined, coarse)
+
+    def test_vector_component_reductions_normalize_by_measure(self):
+        coarse_target = TensorDict({"velocity": torch.ones(2, 2)}, batch_size=[])
+        coarse_pred = TensorDict(
+            {"velocity": torch.tensor([[1.0, 1.0], [3.0, 5.0]])},
+            batch_size=[],
+        )
+        refined_target = TensorDict({"velocity": torch.ones(4, 2)}, batch_size=[])
+        refined_pred = TensorDict(
+            {
+                "velocity": torch.tensor(
+                    [[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [3.0, 5.0]]
+                )
+            },
+            batch_size=[],
+        )
+        calculator = LossCalculator(
+            {"velocity": "vector"}, loss_type="mse", n_spatial_dims=2
+        )
+
+        coarse, _ = calculator(coarse_pred, coarse_target, torch.tensor([1.0, 1.0]))
+        refined, _ = calculator(
+            refined_pred,
+            refined_target,
+            torch.tensor([1 / 3, 1 / 3, 1 / 3, 1.0]),
+        )
+
+        ### Per-component weighted MSEs are 2 and 8; channel normalization
+        ### divides their sum by two.
+        assert coarse.item() == pytest.approx(5.0)
+        assert torch.allclose(refined, coarse)
+
+    def test_explicit_none_is_bitwise_identical_to_legacy_call(self):
+        torch.manual_seed(7)
+        pred = _make_td({"pressure": torch.randn(1, 17), "wss": torch.randn(1, 17, 3)})
+        target = _make_td(
+            {"pressure": torch.randn(1, 17), "wss": torch.randn(1, 17, 3)}
+        )
+        calculator = LossCalculator(
+            {"pressure": "scalar", "wss": "vector"}, loss_type="huber"
+        )
+
+        legacy_total, legacy_fields = calculator(pred, target)
+        none_total, none_fields = calculator(pred, target, None)
+
+        assert torch.equal(none_total, legacy_total)
+        for key in legacy_fields.keys():
+            assert torch.equal(none_fields[key], legacy_fields[key])
+
+    def test_misaligned_measure_raises(self):
+        pred = _make_td({"pressure": torch.ones(3)})
+        calculator = LossCalculator({"pressure": "scalar"}, loss_type="mse")
+        with pytest.raises(ValueError, match="one value per target query"):
+            calculator(pred, pred, torch.ones(2))
+
+    @pytest.mark.parametrize(
+        "measure",
+        [
+            torch.tensor([1.0, 0.0]),
+            torch.tensor([1.0, -2.0]),
+            torch.tensor([1.0, float("nan")]),
+            torch.tensor([1.0, float("inf")]),
+        ],
+    )
+    def test_nonpositive_or_nonfinite_measure_raises(self, measure):
+        pred = _make_td({"pressure": torch.ones(2)})
+        calculator = LossCalculator({"pressure": "scalar"}, loss_type="mse")
+        with pytest.raises(ValueError, match="finite positive"):
+            calculator(pred, pred, measure)
+
+    @pytest.mark.parametrize("loss_type", ["relative_mse", "relative_l2"])
+    @pytest.mark.parametrize(
+        ("field_name", "field_type", "pred"),
+        [
+            ("pressure", "scalar", torch.tensor([1e-5, -1e-5])),
+            (
+                "wss",
+                "vector",
+                torch.tensor([[1e-5, -2e-5], [-1e-5, 2e-5]]),
+            ),
+        ],
+    )
+    def test_relative_loss_is_invariant_to_uniform_measure_scale_near_zero(
+        self, loss_type, field_name, field_type, pred
+    ):
+        """A fixed epsilon must not turn measure units into a loss input."""
+        target = torch.zeros_like(pred)
+        calculator = LossCalculator(
+            {field_name: field_type},
+            loss_type=loss_type,
+            n_spatial_dims=2,
+        )
+        pred_td = _make_td({field_name: pred})
+        target_td = _make_td({field_name: target})
+
+        base, _ = calculator(pred_td, target_td, torch.ones(2))
+        rescaled, _ = calculator(pred_td, target_td, 880.0 * torch.ones(2))
+
+        assert torch.equal(rescaled, base)
 
 
 ### ---------------------------------------------------------------------------

@@ -188,6 +188,83 @@ def test_vector_aggregate_l2_is_frobenius():
     assert out["wss_l2"].item() == pytest.approx(expected, rel=1e-5)
 
 
+def test_weighted_vector_metrics_are_refinement_invariant_and_analytic():
+    """Unequal local refinement cannot bias component or aggregate metrics."""
+    coarse_target = TensorDict({"velocity": torch.ones(2, 2)}, batch_size=[])
+    coarse_pred = TensorDict(
+        {"velocity": torch.tensor([[1.0, 1.0], [3.0, 5.0]])},
+        batch_size=[],
+    )
+    refined_target = TensorDict({"velocity": torch.ones(4, 2)}, batch_size=[])
+    refined_pred = TensorDict(
+        {"velocity": torch.tensor([[1.0, 1.0], [1.0, 1.0], [1.0, 1.0], [3.0, 5.0]])},
+        batch_size=[],
+    )
+    calculator = MetricCalculator({"velocity": "vector"}, n_spatial_dims=2)
+
+    coarse = calculator(coarse_pred, coarse_target, torch.tensor([1.0, 1.0]))
+    refined = calculator(
+        refined_pred,
+        refined_target,
+        torch.tensor([1 / 3, 1 / 3, 1 / 3, 1.0]),
+    )
+
+    for key in coarse.keys():
+        assert torch.allclose(refined[key], coarse[key])
+    expected = {
+        "velocity_x_mae": 1.0,
+        "velocity_x_l1": 1.0,
+        "velocity_x_l2": 2.0**0.5,
+        "velocity_y_mae": 2.0,
+        "velocity_y_l1": 2.0,
+        "velocity_y_l2": 8.0**0.5,
+        "velocity_mae": 1.5,
+        "velocity_l1": 1.5,
+        "velocity_l2": 5.0**0.5,
+    }
+    for key, value in expected.items():
+        assert coarse[key].item() == pytest.approx(value)
+
+
+def test_relative_metrics_are_invariant_to_uniform_measure_scale_near_zero():
+    """Metric epsilons must not make measure units change the answer."""
+    pred = TensorDict(
+        {"wss": torch.tensor([[1e-5, -2e-5], [-1e-5, 2e-5]])},
+        batch_size=[],
+    )
+    target = TensorDict({"wss": torch.zeros(2, 2)}, batch_size=[])
+    calculator = MetricCalculator(
+        {"wss": "vector"},
+        n_spatial_dims=2,
+        metrics=["l1", "l2"],
+    )
+
+    base = calculator(pred, target, torch.ones(2))
+    rescaled = calculator(pred, target, 880.0 * torch.ones(2))
+
+    for key in base.keys():
+        assert torch.equal(rescaled[key], base[key])
+
+
+def test_metric_explicit_none_is_bitwise_identical_to_legacy_call():
+    torch.manual_seed(11)
+    pred = TensorDict(
+        {"pressure": torch.randn(19), "wss": torch.randn(19, 3)},
+        batch_size=[],
+    )
+    target = TensorDict(
+        {"pressure": torch.randn(19), "wss": torch.randn(19, 3)},
+        batch_size=[],
+    )
+    calculator = MetricCalculator({"pressure": "scalar", "wss": "vector"})
+
+    legacy = calculator(pred, target)
+    explicit_none = calculator(pred, target, None)
+
+    for key in legacy.keys():
+        assert torch.equal(explicit_none[key], legacy[key])
+
+
 ### ---------------------------------------------------------------------------
 ### Autocast precision contract
 ### ---------------------------------------------------------------------------

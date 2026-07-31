@@ -62,6 +62,7 @@ from __future__ import annotations
 import torch
 from tensordict import TensorDict
 
+from physicsnemo.datapipes._rng import spawn_generator
 from physicsnemo.datapipes.readers.mesh import DomainMeshReader, _subsample_mesh
 from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh, SetGlobalField

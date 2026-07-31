@@ -35,6 +35,7 @@ from nondim import NonDimensionalizeByMetadata, freestream_scales
 from omegaconf import OmegaConf
 from tensordict import TensorDict
 
+from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.mesh import DomainMesh
 
 _RECIPE = Path(__file__).resolve().parent.parent
@@ -53,6 +54,25 @@ def test_build_redim_field_types_surface():
         "pressure": "pressure",
         "wss": "stress",
     }
+
+
+def test_drivaer_ml_surface_stores_physical_center():
+    """DrivAerML records the pre-nondimensionalization center for inference."""
+    ds_yaml = infer.load_dataset_config(_DATASETS / "drivaer_ml_surface.yaml")
+    transforms = list(ds_yaml.pipeline.transforms)
+    center_index = next(
+        i
+        for i, transform in enumerate(transforms)
+        if str(transform._target_).endswith(".CenterMesh")
+    )
+    nondim_index = next(
+        i
+        for i, transform in enumerate(transforms)
+        if str(transform._target_).endswith(".NonDimensionalizeByMetadata")
+    )
+
+    assert transforms[center_index].store_center_as == "center"
+    assert center_index < nondim_index
 
 
 def test_build_redim_field_types_volume():
@@ -257,3 +277,59 @@ def test_attach_and_save_rescale_geometry_scales_points(tmp_path):
 
     reloaded = DomainMesh.load(str(out_path))
     assert torch.allclose(reloaded.interior.points, orig_points * l_ref, atol=1e-4)
+
+
+def test_attach_and_save_restores_center_after_geometry_scale(tmp_path):
+    """Invert x*=(x-center)/L_ref without multiplying the physical center."""
+    targets = {"pressure": "scalar", "wss": "vector"}
+    domain = make_surface_domain_mesh(targets, n_cells=16)
+    center = torch.tensor([10.0, -4.0, 2.0])
+    domain.global_data["center"] = center
+    l_ref = float(domain.global_data["L_ref"])
+    interior_points = domain.interior.points.clone()
+    vehicle_points = domain.boundaries["vehicle"].points.clone()
+    phys = domain.interior.point_data.select("pressure", "wss")
+    out_path = tmp_path / "translated.pdmsh"
+
+    infer.attach_and_save(
+        domain,
+        phys,
+        phys,
+        targets,
+        out_path,
+        rescale_geometry=True,
+    )
+
+    reloaded = DomainMesh.load(str(out_path))
+    torch.testing.assert_close(
+        reloaded.interior.points,
+        interior_points * l_ref + center,
+    )
+    torch.testing.assert_close(
+        reloaded.boundaries["vehicle"].points,
+        vehicle_points * l_ref + center,
+    )
+    torch.testing.assert_close(reloaded.global_data["center"], center)
+
+
+def test_attach_and_save_drops_private_target_measure(tmp_path):
+    """Training-geometry quadrature metadata must not leak into artifacts."""
+    targets = {"pressure": "scalar", "wss": "vector"}
+    domain = make_surface_domain_mesh(targets, n_cells=16)
+    domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = torch.ones(
+        domain.interior.n_points
+    )
+    phys = domain.interior.point_data.select("pressure", "wss")
+    out_path = tmp_path / "measure_free.pdmsh"
+
+    infer.attach_and_save(
+        domain,
+        phys,
+        phys,
+        targets,
+        out_path,
+        rescale_geometry=True,
+    )
+
+    reloaded = DomainMesh.load(str(out_path))
+    assert TARGET_QUADRATURE_MEASURE_KEY not in reloaded.interior.point_data

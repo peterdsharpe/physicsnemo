@@ -928,6 +928,44 @@ def test_topology_aware_reader_feeds_full_vehicle(tmp_path: Path) -> None:
     )
 
 
+def test_topology_aware_reader_seeded_subsampling_is_reproducible(
+    tmp_path: Path,
+) -> None:
+    """The recipe reader's seeded path is executable and deterministic."""
+    vehicle = _patch(
+        (0.0, 0.0, 0.0),
+        (4.0, 0.0, 0.0),
+        (0.0, 3.0, 0.0),
+        8,
+        7,
+    )
+    vehicle = vehicle.with_data(cell_data={"cell_id": torch.arange(vehicle.n_cells)})
+    raw = DomainMesh(
+        interior=Mesh(points=torch.arange(90, dtype=torch.float32).reshape(30, 3)),
+        boundaries={"vehicle": vehicle},
+    )
+    case_dir = tmp_path / "run_1"
+    case_dir.mkdir()
+    raw.save(str(case_dir / "case.pdmsh"))
+
+    reader = TopologyAwareDomainMeshReader(
+        path=tmp_path,
+        pattern="run_*/*.pdmsh",
+        subsample_n_cells=9,
+        subsample_n_points=8,
+    )
+    reader.set_generator(torch.Generator().manual_seed(1234))
+    first, _ = reader[0]
+    reader.set_generator(torch.Generator().manual_seed(1234))
+    second, _ = reader[0]
+
+    assert torch.equal(first.interior.points, second.interior.points)
+    assert torch.equal(
+        first.boundaries["vehicle"].cell_data["cell_id"],
+        second.boundaries["vehicle"].cell_data["cell_id"],
+    )
+
+
 ### ---------------------------------------------------------------------------
 ### Boundary-contribution probe (tools/probe_boundary_contributions.py)
 ### ---------------------------------------------------------------------------

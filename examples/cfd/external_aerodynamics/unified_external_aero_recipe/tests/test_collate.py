@@ -36,12 +36,15 @@ from __future__ import annotations
 
 import pytest
 import torch
+from collate import _add_batch_dim_token, build_collate_fn
 from tensordict import TensorDict
 
+from physicsnemo.datapipes.transforms.mesh import (
+    TARGET_QUADRATURE_MEASURE_KEY,
+    MeshToDomainMesh,
+)
 from physicsnemo.mesh import DomainMesh, Mesh
-
-from collate import _add_batch_dim_token, build_collate_fn
-
+from physicsnemo.mesh.calculus import cell_measures
 
 ### ---------------------------------------------------------------------------
 ### Fixtures
@@ -149,6 +152,21 @@ class TestTensorInputCollate:
         assert tuple(batch["targets"]["pressure"].shape) == (1, 6)
         assert tuple(batch["targets"]["wss"].shape) == (1, 6, 3)
 
+    def test_target_measure_gets_one_matching_batch_dim(self, domain):
+        measure = torch.arange(1, 7, dtype=torch.float32)
+        domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = measure
+        collate = build_collate_fn(
+            "tensors",
+            {"geometry": "interior.points"},
+            {"pressure": "scalar", "wss": "vector"},
+        )
+
+        batch = collate([(domain, {})])
+
+        assert set(batch) == {"forward_kwargs", "targets", "target_measure"}
+        assert batch["target_measure"].shape == batch["targets"]["pressure"].shape
+        assert torch.equal(batch["target_measure"], measure.unsqueeze(0))
+
     def test_list_spec_concatenates(self, domain):
         """List spec concatenates."""
         spec = {
@@ -236,6 +254,46 @@ class TestMeshInputCollate:
         assert batch["targets"].batch_size == torch.Size([6])
         assert tuple(batch["targets"]["pressure"].shape) == (6,)
         assert tuple(batch["targets"]["wss"].shape) == (6, 3)
+
+    def test_target_measure_stays_aligned_and_unbatched(self, domain):
+        measure = torch.arange(1, 7, dtype=torch.float32)
+        domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = measure
+        collate = build_collate_fn(
+            "mesh",
+            {"prediction_points": "interior.points"},
+            {"pressure": "scalar", "wss": "vector"},
+        )
+
+        batch = collate([(domain, {})])
+
+        assert batch["target_measure"].shape == batch["targets"]["pressure"].shape
+        assert torch.equal(batch["target_measure"], measure)
+
+    def test_trace_identity_keeps_query_target_and_measure_in_cell_order(self):
+        source = Mesh(
+            points=torch.tensor(
+                [
+                    [0.0, 0.0, 0.0],
+                    [1.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [3.0, 0.0, 0.0],
+                    [5.0, 0.0, 0.0],
+                    [3.0, 2.0, 0.0],
+                ]
+            ),
+            cells=torch.tensor([[0, 1, 2], [3, 4, 5]]),
+            cell_data={"pressure": torch.tensor([10.0, 20.0])},
+        )
+        domain = MeshToDomainMesh(cell_data_targets=["pressure"])(source)
+        collate = build_collate_fn("mesh", {"domain": ""}, {"pressure": "scalar"})
+
+        batch = collate([(domain, {})])
+        boundary = domain.boundaries["vehicle"]
+
+        assert batch["forward_kwargs"]["domain"] is domain
+        assert torch.equal(domain.interior.points, boundary.cell_centroids)
+        assert torch.equal(batch["targets"]["pressure"], torch.tensor([10.0, 20.0]))
+        assert torch.equal(batch["target_measure"], cell_measures(boundary))
 
 
 ### ---------------------------------------------------------------------------

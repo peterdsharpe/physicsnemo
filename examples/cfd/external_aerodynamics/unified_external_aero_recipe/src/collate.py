@@ -17,7 +17,7 @@
 """Collate function for the DomainMesh-native unified external aero recipe.
 
 The collate turns a single dataset sample (a `DomainMesh`) into a dict with
-exactly two keys:
+two required keys and one optional key:
 
 - ``"forward_kwargs"`` : ready to splat into ``model.forward(**...)``.
 - ``"targets"``        : `TensorDict` of prediction targets extracted from
@@ -25,6 +25,9 @@ exactly two keys:
                           ``[N]`` in mesh-input mode and ``[1, N]`` in
                           tensor-input mode (the leading 1 comes from a
                           ``targets.unsqueeze(0)`` performed here).
+- ``"target_measure"`` : optional effective quadrature measure aligned with
+                          the target points. Present only when the dataset
+                          transform supplied it.
 
 Two `input_type`s are supported:
 
@@ -51,7 +54,11 @@ from collections.abc import Callable
 from typing import Any
 
 import torch
-from forward_kwargs import extract_targets, resolve_forward_kwargs
+from forward_kwargs import (
+    extract_target_measure,
+    extract_targets,
+    resolve_forward_kwargs,
+)
 from jaxtyping import Float
 from output_normalize import IOType
 from utils import FieldType
@@ -119,7 +126,8 @@ def build_collate_fn(
 
     Returns:
         A collate function suitable for ``DataLoader(collate_fn=...)``.
-        It returns a dict with keys ``"forward_kwargs"`` and ``"targets"``.
+        It returns a dict with keys ``"forward_kwargs"`` and ``"targets"``,
+        plus ``"target_measure"`` when the input carries one.
 
     Raises:
         ValueError: If ``input_type`` is not ``"mesh"`` or ``"tensors"``.
@@ -142,6 +150,7 @@ def build_collate_fn(
 
         forward_kwargs = resolve_forward_kwargs(forward_kwargs_spec, domain)
         targets = extract_targets(domain, target_config)
+        target_measure = extract_target_measure(domain)
 
         if add_batch_dim:
             ### forward_kwargs values get padded up to ndim>=2 first (so 1-D
@@ -155,7 +164,12 @@ def build_collate_fn(
             ### wss (N, 3) -> (1, N, 3). Per-element scalars stay (1, N) so
             ### they line up with the model's (1, N) scalar output.
             targets = targets.unsqueeze(0)
+            if target_measure is not None:
+                target_measure = target_measure.unsqueeze(0)
 
-        return {"forward_kwargs": forward_kwargs, "targets": targets}
+        batch = {"forward_kwargs": forward_kwargs, "targets": targets}
+        if target_measure is not None:
+            batch["target_measure"] = target_measure
+        return batch
 
     return collate_fn

@@ -16,6 +16,10 @@
 
 """Tests for the intrinsic reference-length gauge transform."""
 
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
 import intrinsic_gauge
 import pytest
 import torch
@@ -24,8 +28,18 @@ from intrinsic_gauge import (
     measure_weighted_rms_radius,
 )
 
-from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import compose_measure_weights
+from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import (
+    MEASURE_WEIGHTS_KEY,
+    cell_measures,
+    compose_measure_weights,
+)
+
+_STUDIES_DIR = Path(__file__).resolve().parent.parent / "studies"
+if str(_STUDIES_DIR) not in sys.path:
+    sys.path.insert(0, str(_STUDIES_DIR))
+
+import calibrate_intrinsic_gauge  # noqa: E402
 
 
 def _plate_mesh(
@@ -66,9 +80,8 @@ def test_matches_model_intrinsic_gauge():
     transfer experiment rests on.  Both now call
     ``mesh_attention.measure_weighted_rms_radius``; this pins it.
 
-    On a mesh with no recorded measure weights the two weightings
-    (``cell_measures`` vs the model's bare ``cell_areas``) coincide bitwise,
-    so equality here is exact rather than approximate.
+    On a mesh with no recorded measure weights, ``cell_measures`` returns
+    bare area without an extra multiplication, so equality here is exact.
     """
     from physicsnemo.experimental.nn.mesh_attention import (
         measure_weighted_rms_radius as model_gauge,
@@ -86,6 +99,55 @@ def test_matches_model_intrinsic_gauge():
     assert torch.allclose(
         written.global_data["reference_length"],
         scale_constant * model_value,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_public_model_gauge_matches_transform_with_nonuniform_weights():
+    """The real encode path and dataset transform share effective measure."""
+    from physicsnemo.experimental.nn.mesh_attention import MeshTransformer
+
+    mesh = _plate_mesh(a=2.0, b=1.0, n=8, offset=(3.0, -1.0, 0.5))
+    weights = torch.linspace(0.2, 5.0, mesh.n_cells, dtype=torch.float64)
+    weighted = mesh.with_data(cell_data={MEASURE_WEIGHTS_KEY: weights})
+    expected = measure_weighted_rms_radius(weighted)
+
+    torch.manual_seed(21)
+    model = (
+        MeshTransformer(
+            n_spatial_dims=3,
+            output_field_ranks={"u": 0},
+            boundary_field_ranks={"surface": {"operator": {}, "drive": {}}},
+            global_field_ranks={"operator": {}, "drive": {"h": 0}},
+            field_mode="linear",
+            query_decoder="moment",
+            operator_scalar_dim=8,
+            operator_vector_dim=2,
+            drive_scalar_dim=8,
+            drive_vector_dim=2,
+            operator_layers=1,
+            drive_layers=1,
+            query_layers=1,
+            heads=1,
+            scalar_rank=8,
+            vector_rank=2,
+        )
+        .eval()
+        .to(torch.float64)
+    )
+    domain = DomainMesh(
+        interior=Mesh(points=torch.zeros(1, 3, dtype=torch.float64)),
+        boundaries={"surface": weighted},
+        global_data={"h": torch.tensor(1.0, dtype=torch.float64)},
+    )
+    with torch.no_grad():
+        encoded = model.encode(domain)
+
+    assert torch.equal(encoded.reference_length, expected)
+    torch.testing.assert_close(
+        cell_measures(encoded.source_mesh),
+        encoded.source_mesh.cell_areas * weights,
         rtol=0.0,
         atol=0.0,
     )
@@ -117,9 +179,7 @@ def test_gauge_is_dtype_independent_on_realistic_measures():
     weights64 = 10.0 ** (-9.0 + 5.0 * exponents)
 
     reference = model_gauge(weights64, centroids64)
-    from_float32 = model_gauge(
-        weights64.float(), centroids64.float(), torch.float64
-    )
+    from_float32 = model_gauge(weights64.float(), centroids64.float(), torch.float64)
     assert from_float32 == pytest.approx(float(reference), rel=1e-6)
 
 
@@ -149,9 +209,7 @@ def test_two_cell_exact_value():
     )
     w = torch.tensor([0.5, 1.0], dtype=torch.float64)
     center = (w[:, None] * c).sum(0) / w.sum()
-    expected = float(
-        (((w * ((c - center) ** 2).sum(-1)).sum() / w.sum()) ** 0.5)
-    )
+    expected = float((((w * ((c - center) ** 2).sum(-1)).sum() / w.sum()) ** 0.5))
     got = float(measure_weighted_rms_radius(mesh))
     assert got == pytest.approx(expected, rel=1e-12)
 
@@ -217,3 +275,62 @@ def test_registered_in_datapipe_registry():
     target = _resolve_component("ComputeIntrinsicReferenceLength")
     assert target == "intrinsic_gauge.ComputeIntrinsicReferenceLength"
     assert intrinsic_gauge.ComputeIntrinsicReferenceLength is not None
+
+
+def test_calibration_consumes_only_sampler_indices(monkeypatch):
+    """The train-only calibration follows the loader's manifest sampler."""
+
+    class FakeDataset:
+        def __init__(self):
+            self.visited: list[int] = []
+
+        def __getitem__(self, index: int):
+            self.visited.append(index)
+            domain = SimpleNamespace(boundaries={"vehicle": float(index)})
+            metadata = {
+                "source_path": (
+                    f"/frozen/drivaer_ml/run_{index}/case.pdmsh/"
+                    "_tensordict/boundaries/vehicle"
+                )
+            }
+            return domain, metadata
+
+    class FakeSampler:
+        def __iter__(self):
+            return iter([3, 1])
+
+    dataset = FakeDataset()
+    sampler = FakeSampler()
+    monkeypatch.setattr(
+        calibrate_intrinsic_gauge,
+        "measure_weighted_rms_radius",
+        lambda boundary: boundary,
+    )
+
+    indices, case_ids, radii = calibrate_intrinsic_gauge._collect_calibration_samples(
+        dataset, sampler
+    )
+
+    assert dataset.visited == [3, 1]
+    assert indices == [3, 1]
+    assert case_ids == ["run_3", "run_1"]
+    assert radii == [3.0, 1.0]
+    calibrate_intrinsic_gauge._validate_manifest_case_ids(case_ids, ["run_1", "run_3"])
+    with pytest.raises(RuntimeError, match="does not match"):
+        calibrate_intrinsic_gauge._validate_manifest_case_ids(
+            case_ids, ["run_1", "run_2"]
+        )
+
+
+def test_calibration_fails_closed_without_frozen_manifest(monkeypatch, tmp_path):
+    """A missing manifest cannot silently turn the whole dataset into TRAIN."""
+    missing = tmp_path / "missing_manifest.json"
+    monkeypatch.setattr(
+        calibrate_intrinsic_gauge,
+        "load_dataset_config",
+        lambda _path: {"train_manifest": str(missing)},
+    )
+    cfg = SimpleNamespace(dataset="test_dataset", train_split="train")
+
+    with pytest.raises(FileNotFoundError, match="requires a frozen training manifest"):
+        calibrate_intrinsic_gauge._load_frozen_training_manifest(cfg)

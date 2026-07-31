@@ -100,7 +100,9 @@ pipeline:
     # studies/intrinsic_gauge_calibration.json). Inert for models that do
     # not declare `reference_length_key`.
     - _target_: ${dp:ComputeIntrinsicReferenceLength}
-      scale_constant: 26.476592786355283
+      # EDIT (2026-07-27): corrected 435-case train-only calibration from CPU
+      # job 302536. Historical runs used 26.476592786355283 (0.029% lower).
+      scale_constant: 26.48435695783964
     # Terminal transform: convert the surface Mesh into a DomainMesh per the
     # recipe's prediction-vs-input contract. `interior` becomes a Mesh[0, 3]
     # point cloud at the cell centroids (where the model predicts), with the

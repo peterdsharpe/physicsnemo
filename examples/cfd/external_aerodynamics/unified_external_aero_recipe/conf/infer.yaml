@@ -79,9 +79,11 @@ output_dir: inference
 # for datasets that declare neither transform (fields already physical).
 redimensionalize: true
 
-# Best-effort physical-scale geometry: multiply coordinates by L_ref.  The
-# per-sample CenterMesh offset is not stored, so geometry remains centered
-# at the origin; field values are unaffected either way.  Off by default.
+# Best-effort physical geometry: multiply coordinates by L_ref, then add a
+# stored global_data.center when the dataset provides one. The DrivAerML
+# surface config records this physical-coordinate CenterMesh center; datasets
+# without it remain centered at the origin. Field values are unaffected.
+# Off by default.
 rescale_geometry: false
 
 # -- Runtime ----------------------------------------------------------------
@@ -101,11 +103,12 @@ metrics: [l2]
 # Integrates the predicted (and reference) surface traction (-Cp*n + Cf)
 # over the vehicle into force/moment coefficients: CD/CL/CS (drag/lift/side)
 # and CMR/CMP/CMY (roll/pitch/yaw). Auto-skips when the dataset has no
-# Cp/Cf surface fields (e.g. volume runs). Magnitudes are only physical at
-# full surface resolution: a `sampling_resolution` below the mesh's cell
-# count truncates the integral (pred and true alike; infer.py warns when
-# it detects this). See src/forces.py for the math and sign/orientation
-# conventions.
+# Cp/Cf surface fields (e.g. volume runs). At full surface resolution this
+# is an exact mesh quadrature. Uniform subsampling carries inverse-inclusion
+# measure weights, so lower resolutions produce unbiased but noisy
+# Horvitz--Thompson estimates rather than retained-area-shrunk integrals;
+# infer.py warns when it detects this. See src/forces.py for the math and
+# sign/orientation conventions.
 force_coefficients:
   enabled: true
   # A_ref in physical units. CD/CL/CM magnitudes are only physically
@@ -117,8 +120,9 @@ force_coefficients:
   # global_data.L_ref (the same length used to non-dimensionalize geometry).
   reference_length: null
   # Moment reference point, in the centered + physical-scale body frame
-  # (origin = the CenterMesh area/point centroid; the absolute offset is
-  # not recoverable). Predicted and reference moments use the same frame.
+  # (origin = the CenterMesh area/point centroid). This integration setting
+  # is not shifted when attach_and_save restores output geometry translation.
+  # Predicted and reference moments use the same frame.
   moment_center: [0.0, 0.0, 0.0]
   # Global "up" axis; the drag axis is taken from each sample's U_inf and
   # the lift axis is `up` orthogonalized against drag.

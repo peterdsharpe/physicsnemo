@@ -33,6 +33,7 @@ Usage::
     python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 """
 
+import math
 import os
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -76,6 +77,9 @@ from physicsnemo.utils.profiling import Profiler, profile
 ### batch loop after this many steps. Keeps profiling traces short enough
 ### to be useful without changing the rest of the training contract.
 _PROFILE_MAX_STEPS = 10
+
+_CHECKPOINT_METADATA_KEY = "unified_external_aero_recipe"
+_CHECKPOINT_SCHEMA_VERSION = 1
 
 
 ### ---------------------------------------------------------------------------
@@ -223,10 +227,9 @@ def forward_pass(
     """Run a forward pass + loss + metrics on one collated batch.
 
     Args:
-        batch: ``{"forward_kwargs": ..., "targets": TensorDict}`` produced
-            by the collate function. ``"targets"`` is a TensorDict with
-            batch_size ``[N]`` (mesh-input mode) or ``[1, N]``
-            (tensor-input mode).
+        batch: Collated ``"forward_kwargs"`` and ``"targets"``, plus an
+            optional ``"target_measure"``. ``"targets"`` has batch_size
+            ``[N]`` (mesh-input mode) or ``[1, N]`` (tensor-input mode).
         model: Model whose ``forward`` accepts the resolved
             ``forward_kwargs`` as keyword arguments.
         precision: One of ``"float32"``, ``"float16"``, or ``"bfloat16"``.
@@ -251,6 +254,7 @@ def forward_pass(
     """
     forward_kwargs = batch["forward_kwargs"]
     targets: TensorDict = batch["targets"]
+    target_measure: torch.Tensor | None = batch.get("target_measure")
 
     ### Inputs keep their native dtype; autocast handles model-internal precision.
     with get_autocast_context(precision):
@@ -261,10 +265,11 @@ def forward_pass(
     ### Loss runs in float32 to avoid bf16 precision loss in the reduction.
     pred_f32 = pred_td.float()
     target_f32 = targets.float()
+    target_measure_f32 = None if target_measure is None else target_measure.float()
 
-    loss, loss_td = loss_calculator(pred_f32, target_f32)
+    loss, loss_td = loss_calculator(pred_f32, target_f32, target_measure_f32)
     with torch.no_grad():
-        metric_td = metric_calculator(pred_f32, target_f32)
+        metric_td = metric_calculator(pred_f32, target_f32, target_measure_f32)
     ### Detach (don't sync) the per-field TDs so the caller controls when
     ### a D2H copy happens; running ``.item()`` here would serialise the
     ### forward kernels against the host. ``TensorDict.detach()`` walks
@@ -275,6 +280,173 @@ def forward_pass(
 ### ---------------------------------------------------------------------------
 ### Epoch loops
 ### ---------------------------------------------------------------------------
+
+
+def _raise_if_divergent_loss(
+    loss: Float[torch.Tensor, ""],
+    *,
+    mode: Literal["train", "val"],
+    epoch: int,
+    step: int,
+    threshold: float | None,
+    dist_manager: DistributedManager,
+) -> None:
+    """Stop every rank before backward when any rank reports a bad loss.
+
+    Non-finite losses are always fatal.  When *threshold* is set, a finite
+    loss above it is fatal as well.  The integer failure flag is reduced
+    across ranks before any rank raises, keeping DDP workers on the same
+    control-flow path rather than letting healthy ranks enter backward while
+    another rank exits.
+    """
+    local_failure = ~torch.isfinite(loss.detach())
+    if threshold is not None:
+        local_failure.logical_or_(loss.detach() > threshold)
+
+    any_failure = local_failure.to(dtype=torch.int32)
+    if dist_manager.world_size > 1:
+        dist.all_reduce(any_failure, op=dist.ReduceOp.MAX)
+    if not bool(any_failure.item()):
+        return
+
+    local_loss = loss.detach().item()
+    if bool(local_failure.item()):
+        reason = (
+            "non-finite" if not math.isfinite(local_loss) else f"above {threshold:g}"
+        )
+        detail = f"local loss {local_loss!r} is {reason}"
+    else:
+        detail = f"another rank reported a divergent loss; local loss is {local_loss!r}"
+    raise RuntimeError(
+        f"{mode} loss guard triggered at epoch {epoch}, step {step}: {detail}"
+    )
+
+
+def _finish_epoch(
+    *,
+    epoch: int,
+    num_epochs: int,
+    cfg: DictConfig,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    ckpt_args: dict[str, Any],
+    normalizer: Any | None,
+    is_rank0: bool,
+) -> bool:
+    """Advance epoch state and save periodic or terminal checkpoints.
+
+    The checkpoint index is the number of completed epochs, which is also the
+    next epoch index consumed by ``range(loaded_epoch, num_epochs)`` on resume.
+    Epoch-based schedulers advance first so the persisted state is exactly the
+    state used by the resumed epoch.  The final epoch is always saved; one
+    combined condition prevents a duplicate save when it is also periodic.
+    """
+    if cfg.training.get("scheduler_update_mode", "epoch") == "epoch":
+        scheduler.step()
+
+    is_periodic = epoch % cfg.training.save_interval == 0
+    is_terminal = epoch + 1 == num_epochs
+    if not is_rank0 or not (is_periodic or is_terminal):
+        return False
+
+    completed_epochs = epoch + 1
+    checkpoint_metadata = {
+        _CHECKPOINT_METADATA_KEY: {
+            "schema_version": _CHECKPOINT_SCHEMA_VERSION,
+            "epoch_semantics": "completed_epochs_after_scheduler_step",
+            "scheduler_update_mode": cfg.training.get("scheduler_update_mode", "epoch"),
+            "scaler_state_saved": ckpt_args.get("scaler") is not None,
+        }
+    }
+    save_checkpoint(
+        **ckpt_args,
+        epoch=completed_epochs,
+        metadata=checkpoint_metadata,
+    )
+    if normalizer is not None:
+        norm_path = os.path.join(ckpt_args["path"], "norm_stats.pt")
+        torch.save(normalizer.stats, norm_path)
+    return True
+
+
+def _reconcile_loaded_checkpoint(
+    *,
+    loaded_epoch: int,
+    metadata: dict[str, Any],
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
+    scheduler_update_mode: str,
+    scaler: GradScaler | None,
+    logger: Any,
+) -> dict[str, Any]:
+    """Migrate legacy recipe checkpoint state and report resume fidelity.
+
+    Checkpoints written before schema 1 stored an epoch-mode scheduler before
+    its end-of-epoch ``step()``.  Their epoch value already meant "completed
+    epochs", so advancing the restored scheduler once recovers the state that
+    continuous training would have used next.  Those checkpoints did not save
+    the fp16 ``GradScaler`` at all; that state is not reconstructable and is
+    reported as a non-exact resume instead of being silently reset.
+    """
+    report: dict[str, Any] = {
+        "loaded_epoch": loaded_epoch,
+        "checkpoint_schema_version": None,
+        "legacy_scheduler_step_applied": False,
+        "resume_exact": True,
+    }
+    if loaded_epoch == 0:
+        report["checkpoint_found"] = False
+        return report
+
+    report["checkpoint_found"] = True
+    recipe_metadata = metadata.get(_CHECKPOINT_METADATA_KEY)
+    if recipe_metadata is not None:
+        schema_version = recipe_metadata.get("schema_version")
+        report["checkpoint_schema_version"] = schema_version
+        if schema_version != _CHECKPOINT_SCHEMA_VERSION:
+            raise RuntimeError(
+                "Unsupported unified external-aero checkpoint schema "
+                f"{schema_version!r}; expected {_CHECKPOINT_SCHEMA_VERSION}."
+            )
+        if (
+            recipe_metadata.get("epoch_semantics")
+            != "completed_epochs_after_scheduler_step"
+        ):
+            raise RuntimeError(
+                "Checkpoint has an unrecognized epoch/scheduler-state contract."
+            )
+        saved_update_mode = recipe_metadata.get("scheduler_update_mode")
+        if saved_update_mode != scheduler_update_mode:
+            raise RuntimeError(
+                "Checkpoint scheduler update mode does not match the live "
+                f"configuration: saved={saved_update_mode!r}, "
+                f"live={scheduler_update_mode!r}."
+            )
+        if scaler is not None and not recipe_metadata.get("scaler_state_saved", False):
+            report["resume_exact"] = False
+            report["non_exact_reason"] = "checkpoint declared no fp16 scaler state"
+            logger.warning(
+                "Checkpoint declares that fp16 GradScaler state was not saved; "
+                "resume is not numerically equivalent to a continuous run."
+            )
+        return report
+
+    report["checkpoint_schema_version"] = "legacy_unversioned"
+    if scheduler_update_mode == "epoch":
+        scheduler.step()
+        report["legacy_scheduler_step_applied"] = True
+        logger.warning(
+            "Migrated an unversioned legacy checkpoint by advancing the "
+            "epoch-mode scheduler once: historical recipe checkpoints were "
+            "saved before their end-of-epoch scheduler step."
+        )
+    if scaler is not None:
+        report["resume_exact"] = False
+        report["non_exact_reason"] = "legacy checkpoint has no recoverable scaler state"
+        logger.warning(
+            "Unversioned legacy fp16 checkpoints did not persist GradScaler "
+            "state. The model/optimizer/scheduler resume was loaded, but the "
+            "training trajectory is explicitly non-exact."
+        )
+    return report
 
 
 def _run_epoch(
@@ -339,6 +511,14 @@ def _run_epoch(
     total_losses_td: TensorDict | None = None
     total_metrics_td: TensorDict | None = None
     precision = getattr(cfg, "precision", "float32")
+    divergence_loss_threshold = cfg.training.get("divergence_loss_threshold", None)
+    if divergence_loss_threshold is not None:
+        divergence_loss_threshold = float(divergence_loss_threshold)
+        if (
+            not math.isfinite(divergence_loss_threshold)
+            or divergence_loss_threshold <= 0
+        ):
+            raise ValueError("training.divergence_loss_threshold must be positive")
     n_local = 0
     num_steps = len(dataloader)
     epoch_t0 = time.perf_counter()
@@ -355,6 +535,15 @@ def _run_epoch(
                 metric_calculator,
                 output_type=output_type,
                 target_config=target_config,
+            )
+
+            _raise_if_divergent_loss(
+                loss,
+                mode=mode,
+                epoch=epoch,
+                step=i,
+                threshold=divergence_loss_threshold,
+                dist_manager=dist_manager,
             )
 
             if is_train:
@@ -903,9 +1092,25 @@ def main(cfg: DictConfig) -> None:
         "path": os.path.join(checkpoint_dir, cfg.run_id, "checkpoints"),
         "optimizer": optimizer,
         "scheduler": scheduler,
+        "scaler": scaler,
         "models": model,
     }
-    loaded_epoch = load_checkpoint(device=device, **ckpt_args)
+    checkpoint_metadata: dict[str, Any] = {}
+    loaded_epoch = load_checkpoint(
+        device=device,
+        metadata_dict=checkpoint_metadata,
+        **ckpt_args,
+    )
+    resume_report = _reconcile_loaded_checkpoint(
+        loaded_epoch=loaded_epoch,
+        metadata=checkpoint_metadata,
+        scheduler=scheduler,
+        scheduler_update_mode=cfg.training.get("scheduler_update_mode", "epoch"),
+        scaler=scaler,
+        logger=logger,
+    )
+    if is_rank0 and log_jsonl is not None:
+        log_jsonl({"phase": "checkpoint_resume", **resume_report})
 
     if cfg.compile:
         model = torch.compile(model)
@@ -973,14 +1178,15 @@ def main(cfg: DictConfig) -> None:
                     f"{table}\n"
                 )
 
-            if epoch % cfg.training.save_interval == 0 and is_rank0:
-                save_checkpoint(**ckpt_args, epoch=epoch + 1)
-                if normalizer is not None:
-                    norm_path = os.path.join(ckpt_args["path"], "norm_stats.pt")
-                    torch.save(normalizer.stats, norm_path)
-
-            if cfg.training.get("scheduler_update_mode", "epoch") == "epoch":
-                scheduler.step()
+            _finish_epoch(
+                epoch=epoch,
+                num_epochs=num_epochs,
+                cfg=cfg,
+                scheduler=scheduler,
+                ckpt_args=ckpt_args,
+                normalizer=normalizer,
+                is_rank0=is_rank0,
+            )
 
     if is_rank0:
         if train_writer is not None:

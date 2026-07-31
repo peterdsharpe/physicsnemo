@@ -193,6 +193,61 @@ def align_scalar_shapes(
     return p, t
 
 
+def align_target_measure(
+    target_measure: torch.Tensor | None,
+    reference: torch.Tensor,
+    field_type: FieldType,
+) -> torch.Tensor | None:
+    """Validate and cast a per-query measure for one target field.
+
+    Scalar fields have shape ``(..., N)`` and vector fields
+    ``(..., N, D)``; in both cases the quadrature measure must have exactly
+    one value per query, shape ``(..., N)``. Requiring an exact shape prevents
+    a stale or reordered measure from silently broadcasting across a field.
+    """
+    if target_measure is None:
+        return None
+    expected_shape = reference.shape if field_type == "scalar" else reference.shape[:-1]
+    if target_measure.shape != expected_shape:
+        raise ValueError(
+            "target_measure must have one value per target query: expected "
+            f"shape {tuple(expected_shape)} for a {field_type} field with "
+            f"shape {tuple(reference.shape)}, got {tuple(target_measure.shape)}."
+        )
+    aligned = target_measure.to(device=reference.device, dtype=reference.dtype)
+    if not torch.compiler.is_compiling():
+        is_valid = aligned.numel() > 0 and bool(
+            (torch.isfinite(aligned) & (aligned > 0)).all().item()
+        )
+        if not is_valid:
+            raise ValueError(
+                "target_measure must contain one finite positive integration "
+                "weight per target query"
+            )
+    return aligned
+
+
+def normalize_target_measure(
+    target_measure: torch.Tensor,
+) -> torch.Tensor:
+    """Remove the arbitrary uniform scale of per-query measure weights.
+
+    Relative-error kernels apply a fixed epsilon to their reduced target
+    energy.  Passing raw quadrature weights would therefore make that floor,
+    and hence the reported relative error for a nearly-zero field, depend on
+    the units or a uniform Horvitz--Thompson factor.  Mean-one weights retain
+    the intended nonuniform measure shape while giving the epsilon the same
+    interpretation as the unweighted path.
+    """
+    mean_measure = target_measure.mean(dim=-1, keepdim=True)
+    safe_mean = torch.where(
+        mean_measure > 0,
+        mean_measure,
+        torch.ones_like(mean_measure),
+    )
+    return target_measure / safe_mean
+
+
 def validate_field_coverage(
     target_config: dict[str, FieldType],
     pred: TensorDict,

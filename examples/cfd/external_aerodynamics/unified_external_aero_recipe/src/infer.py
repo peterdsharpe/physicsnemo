@@ -52,9 +52,10 @@ Caveats:
   numbers logged during training.  Physical, actionable quantities come
   from the re-dimensionalized fields written to disk and the integrated
   force / moment coefficients (CD/CL/...), not from the metric tables.
-- ``CenterMesh``'s per-sample translation offset is not stored, so the
-  written geometry is physical-*scale* (when ``rescale_geometry=true``)
-  but remains centered at the origin.  Field values are unaffected.
+- When a dataset stores the per-sample ``CenterMesh`` center in
+  ``global_data.center`` (the DrivAerML surface config does),
+  ``rescale_geometry=true`` restores both physical scale and translation.
+  Datasets without that metadata remain centered at the origin.
 - Inference runs at whatever ``sampling_resolution`` allows (default:
   effectively the full mesh).  Very large volume meshes may need a
   smaller cap to fit in memory.  Chunked / windowed inference is
@@ -98,6 +99,7 @@ from utils import (
 )
 
 from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
+from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.mesh import DomainMesh
 from physicsnemo.utils import load_checkpoint
@@ -276,23 +278,35 @@ def attach_and_save(
     Writes ``pred_<name>`` and ``true_<name>`` onto a copy of the
     interior's ``point_data`` (the training-space target fields are
     dropped to avoid ambiguity with their physical ``true_<name>``
-    counterparts; non-target inputs like ``sdf`` are kept). The result is
-    saved with :meth:`DomainMesh.save` as a native ``.pdmsh`` tree.
+    counterparts; non-target inputs like ``sdf`` are kept). Private target
+    quadrature bookkeeping is consumed for scoring and deliberately omitted
+    from the saved prediction artifact. The result is saved with
+    :meth:`DomainMesh.save` as a native ``.pdmsh`` tree.
 
-    When *rescale_geometry* is set and ``L_ref`` is available, every mesh
-    in the domain is scaled by ``L_ref`` to recover physical-scale
-    coordinates (``Mesh.scale`` leaves ``point_data`` untouched, so the
-    attached fields are not affected).
+    When *rescale_geometry* is set, every mesh in the domain is first
+    scaled by ``L_ref`` when available and then translated by the
+    physical-coordinate center in ``global_data.center`` when available.
+    This inverts the DrivAerML surface pipeline's center-then-scale order:
+    ``x* = (x - center) / L_ref``. Geometry transforms leave
+    ``point_data`` untouched, so the attached fields are not affected.
     """
-    if rescale_geometry and "L_ref" in domain.global_data:
-        L_ref = domain.global_data["L_ref"]
-        domain = domain.apply_to_meshes(lambda m: m.scale(L_ref))
+    if rescale_geometry:
+        if "L_ref" in domain.global_data:
+            L_ref = domain.global_data["L_ref"]
+            domain = domain.apply_to_meshes(lambda m: m.scale(L_ref))
+        if "center" in domain.global_data:
+            domain = domain.translate(domain.global_data["center"])
 
     interior = domain.interior
     ### Drop training-space targets (replaced by physical true_<name>);
-    ### keep non-target inputs such as sdf / sdf_normals for inspection.
+    ### keep non-target inputs such as sdf / sdf_normals for inspection. The
+    ### private measure belongs to the transformed training geometry and would
+    ### become dimensionally stale if the output geometry is rescaled.
     present_targets = [n for n in target_config if n in interior.point_data.keys()]
-    new_pd = interior.point_data.exclude(*present_targets).clone()
+    drop_keys = list(present_targets)
+    if TARGET_QUADRATURE_MEASURE_KEY in interior.point_data:
+        drop_keys.append(TARGET_QUADRATURE_MEASURE_KEY)
+    new_pd = interior.point_data.exclude(*drop_keys).clone()
     for name, val in pred_phys.items():
         new_pd[f"pred_{name}"] = val
     for name, val in true_phys.items():
@@ -557,7 +571,7 @@ def main(cfg: DictConfig) -> None:
     totals: dict[str, float] = {k: 0.0 for k in metric_calculator.expected_keys()}
     count = 0
     sampling_cap = cfg.get("sampling_resolution", None)
-    truncation_warned = False
+    subsampling_warned = False
     for i, idx in enumerate(sampler):
         sample = dataset[idx]
         domain, metadata = sample
@@ -569,7 +583,12 @@ def main(cfg: DictConfig) -> None:
 
         ### Metrics in training space (matches the validation numbers); pull the
         ### whole TensorDict host-side once so each .item() is a free CPU index.
-        metric_td = metric_calculator(pred_td.float(), batch["targets"].float())
+        target_measure = batch.get("target_measure")
+        metric_td = metric_calculator(
+            pred_td.float(),
+            batch["targets"].float(),
+            None if target_measure is None else target_measure.float(),
+        )
         sample_metrics = {key: value.item() for key, value in metric_td.cpu().items()}
         for k, v in sample_metrics.items():
             totals[k] += v
@@ -588,23 +607,25 @@ def main(cfg: DictConfig) -> None:
             )
             if sample_forces is not None:
                 force_acc.update(*sample_forces)
-                ### Force magnitudes are only physical at full surface
-                ### resolution (see forces.py): a vehicle cell count
-                ### sitting exactly at the subsample cap means the surface
-                ### was almost certainly truncated by the reader.
+                ### A vehicle cell count sitting exactly at the cap means
+                ### this is almost certainly a Horvitz--Thompson estimate
+                ### from a sparse uniform sample, not an exact full-surface
+                ### quadrature (see forces.py).
                 if (
-                    not truncation_warned
+                    not subsampling_warned
                     and sampling_cap is not None
                     and domain.boundaries["vehicle"].n_cells == sampling_cap
                 ):
                     logger.warning(
                         f"Vehicle surface has exactly sampling_resolution="
                         f"{sampling_cap} cells, so it was likely subsampled; "
-                        f"integrated force/moment coefficients cover only the "
-                        f"kept cells and their magnitudes are not physical. "
-                        f"Raise `sampling_resolution` for absolute CD/CL/CM."
+                        f"integrated force/moment coefficients use the retained "
+                        f"measure weights as an unbiased but noisy full-surface "
+                        f"estimate, not an exact full-surface quadrature. "
+                        f"Report sampling uncertainty or raise "
+                        f"`sampling_resolution` for absolute CD/CL/CM."
                     )
-                    truncation_warned = True
+                    subsampling_warned = True
 
         ### Re-dimensionalize predictions + reference to physical units,
         ### then write them back onto the DomainMesh.

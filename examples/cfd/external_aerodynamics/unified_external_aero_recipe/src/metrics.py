@@ -25,8 +25,9 @@ named target field declared in ``target_config`` produces:
   (``"<prefix>/<name>_x_<metric>"`` etc.) plus aggregate values over all
   components jointly (``"<prefix>/<name>_<metric>"``).
 
-Metrics are reported unweighted -- per-field weighting belongs in the
-loss, not in diagnostic summaries.
+When a target quadrature measure is available, every spatial reduction is
+measure-weighted. This is distinct from per-field loss weighting: the measure
+describes how much geometry each query represents.
 """
 
 from __future__ import annotations
@@ -38,7 +39,13 @@ import torch
 from jaxtyping import Float
 from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
-from utils import FieldType, align_scalar_shapes, validate_field_coverage
+from utils import (
+    FieldType,
+    align_scalar_shapes,
+    align_target_measure,
+    normalize_target_measure,
+    validate_field_coverage,
+)
 
 ### Recipe-wide alias for the metric-name enum that the dataset YAMLs use.
 MetricName: TypeAlias = Literal["mae", "l1", "l2"]
@@ -50,14 +57,25 @@ MetricName: TypeAlias = Literal["mae", "l1", "l2"]
 
 
 def _mean_absolute_error(
-    pred: torch.Tensor, target: torch.Tensor
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    target_measure: torch.Tensor | None = None,
 ) -> Float[torch.Tensor, ""]:
     """Mean absolute error over all elements."""
-    return torch.mean(torch.abs(pred - target))
+    abs_diff = torch.abs(pred - target)
+    if target_measure is None:
+        return torch.mean(abs_diff)
+    if pred.ndim == 0:
+        return abs_diff
+    denominator = target_measure.sum(dim=-1).clamp_min(torch.finfo(pred.dtype).tiny)
+    return ((abs_diff * target_measure).sum(dim=-1) / denominator).mean()
 
 
 def _relative_l1(
-    pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-8
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    target_measure: torch.Tensor | None = None,
+    eps: float = 1e-8,
 ) -> Float[torch.Tensor, ""]:
     """``sum|pred - target| / sum|target|``, computed over the spatial axis."""
     abs_diff = torch.abs(pred - target)
@@ -65,21 +83,34 @@ def _relative_l1(
         return abs_diff / (torch.abs(target) + eps)
     ### Sum over the spatial axis (treat all leading dims as batch).
     spatial_axis = -1
-    num = torch.sum(abs_diff, dim=spatial_axis)
-    denom = torch.sum(torch.abs(target), dim=spatial_axis)
+    if target_measure is None:
+        num = torch.sum(abs_diff, dim=spatial_axis)
+        denom = torch.sum(torch.abs(target), dim=spatial_axis)
+    else:
+        relative_weights = normalize_target_measure(target_measure)
+        num = torch.sum(abs_diff * relative_weights, dim=spatial_axis)
+        denom = torch.sum(torch.abs(target) * relative_weights, dim=spatial_axis)
     return torch.mean(num / (denom + eps))
 
 
 def _relative_l2(
-    pred: torch.Tensor, target: torch.Tensor, eps: float = 1e-8
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    target_measure: torch.Tensor | None = None,
+    eps: float = 1e-8,
 ) -> Float[torch.Tensor, ""]:
     """``sqrt(sum diff^2) / sqrt(sum target^2)``, over the spatial axis."""
     diff_sq = (pred - target) ** 2
     if pred.ndim == 0:
         return torch.sqrt(diff_sq) / (torch.sqrt(target**2) + eps)
     spatial_axis = -1
-    num = torch.sqrt(torch.sum(diff_sq, dim=spatial_axis))
-    denom = torch.sqrt(torch.sum(target**2, dim=spatial_axis))
+    if target_measure is None:
+        num = torch.sqrt(torch.sum(diff_sq, dim=spatial_axis))
+        denom = torch.sqrt(torch.sum(target**2, dim=spatial_axis))
+    else:
+        relative_weights = normalize_target_measure(target_measure)
+        num = torch.sqrt(torch.sum(diff_sq * relative_weights, dim=spatial_axis))
+        denom = torch.sqrt(torch.sum(target**2 * relative_weights, dim=spatial_axis))
     return torch.mean(num / (denom + eps))
 
 
@@ -210,10 +241,16 @@ class MetricCalculator:
         return keys
 
     def _metrics_for_tensor(
-        self, pred: torch.Tensor, target: torch.Tensor, name_parts: tuple[str, ...]
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,
+        name_parts: tuple[str, ...],
+        target_measure: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         return {
-            self._make_key(*name_parts, m): METRIC_FUNCTIONS[m](pred, target)
+            self._make_key(*name_parts, m): METRIC_FUNCTIONS[m](
+                pred, target, target_measure
+            )
             for m in self.metric_names
         }
 
@@ -221,12 +258,16 @@ class MetricCalculator:
         self,
         pred: TensorDict,
         target: TensorDict,
+        target_measure: torch.Tensor | None = None,
     ) -> TensorDict:
         """Compute per-field metrics over a TensorDict pred / target pair.
 
         Args:
             pred: TensorDict of predictions, one leaf per target field.
             target: TensorDict of the same structure as ``pred``.
+            target_measure: Optional effective measure of shape ``(..., N)``,
+                aligned one-for-one with target queries. When absent, the
+                original unweighted metrics are used unchanged.
 
         Returns:
             0-D ``TensorDict`` (``batch_size=[]``) keyed by
@@ -250,8 +291,10 @@ class MetricCalculator:
                 p, t = pred[name], target[name]
                 if field_type == "scalar":
                     p, t = align_scalar_shapes(p, t)
-                    out.update(self._metrics_for_tensor(p, t, (name,)))
+                    measure = align_target_measure(target_measure, p, field_type)
+                    out.update(self._metrics_for_tensor(p, t, (name,), measure))
                 else:  # vector
+                    measure = align_target_measure(target_measure, p, field_type)
                     n_components = p.shape[-1]
                     ### Per-component metrics.
                     for i in range(n_components):
@@ -261,14 +304,26 @@ class MetricCalculator:
                             else str(i)
                         )
                         out.update(
-                            self._metrics_for_tensor(p[..., i], t[..., i], (name, comp))
+                            self._metrics_for_tensor(
+                                p[..., i], t[..., i], (name, comp), measure
+                            )
                         )
                     ### Aggregate vector metric under the bare field name:
                     ### all components jointly, flattened so the relative
                     ### norms reduce over the whole field (Frobenius for
                     ### l2) and direction errors count.
+                    aggregate_measure = (
+                        None
+                        if measure is None
+                        else measure.unsqueeze(-1).expand_as(p).flatten(-2)
+                    )
                     out.update(
-                        self._metrics_for_tensor(p.flatten(-2), t.flatten(-2), (name,))
+                        self._metrics_for_tensor(
+                            p.flatten(-2),
+                            t.flatten(-2),
+                            (name,),
+                            aggregate_measure,
+                        )
                     )
 
         return TensorDict(out)

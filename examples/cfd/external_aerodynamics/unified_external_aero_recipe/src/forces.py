@@ -38,7 +38,8 @@ moment coefficient vectors are
 
 The surface integral is evaluated with the mesh quadrature utility
 :meth:`physicsnemo.mesh.Mesh.integrate` (cell-data / P0 rule:
-:math:`\\int_S f\\,dA = \\sum_c f_c\\,A_c`).
+:math:`\\int_S f\\,dA = \\sum_c f_c\\,A_c w_c`, where :math:`w_c`
+is the represented-to-geometric measure weight and defaults to one).
 
 The coefficient vectors are then projected onto an orthonormal
 (drag, lift, side) triad built from the per-sample freestream direction
@@ -64,16 +65,16 @@ Conventions and assumptions:
 - **Geometry scale.** Pipeline geometry is non-dimensionalized by
   ``L_ref`` (coordinates divided by ``L_ref``). Pass ``length_scale =
   L_ref`` to integrate on a physical-scale surface; areas and moment
-  arms are translation-invariant, so the lost ``CenterMesh`` offset does
-  not affect forces (and only shifts the moment reference for moments).
-- **Full surface resolution.** The quadrature covers exactly the cells
-  present on the ``vehicle`` mesh. If the pipeline subsampled the
-  surface (``sampling_resolution`` below the mesh's cell count), the
-  integral covers only the kept cells and every coefficient shrinks by
-  roughly the kept-to-total area fraction -- for predicted and reference
-  values alike, so the *comparison* stays meaningful but the magnitudes
-  do not. ``ForceContext.coefficients``'s 1:1 points/cells contract
-  check cannot detect this (a subsampled surface still satisfies it);
+  arms are handled in the centered frame, so restoring the ``CenterMesh``
+  translation in saved inference geometry does not affect forces (and
+  would only shift the reference point used to express moments).
+- **Subsampled surfaces.** Cell subsampling records the inverse inclusion
+  probability in the mesh's effective measure. The resulting force and
+  moment coefficients are Horvitz--Thompson estimates of the full-surface
+  integrals: unbiased under the production uniform sampler, but stochastic
+  and potentially noisy rather than deterministically shrunk by the kept-area
+  fraction. ``ForceContext.coefficients``'s 1:1 points/cells contract cannot
+  distinguish an exact full-surface integral from this estimate;
   ``infer.py`` warns when a vehicle's cell count sits at the
   ``sampling_resolution`` cap.
 """
@@ -152,7 +153,7 @@ def force_moment_coefficients(
     Args:
         vehicle: Triangulated surface mesh (codimension-1) carrying the
             body. Its cells define the quadrature; ``cell_normals`` and
-            ``cell_areas`` are taken from this mesh.
+            effective cell measures are taken from this mesh.
         pressure_coeff: Per-cell pressure coefficient :math:`C_p`, shape
             ``(n_cells,)`` (a trailing singleton dim, e.g. ``(n_cells, 1)``,
             is flattened internally). Must align 1:1 with ``vehicle`` cells.

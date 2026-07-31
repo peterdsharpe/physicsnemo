@@ -40,6 +40,7 @@ from conftest import make_surface_domain_mesh, make_volume_domain_mesh
 from omegaconf import OmegaConf
 
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import compose_measure_weights
 
 
 def _closed_tetrahedron() -> Mesh:
@@ -93,6 +94,27 @@ def test_uniform_shear_gives_drag_equal_to_c_times_area():
     res = forces.force_moment_coefficients(vehicle, torch.zeros(n), cf, **_COMMON)
     assert res["CD"] == pytest.approx(c * area_total, abs=1e-3)
     assert abs(res["CL"]) < 1e-4 and abs(res["CS"]) < 1e-4
+
+
+def test_measure_weighted_subsample_force_is_not_area_fraction_shrunk():
+    """HT cell measures recover a constant full-surface traction integral."""
+    full = _closed_tetrahedron()
+    retained = full.slice_cells(torch.tensor([0, 1]))
+    compose_measure_weights(retained, full.n_cells / retained.n_cells)
+
+    c = 2.0
+    cf = torch.tensor([[c, 0.0, 0.0]]).repeat(retained.n_cells, 1)
+    result = forces.force_moment_coefficients(
+        retained,
+        torch.zeros(retained.n_cells),
+        cf,
+        **_COMMON,
+    )
+
+    expected = c * float(full.cell_areas.sum())
+    assert result["CD"] == pytest.approx(expected, abs=1e-3)
+    bare_retained = c * float(retained.cell_areas.sum())
+    assert bare_retained == pytest.approx(expected / 2.0, abs=1e-3)
 
 
 def test_uniform_shear_moment_about_offset_center():

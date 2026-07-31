@@ -63,6 +63,7 @@ import torch
 from physicsnemo.datapipes.registry import register
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
 from physicsnemo.mesh import Mesh
+
 try:
     # Post-#1770 layout: Horvitz-Thompson-aware effective measures
     # (geometric measure x composed subsampling weights).
@@ -75,6 +76,7 @@ except (ModuleNotFoundError, ImportError):  # pragma: no cover - pre-merge trees
         the HT-weighted one, so calibration and evaluation remain
         consistent across tree versions."""
         return mesh.cell_areas
+
 
 __all__ = ["ComputeIntrinsicReferenceLength", "measure_weighted_rms_radius"]
 
@@ -89,13 +91,13 @@ def measure_weighted_rms_radius(mesh: Mesh) -> torch.Tensor:
     geometry validation.  ``test_matches_model_intrinsic_gauge`` pins the
     agreement.
 
-    The one intentional difference is the **weights**: this transform runs
-    after ``SubsampleMesh`` and is estimating the statistic of the
-    full-resolution geometry, so it weights by ``cell_measures`` (geometric
-    measure times composed Horvitz-Thompson inclusion weights).  The model
-    weights by bare ``cell_areas``, its own quadrature measure, so its gauge
-    stays consistent with the operator it normalizes.  On a mesh carrying no
-    measure weights the two coincide bitwise.
+    Both routes consume ``cell_measures`` (geometric measure times composed
+    public representation/inclusion weights). This transform runs after
+    subsampling, while the model now preserves that reserved metadata through
+    its public encode path, so explicit and built-in gauges agree even for
+    nonuniform factors. A uniform Horvitz--Thompson factor cancels in this
+    ratio-valued statistic; that does not make the nonlinear gauge estimator
+    design-unbiased under arbitrary random subsampling.
 
     Returns
     -------

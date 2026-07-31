@@ -376,8 +376,10 @@ ${output_dir}/${run_id}/
 - **Physical units**: written fields are re-dimensionalized
   (`redimensionalize=true`, default) by inverting normalization then
   non-dimensionalization; `rescale_geometry=true` additionally restores
-  physical-scale coordinates (the lost `CenterMesh` offset leaves them
-  centered at the origin).
+  physical-scale coordinates and, when the dataset records its
+  `CenterMesh` center (as DrivAerML surface does), the original physical
+  translation. Datasets without that metadata remain centered at the
+  origin.
 - **Force / moment coefficients** (surface cases): integrates the
   predicted and reference surface traction (`-Cp*n + Cf`) over the
   `vehicle` boundary into `CD`/`CL`/`CS` (drag/lift/side) and
