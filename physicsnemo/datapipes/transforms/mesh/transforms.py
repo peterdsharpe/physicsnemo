@@ -35,7 +35,14 @@ from physicsnemo.mesh import (
     Mesh,
     MeshFieldAssociation,
 )
-from physicsnemo.mesh.calculus.measure import compose_measure_weights
+from physicsnemo.mesh.calculus.measure import cell_measures, compose_measure_weights
+
+### Reserved ``point_data`` key carrying the effective quadrature measure for
+### centroid query points created by :class:`MeshToDomainMesh`.  This is
+### deliberately distinct from ``MEASURE_WEIGHTS_KEY``: the latter is a
+### dimensionless factor attached to source cells, while this leaf is the
+### complete geometric measure aligned one-for-one with target/query points.
+TARGET_QUADRATURE_MEASURE_KEY: str = "_target_quadrature_measure"
 
 
 @register()
@@ -189,11 +196,28 @@ class RotateMesh(MeshTransform):
 
 @register()
 class CenterMesh(MeshTransform):
-    r"""Translate mesh so its center of mass is at the origin."""
+    r"""Translate mesh so its center of mass is at the origin.
 
-    def __init__(self, use_area_weighting: bool = True) -> None:
+    Parameters
+    ----------
+    use_area_weighting : bool, default ``True``
+        Weight cell centroids by cell area when computing the center. If
+        ``False``, use the arithmetic mean of the mesh points.
+    store_center_as : str or None, default ``None``
+        Optional ``global_data`` key under which to store the center that was
+        subtracted. For a :class:`DomainMesh`, the center is stored in the
+        domain-level ``global_data``. The default preserves the historical
+        behavior without adding metadata.
+    """
+
+    def __init__(
+        self,
+        use_area_weighting: bool = True,
+        store_center_as: str | None = None,
+    ) -> None:
         super().__init__()
         self.use_area_weighting = use_area_weighting
+        self.store_center_as = store_center_as
 
     def _compute_com(self, mesh: Mesh) -> Float[torch.Tensor, " spatial_dims"]:
         """Compute center of mass for a single mesh."""
@@ -205,7 +229,13 @@ class CenterMesh(MeshTransform):
         return mesh.points.mean(dim=0)
 
     def __call__(self, mesh: Mesh) -> Mesh:
-        return mesh.translate(-self._compute_com(mesh))
+        com = self._compute_com(mesh)
+        centered = mesh.translate(-com)
+        if self.store_center_as is not None:
+            global_data = centered.global_data.clone()
+            global_data[self.store_center_as] = com
+            centered.global_data = global_data
+        return centered
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
         """Translate a :class:`DomainMesh` so its interior center of mass is at the origin.
@@ -224,10 +254,18 @@ class CenterMesh(MeshTransform):
             Centered domain mesh.
         """
         com = self._compute_com(domain.interior)
-        return domain.translate(-com)
+        centered = domain.translate(-com)
+        if self.store_center_as is not None:
+            global_data = centered.global_data.clone()
+            global_data[self.store_center_as] = com
+            centered.global_data = global_data
+        return centered
 
     def extra_repr(self) -> str:
-        return f"use_area_weighting={self.use_area_weighting}"
+        parts = [f"use_area_weighting={self.use_area_weighting}"]
+        if self.store_center_as is not None:
+            parts.append(f"store_center_as={self.store_center_as!r}")
+        return ", ".join(parts)
 
 
 def _compact_points(mesh: Mesh) -> Mesh:
@@ -938,8 +976,9 @@ class MeshToDomainMesh(MeshTransform):
         Names of cell-centered fields on the input mesh to use as prediction
         targets. They are moved out of the boundary's ``cell_data`` and into
         ``interior.point_data``. Use with ``interior_points='cell_centroids'``.
-        If ``None`` (and ``point_data_targets`` is also ``None``), no targets
-        are placed on the interior.
+        If ``None`` (and ``point_data_targets`` is also ``None``), no user
+        targets are placed on the interior. Centroid mode still records its
+        private target quadrature measure.
     point_data_targets : list[str] or None, default ``None``
         Names of vertex-centered fields on the input mesh to use as prediction
         targets. They are moved out of the boundary's ``point_data`` and into
@@ -1019,10 +1058,27 @@ class MeshToDomainMesh(MeshTransform):
             )
         self._cell_data_targets: list[str] = list(cell_data_targets or [])
         self._point_data_targets: list[str] = list(point_data_targets or [])
+        if TARGET_QUADRATURE_MEASURE_KEY in (
+            self._cell_data_targets + self._point_data_targets
+        ):
+            raise ValueError(
+                f"{TARGET_QUADRATURE_MEASURE_KEY!r} is reserved for target "
+                "quadrature bookkeeping and cannot be configured as a user target."
+            )
         self._interior_points = interior_points
         self._boundary_name = boundary_name
 
     def __call__(self, mesh: Mesh) -> DomainMesh:  # type: ignore[override]
+        for association, data in (
+            ("point_data", mesh.point_data),
+            ("cell_data", mesh.cell_data),
+        ):
+            if TARGET_QUADRATURE_MEASURE_KEY in data:
+                raise ValueError(
+                    f"Input mesh {association} already contains reserved key "
+                    f"{TARGET_QUADRATURE_MEASURE_KEY!r}; rename the user field "
+                    "before MeshToDomainMesh."
+                )
         ### v1 supports two diagonal corners:
         ### (cell_data_targets, interior_points='cell_centroids')
         ### (point_data_targets, interior_points='vertices')
@@ -1056,12 +1112,16 @@ class MeshToDomainMesh(MeshTransform):
 
     def _call_cell_centroids(self, mesh: Mesh) -> DomainMesh:
         ### Build the interior as a point cloud at cell centroids, with target
-        ### cell_data fields moved into interior.point_data.
+        ### cell_data fields moved into interior.point_data.  The original
+        ### cells disappear at this boundary, so materialize their effective
+        ### measure beside the centroid queries while cell geometry and any
+        ### composed measure weights are still available.
         interior_point_data = (
             mesh.cell_data.select(*self._cell_data_targets)
             if self._cell_data_targets
             else TensorDict({}, batch_size=[mesh.n_cells])
         )
+        interior_point_data[TARGET_QUADRATURE_MEASURE_KEY] = cell_measures(mesh)
         interior = Mesh(
             points=mesh.cell_centroids,
             point_data=interior_point_data,
