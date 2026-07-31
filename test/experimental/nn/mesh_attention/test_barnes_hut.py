@@ -31,6 +31,7 @@ from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
     exact_single_layer_member,
 )
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import MEASURE_WEIGHTS_KEY
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
 
@@ -184,6 +185,42 @@ def test_theta_to_zero_recovers_dense(device):
     queries = _exterior_queries(device, 48)
     out_dense = dense(queries, dense_cache)
     out_hier = hier(queries, hier_cache)
+    assert torch.allclose(out_dense.scalars, out_hier.scalars, rtol=1e-10, atol=1e-12)
+    assert torch.allclose(out_dense.vectors, out_hier.vectors, rtol=1e-10, atol=1e-12)
+
+
+def test_theta_to_zero_recovers_dense_with_nonuniform_public_measure(device):
+    """Both backends distinguish panel geometry from effective quadrature."""
+    base = _sphere_mesh(device, 2)
+    factors = torch.linspace(
+        0.2,
+        5.0,
+        base.n_cells,
+        dtype=base.points.dtype,
+        device=base.points.device,
+    )
+    mesh = base.with_data(cell_data={MEASURE_WEIGHTS_KEY: factors})
+    dense, hier, dense_cache, hier_cache = _decoder_pair(device, mesh, theta=1.0e-6)
+    queries = _exterior_queries(device, 48)
+    out_dense = dense(queries, dense_cache)
+    out_hier = hier(queries, hier_cache)
+
+    torch.testing.assert_close(
+        dense_cache.panel_areas, base.cell_areas, rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(dense_cache.measure_factors, factors, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        dense_cache.quadrature_measures,
+        base.cell_areas * factors,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        hier_cache.quadrature_measures,
+        dense_cache.quadrature_measures,
+        rtol=0.0,
+        atol=0.0,
+    )
     assert torch.allclose(out_dense.scalars, out_hier.scalars, rtol=1e-10, atol=1e-12)
     assert torch.allclose(out_dense.vectors, out_hier.vectors, rtol=1e-10, atol=1e-12)
 

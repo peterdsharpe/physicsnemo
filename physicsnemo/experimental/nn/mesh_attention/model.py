@@ -37,28 +37,31 @@ from physicsnemo.mesh import (
     flatten_rank_spec,
     validate_rank_spec,
 )
-from physicsnemo.mesh.calculus.measure import compose_measure_weights
+from physicsnemo.mesh.calculus.measure import (
+    MEASURE_WEIGHTS_KEY,
+    cell_measure_weights,
+    cell_measures,
+    compose_measure_weights,
+)
 
 from .attention import AttentionMoments, ScalarVectorState, TypedProjection
-from .gauge import measure_weighted_rms_radius
 from .block import (
     GeometryConditionedLinear,
+    HomogeneousFieldReadIn,
     LinearMeshFieldBlock,
     MeshOperatorBlock,
     NonlinearZeroMeshFieldBlock,
     PointwiseGeometryBlock,
-    HomogeneousFieldReadIn,
     QuadraticFieldReadIn,
 )
+from .gauge import measure_weighted_rms_radius
 from .kernel_decoder import (
     KernelDecoderCache,
     LinearKernelBasisCrossDecoder,
     NonlinearZeroKernelBasisCrossDecoder,
 )
 
-FieldMode = Literal[
-    "linear", "zero_preserving_nonlinear", "quadratic", "homogeneous"
-]
+FieldMode = Literal["linear", "zero_preserving_nonlinear", "quadratic", "homogeneous"]
 QueryDecoder = Literal["moment", "kernel"]
 #: A :data:`~physicsnemo.mesh.RankSpecDict` whose leaves may additionally be
 #: the string rank token ``"0o"``, declaring a 2D pseudoscalar field
@@ -121,6 +124,192 @@ class MetaData(ModelMetaData):
     amp: bool = True
     torch_fx: bool = False
     onnx: bool = False
+
+
+@dataclass(frozen=True)
+class CanonicalSourceGeometry:
+    r"""Complete, already-normalized source geometry for an opt-in encode.
+
+    The cell ordering and connectivity must exactly match the boundary meshes
+    merged in the model's declared boundary-name order.  ``center`` and
+    ``reference_length`` are deliberately part of the bundle so the neutral
+    frame is explicit rather than inferred: the current contract accepts only
+    positive-zero ``center`` entries and an exactly ``+1`` reference length.
+
+    The prescribed centroids, areas, and normals are authoritative.  They are
+    installed directly into the source mesh's immutable geometry cache and
+    are not re-derived from ``points``.  Public measure weights remain owned
+    by the domain boundaries and are retained independently of this geometric
+    override.
+    """
+
+    points: Float[torch.Tensor, "n_points spatial_dims"]
+    cells: torch.Tensor
+    centroids: Float[torch.Tensor, "n_cells spatial_dims"]
+    areas: Float[torch.Tensor, " n_cells"]
+    normals: Float[torch.Tensor, "n_cells spatial_dims"]
+    center: Float[torch.Tensor, " spatial_dims"]
+    reference_length: Float[torch.Tensor, ""]
+
+
+def _validate_canonical_source_geometry(
+    geometry: CanonicalSourceGeometry,
+    merged: Mesh,
+) -> None:
+    """Validate a complete canonical bundle against merged source topology."""
+    if not isinstance(geometry, CanonicalSourceGeometry):
+        raise TypeError(
+            "canonical_source_geometry must be a CanonicalSourceGeometry, "
+            f"got {type(geometry).__name__}"
+        )
+
+    tensors = {
+        "points": geometry.points,
+        "cells": geometry.cells,
+        "centroids": geometry.centroids,
+        "areas": geometry.areas,
+        "normals": geometry.normals,
+        "center": geometry.center,
+        "reference_length": geometry.reference_length,
+    }
+    for name, value in tensors.items():
+        if not isinstance(value, torch.Tensor):
+            raise TypeError(
+                f"canonical_source_geometry.{name} must be a torch.Tensor, "
+                f"got {type(value).__name__}"
+            )
+
+    expected_shapes = {
+        "points": tuple(merged.points.shape),
+        "cells": tuple(merged.cells.shape),
+        "centroids": (merged.n_cells, merged.n_spatial_dims),
+        "areas": (merged.n_cells,),
+        "normals": (merged.n_cells, merged.n_spatial_dims),
+        "center": (merged.n_spatial_dims,),
+        "reference_length": (),
+    }
+    for name, expected in expected_shapes.items():
+        actual = tuple(tensors[name].shape)
+        if actual != expected:
+            raise ValueError(
+                f"canonical_source_geometry.{name} must have shape {expected}, "
+                f"got {actual}"
+            )
+
+    for name in (
+        "points",
+        "centroids",
+        "areas",
+        "normals",
+        "center",
+        "reference_length",
+    ):
+        value = tensors[name]
+        if value.device != merged.points.device:
+            raise ValueError(
+                f"canonical_source_geometry.{name} must be on "
+                f"{merged.points.device}, got {value.device}"
+            )
+        if value.dtype != merged.points.dtype:
+            raise ValueError(
+                f"canonical_source_geometry.{name} must have dtype "
+                f"{merged.points.dtype}, got {value.dtype}"
+            )
+    if geometry.cells.device != merged.cells.device:
+        raise ValueError(
+            "canonical_source_geometry.cells must be on "
+            f"{merged.cells.device}, got {geometry.cells.device}"
+        )
+    if geometry.cells.dtype != merged.cells.dtype:
+        raise ValueError(
+            "canonical_source_geometry.cells must have dtype "
+            f"{merged.cells.dtype}, got {geometry.cells.dtype}"
+        )
+    if not torch.equal(geometry.cells, merged.cells):
+        raise ValueError(
+            "canonical_source_geometry.cells must exactly match the merged "
+            "boundary topology and cell ordering"
+        )
+
+    for name in (
+        "points",
+        "centroids",
+        "areas",
+        "normals",
+        "center",
+        "reference_length",
+    ):
+        if not torch.isfinite(tensors[name]).all().item():
+            raise ValueError(
+                f"canonical_source_geometry.{name} must contain only finite values"
+            )
+    if not (geometry.areas > 0.0).all().item():
+        raise ValueError(
+            "canonical_source_geometry.areas must contain only positive values"
+        )
+    if not torch.isfinite(geometry.areas.sum()).item():
+        raise ValueError(
+            "canonical_source_geometry.areas must have a finite positive total"
+        )
+
+    normal_lengths = torch.linalg.vector_norm(geometry.normals, dim=-1)
+    normal_tolerance = max(
+        32.0 * torch.finfo(geometry.normals.dtype).eps,
+        1.0e-12,
+    )
+    if not torch.allclose(
+        normal_lengths,
+        torch.ones_like(normal_lengths),
+        rtol=normal_tolerance,
+        atol=normal_tolerance,
+    ):
+        raise ValueError("canonical_source_geometry.normals must be unit vectors")
+
+    center_is_positive_zero = (geometry.center == 0.0).all() & (
+        ~torch.signbit(geometry.center)
+    ).all()
+    if not center_is_positive_zero.item():
+        raise ValueError(
+            "canonical_source_geometry.center must contain raw positive zeros"
+        )
+    if not (geometry.reference_length == 1.0).item():
+        raise ValueError(
+            "canonical_source_geometry.reference_length must be exactly +1"
+        )
+
+
+def _validate_boundary_measures(
+    geometric_measures: torch.Tensor,
+    effective_measures: torch.Tensor,
+) -> torch.Tensor:
+    """Validate geometric and effective source measures and return their total."""
+    total_measure = effective_measures.sum()
+    if torch.compiler.is_compiling():
+        return total_measure
+
+    geometry_is_valid = (
+        torch.isfinite(geometric_measures).all() & (geometric_measures > 0.0).all()
+    )
+    cells_are_valid = (
+        torch.isfinite(effective_measures).all() & (effective_measures > 0.0).all()
+    )
+    total_is_valid = torch.isfinite(total_measure) & (total_measure > 0.0)
+    # Keep valid execution to one host synchronization. The individual
+    # predicate is inspected only on the exceptional path so the error still
+    # identifies degenerate cells versus an overflowing total.
+    if not (geometry_is_valid & cells_are_valid & total_is_valid).item():
+        if not geometry_is_valid.item():
+            raise ValueError(
+                "Every boundary cell must have finite positive measure "
+                "(geometric panel measure)"
+            )
+        if not cells_are_valid.item():
+            raise ValueError(
+                "Every boundary cell must have finite positive measure "
+                "(effective quadrature measure)"
+            )
+        raise ValueError("Boundary measure must be finite and positive")
+    return total_measure
 
 
 @dataclass(frozen=True)
@@ -1088,9 +1277,7 @@ class MeshTransformer(Module):
             # The quadratic mode's query machinery is the linear machinery
             # (its degree is added by the read-in composition, not by depth).
             query_layers = (
-                1
-                if field_mode in ("linear", "quadratic", "homogeneous")
-                else 2
+                1 if field_mode in ("linear", "quadratic", "homogeneous") else 2
             )
         _require_int("query_layers", query_layers, minimum=1)
         if scalar_rank + vector_rank == 0:
@@ -1813,11 +2000,9 @@ class MeshTransformer(Module):
 
         The reduction itself lives in :mod:`.gauge` so that dataset-side
         transforms computing a per-sample gauge for the *explicit* override
-        path share one implementation with this one.  ``weights`` here is
-        the model's own quadrature measure (bare ``cell_areas``), which is
-        deliberately not the Horvitz--Thompson-weighted measure a
-        subsample-aware dataset transform uses -- see the :mod:`.gauge`
-        module docstring.
+        path share one implementation with this one. ``weights`` is the
+        effective source measure: geometric cell area times any public
+        measure weight retained by the data pipeline.
         """
         return measure_weighted_rms_radius(weights, centroids, dtype)
 
@@ -2033,76 +2218,139 @@ class MeshTransformer(Module):
             ),
         )
 
-    def encode(self, domain: DomainMesh) -> EncodedBoundary:
-        r"""Encode a boundary once for reuse at one or more query meshes."""
+    def encode(
+        self,
+        domain: DomainMesh,
+        *,
+        canonical_source_geometry: CanonicalSourceGeometry | None = None,
+    ) -> EncodedBoundary:
+        r"""Encode a boundary once for reuse at one or more query meshes.
+
+        ``canonical_source_geometry`` is a default-off escape hatch for a
+        caller that has already constructed the complete normalized source
+        geometry.  Its topology and cell ordering must match the merged domain
+        boundaries exactly; its prescribed geometric fields are cached without
+        re-derivation.  The default ``None`` path is the historical encode.
+        """
         self._validate_domain(domain)
-        geometry_meshes = [
-            domain.boundaries[name].with_data(
-                point_data={}, cell_data={}, global_data={}
-            )
+        # Feature data is packed separately below, but the reserved public
+        # measure contract is geometry metadata and must survive. Mesh.merge
+        # requires identical keys, so materialize unit factors on the other
+        # boundaries when only a subset carries explicit weights.
+        carries_measure_weights = any(
+            MEASURE_WEIGHTS_KEY in domain.boundaries[name].cell_data
             for name in self.boundary_names
-        ]
-        merged = Mesh.merge(geometry_meshes)
-        length = (
-            None
-            if self.reference_length_key is None
-            else self._reference_length(domain.global_data, merged.points)
         )
-        # Geometry and quadrature construction stay outside ambient AMP. The
-        # learned projections may autocast, but centering, normals, and source
-        # measure are numerical mesh operations and retain the input geometry
-        # precision.
-        with torch.autocast(device_type=merged.points.device.type, enabled=False):
-            weights = merged.cell_areas
-            total_measure = weights.sum()
-        if not torch.compiler.is_compiling():
-            cells_are_valid = torch.isfinite(weights).all() & (weights > 0.0).all()
-            total_is_valid = torch.isfinite(total_measure) & (total_measure > 0.0)
-            # Keep valid execution to one host synchronization. The individual
-            # predicate is inspected only on the exceptional path so the error
-            # still identifies degenerate cells versus an overflowing total.
-            if not (cells_are_valid & total_is_valid).item():
-                if not cells_are_valid.item():
-                    raise ValueError(
-                        "Every boundary cell must have finite positive measure"
+        geometry_meshes = []
+        for name in self.boundary_names:
+            boundary = domain.boundaries[name]
+            measure_data = (
+                {
+                    MEASURE_WEIGHTS_KEY: cell_measure_weights(boundary).to(
+                        device=boundary.points.device,
+                        dtype=boundary.points.dtype,
                     )
-                raise ValueError("Boundary measure must be finite and positive")
-        with torch.autocast(device_type=merged.points.device.type, enabled=False):
-            if length is None:
-                # Intrinsic scale gauge: the measure-weighted RMS boundary
-                # radius, computed after the measure validation above so a
-                # degenerate boundary reports its own error first.
-                length = self._intrinsic_reference_length(
-                    weights, merged.cell_centroids, merged.points.dtype
-                )
-            center = torch.einsum("n,nd->d", weights, merged.cell_centroids)
-            center = center / total_measure
-            source_mesh = Mesh(
-                points=(merged.points - center) / length,
-                cells=merged.cells,
+                }
+                if carries_measure_weights
+                else {}
             )
-            if self.measure_normalization:
-                # Measure-scale invariance: every quadrature consumer reads
-                # the EFFECTIVE measure (``cell_measures``), so recording a
-                # single normalizing weight here makes the operator depend
-                # on the source measure's *distribution* and not on its
-                # magnitude.  The magnitude is not discarded -- it re-enters
-                # as the dimensionless global scalar below.  Composed (not
-                # assigned) so any Horvitz--Thompson weight the pipeline
-                # already recorded survives; a uniform HT factor cancels in
-                # the normalization, which is what makes subsample weights
-                # safe to carry at all (see the module docstring of gauge.py
-                # and the k-ladder in the notebook).
-                nondim_measure = source_mesh.cell_areas.double().sum()
-                compose_measure_weights(
-                    source_mesh,
-                    (1.0 / nondim_measure).to(source_mesh.points.dtype),
+            geometry_meshes.append(
+                boundary.with_data(
+                    point_data={}, cell_data=measure_data, global_data={}
                 )
-            # Populate the immutable geometric cache at full geometry precision
-            # before learned layers are entered under any outer autocast scope.
-            _ = source_mesh.cell_centroids
-            _ = source_mesh.cell_areas
-            _ = source_mesh.cell_normals
+            )
+        merged = Mesh.merge(geometry_meshes)
+        if canonical_source_geometry is None:
+            length = (
+                None
+                if self.reference_length_key is None
+                else self._reference_length(domain.global_data, merged.points)
+            )
+            # Geometry and quadrature construction stay outside ambient AMP. The
+            # learned projections may autocast, but centering, normals, and source
+            # measure are numerical mesh operations and retain the input geometry
+            # precision.
+            with torch.autocast(device_type=merged.points.device.type, enabled=False):
+                geometric_measures = merged.cell_areas
+                weights = cell_measures(merged)
+                total_measure = _validate_boundary_measures(
+                    geometric_measures,
+                    weights,
+                )
+            with torch.autocast(device_type=merged.points.device.type, enabled=False):
+                if length is None:
+                    # Intrinsic scale gauge: the measure-weighted RMS boundary
+                    # radius, computed after the measure validation above so a
+                    # degenerate boundary reports its own error first.
+                    length = self._intrinsic_reference_length(
+                        weights, merged.cell_centroids, merged.points.dtype
+                    )
+                center = torch.einsum("n,nd->d", weights, merged.cell_centroids)
+                center = center / total_measure
+                source_points = (merged.points - center) / length
+                if carries_measure_weights:
+                    source_mesh = Mesh(
+                        points=source_points,
+                        cells=merged.cells,
+                        cell_data={
+                            MEASURE_WEIGHTS_KEY: cell_measure_weights(merged),
+                        },
+                    )
+                else:
+                    # Preserve the historical data-free construction exactly
+                    # when neither the caller nor normalization needs weights.
+                    source_mesh = Mesh(points=source_points, cells=merged.cells)
+                if self.measure_normalization:
+                    # Measure-scale invariance: every quadrature consumer reads
+                    # the effective measure, so composing a single normalizing
+                    # factor here makes the operator depend on the source
+                    # measure's distribution and not on its nuisance magnitude.
+                    # Existing Horvitz--Thompson factors survive composition; a
+                    # uniform factor cancels without altering physical panel
+                    # geometry.
+                    nondim_measure = cell_measures(source_mesh).double().sum()
+                    compose_measure_weights(
+                        source_mesh,
+                        (1.0 / nondim_measure).to(source_mesh.points.dtype),
+                    )
+                # Populate the immutable geometric cache at full geometry precision
+                # before learned layers are entered under any outer autocast scope.
+                _ = source_mesh.cell_centroids
+                _ = source_mesh.cell_areas
+                _ = source_mesh.cell_normals
+        else:
+            _validate_canonical_source_geometry(canonical_source_geometry, merged)
+            center = canonical_source_geometry.center
+            length = canonical_source_geometry.reference_length
+            with torch.autocast(device_type=merged.points.device.type, enabled=False):
+                source_mesh = Mesh(
+                    points=canonical_source_geometry.points,
+                    cells=canonical_source_geometry.cells,
+                    cell_data=(
+                        {
+                            MEASURE_WEIGHTS_KEY: cell_measure_weights(merged),
+                        }
+                        if carries_measure_weights
+                        else {}
+                    ),
+                )
+                source_mesh._cache["cell", "centroids"] = (
+                    canonical_source_geometry.centroids
+                )
+                source_mesh._cache["cell", "areas"] = canonical_source_geometry.areas
+                source_mesh._cache["cell", "normals"] = (
+                    canonical_source_geometry.normals
+                )
+                _validate_boundary_measures(
+                    source_mesh.cell_areas,
+                    cell_measures(source_mesh),
+                )
+                if self.measure_normalization:
+                    nondim_measure = cell_measures(source_mesh).double().sum()
+                    compose_measure_weights(
+                        source_mesh,
+                        (1.0 / nondim_measure).to(source_mesh.points.dtype),
+                    )
 
         boundary_operator = self._pack_boundary_role(domain, "operator")
         global_operator = self._pack_global_role(
@@ -2530,6 +2778,7 @@ class MeshTransformer(Module):
 
 
 __all__ = [
+    "CanonicalSourceGeometry",
     "EncodedBoundary",
     "FieldMode",
     "FieldRoleRanks",

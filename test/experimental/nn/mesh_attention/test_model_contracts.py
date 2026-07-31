@@ -18,11 +18,21 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
-from physicsnemo.experimental.nn.mesh_attention.model import MeshTransformer
+from physicsnemo.experimental.nn.mesh_attention import (
+    CanonicalSourceGeometry,
+    MeshTransformer,
+)
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import (
+    MEASURE_WEIGHTS_KEY,
+    cell_measure_weights,
+    cell_measures,
+)
 
 _BOUNDARY_RANKS = {
     "wall": {
@@ -46,14 +56,19 @@ def _model(
     query_chunk_size: int = 2,
     reference_length_key: str | None = "reference.length",
     bounded_query_geometry: bool = False,
+    measure_normalization: bool = False,
+    boundary_field_ranks: dict | None = None,
 ) -> MeshTransformer:
     torch.manual_seed(732)
     model = MeshTransformer(
         n_spatial_dims=3,
         output_field_ranks=_OUTPUT_RANKS,
-        boundary_field_ranks=_BOUNDARY_RANKS,
+        boundary_field_ranks=(
+            _BOUNDARY_RANKS if boundary_field_ranks is None else boundary_field_ranks
+        ),
         global_field_ranks=_GLOBAL_RANKS,
         reference_length_key=reference_length_key,
+        measure_normalization=measure_normalization,
         field_mode=field_mode,
         query_decoder=query_decoder,
         bounded_query_geometry=bounded_query_geometry,
@@ -1272,3 +1287,419 @@ def test_mdlus_checkpoint_roundtrip(device, tmp_path, query_decoder):
     restored.eval()
     actual = restored(domain)
     _assert_output_close(actual, expected, rtol=2.0e-6, atol=2.0e-7)
+
+
+def _prescribed_canonical_geometry(
+    model: MeshTransformer,
+    domain: DomainMesh,
+) -> CanonicalSourceGeometry:
+    """Build a valid bundle whose cached fields intentionally are not derived."""
+    with torch.no_grad():
+        historical = model.encode(domain)
+    source = historical.source_mesh
+    offsets = source.points.new_tensor([0.17, -0.11, 0.23])
+    area_factors = torch.linspace(
+        1.1,
+        1.4,
+        source.n_cells,
+        device=source.points.device,
+        dtype=source.points.dtype,
+    )
+    return CanonicalSourceGeometry(
+        points=(source.points + offsets).clone(),
+        cells=source.cells.clone(),
+        centroids=(source.cell_centroids.flip(0) - offsets).clone(),
+        areas=(source.cell_areas.flip(0) * area_factors).clone(),
+        normals=(-source.cell_normals.roll(1, dims=0)).clone(),
+        center=torch.zeros_like(historical.center),
+        reference_length=torch.ones_like(historical.reference_length),
+    )
+
+
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_canonical_source_geometry_is_public_and_authoritative_on_cpu(query_decoder):
+    model = _model("cpu", query_decoder=query_decoder)
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+
+    # These fields deliberately disagree with geometry re-derived from the
+    # prescribed points. The public encode must therefore consume the bundle,
+    # not merely accept and then ignore it.
+    derived = Mesh(points=prescribed.points, cells=prescribed.cells)
+    assert not torch.equal(derived.cell_centroids, prescribed.centroids)
+    assert not torch.equal(derived.cell_areas, prescribed.areas)
+    assert not torch.equal(derived.cell_normals, prescribed.normals)
+
+    with torch.no_grad():
+        encoded = model.encode(domain, canonical_source_geometry=prescribed)
+        prediction = model.decode(encoded)
+
+    torch.testing.assert_close(
+        encoded.source_mesh.points, prescribed.points, rtol=0.0, atol=0.0
+    )
+    assert torch.equal(encoded.source_mesh.cells, prescribed.cells)
+    for name, expected in (
+        ("cell_centroids", prescribed.centroids),
+        ("cell_areas", prescribed.areas),
+        ("cell_normals", prescribed.normals),
+    ):
+        actual = getattr(encoded.source_mesh, name)
+        torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+        assert actual.data_ptr() == expected.data_ptr()
+    torch.testing.assert_close(encoded.center, prescribed.center, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        encoded.reference_length,
+        prescribed.reference_length,
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert torch.isfinite(prediction.point_data["pressure"]).all()
+    assert torch.isfinite(prediction.point_data["velocity"]).all()
+
+
+def test_canonical_source_geometry_default_off_is_bitwise_on_cpu():
+    model = _model("cpu")
+    with torch.no_grad():
+        omitted = model.encode(_domain("cpu"))
+        explicit_none = model.encode(_domain("cpu"), canonical_source_geometry=None)
+        omitted_prediction = model.decode(omitted)
+        explicit_none_prediction = model.decode(explicit_none)
+
+    for omitted_value, explicit_value in (
+        (omitted.source_mesh.points, explicit_none.source_mesh.points),
+        (omitted.source_mesh.cells, explicit_none.source_mesh.cells),
+        (omitted.source_mesh.cell_centroids, explicit_none.source_mesh.cell_centroids),
+        (omitted.source_mesh.cell_areas, explicit_none.source_mesh.cell_areas),
+        (omitted.source_mesh.cell_normals, explicit_none.source_mesh.cell_normals),
+        (omitted.center, explicit_none.center),
+        (omitted.reference_length, explicit_none.reference_length),
+        (
+            omitted_prediction.point_data["pressure"],
+            explicit_none_prediction.point_data["pressure"],
+        ),
+        (
+            omitted_prediction.point_data["velocity"],
+            explicit_none_prediction.point_data["velocity"],
+        ),
+    ):
+        assert torch.equal(omitted_value, explicit_value)
+
+
+def test_canonical_source_geometry_measure_normalization_preserves_areas_on_cpu():
+    model = _model("cpu", measure_normalization=True)
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+
+    with torch.no_grad():
+        encoded = model.encode(domain, canonical_source_geometry=prescribed)
+
+    assert encoded.source_mesh.cell_areas.data_ptr() == prescribed.areas.data_ptr()
+    assert torch.equal(encoded.source_mesh.cell_areas, prescribed.areas)
+    expected_factor = (1.0 / prescribed.areas.double().sum()).to(prescribed.areas.dtype)
+    torch.testing.assert_close(
+        cell_measure_weights(encoded.source_mesh),
+        torch.ones_like(prescribed.areas) * expected_factor,
+        rtol=0.0,
+        atol=0.0,
+    )
+    tolerance = 8.0 * torch.finfo(prescribed.areas.dtype).eps
+    torch.testing.assert_close(
+        cell_measures(encoded.source_mesh).sum(),
+        prescribed.areas.new_tensor(1.0),
+        rtol=tolerance,
+        atol=tolerance,
+    )
+
+
+def test_canonical_source_geometry_validates_merged_boundary_order_on_cpu():
+    boundary_ranks = {
+        "wall_a": _BOUNDARY_RANKS["wall"],
+        "wall_b": _BOUNDARY_RANKS["wall"],
+    }
+    model = _model("cpu", boundary_field_ranks=boundary_ranks)
+    original = _domain("cpu")
+    boundary = original.boundaries["wall"]
+    domain = DomainMesh(
+        interior=original.interior,
+        boundaries={"wall_a": boundary, "wall_b": boundary},
+        global_data=original.global_data,
+    )
+    prescribed = _prescribed_canonical_geometry(model, domain)
+
+    expected_cells = torch.cat(
+        (boundary.cells, boundary.cells + boundary.n_points),
+        dim=0,
+    )
+    assert model.boundary_names == ("wall_a", "wall_b")
+    assert torch.equal(prescribed.cells, expected_cells)
+    with torch.no_grad():
+        encoded = model.encode(domain, canonical_source_geometry=prescribed)
+    assert torch.equal(encoded.source_mesh.cells, expected_cells)
+
+    n_boundary_cells = boundary.n_cells
+    swapped_boundaries = replace(
+        prescribed,
+        cells=torch.cat(
+            (
+                prescribed.cells[n_boundary_cells:],
+                prescribed.cells[:n_boundary_cells],
+            ),
+            dim=0,
+        ),
+    )
+    with pytest.raises(
+        ValueError,
+        match="merged boundary topology and cell ordering",
+    ):
+        model.encode(domain, canonical_source_geometry=swapped_boundaries)
+
+
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    [
+        ("points_shape", r"points must have shape"),
+        ("cells_dtype", r"cells must have dtype"),
+        ("cells_topology", r"merged boundary topology and cell ordering"),
+        ("cells_order", r"merged boundary topology and cell ordering"),
+        ("areas_device", r"areas must be on cpu"),
+        ("areas_dtype", r"areas must have dtype"),
+        ("centroids_nonfinite", r"centroids must contain only finite"),
+        ("areas_nonpositive", r"areas must contain only positive"),
+        ("areas_nonfinite_total", r"areas must have a finite positive total"),
+        ("normals_nonunit", r"normals must be unit vectors"),
+        ("negative_zero_center", r"center must contain raw positive zeros"),
+        ("nonneutral_center", r"center must contain raw positive zeros"),
+        ("nonneutral_length", r"reference_length must be exactly \+1"),
+    ],
+)
+def test_canonical_source_geometry_rejects_malformed_cpu_input(failure, message):
+    model = _model("cpu")
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+
+    if failure == "points_shape":
+        malformed = replace(prescribed, points=prescribed.points[:-1])
+    elif failure == "cells_dtype":
+        malformed = replace(prescribed, cells=prescribed.cells.to(torch.int32))
+    elif failure == "cells_topology":
+        cells = prescribed.cells.clone()
+        cells[0] = cells[0].roll(1)
+        malformed = replace(prescribed, cells=cells)
+    elif failure == "cells_order":
+        malformed = replace(prescribed, cells=prescribed.cells.flip(0))
+    elif failure == "areas_device":
+        malformed = replace(
+            prescribed,
+            areas=torch.empty_like(prescribed.areas, device="meta"),
+        )
+    elif failure == "areas_dtype":
+        malformed = replace(prescribed, areas=prescribed.areas.float())
+    elif failure == "centroids_nonfinite":
+        centroids = prescribed.centroids.clone()
+        centroids[0, 0] = float("nan")
+        malformed = replace(prescribed, centroids=centroids)
+    elif failure == "areas_nonpositive":
+        areas = prescribed.areas.clone()
+        areas[0] = 0.0
+        malformed = replace(prescribed, areas=areas)
+    elif failure == "areas_nonfinite_total":
+        malformed = replace(
+            prescribed,
+            areas=torch.full_like(
+                prescribed.areas, torch.finfo(prescribed.areas.dtype).max
+            ),
+        )
+    elif failure == "normals_nonunit":
+        malformed = replace(prescribed, normals=2.0 * prescribed.normals)
+    elif failure == "negative_zero_center":
+        malformed = replace(prescribed, center=torch.full_like(prescribed.center, -0.0))
+    elif failure == "nonneutral_center":
+        malformed = replace(prescribed, center=torch.ones_like(prescribed.center))
+    else:
+        malformed = replace(
+            prescribed,
+            reference_length=prescribed.reference_length.new_tensor(2.0),
+        )
+
+    with pytest.raises(ValueError, match=message):
+        model.encode(domain, canonical_source_geometry=malformed)
+
+
+@pytest.mark.parametrize("query_decoder", ["moment", "kernel"])
+def test_canonical_source_geometry_preserves_measure_weights_on_cpu(query_decoder):
+    model = _model("cpu", query_decoder=query_decoder)
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+    boundary = domain.boundaries["wall"]
+    cell_data = dict(boundary.cell_data.items())
+    weights = torch.linspace(
+        0.25,
+        2.0,
+        boundary.n_cells,
+        dtype=boundary.points.dtype,
+        device=boundary.points.device,
+    )
+    cell_data[MEASURE_WEIGHTS_KEY] = weights
+    weighted = DomainMesh(
+        interior=domain.interior,
+        boundaries={"wall": boundary.with_data(cell_data=cell_data)},
+        global_data=domain.global_data,
+    )
+
+    with torch.no_grad():
+        encoded = model.encode(weighted, canonical_source_geometry=prescribed)
+        prediction = model.decode(encoded)
+
+    assert encoded.source_mesh.cell_areas.data_ptr() == prescribed.areas.data_ptr()
+    torch.testing.assert_close(
+        encoded.source_mesh.cell_areas,
+        prescribed.areas,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        cell_measure_weights(encoded.source_mesh),
+        weights,
+        rtol=0.0,
+        atol=0.0,
+    )
+    if query_decoder == "kernel":
+        torch.testing.assert_close(
+            encoded.kernel_cache.panel_areas,
+            prescribed.areas,
+            rtol=0.0,
+            atol=0.0,
+        )
+        torch.testing.assert_close(
+            encoded.kernel_cache.quadrature_measures,
+            prescribed.areas * weights,
+            rtol=0.0,
+            atol=0.0,
+        )
+        torch.testing.assert_close(
+            encoded.kernel_cache.representation_measure_factors,
+            weights,
+            rtol=0.0,
+            atol=0.0,
+        )
+    assert torch.isfinite(prediction.point_data["pressure"]).all()
+    assert torch.isfinite(prediction.point_data["velocity"]).all()
+
+
+def test_canonical_source_geometry_fills_unit_weights_across_boundaries_on_cpu():
+    boundary_ranks = {
+        "wall_a": _BOUNDARY_RANKS["wall"],
+        "wall_b": _BOUNDARY_RANKS["wall"],
+    }
+    model = _model("cpu", boundary_field_ranks=boundary_ranks)
+    original = _domain("cpu")
+    boundary = original.boundaries["wall"]
+    explicit_weights = torch.linspace(
+        0.25,
+        2.0,
+        boundary.n_cells,
+        dtype=boundary.points.dtype,
+        device=boundary.points.device,
+    )
+    weighted_boundary = boundary.with_data(
+        cell_data={
+            **dict(boundary.cell_data.items()),
+            MEASURE_WEIGHTS_KEY: explicit_weights,
+        }
+    )
+    domain = DomainMesh(
+        interior=original.interior,
+        boundaries={"wall_a": weighted_boundary, "wall_b": boundary},
+        global_data=original.global_data,
+    )
+    prescribed = _prescribed_canonical_geometry(model, domain)
+
+    with torch.no_grad():
+        encoded = model.encode(domain, canonical_source_geometry=prescribed)
+
+    expected_weights = torch.cat(
+        (explicit_weights, torch.ones_like(explicit_weights)),
+    )
+    torch.testing.assert_close(
+        cell_measure_weights(encoded.source_mesh),
+        expected_weights,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        cell_measures(encoded.source_mesh),
+        prescribed.areas * expected_weights,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_canonical_source_geometry_composes_measure_normalization_on_cpu():
+    model = _model("cpu", measure_normalization=True)
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+    boundary = domain.boundaries["wall"]
+    weights = torch.linspace(
+        0.25,
+        2.0,
+        boundary.n_cells,
+        dtype=boundary.points.dtype,
+        device=boundary.points.device,
+    )
+    weighted = DomainMesh(
+        interior=domain.interior,
+        boundaries={
+            "wall": boundary.with_data(
+                cell_data={
+                    **dict(boundary.cell_data.items()),
+                    MEASURE_WEIGHTS_KEY: weights,
+                }
+            )
+        },
+        global_data=domain.global_data,
+    )
+
+    with torch.no_grad():
+        encoded = model.encode(weighted, canonical_source_geometry=prescribed)
+
+    normalization = (1.0 / (prescribed.areas * weights).double().sum()).to(
+        prescribed.areas.dtype
+    )
+    torch.testing.assert_close(
+        cell_measure_weights(encoded.source_mesh),
+        weights * normalization,
+        rtol=0.0,
+        atol=0.0,
+    )
+    tolerance = 8.0 * torch.finfo(prescribed.areas.dtype).eps
+    torch.testing.assert_close(
+        cell_measures(encoded.source_mesh).sum(),
+        prescribed.areas.new_tensor(1.0),
+        rtol=tolerance,
+        atol=tolerance,
+    )
+
+
+@pytest.mark.parametrize("bad_value", [0.0, -1.0, float("nan"), float("inf")])
+def test_canonical_source_geometry_rejects_invalid_measure_weights_on_cpu(bad_value):
+    model = _model("cpu")
+    domain = _domain("cpu")
+    prescribed = _prescribed_canonical_geometry(model, domain)
+    boundary = domain.boundaries["wall"]
+    weights = torch.ones_like(boundary.cell_areas)
+    weights[0] = bad_value
+    weighted = DomainMesh(
+        interior=domain.interior,
+        boundaries={
+            "wall": boundary.with_data(
+                cell_data={
+                    **dict(boundary.cell_data.items()),
+                    MEASURE_WEIGHTS_KEY: weights,
+                }
+            )
+        },
+        global_data=domain.global_data,
+    )
+
+    with pytest.raises(ValueError, match="effective quadrature measure"):
+        model.encode(weighted, canonical_source_geometry=prescribed)

@@ -322,9 +322,9 @@ class BHNodeAggregates:
     The density products :math:`\rho = C \cdot V` are aggregated exactly
     (channel resolved); only geometry is approximated at evaluation time.
     ``sl_*``/``dl_*`` carry the exact singular members' aggregates
-    (:math:`\sum A\rho` and :math:`\sum A n \rho`); ``smooth_*`` carry the
-    measure-weighted smooth-member density sums evaluated against the node's
-    virtual source (area-weighted centroid/normal/state vectors).
+    (:math:`\sum \mu\rho` and :math:`\sum \mu n \rho`); ``smooth_*`` carry
+    the effective-measure-weighted smooth-member density sums evaluated
+    against the node's virtual source.
     """
 
     centroid: Float[torch.Tensor, "n 3"]
@@ -346,7 +346,7 @@ class BHNodeAggregates:
 def build_node_aggregates(
     tree: ClusterTree,
     *,
-    areas: Float[torch.Tensor, " s"],
+    measures: Float[torch.Tensor, " s"],
     centroids: Float[torch.Tensor, "s 3"],
     normals: Float[torch.Tensor, "s 3"],
     pair_vectors: Float[torch.Tensor, "s channels 3"],
@@ -358,15 +358,19 @@ def build_node_aggregates(
     n_smooth_members: int,
 ) -> BHNodeAggregates:
     """Assemble every per-node aggregate the far field needs (module header)."""
-    area_sum = _node_range_sums(tree, areas).clamp_min(torch.finfo(areas.dtype).tiny)
-    centroid = _node_range_sums(tree, areas[:, None] * centroids) / area_sum[:, None]
-    normal_sum = _node_range_sums(tree, areas[:, None] * normals)
+    measure_sum = _node_range_sums(tree, measures).clamp_min(
+        torch.finfo(measures.dtype).tiny
+    )
+    centroid = (
+        _node_range_sums(tree, measures[:, None] * centroids) / measure_sum[:, None]
+    )
+    normal_sum = _node_range_sums(tree, measures[:, None] * normals)
     unit_normal = normal_sum / normal_sum.norm(dim=-1, keepdim=True).clamp_min(
-        torch.finfo(areas.dtype).tiny
+        torch.finfo(measures.dtype).tiny
     )
     mean_pair_vectors = (
-        _node_range_sums(tree, areas[:, None, None] * pair_vectors)
-        / area_sum[:, None, None]
+        _node_range_sums(tree, measures[:, None, None] * pair_vectors)
+        / measure_sum[:, None, None]
     )
 
     def _density(member: int, weight: Float[torch.Tensor, " s"]):
@@ -394,16 +398,16 @@ def build_node_aggregates(
         )
         return scalars, vectors, pseudos
 
-    dl_scalars, dl_vectors, dl_pseudos = _dipole(0, areas)
+    dl_scalars, dl_vectors, dl_pseudos = _dipole(0, measures)
     if include_single_layer:
-        sl_scalars, sl_vectors, sl_pseudos = _density(1, areas)
+        sl_scalars, sl_vectors, sl_pseudos = _density(1, measures)
         first_smooth = 2
     else:
         sl_scalars = sl_vectors = sl_pseudos = None
         first_smooth = 1
 
     if n_smooth_members > 0:
-        parts = [_density(first_smooth + m, areas) for m in range(n_smooth_members)]
+        parts = [_density(first_smooth + m, measures) for m in range(n_smooth_members)]
         smooth_scalars = torch.stack([p[0] for p in parts], dim=1)
         smooth_vectors = torch.stack([p[1] for p in parts], dim=1)
         smooth_pseudos = (

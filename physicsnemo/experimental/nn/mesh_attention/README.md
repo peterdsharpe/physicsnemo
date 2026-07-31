@@ -193,17 +193,27 @@ quadrature tuples
 Q_\Gamma=\{(x_j,w_j,n_j,r_j)\}_{j=1}^{N_s},
 \]
 
-where \(x_j\) is the cell centroid, \(w_j\) is its
-\((D-1)\)-dimensional measure, \(n_j\) is its cell normal, and \(r_j\) contains
+where \(x_j\) is the cell centroid, \(w_j\) is its effective
+\((D-1)\)-dimensional measure (geometric panel measure times the public
+dimensionless measure factor), \(n_j\) is its cell normal, and \(r_j\) contains
 the declared cell fields and boundary identity. The discrete source measure is
 
 \[
 \mu_h=\sum_{j=1}^{N_s}w_j\delta_{(x_j,n_j)}.
 \]
 
-Every source contraction includes `source_mesh.cell_areas`. Unit weights are
-not substituted. Query points are evaluated pointwise and therefore do not
-need target quadrature weights.
+Every source contraction includes `cell_measures(source_mesh)`. Exact panel
+members already contain geometric integration and therefore receive only the
+dimensionless factor; smooth midpoint members receive the full effective
+measure. Physical panel size always comes from `source_mesh.cell_areas`, never
+from a sampling or normalization factor. Query points are evaluated pointwise
+inside the model; any training loss or integral metric over those points still
+needs a separate target quadrature measure.
+
+Supplying `CanonicalSourceGeometry` overrides only source geometry. Reserved
+measure weights remain owned by the corresponding domain boundaries, survive
+the canonical encode unchanged, and are validated against the prescribed
+panel areas before any source contraction.
 
 The current interface is cell-quadrature based. Point-associated boundary
 fields, higher-order panel quadrature, and already-integrated face totals must
@@ -528,14 +538,16 @@ dictionary \(\varphi\) combines:
   \(\partial G/\partial n_y\) over each boundary cell (signed subtended angle
   on 2D segments, including the \(\sigma=n\times\tau\) orientation factor;
   van Oosterom--Strackee signed solid angle on 3D triangles). Its value is
-  the cell-integrated influence with measure included and is never
-  multiplied by the cell weight again;
+  the cell-integrated influence with geometric panel measure included, so
+  geometric area is never multiplied again; a dimensionless public
+  representation/inclusion factor still multiplies that exact integral once;
 - optionally (`kernel_include_single_layer_member=True`, default off) one
   **exact-quadrature single-layer member**: the closed-form integral of the
   free-space Green's function itself over each cell
   (\(-\log(|x-y|/L_{\mathrm{ref}})/2\pi\) on segments,
   \(1/(4\pi|x-y|)\) on triangles), orientation independent (no \(\sigma\)
-  factor). A double-layer-only dictionary cannot carry net flux through
+  factor), with the same exactly-once public representation factor. A
+  double-layer-only dictionary cannot carry net flux through
   handles of multiply connected domains (e.g. \(u=a+b\log r\) on an annulus
   has zero double-layer representation); Green's representation requires
   both layers, and the shell-topology tier probes exactly this; and

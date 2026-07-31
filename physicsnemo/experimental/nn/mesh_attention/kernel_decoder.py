@@ -46,8 +46,10 @@ Member dictionary :math:`\varphi`
   subtended angle, including the :math:`\sigma=n\times\tau` orientation
   factor) and :math:`n\cdot(x-y)/(4\pi|x-y|^3)` over flat triangles in 3D
   (van Oosterom--Strackee signed solid angle).  This member's value **is**
-  the cell-integrated influence with the boundary measure included; it is
-  never multiplied by the cell weight again.  Exact integration matters:
+  the cell-integrated influence with the **geometric** panel measure
+  included; it is never multiplied by geometric area again. A public
+  dimensionless representation/inclusion factor still multiplies this exact
+  panel integral once. Exact integration matters:
   midpoint quadrature of a singular kernel produces uncontrolled
   near-boundary error that a learned kernel then mollifies away at the cost
   of operator fidelity.
@@ -62,10 +64,11 @@ Member dictionary :math:`\varphi`
   representation -- and Green's representation theorem requires both layers.
   The worst benchmark tier (3D shell topology) is exactly this deficiency.
   Like the double-layer member, the value is the exact cell-integrated
-  influence with the boundary measure included, never reweighted, because
-  singular kernels need singular quadrature.  Unlike the double-layer
-  member, the single layer is orientation independent (no :math:`\sigma`
-  factor; it never reads the cell normal).
+  influence with geometric panel measure included, then receives any public
+  dimensionless representation/inclusion factor exactly once. Singular
+  kernels still use singular quadrature. Unlike the double-layer member, the
+  single layer is orientation independent (no :math:`\sigma` factor; it
+  never reads the cell normal).
 - **Monopole-free single layer** (``monopole_free_single_layer=True``;
   requires the single-layer member).  A measure-weighted rank-one deflation
   of the single-layer member column,
@@ -252,7 +255,10 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import cell_measures
+from physicsnemo.mesh.calculus.measure import (
+    MEASURE_WEIGHTS_KEY,
+    cell_measure_weights,
+)
 
 from .attention import (
     ScalarVectorState,
@@ -663,8 +669,9 @@ def exact_double_layer_member(
 
     ``panel_vertices`` has shape ``(S, 2, 2)`` for straight 2D segments or
     ``(S, 3, 3)`` for flat 3D triangles.  Values are similarity invariant
-    (angles) and translation invariant, and the measure is included -- do not
-    multiply the result by cell weights again.
+    (angles) and translation invariant, and geometric panel measure is
+    included -- do not multiply the result by geometric area again. A
+    dimensionless public measure factor may still be applied once.
     """
     n_dims = query_points.shape[-1]
     expected = _EXACT_MEMBER_VERTICES.get(n_dims)
@@ -716,8 +723,9 @@ def _segment_single_layer_member(
     frame, where coordinates are already divided by the model reference
     length; the additive log-scale gauge is therefore fixed as
     :math:`\log(\lVert x-y\rVert/L_{\mathrm{ref}})` and the member is
-    dimensionless.  The boundary measure is included -- do not multiply by
-    cell weights again.
+    dimensionless. Geometric panel measure is included -- do not multiply by
+    geometric area again. A dimensionless public measure factor may still be
+    applied once.
     """
     start_vector = panel_vertices[None, :, 0, :] - query_points[:, None, :]
     end_vector = panel_vertices[None, :, 1, :] - query_points[:, None, :]
@@ -781,8 +789,9 @@ def _triangle_single_layer_member(
     factor: only :math:`|h|` and :math:`|\Omega|` appear and the in-plane
     edge distances :math:`t_e` are paired with the winding normal
     consistently, so the member never reads the cell normal and vertex
-    winding is irrelevant by construction.  The boundary measure is included
-    -- do not multiply by cell weights again.
+    winding is irrelevant by construction. Geometric panel measure is
+    included -- do not multiply by geometric area again. A dimensionless
+    public measure factor may still be applied once.
     """
     a = panel_vertices[None, :, 0, :] - query_points[:, None, :]
     b = panel_vertices[None, :, 1, :] - query_points[:, None, :]
@@ -850,8 +859,9 @@ def exact_single_layer_member(
     integral of the free-space Green's function (:math:`-\Delta G=\delta`)
     over cell :math:`j` evaluated at query point :math:`i`:
     :math:`-\log(\lVert x-y\rVert/L_{\mathrm{ref}})/(2\pi)` in 2D and
-    :math:`1/(4\pi\lVert x-y\rVert)` in 3D, with the boundary measure
-    included -- do not multiply the result by cell weights again.
+    :math:`1/(4\pi\lVert x-y\rVert)` in 3D, with geometric panel measure
+    included -- do not multiply the result by geometric area again. A
+    dimensionless public measure factor may still be applied once.
 
     Unlike :func:`exact_double_layer_member` there is no normal argument:
     the single layer is orientation independent (a recurring failure mode
@@ -963,14 +973,18 @@ class KernelDecoderCache:
 
     Everything is expressed in the model's normalized frame.  The cache is
     query independent: it contains per-source geometry (cell vertices,
-    centroids, normals, measure), the per-source kernel coefficients
-    :math:`C_{jmh}`, the state vectors whose pair alignments feed the smooth
-    members, and the projected drive values.
+    centroids, normals, geometric panel extent), the dimensionless public
+    measure factors and their resulting effective quadrature measure, the
+    per-source kernel coefficients :math:`C_{jmh}`, the state vectors whose
+    pair alignments feed the smooth members, and the projected drive values.
     """
 
     panel_vertices: Float[torch.Tensor, "s vertices spatial_dims"]
     centroids: Float[torch.Tensor, "s spatial_dims"]
     normals: Float[torch.Tensor, "s spatial_dims"]
+    # Historical public field: geometric panel area. Keep both its meaning
+    # and constructor position so ``weights=`` and positional calls from
+    # experimental users remain behaviorally compatible.
     weights: Float[torch.Tensor, " s"]
     pair_vectors: Float[torch.Tensor, "s channels spatial_dims"]
     coefficients: Float[torch.Tensor, "s members heads"]
@@ -997,6 +1011,34 @@ class KernelDecoderCache:
     # content, built once per encode; ``None`` on dense caches.
     bh_tree: "object | None" = None
     bh_aggregates: "object | None" = None
+    # Added after every historical field to preserve positional construction.
+    # ``None`` denotes an old/no-weight cache, where the dimensionless
+    # representation factor was implicitly one.
+    measure_factors: Float[torch.Tensor, " s"] | None = None
+
+    @property
+    def quadrature_measures(self) -> Float[torch.Tensor, " s"]:
+        """Effective quadrature measure: panel area times public factor."""
+        if self.measure_factors is None:
+            return self.weights
+        return self.weights * self.measure_factors
+
+    @property
+    def geometric_panel_areas(self) -> Float[torch.Tensor, " s"]:
+        """Explicit alias for the historical geometric-area field."""
+        return self.weights
+
+    @property
+    def panel_areas(self) -> Float[torch.Tensor, " s"]:
+        """Named geometric-panel alias introduced with the measure split."""
+        return self.weights
+
+    @property
+    def representation_measure_factors(self) -> Float[torch.Tensor, " s"]:
+        """Dimensionless public factors (unit factors for old caches)."""
+        if self.measure_factors is None:
+            return torch.ones_like(self.weights)
+        return self.measure_factors
 
 
 class KernelBasisCrossDecoder(nn.Module):
@@ -1609,19 +1651,17 @@ class KernelBasisCrossDecoder(nn.Module):
             panel_vertices=source_mesh.points[source_mesh.cells],
             centroids=source_mesh.cell_centroids,
             normals=source_mesh.cell_normals,
-            ### TRUE geometric measure, deliberately NOT the normalized
-            ### effective measure.  These weights serve two roles in the
-            ### decoder -- the boundary-integral quadrature AND the physical
-            ### panel extent (``panel_size = weights**(1/n_manifold_dims)``,
-            ### fed to the log-radial feature as panel_size/distance).  Both
-            ### are physical lengths/areas; normalizing them by their sum
-            ### makes panel size scale as n^(-1/d) and silently distorts the
-            ### near-field geometry.  Measured cost of getting this wrong:
-            ### the resolution sweep went from 2.5e4 to 1.7e11 at 40k
-            ### sources while improving at every smaller resolution.
-            ### Measure-scale invariance belongs to the moment quadrature,
-            ### not to the decoder's geometry.
+            # Keep physical panel extent separate from represented measure.
+            # Only panel_areas may define near-field geometry (for example
+            # panel_size / distance); measure_factors multiply exact panel
+            # integrals once, and quadrature_measures drive every midpoint
+            # quadrature.
             weights=source_mesh.cell_areas,
+            measure_factors=(
+                cell_measure_weights(source_mesh)
+                if MEASURE_WEIGHTS_KEY in source_mesh.cell_data
+                else None
+            ),
             pair_vectors=self._kernel_pair_vectors(operator_state, drive_state),
             coefficients=self.coefficient_map(
                 self._kernel_source_invariants(operator_state, drive_state)
@@ -1648,11 +1688,11 @@ class KernelBasisCrossDecoder(nn.Module):
                 tree = ClusterTree.from_points(
                     cache.centroids,
                     leaf_size=self.bh_leaf_size,
-                    areas=cache.weights,
+                    areas=cache.geometric_panel_areas,
                 )
                 aggregates = _bh.build_node_aggregates(
                     tree,
-                    areas=cache.weights,
+                    measures=cache.quadrature_measures,
                     centroids=cache.centroids,
                     normals=cache.normals,
                     pair_vectors=cache.pair_vectors,
@@ -1696,7 +1736,7 @@ class KernelBasisCrossDecoder(nn.Module):
         squared_distance = features.squared_distance
         if self.local_pair_features == "global_control":
             # Sharing control: identical width, zero per-pair locality.
-            measure = cache.weights.to(cache.local_scalars.dtype)
+            measure = cache.quadrature_measures.to(cache.local_scalars.dtype)
             pooled = (measure[:, None] * cache.local_scalars).sum(
                 dim=0
             ) / measure.sum().clamp_min(torch.finfo(measure.dtype).tiny)
@@ -1707,7 +1747,7 @@ class KernelBasisCrossDecoder(nn.Module):
             block[..., 1] = pooled[1]
             return block
         theta = subtended_angle(
-            squared_distance, cache.weights, self.n_spatial_dims - 1
+            squared_distance, cache.geometric_panel_areas, self.n_spatial_dims - 1
         )
         if self.local_pair_features == "windowed":
             # Smooth full-support window: bounded to [0, 1), -> 0 as
@@ -1786,18 +1826,26 @@ class KernelBasisCrossDecoder(nn.Module):
                 singular = exact_double_layer_member(
                     query_points, cache.panel_vertices, cache.normals
                 )
+                # The closed form already integrates over the geometric
+                # panel. Public inclusion/representation factors multiply
+                # that exact integral once; effective area would count the
+                # geometric panel a second time.
+                singular = (
+                    singular
+                    * cache.representation_measure_factors.to(singular.dtype)[None, :]
+                )
                 if self_indices is not None:
                     # Declared boundary-trace queries: the closed form lands
                     # on an accidental signed-zero branch of the jump
                     # discontinuity at its own panel; replace the (query, own
                     # panel) entries with the exact exterior one-sided limit
                     # +1/2 (see exterior_trace_self_entries for the jump
-                    # relation).  The single-layer member below is continuous
+                    # relation). Apply this identity term after the public
+                    # factor so the local +1/2 jump is not Horvitz--Thompson
+                    # reweighted. The single-layer member below is continuous
                     # across the boundary -- only its normal derivative jumps
                     # -- so its value needs, and receives, no correction.
-                    singular = exterior_trace_self_entries(
-                        singular, self_indices
-                    )
+                    singular = exterior_trace_self_entries(singular, self_indices)
                 singular = singular.unsqueeze(-1)
             else:
                 # MLP-only ablation (external-review P0): no exact
@@ -1812,6 +1860,12 @@ class KernelBasisCrossDecoder(nn.Module):
                 single_layer = exact_single_layer_member(
                     query_points, cache.panel_vertices
                 )
+                single_layer = (
+                    single_layer
+                    * cache.representation_measure_factors.to(single_layer.dtype)[
+                        None, :
+                    ]
+                )
                 if self.monopole_free_single_layer:
                     # Measure-weighted rank-one deflation (module docstring):
                     # subtract each member's share of the uniform-density
@@ -1822,7 +1876,7 @@ class KernelBasisCrossDecoder(nn.Module):
                     # in 3D) by construction.  The reduction is a fixed-axis
                     # per-query-row sum, so bitwise query-set independence is
                     # preserved, and the map is linear and differentiable.
-                    weights = cache.weights.to(single_layer.dtype)
+                    weights = cache.quadrature_measures.to(single_layer.dtype)
                     single_layer = (
                         single_layer
                         - single_layer.sum(dim=-1, keepdim=True)
@@ -1870,10 +1924,13 @@ class KernelBasisCrossDecoder(nn.Module):
             smooth_parts = polynomial
         if smooth_parts is not None:
             # Smooth members use consistent midpoint quadrature (value at the
-            # centroid times the cell measure); the singular members are
-            # already exact integrals with measure included and are not
-            # weighted again.
-            smooth = smooth_parts * cache.weights.to(smooth_parts.dtype)[None, :, None]
+            # centroid times effective cell measure); singular members
+            # already contain geometric panel integration and received only
+            # their dimensionless public factor above.
+            smooth = (
+                smooth_parts
+                * cache.quadrature_measures.to(smooth_parts.dtype)[None, :, None]
+            )
             members = (
                 smooth
                 if singular is None
@@ -2074,16 +2131,17 @@ class KernelBasisCrossDecoder(nn.Module):
                     cache.panel_vertices[ns_s],
                     cache.normals[ns_s],
                 )
+                dl = dl * cache.representation_measure_factors[ns_s].to(dl.dtype)
                 if self_indices is not None:
                     own = ns_s == self_indices[nq_s]
                     dl = torch.where(own, dl.new_full((), 0.5), dl)
                 pieces.append(dl.unsqueeze(-1))
                 if self.include_single_layer_member:
-                    pieces.append(
-                        _bh.pair_triangle_single_layer(
-                            query_points[nq_s], cache.panel_vertices[ns_s]
-                        ).unsqueeze(-1)
+                    sl = _bh.pair_triangle_single_layer(
+                        query_points[nq_s], cache.panel_vertices[ns_s]
                     )
+                    sl = sl * cache.representation_measure_factors[ns_s].to(sl.dtype)
+                    pieces.append(sl.unsqueeze(-1))
                 displacement = query_points[nq_s] - cache.centroids[ns_s]
             if self.member_mlp is not None:
                 # Under ambient autocast, mirroring the dense path.
@@ -2091,7 +2149,9 @@ class KernelBasisCrossDecoder(nn.Module):
                     displacement, cache.normals[ns_s], cache.pair_vectors[ns_s]
                 )
                 learned = self.member_mlp(feats)
-                pieces.append(learned * cache.weights[ns_s].to(learned.dtype)[:, None])
+                pieces.append(
+                    learned * cache.quadrature_measures[ns_s].to(learned.dtype)[:, None]
+                )
             with torch.autocast(device_type=device_type, enabled=False):
                 members = torch.cat([p.to(pieces[0].dtype) for p in pieces], dim=-1)
                 kernel_p = (members.to(dtype).unsqueeze(-1) * coefficients[ns_s]).sum(
@@ -2247,7 +2307,8 @@ class KernelBasisCrossDecoder(nn.Module):
             panel_vertices: torch.Tensor,
             centroids: torch.Tensor,
             normals: torch.Tensor,
-            weights: torch.Tensor,
+            panel_areas: torch.Tensor,
+            measure_factors: torch.Tensor,
             pair_vectors: torch.Tensor,
             coefficients: torch.Tensor,
             value_scalars: torch.Tensor,
@@ -2261,7 +2322,8 @@ class KernelBasisCrossDecoder(nn.Module):
                     panel_vertices=panel_vertices,
                     centroids=centroids,
                     normals=normals,
-                    weights=weights,
+                    weights=panel_areas,
+                    measure_factors=measure_factors,
                     pair_vectors=pair_vectors,
                     coefficients=coefficients,
                     value_scalars=value_scalars,
@@ -2279,7 +2341,8 @@ class KernelBasisCrossDecoder(nn.Module):
             cache.panel_vertices,
             cache.centroids,
             cache.normals,
-            cache.weights,
+            cache.geometric_panel_areas,
+            cache.representation_measure_factors,
             cache.pair_vectors,
             cache.coefficients,
             cache.value_scalars,

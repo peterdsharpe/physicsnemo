@@ -34,12 +34,40 @@ import torch
 
 from physicsnemo.experimental.nn.mesh_attention.kernel_decoder import (
     _LOG_RADIAL_EPS,
+    KernelDecoderCache,
     PairInvariantFeatures,
     exact_double_layer_member,
     exact_single_layer_member,
 )
 from physicsnemo.experimental.nn.mesh_attention.model import MeshTransformer
 from physicsnemo.mesh import DomainMesh, Mesh
+
+
+def test_kernel_cache_preserves_historical_weights_constructor():
+    """The measure split must not break exported experimental cache callers."""
+    weights = torch.tensor([0.25, 0.75])
+    cache = KernelDecoderCache(
+        panel_vertices=torch.zeros(2, 2, 2),
+        centroids=torch.zeros(2, 2),
+        normals=torch.zeros(2, 2),
+        weights=weights,
+        pair_vectors=torch.zeros(2, 1, 2),
+        coefficients=torch.zeros(2, 1, 1),
+        value_scalars=torch.zeros(2, 1, 1),
+        value_vectors=torch.zeros(2, 1, 1, 2),
+    )
+
+    assert cache.weights is weights
+    assert cache.quadrature_measures is weights
+    assert cache.geometric_panel_areas is weights
+    torch.testing.assert_close(
+        cache.representation_measure_factors, torch.ones_like(weights)
+    )
+
+    factors = torch.tensor([2.0, 4.0])
+    factored = dataclasses.replace(cache, measure_factors=factors)
+    assert factored.weights is weights
+    torch.testing.assert_close(factored.quadrature_measures, weights * factors)
 
 
 def _circle_boundary(

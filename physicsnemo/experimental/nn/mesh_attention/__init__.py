@@ -40,6 +40,7 @@ from .kernel_decoder import (
     PairInvariantFeatures,
 )
 from .model import (
+    CanonicalSourceGeometry,
     EncodedBoundary,
     FieldMode,
     FieldRoleRanks,
@@ -49,6 +50,7 @@ from .model import (
 
 __all__ = [
     "AttentionMoments",
+    "CanonicalSourceGeometry",
     "FieldMode",
     "FieldRoleRanks",
     "GeometryConditionedLinear",
