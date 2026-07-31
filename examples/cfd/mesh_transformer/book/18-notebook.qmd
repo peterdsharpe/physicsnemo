@@ -1982,3 +1982,36 @@ the truth table forbids launching a full same-cell retrain from this result.
 [Adjudication](../results/historical_k10000_one_step_parity_v3_job332069_2026-07-31/historical_k10000_one_step_parity_adjudication.json);
 the 326 MB gradient/update payload stays on AGA and this machine, recorded
 by its committed sha256 sidecar.
+
+## 2026-07-31 — Matched updates flip the adaptation story, but the registered gates say extend, not decide {#sec-nb-convergence-extension-verdict}
+
+The convergence extension finished (all 32 lanes at exactly 17,920
+optimizer updates; 160 checkpoint evaluations on the two fixed validation
+seeds) and its formal reduction is complete with the test splits still
+sealed. The pilot's ordering inverts once optimization is matched:
+
+| Architecture | Family | Pressure ratio pretrained-64 / scratch-128 [95% CI] | Half-label gate (<= 0.95) |
+|---|---|---|---|
+| MeshTransformer | fastback | 0.9385 [0.9296, 0.9474] | **passes** |
+| MeshTransformer | estate | 0.9595 [0.9496, 0.9700] | misses |
+| GeoTransolver | estate | 1.0135 [0.9913, 1.0347] | no signal |
+| GeoTransolver | fastback | 1.0101 [0.9791, 1.0594] | no signal |
+
+GeoTransolver's pilot-era larger pretraining gain was a warm-start
+artifact: at matched updates its ratios sit at ~1.01 with intervals
+straddling one. MeshTransformer's DrivAerML initialization is now worth
+approximately half the target labels on fastbacks, with wall-shear safety
+satisfied (0.949) and the strong-validation criterion (CI upper bound
+below one) met on both families.
+
+**No decision is banked.** The pre-registered plateau gate fails in all
+four cells -- scratch-128 is still improving 4--9% per stage against the
+pretrained arms' ~1% -- and every selected continuation rate sits on the
+search-grid edge, so the registered `extend_without_interpretation` rule
+routes both architectures to `refine_rate_grid_and_extend_same_checkpoints`
+before any half-label claim. The direction of the non-plateau (scratch
+closing faster) means extension will most plausibly *raise* these ratios;
+that is precisely what the gate exists to find out. Single training seed
+per cell remains this branch's declared limitation
+(@sec-nb-hseed-summary).
+[Formal reduction](../results/shift_suv_convergence_extension_2026-07-30/analysis/formal_convergence_summary.json).

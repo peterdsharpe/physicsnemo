@@ -1,0 +1,4607 @@
+{
+  "analysis_clarification_sha256": "fc9422bdad25ef9c669efc0338886dcc4de351991284be5aab846f0873bbb9c9",
+  "analysis_sha256": "f86e852de4c3d61c2177ef1ad4512fe4de4af8a0ba0e466de07d0b1db6935ccb",
+  "architecture_decisions": [
+    {
+      "advance_to_multiseed_confirmation": false,
+      "architecture": "mesh_transformer",
+      "close_as_optimization_only": false,
+      "next_action": "refine_rate_grid_and_extend_same_checkpoints",
+      "plateau_gate_on_both_families": false,
+      "unresolved_final_rate_grid_edge": true
+    },
+    {
+      "advance_to_multiseed_confirmation": false,
+      "architecture": "geotransolver",
+      "close_as_optimization_only": false,
+      "next_action": "refine_rate_grid_and_extend_same_checkpoints",
+      "plateau_gate_on_both_families": false,
+      "unresolved_final_rate_grid_edge": true
+    }
+  ],
+  "bootstrap": {
+    "primary_limitation": "Descriptive: the same validation cases select the continuation learning rate and quantify uncertainty.",
+    "primary_method": "paired validation-case resampling",
+    "replicates": 10000,
+    "seed": 20260730,
+    "selection_crossfit": {
+      "decision_role": "conservative sensitivity gate; it may block but not create advancement or closure",
+      "folds": 5,
+      "method": "five-fold case cross-fitting; select pressure-minimizing rate on four folds and evaluate pressure and WSS on the held-out fold",
+      "permutation_seed": 20260732
+    }
+  },
+  "decision_rules_applied": {
+    "field_safety_threshold": 1.1,
+    "material_half_label_threshold": 0.95,
+    "plateau_absolute_relative_change_threshold": 0.02,
+    "strong_signal_upper_bound": 1.0,
+    "test_splits_remain_sealed": true
+  },
+  "family_decisions": [
+    {
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "field_safety": true,
+      "final_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.949581129268658,
+          0.9700401429734409
+        ],
+        "point": 0.9595048345800029
+      },
+      "final_rate_grid_edge": true,
+      "final_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9517102363192124,
+          0.9689386249736772
+        ],
+        "point": 0.9602751380128246
+      },
+      "material_half_label_success": false,
+      "middle_to_final_absolute_relative_change": {
+        "pressure_ratio": 0.07066812100887288,
+        "pretrained_64": 0.010288571659533785,
+        "scratch_128": 0.07561324660728908
+      },
+      "plateau_gate": false,
+      "primary_field_safety": true,
+      "primary_final_rate_grid_edge": true,
+      "primary_material_half_label_success": false,
+      "primary_strong_validation_signal": true,
+      "selection_crossfit_field_safety": true,
+      "selection_crossfit_final_rate_grid_edge": true,
+      "selection_crossfit_material_half_label_success": false,
+      "selection_crossfit_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.949581129268658,
+          0.9700401429734409
+        ],
+        "point": 0.9595048345800029
+      },
+      "selection_crossfit_strong_validation_signal": true,
+      "selection_crossfit_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9517102363192124,
+          0.9689386249736772
+        ],
+        "point": 0.9602751380128246
+      },
+      "strong_validation_signal": true
+    },
+    {
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "field_safety": true,
+      "final_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9295829271921395,
+          0.9473835369601598
+        ],
+        "point": 0.9384894608221601
+      },
+      "final_rate_grid_edge": true,
+      "final_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9417095800437161,
+          0.9571312176159985
+        ],
+        "point": 0.9493493667258278
+      },
+      "material_half_label_success": true,
+      "middle_to_final_absolute_relative_change": {
+        "pressure_ratio": 0.08265628595276064,
+        "pretrained_64": 0.013824759426383615,
+        "scratch_128": 0.08911512049665771
+      },
+      "plateau_gate": false,
+      "primary_field_safety": true,
+      "primary_final_rate_grid_edge": true,
+      "primary_material_half_label_success": true,
+      "primary_strong_validation_signal": true,
+      "selection_crossfit_field_safety": true,
+      "selection_crossfit_final_rate_grid_edge": true,
+      "selection_crossfit_material_half_label_success": true,
+      "selection_crossfit_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9295829271921395,
+          0.9473835369601598
+        ],
+        "point": 0.9384894608221601
+      },
+      "selection_crossfit_strong_validation_signal": true,
+      "selection_crossfit_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9417095800437161,
+          0.9571312176159985
+        ],
+        "point": 0.9493493667258278
+      },
+      "strong_validation_signal": true
+    },
+    {
+      "architecture": "geotransolver",
+      "family": "estate",
+      "field_safety": true,
+      "final_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9913369045421714,
+          1.0347240825888615
+        ],
+        "point": 1.0134983165968874
+      },
+      "final_rate_grid_edge": true,
+      "final_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          1.052622666281399,
+          1.0977080654591627
+        ],
+        "point": 1.0747942270719806
+      },
+      "material_half_label_success": false,
+      "middle_to_final_absolute_relative_change": {
+        "pressure_ratio": 0.029622072501737762,
+        "pretrained_64": 0.014437938915117021,
+        "scratch_128": 0.04279241150085222
+      },
+      "plateau_gate": false,
+      "primary_field_safety": true,
+      "primary_final_rate_grid_edge": true,
+      "primary_material_half_label_success": false,
+      "primary_strong_validation_signal": false,
+      "selection_crossfit_field_safety": true,
+      "selection_crossfit_final_rate_grid_edge": true,
+      "selection_crossfit_material_half_label_success": false,
+      "selection_crossfit_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9913369045421714,
+          1.0347240825888615
+        ],
+        "point": 1.0134983165968874
+      },
+      "selection_crossfit_strong_validation_signal": false,
+      "selection_crossfit_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          1.052622666281399,
+          1.0977080654591627
+        ],
+        "point": 1.0747942270719806
+      },
+      "strong_validation_signal": false
+    },
+    {
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "field_safety": true,
+      "final_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.979121357608682,
+          1.0593507355959626
+        ],
+        "point": 1.010139467174468
+      },
+      "final_rate_grid_edge": true,
+      "final_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          1.0036207344000527,
+          1.0562324894146446
+        ],
+        "point": 1.026932256220537
+      },
+      "material_half_label_success": false,
+      "middle_to_final_absolute_relative_change": {
+        "pressure_ratio": 0.0648805278058393,
+        "pretrained_64": 0.00761734763557631,
+        "scratch_128": 0.0680807598114278
+      },
+      "plateau_gate": false,
+      "primary_field_safety": true,
+      "primary_final_rate_grid_edge": false,
+      "primary_material_half_label_success": false,
+      "primary_strong_validation_signal": false,
+      "selection_crossfit_field_safety": true,
+      "selection_crossfit_final_rate_grid_edge": true,
+      "selection_crossfit_material_half_label_success": false,
+      "selection_crossfit_pressure_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          0.9817807571716443,
+          1.0624759852024601
+        ],
+        "point": 1.0129667126756705
+      },
+      "selection_crossfit_strong_validation_signal": false,
+      "selection_crossfit_wss_ratio": {
+        "paired_case_bootstrap_95_ci": [
+          1.0067839546166466,
+          1.058449735966819
+        ],
+        "point": 1.029606888946993
+      },
+      "strong_validation_signal": false
+    }
+  ],
+  "fixed_evaluator_sha256": "e82b47fb5ba8372e468aad1ab8460efac394014135c8722c3016134e04d33834",
+  "fixed_validation_manifest_sha256": "4fd89d88d7bcea0a59903e74c77ab35ea505238975204bc83cd31cd7f23756bb",
+  "fixed_validation_seeds": [
+    20260730,
+    20260731
+  ],
+  "incomplete": [],
+  "invalid_fixed_validation_candidates": [],
+  "parent_summary_sha256": "f57eb93618ff2ec90089b5e21528a0a9ce5f74c1435309ff2adb124fea033bd1",
+  "preregistration_sha256": "91a065af59e3bd2a712457bf50bf27e7c13a0d3ca97fc648cd978631839a22e3",
+  "prospective_curve_forecast_evaluation": [
+    {
+      "actual_H_early": 0.8956254720595975,
+      "actual_H_final": 0.9595048345800029,
+      "actual_over_predicted": {
+        "early": 0.725639079641702,
+        "final": 0.7367616052711015
+      },
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "predicted_H_early": 1.2342574941,
+      "predicted_H_final": 1.3023274119,
+      "scratch_catchup_observed": true,
+      "scratch_catchup_predicted": true
+    },
+    {
+      "actual_H_early": 0.8685632055502076,
+      "actual_H_final": 0.9384894608221601,
+      "actual_over_predicted": {
+        "early": 0.7390943649426226,
+        "final": 0.757518706990193
+      },
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "predicted_H_early": 1.175172274,
+      "predicted_H_final": 1.2388993858,
+      "scratch_catchup_observed": true,
+      "scratch_catchup_predicted": true
+    },
+    {
+      "actual_H_early": 0.9248391814923491,
+      "actual_H_final": 1.0134983165968874,
+      "actual_over_predicted": {
+        "early": 1.0093526474836092,
+        "final": 1.0541674305724746
+      },
+      "architecture": "geotransolver",
+      "family": "estate",
+      "predicted_H_early": 0.9162696346,
+      "predicted_H_final": 0.9614206313,
+      "scratch_catchup_observed": true,
+      "scratch_catchup_predicted": true
+    },
+    {
+      "actual_H_early": 0.9138228390316082,
+      "actual_H_final": 1.010139467174468,
+      "actual_over_predicted": {
+        "early": 1.0010521729060335,
+        "final": 1.027640442568509
+      },
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "predicted_H_early": 0.91286235,
+      "predicted_H_final": 0.9829697483,
+      "scratch_catchup_observed": true,
+      "scratch_catchup_predicted": true
+    }
+  ],
+  "prospective_forecast_sha256": "25d8a3f2d7e914338b667897a9126e58755b138933869d8d0903ecbb073cf9aa",
+  "schema_version": 1,
+  "stage_results": [
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.884142713995529,
+          0.9076473979240202
+        ],
+        "point": 0.8956254720595975
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.8606176508919677,
+          0.8811792786355321
+        ],
+        "point": 0.8709359359268356
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 71,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.18043678329147475,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.21860052870981622
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": null,
+          "parent_learning_rate": 0.003,
+          "pressure_l2": 0.2014645506637265,
+          "rate_grid_edge": false,
+          "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+          "source": "parent",
+          "wss_l2": 0.2509949580587522
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.884142713995529,
+            0.9076473979240202
+          ],
+          "point": 0.8956254720595975
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.8606176508919677,
+            0.8811792786355321
+          ],
+          "point": 0.8709359359268356
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": null,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            }
+          ]
+        }
+      },
+      "stage": "early",
+      "total_updates": {
+        "pretrained_64": 9024,
+        "scratch_128": 8960
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.8854809827275713,
+          0.9077096676783463
+        ],
+        "point": 0.8961739083777682
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.8962690676988962,
+          0.9129803726119934
+        ],
+        "point": 0.9045799555118017
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 141,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.15762144981911688,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.19765706247452533
+        },
+        "scratch_128": {
+          "completed_epoch": 36,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.17588265887414567,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.21850701120465693
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.8854809827275713,
+            0.9077096676783463
+          ],
+          "point": 0.8961739083777682
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.8962690676988962,
+            0.9129803726119934
+          ],
+          "point": 0.9045799555118017
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "middle",
+      "total_updates": {
+        "pretrained_64": 13504,
+        "scratch_128": 13568
+      }
+    },
+    {
+      "absolute_update_mismatch": 0,
+      "architecture": "mesh_transformer",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.949581129268658,
+          0.9700401429734409
+        ],
+        "point": 0.9595048345800029
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.9517102363192124,
+          0.9689386249736772
+        ],
+        "point": 0.9602751380128246
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 210,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.1559997502375733,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.19646754100768252
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.1625836000147492,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.20459505117902851
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.949581129268658,
+            0.9700401429734409
+          ],
+          "point": 0.9595048345800029
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.9517102363192124,
+            0.9689386249736772
+          ],
+          "point": 0.9602751380128246
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "final",
+      "total_updates": {
+        "pretrained_64": 17920,
+        "scratch_128": 17920
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.8578685214462389,
+          0.8795378794668847
+        ],
+        "point": 0.8685632055502076
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.8356067145629086,
+          0.8595870289918058
+        ],
+        "point": 0.8476738531374567
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 71,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.1815217509113177,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.22074623955319625
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": null,
+          "parent_learning_rate": 0.003,
+          "pressure_l2": 0.20899083653483727,
+          "rate_grid_edge": false,
+          "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+          "source": "parent",
+          "wss_l2": 0.26041411886913607
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.8578685214462389,
+            0.8795378794668847
+          ],
+          "point": 0.8685632055502076
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.8356067145629086,
+            0.8595870289918058
+          ],
+          "point": 0.8476738531374567
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": null,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_mesh_transformer_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            }
+          ]
+        }
+      },
+      "stage": "early",
+      "total_updates": {
+        "pretrained_64": 9024,
+        "scratch_128": 8960
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.8589191998337136,
+          0.8749446556593177
+        ],
+        "point": 0.8668397098865679
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.8738669473153318,
+          0.889416954372622
+        ],
+        "point": 0.8818144937662467
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 141,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.15613823914618202,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.1970479681034281
+        },
+        "scratch_128": {
+          "completed_epoch": 36,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.18012354229435776,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.2234573932458656
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.8589191998337136,
+            0.8749446556593177
+          ],
+          "point": 0.8668397098865679
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.8738669473153318,
+            0.889416954372622
+          ],
+          "point": 0.8818144937662467
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "middle",
+      "total_updates": {
+        "pretrained_64": 13504,
+        "scratch_128": 13568
+      }
+    },
+    {
+      "absolute_update_mismatch": 0,
+      "architecture": "mesh_transformer",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.9295829271921395,
+          0.9473835369601598
+        ],
+        "point": 0.9384894608221601
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.9417095800437161,
+          0.9571312176159985
+        ],
+        "point": 0.9493493667258278
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 210,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.1539796655527269,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.1947306070213366
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.16407181111851124,
+          "rate_grid_edge": true,
+          "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.20512006838213315
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9295829271921395,
+            0.9473835369601598
+          ],
+          "point": 0.9384894608221601
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.9417095800437161,
+            0.9571312176159985
+          ],
+          "point": 0.9493493667258278
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_mesh_transformer_scratch_128_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "final",
+      "total_updates": {
+        "pretrained_64": 17920,
+        "scratch_128": 17920
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "geotransolver",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.9064436207614461,
+          0.9434623699309925
+        ],
+        "point": 0.9248391814923491
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.9416327316491382,
+          0.9875852506951697
+        ],
+        "point": 0.9642455092448641
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 71,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.08438004193959212,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.1251357641786036
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": null,
+          "parent_learning_rate": 0.003,
+          "pressure_l2": 0.09123752932205345,
+          "rate_grid_edge": false,
+          "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+          "source": "parent",
+          "wss_l2": 0.1297758329998363
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9064436207614461,
+            0.9434623699309925
+          ],
+          "point": 0.9248391814923491
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.9416327316491382,
+            0.9875852506951697
+          ],
+          "point": 0.9642455092448641
+        },
+        "rate_grid_edge": false,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": null,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_estate_n128_lr3e-3_seed42",
+              "source": "parent"
+            }
+          ]
+        }
+      },
+      "stage": "early",
+      "total_updates": {
+        "pretrained_64": 9024,
+        "scratch_128": 8960
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "geotransolver",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.9623851306290995,
+          1.0047041877214156
+        ],
+        "point": 0.984340122132703
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          1.0109531842538293,
+          1.0576014472735389
+        ],
+        "point": 1.0340803003785264
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 141,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.07879999720237472,
+          "rate_grid_edge": true,
+          "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.11835011425945494
+        },
+        "scratch_128": {
+          "completed_epoch": 36,
+          "continuation_learning_rate": 0.0003,
+          "pressure_l2": 0.08005362722759295,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+          "source": "continuation",
+          "wss_l2": 0.11444963627692425
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9668733446478254,
+            1.0094209926845028
+          ],
+          "point": 0.9890913542204189
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            1.0138940573173203,
+            1.0602439810528637
+          ],
+          "point": 1.0367436437503879
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr3e-4_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "middle",
+      "total_updates": {
+        "pretrained_64": 13504,
+        "scratch_128": 13568
+      }
+    },
+    {
+      "absolute_update_mismatch": 0,
+      "architecture": "geotransolver",
+      "family": "estate",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.9913369045421714,
+          1.0347240825888615
+        ],
+        "point": 1.0134983165968874
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          1.052622666281399,
+          1.0977080654591627
+        ],
+        "point": 1.0747942270719806
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 210,
+          "continuation_learning_rate": 0.003,
+          "pressure_l2": 0.07766228765625545,
+          "rate_grid_edge": true,
+          "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.11736826086887206
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.07662793946913396,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.10920068038382916
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9913369045421714,
+            1.0347240825888615
+          ],
+          "point": 1.0134983165968874
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            1.052622666281399,
+            1.0977080654591627
+          ],
+          "point": 1.0747942270719806
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_estate_lr3e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_estate_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "final",
+      "total_updates": {
+        "pretrained_64": 17920,
+        "scratch_128": 17920
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.8867430504118347,
+          0.9544205919676237
+        ],
+        "point": 0.9138228390316082
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.8968533750584089,
+          0.9392111423321188
+        ],
+        "point": 0.9157382375444634
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 71,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.077269059370714,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.11491506621994153
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": null,
+          "parent_learning_rate": 0.003,
+          "pressure_l2": 0.08455584175658948,
+          "rate_grid_edge": false,
+          "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+          "source": "parent",
+          "wss_l2": 0.12548898965722383
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.8908511145245931,
+            0.9576218900049069
+          ],
+          "point": 0.9173992911873956
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.9016540865509649,
+            0.9442587036616639
+          ],
+          "point": 0.9208110992722642
+        },
+        "rate_grid_edge": false,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": null,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            },
+            {
+              "continuation_learning_rate": null,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "pilot_geotransolver_scratch_fastback_n128_lr3e-3_seed42",
+              "source": "parent"
+            }
+          ]
+        }
+      },
+      "stage": "early",
+      "total_updates": {
+        "pretrained_64": 9024,
+        "scratch_128": 8960
+      }
+    },
+    {
+      "absolute_update_mismatch": 64,
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.9174522415741168,
+          0.9964445123462884
+        ],
+        "point": 0.9485941763399842
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          0.9547663200776909,
+          1.0059138256703635
+        ],
+        "point": 0.9774183781330095
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 141,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.0715272810423013,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.10856449220216635
+        },
+        "scratch_128": {
+          "completed_epoch": 36,
+          "continuation_learning_rate": 0.0003,
+          "pressure_l2": 0.07540345790259766,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+          "source": "continuation",
+          "wss_l2": 0.11107269377268926
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9174522415741168,
+            0.9964445123462884
+          ],
+          "point": 0.9485941763399842
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            0.9547663200776909,
+            1.0059138256703635
+          ],
+          "point": 0.9774183781330095
+        },
+        "rate_grid_edge": false,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.0003,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr3e-4_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "middle",
+      "total_updates": {
+        "pretrained_64": 13504,
+        "scratch_128": 13568
+      }
+    },
+    {
+      "absolute_update_mismatch": 0,
+      "architecture": "geotransolver",
+      "family": "fastback",
+      "pretrained_64_over_scratch_128_pressure": {
+        "paired_case_bootstrap_95_ci": [
+          0.979121357608682,
+          1.0593507355959626
+        ],
+        "point": 1.010139467174468
+      },
+      "pretrained_64_over_scratch_128_wss": {
+        "paired_case_bootstrap_95_ci": [
+          1.0036207344000527,
+          1.0562324894146446
+        ],
+        "point": 1.026932256220537
+      },
+      "selected": {
+        "pretrained_64": {
+          "completed_epoch": 210,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.07098243287717453,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.10779283319910367
+        },
+        "scratch_128": {
+          "completed_epoch": 70,
+          "continuation_learning_rate": 0.001,
+          "pressure_l2": 0.0702699331961798,
+          "rate_grid_edge": false,
+          "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+          "source": "continuation",
+          "wss_l2": 0.10496586561203003
+        }
+      },
+      "selection_crossfit": {
+        "folds": 5,
+        "permutation_seed": 20260732,
+        "pretrained_64_over_scratch_128_pressure": {
+          "paired_case_bootstrap_95_ci": [
+            0.9817807571716443,
+            1.0624759852024601
+          ],
+          "point": 1.0129667126756705
+        },
+        "pretrained_64_over_scratch_128_wss": {
+          "paired_case_bootstrap_95_ci": [
+            1.0067839546166466,
+            1.058449735966819
+          ],
+          "point": 1.029606888946993
+        },
+        "rate_grid_edge": true,
+        "selected_by_role": {
+          "pretrained_64": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.003,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": true,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr3e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_pretrained_64_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ],
+          "scratch_128": [
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 0,
+              "held_out_case_indices": [
+                0,
+                2,
+                5,
+                6,
+                7,
+                15,
+                20,
+                24,
+                37,
+                46,
+                50,
+                53,
+                54,
+                55,
+                57,
+                60,
+                64,
+                80,
+                85,
+                88
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 1,
+              "held_out_case_indices": [
+                1,
+                4,
+                14,
+                27,
+                28,
+                32,
+                35,
+                36,
+                38,
+                45,
+                68,
+                69,
+                77,
+                79,
+                81,
+                83,
+                89,
+                90,
+                92,
+                94
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 2,
+              "held_out_case_indices": [
+                3,
+                8,
+                12,
+                16,
+                17,
+                23,
+                25,
+                31,
+                41,
+                48,
+                52,
+                58,
+                63,
+                72,
+                75,
+                86,
+                87,
+                91,
+                93,
+                98
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 3,
+              "held_out_case_indices": [
+                9,
+                10,
+                18,
+                19,
+                26,
+                33,
+                34,
+                39,
+                56,
+                62,
+                65,
+                66,
+                67,
+                70,
+                71,
+                73,
+                76,
+                84,
+                96,
+                97
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            },
+            {
+              "continuation_learning_rate": 0.001,
+              "fold": 4,
+              "held_out_case_indices": [
+                11,
+                13,
+                21,
+                22,
+                29,
+                30,
+                40,
+                42,
+                43,
+                44,
+                47,
+                49,
+                51,
+                59,
+                61,
+                74,
+                78,
+                82,
+                95
+              ],
+              "rate_grid_edge": false,
+              "run_id": "convergence_geotransolver_scratch_128_fastback_lr1e-3_seed42",
+              "source": "continuation"
+            }
+          ]
+        }
+      },
+      "stage": "final",
+      "total_updates": {
+        "pretrained_64": 17920,
+        "scratch_128": 17920
+      }
+    }
+  ],
+  "status": "complete",
+  "terminal_events_sha256": "7e97630180953aa5959defea18af36619d91bd122859c37ff9d0c803f6c1862d",
+  "test_splits_remain_sealed": true,
+  "training_manifest_sha256": "e85bc40624f4c6f6572b44a5701ce289df7d101e95323cf398555106381f8e77"
+}
