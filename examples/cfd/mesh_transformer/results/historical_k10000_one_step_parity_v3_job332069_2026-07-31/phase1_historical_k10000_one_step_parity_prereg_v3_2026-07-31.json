@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "phase1_historical_k10000_one_step_parity_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-07-31T18:55:00Z",
+  "correction": {
+    "supersedes": {
+      "preregistration": "phase1_historical_k10000_one_step_parity_prereg_v2_2026-07-29.json",
+      "sha256": "d7458ae93a532e6a54eab7631e62a40d7c7f8f5a79433fd690cdda685af15460",
+      "launch_job_id": 307511
+    },
+    "invalid_launch": {
+      "phase": "UNIT_EXECUTION",
+      "run_status": "BLOCKED_PRODUCER_EXECUTION",
+      "completed_units": "0/2",
+      "producer_output_exists": false,
+      "adjudication_output_exists": false,
+      "reason": "The v2 producer called _verify_geometry_manifest without its runtime_support helper argument (TypeError at rank 0 before any measurement). The v3 producer adds the missing argument (one line); the adjudicator pin of the producer hash, and the focused tests, are updated to the fixed pair (32 focused tests pass). All manifests, helpers, execution source, checkpoint bindings, panel, gates, and truth table are byte-identical to v2.",
+      "scientific_evidence": "NONE"
+    },
+    "scope": "Administrative preregistration correction: instrument plumbing fix only; no producer or adjudication output was ever created, so no result could bias this amendment."
+  },
+  "question": "Are the legacy and canonical K=10000 same-cell training paths operationally equivalent for one exact current-recipe CombinedOptimizer(Muon,AdamW) update at a fresh seed-42 state and the historical epoch-491 state?",
+  "derivation": {
+    "exact_arithmetic_identity": "For raw selected vertices X, the recipe path first forms P=(X-m)/5 and the model then subtracts the area center C(P)=(c_A-m)/5 and divides by 8, giving (X-c_A)/40. Canonical source geometry constructs (X-c_A)/40 directly; trace centroids, areas A/1600, and normals are likewise identical in exact arithmetic.",
+    "remaining_difference": "The paths differ only through finite-precision evaluation order, promotion/casting, and cached geometry derivation. They do not change selected cells, source coverage, target coverage, targets, model parameters, or the mathematical operator.",
+    "consequence": "A full legacy-versus-canonical same-cell retrain is scientifically redundant if raw gradients and the exact one-step optimizer updates pass this much cheaper operational parity gate."
+  },
+  "hypothesis": {
+    "prediction": "Every BF16 case/regime pair passes the preregistered global-gradient, exact-combined-update, calibrated-gradient-distance, and active-module-direction gates.",
+    "falsifier": "All raw arrays, shared controls, parameter slices, provenance, and finite-value checks are valid, but at least one BF16 case/regime gate misses its inclusive threshold.",
+    "not_a_falsifier": [
+      "a missing JSON, NPZ, or SHA-256 sidecar",
+      "a malformed, non-finite, wrong-shape, wrong-dtype, incomplete, or manifest-inconsistent array",
+      "a parameter-order, parameter-slice, selected-cell, target, target-measure, model-state, optimizer-state, RNG-state, batch-order, source-weight, or learning-rate control failure",
+      "a dataset, configuration, checkpoint, training-state, or normalization-state provenance mismatch"
+    ]
+  },
+  "fixed_panel": {
+    "resolution": 10000,
+    "cases": [
+      {
+        "ordinal": 0,
+        "case_id": "run_118"
+      },
+      {
+        "ordinal": 12,
+        "case_id": "run_271"
+      },
+      {
+        "ordinal": 24,
+        "case_id": "run_429"
+      },
+      {
+        "ordinal": 35,
+        "case_id": "run_86"
+      }
+    ],
+    "regimes": [
+      "fresh_seed42",
+      "checkpoint_epoch491"
+    ],
+    "precisions": {
+      "bfloat16": "deciding",
+      "float32": "diagnostic only"
+    }
+  },
+  "path_and_measure_contract": {
+    "legacy_path": "Historical pipeline centering/nondimensionalization followed by model-derived area centering and reference-length division.",
+    "canonical_path": "Complete raw-derived canonical source geometry supplied through CanonicalSourceGeometry and decoded at its canonical centroids.",
+    "source_measure_weights": "Source measure weights are explicitly absent in both arms. This is required because the current canonical-source API rejects boundary measure weights and because model-visible Horvitz-Thompson source weights would change the operator rather than isolate geometry-path parity.",
+    "target_measure": "Preserved, positive, raw-byte identical between arms, and used by the current LossCalculator in both arms.",
+    "ht_weight_caveat": "The current recipe carries a target quadrature/HT measure, while the historical flagship training objective was uniform over retained target cells. Therefore this gate is not an exact replay of the historical loss. It tests path parity under the current target-measure-preserving loss while explicitly removing the unresolved source-weight confound.",
+    "optimizer": "The exact current CombinedOptimizer: Muon for two-dimensional parameter tensors and AdamW for all other tensors. The raw flattened update is parameter_after_step minus parameter_before_step; an AdamW-only surrogate is forbidden.",
+    "stochastic_modules": "The producer must inspect and report that no stochastic module is active. Model, optimizer, RNG, batch order, parameter order, and learning rate are restored identically before each arm."
+  },
+  "raw_artifact_contract": {
+    "producer_outputs": [
+      "one strict JSON summary and canonical SHA-256 sidecar",
+      "one NPZ with canonical SHA-256 sidecar",
+      "raw flattened float32 gradient and parameter-update vectors for every arm/case/regime/precision",
+      "training-space pressure/WSS predictions and one scalar loss for descriptive validation",
+      "selected cell IDs, training targets, and target measure for raw-byte shared-control checks",
+      "exact learning rate and parameter tensor-to-module slice metadata"
+    ],
+    "gradient_vector": "All named trainable parameter gradients flattened in one frozen order after backward and before optimizer.step; absent gradients are forbidden rather than silently zero-filled.",
+    "update_vector": "All named trainable parameter deltas flattened in the same order after exactly one CombinedOptimizer(Muon,AdamW) step.",
+    "parameter_slices": "Ordered positive-length tensor slices form a contiguous non-overlapping partition of the full flattened vector; every slice maps to exactly one declared module and every module has at least one slice.",
+    "shared_controls": "Selected IDs, targets, and target measures are raw-byte identical across arms and execution cells for each case. Source geometry, globals, initial parameters, optimizer state, RNG state, parameter order, and batch order are independently hashed per arm and must match."
+  },
+  "deciding_gates": {
+    "reduction_precision": "All statistics are independently recomputed in float64 from the persisted raw vectors.",
+    "global_gradient_cosine_inclusive_minimum": 0.999,
+    "global_update_cosine_inclusive_minimum": 0.9999,
+    "update_symmetric_relative_l2_inclusive_maximum": 0.01,
+    "symmetric_relative_l2_definition": "2*norm(a-b)/(norm(a)+norm(b))",
+    "between_case_calibration": "Within each regime and precision, compute all six ordinary pairwise symmetric-relative-L2 distances among the four legacy case gradients and take their median.",
+    "path_gradient_distance_gate": "For each case, legacy-versus-canonical gradient symmetric relative L2 must be no greater than 0.1 times that regime/precision median between-case legacy-gradient distance.",
+    "active_module_definition": "A module is active when its mean two-arm squared-gradient energy is at least 1% of the total mean two-arm squared-gradient energy.",
+    "active_module_gradient_cosine_inclusive_minimum": 0.99,
+    "joint_rule": "Every gate must pass for every one of the eight BF16 case/regime pairs. FP32 cannot pass, fail, rescue, or invalidate a finite schema-valid BF16 scientific result."
+  },
+  "descriptive_nondeciding_outputs": [
+    "FP32 copies of all gradient/update statistics",
+    "reported scalar loss and an independent float64 reconstruction of the target-measure-weighted channel-normalized Huber loss",
+    "uniform pressure relative L2 and raw-vector Frobenius WSS relative L2 from the stored predictions and targets",
+    "per-module energy fractions and cosines below the 1% deciding activity floor"
+  ],
+  "truth_table": [
+    {
+      "outcome": "NEGLIGIBLE_OPTIMIZATION_EFFECT_PASS",
+      "condition": "The complete instrument is valid and every BF16 case/regime gate passes.",
+      "next_step": "Retire a full same-cell legacy-versus-canonical retrain and advance to a separately preregistered canonical fixed-Q source-support H-QC experiment."
+    },
+    {
+      "outcome": "MATERIAL_PARITY_DIFFERENCE_FAIL",
+      "condition": "The complete instrument is valid but at least one BF16 case/regime gate fails.",
+      "next_step": "Run one fixed 16-step paired microtrajectory. Do not launch a full same-cell retrain from this result."
+    },
+    {
+      "outcome": "INVALID_ONE_STEP_PARITY_COMPARISON",
+      "condition": "A present artifact, array, manifest, shared control, parameter layout, source-weight declaration, optimizer binding, or provenance binding is invalid.",
+      "next_step": "Repair and rerun; no parity evidence exists."
+    },
+    {
+      "outcome": "INCOMPLETE_ONE_STEP_PARITY_COMPARISON",
+      "condition": "A required artifact or sidecar is absent and no present evidence establishes invalidity.",
+      "next_step": "Complete or rerun; no parity evidence exists."
+    }
+  ],
+  "scientific_scope": {
+    "claim_if_passed": "Operational one-step legacy/canonical parity for the four fixed K=10000 cases, two fixed parameter/optimizer states, BF16, the exact current CombinedOptimizer(Muon,AdamW), absent source weights, and preserved target measure.",
+    "does_not_support": [
+      "full training-trajectory identity",
+      "historical uniform-target-loss replay",
+      "population or OOD generalization",
+      "other source counts",
+      "H-QC or an independent source/target coverage mechanism",
+      "architecture superiority",
+      "a measure-aware source operator",
+      "force accuracy",
+      "triangle-area WSS causality"
+    ],
+    "triangle_area_wss_role": "Not part of this gate. It remains an exploratory secondary in later source/target-coverage experiments."
+  },
+  "provenance_bindings": {
+    "execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "dataset_manifest_sha256": "51c2268df5b9b365f4ef6147c6ec390f10c55f733ad967f6617bd5e52f62e7ca",
+    "historical_dataset_config_sha256": "a86a23fb5ae87a400f6b326c597c1a1358429c020628197bd77d2465f1fabed3",
+    "resolved_config_sha256": "a71987df4d49d38cc7f6b43c08ba0a0592fd39cf16a50aef04bf1b0d4f080fe1",
+    "model_checkpoint_sha256": "4c76b1130ffacf93d3590056734e3d8881cc7b12da4f22911f69aa4e612e7a88",
+    "training_state_sha256": "3783bda98ed561db95638d1c6fbb914b73be1bf36ed91ad79872f7f19763cea7",
+    "normalization_state_sha256": "31a73b08f3e3f6b2d8c60ed659247deae996d2596e752f5423cabbb29f186b94"
+  },
+  "frozen_launch_bindings": {
+    "producer_sha256": "f2458d95573b188f8523602204219df98c875c6cd4b2a4e9d306a594d4542500",
+    "adjudicator_sha256": "6b963971fe134671306530851e0e756ede80d4b5a3cad0e952fda8e22cc94048",
+    "producer_test_sha256": "b15a41517ecf222ac402af9c970d34d66e15f271eb833247cf77c6577bdabb9e",
+    "adjudicator_test_sha256": "ac746d68b98a3d44ce9fe50503c131a3ef88060338eccd89aa430f45c8568bad",
+    "legacy_replay_support_sha256": "bce26e1e55d9231843c2255ed7e57fe20166e6fd6098b77d9a63944e8b1dd7a5",
+    "runtime_helper_sha256": "dc4d2a71a0c9c72ff62166801433b21ae6f9b672801dfe5388c7975e887f4896",
+    "canonical_geometry_helper_v5_sha256": "694c45556acd3d002fcd34ffaac2872761ce61eaa60f842c8040f71edd1af7ac",
+    "execution_source_manifest_sha256": "e8edb80f34c005f85e1e87ebc27567ddf0a74fe2bc34e06ba40c35c92e54cfb4",
+    "execution_source_tree_sha256": "fe6bbcf3c28154c7c028456b4b067aec3818effb72c73082612200e482c2c67e",
+    "geometry_manifest_sha256": "3d33209f775513a690d61be560e640a348268132e14dd56675d256ee380bf4b0",
+    "target_input_manifest_sha256": "d7502e9539b983de07ccb58a6313ab844aa5ea5ef4e3e165dd49c6bbfa1a2e49"
+  },
+  "hash_cycle_policy": "This preregistration binds the producer, adjudicator, focused tests, helpers, execution source, and frozen input manifests. The wrapper binds this preregistration by SHA-256. To prevent a self-referential hash cycle, this preregistration excludes wrapper SHA-256.",
+  "adjudication": {
+    "sole_categorical_publisher": "drivaerml_historical_k10000_one_step_parity_adjudicate.py",
+    "producer_may_publish_deciding_statistics": false,
+    "producer_may_publish_a_categorical_outcome": false,
+    "valid_pass_and_valid_fail_exit_code": 0,
+    "invalid_exit_code": 2,
+    "incomplete_exit_code": 3
+  },
+  "launch_state": {
+    "producer_implemented_by_this_file": false,
+    "task_staged": false,
+    "scheduler_test_run": false,
+    "job_submitted": false,
+    "producer_output_exists": false,
+    "adjudication_output_exists": false
+  }
+}

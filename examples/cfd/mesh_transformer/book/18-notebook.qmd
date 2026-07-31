@@ -1959,3 +1959,26 @@ controlled-reset wave (@sec-nb-controlled-reset), and the repaired
 train-only gauge recalibration (@sec-nb-gauge-recalibration). The review
 also committed four days of working-tree state (results, studies, the
 notebook rewrite, and its archives) that had existed on one machine only.
+
+## 2026-07-31 — One-step parity: the canonical and legacy paths are not operationally equivalent {#sec-nb-one-step-parity-verdict}
+
+The repaired instrument (v3; the v2 producer had omitted one helper argument
+and never measured anything) returned a valid adjudication with the
+registered outcome `MATERIAL_PARITY_DIFFERENCE_FAIL`: all eight case/regime
+cells fail their BF16 gates. The sharp part is the fresh-seed regime: the
+legacy and canonical paths produce whole-model gradients whose cosine rounds
+to 1.000000 -- passing the 0.999 gradient gate outright -- yet the
+CombinedOptimizer update differs by 11--15% symmetric relative L2 (update
+cosine 0.988--0.994 against a 0.9999 gate). At the trained epoch-491 state
+the gradient cosine drops to 0.995--0.999 and the update difference grows to
+22--25%. Per-module gradient cosines pass everywhere (>= 0.9976), so the
+divergence is a whole-vector effect that the optimizer transform amplifies
+from a sub-gate-level input difference, not a single broken module. Read
+beside @sec-nb-hqc-campaign: cohort-level field accuracy is noninferior
+while single-update equivalence fails. The pre-registered next step is one
+fixed 16-step paired microtrajectory
+(`studies/phase1_historical_k10000_microtrajectory_prereg_v1_2026-07-29.json`);
+the truth table forbids launching a full same-cell retrain from this result.
+[Adjudication](../results/historical_k10000_one_step_parity_v3_job332069_2026-07-31/historical_k10000_one_step_parity_adjudication.json);
+the 326 MB gradient/update payload stays on AGA and this machine, recorded
+by its committed sha256 sidecar.
