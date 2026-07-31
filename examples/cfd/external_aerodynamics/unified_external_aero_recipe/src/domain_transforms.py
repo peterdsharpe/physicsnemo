@@ -331,9 +331,18 @@ class RandomResolutionSubsampleMesh(SubsampleMesh):
         self.n_cells_choices = choices
 
     def __call__(self, mesh: Mesh) -> Mesh:
+        ### The draw must live on the generator's device: pipelines running
+        ### on CUDA seed a CUDA generator, and torch.randint defaults to CPU.
+        ### An unseeded transform (generator still None) uses the global CPU
+        ### RNG, matching the base class's behavior.
+        generator = self._generator
+        device = generator.device if generator is not None else "cpu"
         index = int(
             torch.randint(
-                len(self.n_cells_choices), (1,), generator=self._generator
+                len(self.n_cells_choices),
+                (1,),
+                generator=generator,
+                device=device,
             ).item()
         )
         self.n_cells = self.n_cells_choices[index]
