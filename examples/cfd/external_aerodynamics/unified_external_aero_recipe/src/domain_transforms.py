@@ -65,7 +65,11 @@ from tensordict import TensorDict
 from physicsnemo.datapipes._rng import spawn_generator
 from physicsnemo.datapipes.readers.mesh import DomainMeshReader, _subsample_mesh
 from physicsnemo.datapipes.registry import register
-from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh, SetGlobalField
+from physicsnemo.datapipes.transforms.mesh import (
+    MeshToDomainMesh,
+    SetGlobalField,
+    SubsampleMesh,
+)
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
 from physicsnemo.mesh import DomainMesh, Mesh
 
@@ -298,3 +302,39 @@ class BoundaryMeshToDomainMesh(MeshToDomainMesh):
             boundaries=new_boundaries,
             global_data=domain.global_data,
         )
+
+
+@register()
+class RandomResolutionSubsampleMesh(SubsampleMesh):
+    r"""``SubsampleMesh`` whose cell count is drawn per sample.
+
+    Mixed-resolution training against the coverage-specific-accuracy
+    defect: every draw keeps the Horvitz--Thompson measure bookkeeping of
+    the base class, so the effective quadrature measure stays unbiased at
+    every resolution. Place it in the ``augmentations:`` list (train-only);
+    the pipeline's fixed ``SubsampleMesh`` cap must be at least
+    ``max(n_cells_choices)`` so it never re-cuts a draw.
+    """
+
+    def __init__(
+        self,
+        n_cells_choices: list[int],
+        compact: bool = True,
+    ) -> None:
+        choices = tuple(int(n) for n in n_cells_choices)
+        if len(choices) < 2 or any(n <= 0 for n in choices):
+            raise ValueError(
+                "n_cells_choices must list at least two positive cell counts, "
+                f"got {n_cells_choices!r}"
+            )
+        super().__init__(n_cells=max(choices), compact=compact)
+        self.n_cells_choices = choices
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        index = int(
+            torch.randint(
+                len(self.n_cells_choices), (1,), generator=self._generator
+            ).item()
+        )
+        self.n_cells = self.n_cells_choices[index]
+        return super().__call__(mesh)

@@ -26,6 +26,14 @@ Iterations 1--6 predate the notebook and are summarized in @sec-learned-bie,
 
 ## Current research agenda {#sec-nb-current-agenda}
 
+**EDIT (2026-07-31): this agenda is superseded.** The four transfer-cause
+questions below are retired by the program decision at
+@sec-nb-model-quality-agenda: the program returns to model quality —
+accuracy, graceful degradation, discretization indifference, and
+simplicity, on one frozen scorecard — and stops designing transfer
+instruments. The text below is retained as the record of the superseded
+agenda.
+
 The long-term goal is an accurate surrogate that remains useful when boundary
 conditions, geometry, discretization, or PDE parameters change. The evidence
 does not yet identify such an architecture. It supports four questions, in
@@ -2015,3 +2023,96 @@ that is precisely what the gate exists to find out. Single training seed
 per cell remains this branch's declared limitation
 (@sec-nb-hseed-summary).
 [Formal reduction](../results/shift_suv_convergence_extension_2026-07-30/analysis/formal_convergence_summary.json).
+
+## 2026-07-31 — Program decision: optimize the model, not the transfer eval {#sec-nb-model-quality-agenda}
+
+Peter's directive, adopted as the governing agenda: the program had drifted
+into designing ever-more-elaborate instruments whose purpose was to exhibit
+cross-dataset transfer -- eval-first drift, the same failure the 07-29
+altitude reset caught one level down. Each instrument was individually
+pre-registered and honest (the gates refused a favorable half-label headline
+hours before this entry), but the trajectory was motivated: iterating on
+experiment design until a transfer effect appears is a garden of forking
+paths at the meta level. The transfer question is a question about datasets;
+this program is about the model. The falsification discipline survives the
+refocus; its target changes.
+
+**Thesis.** Build the simplest boundary-to-interior surrogate that is
+accurate in-family, never catastrophic out-of-family, and indifferent to
+discretization -- each property by construction where a mechanism is known
+-- measured on one small frozen scorecard that never changes. Success is a
+model configuration you would hand a stranger: fewer knobs than the
+flagship, no failure mode that produces non-physical output, and a flat
+resolution curve instead of a spike at the training resolution.
+
+**The frozen scorecard** (all instruments already exist; no new evals will
+be built under this agenda):
+
+1. In-family accuracy: DrivAerML validation pressure + WSS, fixed protocol.
+2. Resolution curve: the coverage sweep of @sec-nb-hcc-summary, reported as
+   a curve, with the signed diagnostic `pred_rms/true_rms` primary at each
+   resolution (the relative-L2 ratio conflates collapse with divergence and
+   was retired by the five-seed verdict).
+3. Foreign-family boundedness (smoke test, not a claim): zero-shot SHIFT-SUV
+   pressure relative L2 finite and < 3.0 on every seed.
+4. Seed band: 5 seeds, report min-max on 1-3.
+5. Strong-form operator residual (the existing fidelity column).
+6. Parameter and knob count.
+
+**The measured defects this agenda attacks, in order:**
+
+1. *Coverage-specific accuracy.* Error minimizes sharply at the training
+   resolution; above it the prediction collapses toward zero RMS (4 of 5
+   seeds) rather than diverging. Diagnosed root: random subsampling is a
+   biased operator (far-field completeness), so training only ever sees one
+   coverage (@sec-nb-hdi-summary, @sec-nb-hcc-summary).
+2. *Unbounded out-of-family failure.* Checkpoints detonate to 1e3-1e13 on a
+   foreign family while a generic baseline stays structured; the degree-1
+   homogeneous mode improves the level ~6700x at the median but with a
+   2491x seed band, so boundedness is not yet a property of the
+   architecture (@sec-nb-wave-summary, @sec-nb-hseed-summary).
+3. *Seed instability itself*, which couples to (2) and caps every claim.
+4. *The incumbent's unexplained 2.34x matched-parameter efficiency* -- the
+   one architectural question deferred all program: locate the mechanism of
+   the learned soft-slice global exchange and absorb or refute it.
+5. *Simplicity debt.* Consolidate to one canonical configuration whose
+   every component cites the factorial that earned it; the eight learned
+   kernel members are already evidence-orphaned at industrial scale, and
+   the trace/self-identification channel (3.8x) stays.
+
+**Closed and parked, with reasons.** The half-label/adaptation branch is
+CLOSED with its verdict recorded and unbanked
+(@sec-nb-convergence-extension-verdict): suggestive (0.9385 on fastbacks),
+unresolved by its own plateau and grid-edge gates, and not pursued further
+because the objective is retired -- extending it again would have been
+instrument-tuning. The rectangle/nonseparable transfer-instrument line
+remains closed. The replay/parity infrastructure line is parked at its
+verdict (@sec-nb-one-step-parity-verdict); the staged microtrajectory
+pre-registration stays on the shelf unless canonical-path training is
+actually blocked. The SHIFT-SUV dataset copy to the second cluster
+completes regardless; it serves the smoke test.
+
+**Week one, pre-registered separately:** (a) measure-consistent training --
+measure-weighted objectives and mixed-resolution sampling against defect 1,
+using the quadrature-measure machinery landed 2026-07-31; (b) held until
+(a) reads out: the bounded-drive-path conjunction against defect 2. One
+variable at a time; acceptance criteria on the frozen scorecard only.
+
+## 2026-07-31 — Pre-registration: measure-consistent mixed-resolution training {#sec-nb-mixedres-prereg}
+
+First experiment of the model-quality agenda, against defect 1
+(coverage-specific collapse). Hypothesis: the collapse exists because
+training only ever sees one coverage of a biased-sampled operator; training
+on an unbiased effective measure (Horvitz--Thompson weights, the new target
+quadrature measure) across mixed resolutions {2.5k, 5k, 10k, 20k} removes
+it. The deciding gate is structural and uses the signed diagnostic that
+replaced the retired ratio: at 40k -- a resolution never trained --
+`pred_rms/true_rms` must land in [0.7, 1.3] on all three seeds, against the
+historical collapse to 0.055--0.355. One fresh fixed-10k control seed pins
+code-epoch drift; every gate is within-experiment. Falsifier: if the
+mixed-measure arm still collapses, the defect is architectural, not
+sampling-statistical, and the next change must be to the model. Registered
+prediction is a genuine coin flip (p ~ 0.55).
+[Preregistration](../results/mixedres_training_preregistration_2026-07-31.json)
+(sha256 fb2d986a...); implementation: `RandomResolutionSubsampleMesh` (HT
+measure unbiasedness unit-tested exact) and the mixedres dataset variant.

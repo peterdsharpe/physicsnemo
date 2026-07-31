@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mixed_resolution_training_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-07-31T20:30:00Z",
+  "agenda": "model-quality (sec-nb-model-quality-agenda); defect 1: coverage-specific accuracy",
+  "question": "Does measure-consistent, mixed-resolution training remove the coverage-specific collapse (prediction RMS -> 0 above the training resolution) at bounded in-family cost?",
+  "known_state": {
+    "collapse": "Flagship trained at fixed 10k: pred_rms/true_rms at 40k = 0.355/0.270/0.055 on three inspected seeds (total signal loss, not divergence); rel-L2 40k/10k ratios 5.5-246 across five seeds (sec-nb-homog-seeds-verdict).",
+    "mechanism": "Random subsampling is a biased operator (far-field completeness, sec-nb-hdi-summary); training only ever sees one coverage. HT measure weights and the target quadrature measure (committed 2026-07-31) make objectives measure-consistent; SubsampleMesh composes unbiased HT weights at any draw (unit-tested: total measure exact).",
+    "retired_statistic": "The relative-L2 40k/10k ratio conflates collapse with divergence (Q2 retirement); the signed diagnostic pred_rms/true_rms is primary."
+  },
+  "arms": {
+    "control": {"dataset": "drivaer_ml_surface", "sampling_resolution": 10000, "seeds": [42], "purpose": "fresh same-protocol control: pins code-epoch drift (measure-weighted objective now rides all arms) and reproduces the collapse under the new code"},
+    "mixedres": {"dataset": "drivaer_ml_surface_mixedres", "sampling_resolution": 20000, "n_cells_choices": [2500, 5000, 10000, 20000], "seeds": [42, 43, 44], "note": "40000 is deliberately never trained: the 40k gate tests resolution extrapolation, not coverage memorization"}
+  },
+  "protocol": {
+    "model": "mesh_transformer_surface_flagship",
+    "epochs": 500, "lr": 3.0e-3, "precision": "bfloat16", "augment": true,
+    "ddp": "1 node x 4 GPUs per run, torchrun standalone",
+    "checkpoint": "final epoch only; no checkpoint selection anywhere in this experiment",
+    "note_vs_history": "augment=true and the measure-weighted objective differ from the historical flagship protocol; every gate is therefore within-experiment against the fresh control, never against historical numbers (quoted above as context only)"
+  },
+  "instrument": "existing resolution sweep (the coverage-cliff instrument): evaluate each final checkpoint on the id_reference cases at sampling_resolution in {2500, 5000, 10000, 20000, 40000}, reporting pressure pred_rms/true_rms and relative L2 per resolution",
+  "deciding_gates": {
+    "G1_primary": "at 40000, pressure pred_rms/true_rms in [0.7, 1.3] for 3/3 mixedres seeds (structural: collapse excluded)",
+    "G2_secondary": "pressure rel-L2(40000)/rel-L2(10000) < 3.0 for 3/3 mixedres seeds",
+    "G3_guard": "in-family pressure rel-L2 at 10000 <= 1.15 x the fresh control's, per seed"
+  },
+  "predictions": {
+    "control_seed42": "collapses at 40k (pred_rms/true_rms < 0.5), p ~ 0.85",
+    "G1": "p ~ 0.55 (coin-flip by design: if unbiased-measure mixed-resolution training does not fix collapse, the defect is architectural, not sampling-statistical)",
+    "G3": "p ~ 0.7 that in-family cost stays within 15%"
+  },
+  "falsifier": "If 2+ mixedres seeds still collapse at 40k (G1 fails), mixed-resolution sampling under an unbiased measure is insufficient: the coverage defect is architectural (decode/receptive structure colluding with coverage), and the next experiment must change the model, not the data distribution. If G3 fails, the cost is material and the arm is not adopted regardless of G1.",
+  "seed_policy": "3 seeds; the primary is a structural collapse/no-collapse discriminant with order-of-magnitude historical separation, chosen per the pilot-variance rule",
+  "launch_state": {"task_staged": false, "job_submitted": false, "results_inspected": false}
+}
