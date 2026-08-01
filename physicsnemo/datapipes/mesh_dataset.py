@@ -137,7 +137,14 @@ class MeshDataset(DatasetBase):
         for child, t in zip(children[1:], self.transforms):
             if hasattr(t, "set_generator"):
                 if self._device is not None and self._device != child.device:
-                    dev_gen = torch.Generator(device=self._device)
+                    ### Resolve an index-less "cuda" to the current device:
+                    ### consumers (e.g. weighted_multinomial) compare the
+                    ### generator's device against indexed sample devices,
+                    ### and torch.device("cuda") != torch.device("cuda:0").
+                    dev = torch.device(self._device)
+                    if dev.type == "cuda" and dev.index is None:
+                        dev = torch.device("cuda", torch.cuda.current_device())
+                    dev_gen = torch.Generator(device=dev)
                     dev_gen.manual_seed(child.initial_seed())
                     t.set_generator(dev_gen)
                 else:
