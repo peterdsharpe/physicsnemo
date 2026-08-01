@@ -288,40 +288,69 @@ def _raise_if_divergent_loss(
     epoch: int,
     step: int,
     threshold: float | None,
+) -> None:
+    """Raise locally when this rank's loss is non-finite or above *threshold*.
+
+    Purely rank-local (one device-to-host sync, no collective): cross-rank
+    synchronization of the failure is the job of
+    :func:`_step_failure_barrier`, which every step passes through before
+    backward.  Invoked only when ``training.divergence_loss_threshold`` is
+    configured.
+    """
+    local_loss = loss.detach().item()
+    if not math.isfinite(local_loss):
+        reason = "non-finite"
+    elif threshold is not None and local_loss > threshold:
+        reason = f"above {threshold:g}"
+    else:
+        return
+    raise RuntimeError(
+        f"{mode} loss guard triggered at epoch {epoch}, step {step}: "
+        f"local loss {local_loss!r} is {reason}"
+    )
+
+
+def _step_failure_barrier(
+    step_error: BaseException | None,
+    *,
+    mode: Literal["train", "val"],
+    epoch: int,
+    step: int,
     dist_manager: DistributedManager,
 ) -> None:
-    """Stop every rank before backward when any rank reports a bad loss.
+    """Fail every rank together when any rank's step failed.
 
-    Non-finite losses are fatal; when *threshold* is set, a finite loss
-    above it is fatal as well.  The integer failure flag is reduced across
-    ranks before any rank raises, keeping DDP workers on the same
-    control-flow path rather than letting healthy ranks enter backward while
-    another rank exits.  Each call costs one device-to-host sync (plus the
-    all-reduce under DDP), so the epoch loop invokes this only when
-    ``training.divergence_loss_threshold`` is configured -- the default
-    path keeps the loop's no-per-step-sync discipline.
+    A rank that raises anywhere between two collectives (data loading, a
+    transform, forward, a validation check in the model) would otherwise
+    exit alone while its peers block in the next allreduce until the NCCL
+    watchdog -- a 10-minute opaque hang per incident, measured in this
+    recipe.  Every step therefore all-reduces a failure flag at one fixed
+    point before backward: the failing rank re-raises its real exception,
+    and healthy peers raise a "peer rank failed" error instead of hanging.
+    Cost is one tiny collective plus a host read per step, alongside the
+    logging reduce the loop already pays.  Residual exposure: a rank whose
+    CUDA context is already dead may fail inside this barrier itself; the
+    process-group timeout is the backstop for that case.
     """
-    local_failure = ~torch.isfinite(loss.detach())
-    if threshold is not None:
-        local_failure.logical_or_(loss.detach() > threshold)
-
-    any_failure = local_failure.to(dtype=torch.int32)
     if dist_manager.world_size > 1:
-        dist.all_reduce(any_failure, op=dist.ReduceOp.MAX)
-    if not bool(any_failure.item()):
-        return
-
-    local_loss = loss.detach().item()
-    if bool(local_failure.item()):
-        reason = (
-            "non-finite" if not math.isfinite(local_loss) else f"above {threshold:g}"
+        flag = torch.tensor(
+            0 if step_error is None else 1,
+            dtype=torch.int32,
+            device=dist_manager.device,
         )
-        detail = f"local loss {local_loss!r} is {reason}"
-    else:
-        detail = f"another rank reported a divergent loss; local loss is {local_loss!r}"
-    raise RuntimeError(
-        f"{mode} loss guard triggered at epoch {epoch}, step {step}: {detail}"
-    )
+        dist.all_reduce(flag, op=dist.ReduceOp.MAX)
+        if not bool(flag.item()):
+            return
+        if step_error is None:
+            raise RuntimeError(
+                f"a peer rank failed during {mode} epoch {epoch}, step {step}; "
+                "failing together instead of hanging in the next collective"
+            )
+    if step_error is not None:
+        raise RuntimeError(
+            f"{mode} step failed at epoch {epoch}, step {step} on this rank; "
+            "all ranks are stopping together"
+        ) from step_error
 
 
 def _finish_epoch(
@@ -507,28 +536,45 @@ def _run_epoch(
     epoch_t0 = time.perf_counter()
     with grad_ctx:
         step_t0 = time.perf_counter()
-        for i, batch in enumerate(dataloader):
-            batch = recursive_to_device(batch, dist_manager.device)
+        ### Manual iteration so the loader's own __next__ (which re-raises
+        ### per-sample transform/reader failures) sits inside the step's
+        ### failure barrier along with the forward pass. Per-rank step
+        ### counts are equal by sampler construction, so every rank runs
+        ### the same number of barrier collectives.
+        iterator = iter(dataloader)
+        for i in range(num_steps):
+            step_error: BaseException | None = None
+            try:
+                batch = next(iterator)
+                batch = recursive_to_device(batch, dist_manager.device)
 
-            loss, losses, metrics = forward_pass(
-                batch,
-                model,
-                precision,
-                loss_calculator,
-                metric_calculator,
-                output_type=output_type,
-                target_config=target_config,
-            )
-
-            if divergence_loss_threshold is not None:
-                _raise_if_divergent_loss(
-                    loss,
-                    mode=mode,
-                    epoch=epoch,
-                    step=i,
-                    threshold=divergence_loss_threshold,
-                    dist_manager=dist_manager,
+                loss, losses, metrics = forward_pass(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    output_type=output_type,
+                    target_config=target_config,
                 )
+
+                if divergence_loss_threshold is not None:
+                    _raise_if_divergent_loss(
+                        loss,
+                        mode=mode,
+                        epoch=epoch,
+                        step=i,
+                        threshold=divergence_loss_threshold,
+                    )
+            except Exception as err:  # noqa: BLE001 -- barrier re-raises
+                step_error = err
+                logger.error(
+                    f"{mode} step {i} (epoch {epoch}) failed on this rank: "
+                    f"{err!r}"
+                )
+            _step_failure_barrier(
+                step_error, mode=mode, epoch=epoch, step=i, dist_manager=dist_manager
+            )
 
             if is_train:
                 optimizer.zero_grad()

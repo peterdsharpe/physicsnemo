@@ -18,6 +18,7 @@ import atexit
 import os
 import queue
 import warnings
+from datetime import timedelta
 from typing import Optional, Tuple
 from warnings import warn
 
@@ -584,6 +585,13 @@ class DistributedManager(object):
             f"cuda:{manager.local_rank}" if torch.cuda.is_available() else "cpu"
         )
 
+        # Optional process-group timeout override (seconds). The NCCL default
+        # of 10 minutes means a rank that dies between collectives leaves its
+        # peers hanging for the full window; short single-node jobs can cap
+        # that cost without risking false timeouts on long steps.
+        timeout_env = os.environ.get("PHYSICSNEMO_DIST_TIMEOUT_S")
+        timeout = timedelta(seconds=float(timeout_env)) if timeout_env else None
+
         if manager._distributed:
             # Setup distributed process group
             try:
@@ -592,6 +600,7 @@ class DistributedManager(object):
                     rank=manager.rank,
                     world_size=manager.world_size,
                     device_id=manager.device,
+                    timeout=timeout,
                 )
             except TypeError:
                 # device_id only introduced in PyTorch 2.3

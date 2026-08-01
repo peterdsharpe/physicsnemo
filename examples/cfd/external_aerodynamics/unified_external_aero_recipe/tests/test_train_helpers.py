@@ -61,6 +61,7 @@ from output_normalize import normalize_output_to_tensordict  # noqa: E402
 from train import (  # noqa: E402  -- after the skip guard
     _finish_epoch,
     _raise_if_divergent_loss,
+    _step_failure_barrier,
     _reconcile_loaded_checkpoint,
     _reduce_and_average,
     _run_epoch,
@@ -276,7 +277,6 @@ class TestLossDivergenceGuard:
             epoch=3,
             step=7,
             threshold=1000.0,
-            dist_manager=self._dist_manager(),
         )
 
     @pytest.mark.parametrize(
@@ -295,26 +295,54 @@ class TestLossDivergenceGuard:
                 epoch=2,
                 step=4,
                 threshold=1000.0,
-                dist_manager=self._dist_manager(),
             )
 
-    def test_remote_failure_is_synchronized(self, monkeypatch):
+    def test_barrier_is_noop_on_healthy_step(self):
+        _step_failure_barrier(
+            None, mode="train", epoch=1, step=2, dist_manager=self._dist_manager()
+        )
+
+    def test_barrier_reraises_local_error_with_cause(self):
+        original = ValueError("degenerate measure")
+        with pytest.raises(RuntimeError, match="step failed at epoch 5") as info:
+            _step_failure_barrier(
+                original,
+                mode="train",
+                epoch=5,
+                step=9,
+                dist_manager=self._dist_manager(),
+            )
+        assert info.value.__cause__ is original
+
+    def test_barrier_synchronizes_peer_failure(self, monkeypatch):
         """A healthy rank raises too when the reduced any-rank flag is set."""
 
-        def report_remote_failure(flag, *, op):
+        def report_remote_failure(flag, op):
             assert op == torch.distributed.ReduceOp.MAX
             flag.fill_(1)
 
         monkeypatch.setattr(train.dist, "all_reduce", report_remote_failure)
-        with pytest.raises(RuntimeError, match="another rank"):
-            _raise_if_divergent_loss(
-                torch.tensor(0.25),
+        with pytest.raises(RuntimeError, match="peer rank failed"):
+            _step_failure_barrier(
+                None,
                 mode="train",
                 epoch=0,
                 step=0,
-                threshold=None,
                 dist_manager=self._dist_manager(world_size=2),
             )
+
+    def test_barrier_healthy_when_no_rank_failed(self, monkeypatch):
+        def report_no_failure(flag, op):
+            assert op == torch.distributed.ReduceOp.MAX
+
+        monkeypatch.setattr(train.dist, "all_reduce", report_no_failure)
+        _step_failure_barrier(
+            None,
+            mode="val",
+            epoch=0,
+            step=0,
+            dist_manager=self._dist_manager(world_size=2),
+        )
 
     @pytest.mark.parametrize("mode", ["train", "val"])
     def test_epoch_loop_checks_before_backward_in_both_modes(self, mode, monkeypatch):
@@ -344,13 +372,13 @@ class TestLossDivergenceGuard:
         if mode == "train":
             kwargs = {"optimizer": optimizer, "scheduler": scheduler}
 
-        with pytest.raises(RuntimeError, match=rf"{mode} loss guard"):
+        with pytest.raises(RuntimeError, match=rf"{mode} step failed at epoch"):
             _run_epoch(
                 [{}],
                 model,
                 None,
                 None,
-                SimpleNamespace(info=lambda *args, **kwargs: None),
+                SimpleNamespace(info=lambda *args, **kwargs: None, error=lambda *args, **kwargs: None),
                 0,
                 cfg,
                 self._dist_manager(),
@@ -389,7 +417,7 @@ class TestLossDivergenceGuard:
             torch.nn.Linear(1, 1),
             None,
             None,
-            SimpleNamespace(info=lambda *args, **kwargs: None),
+            SimpleNamespace(info=lambda *args, **kwargs: None, error=lambda *args, **kwargs: None),
             0,
             cfg,
             self._dist_manager(),
@@ -423,7 +451,7 @@ class TestLossDivergenceGuard:
                 torch.nn.Linear(1, 1),
                 None,
                 None,
-                SimpleNamespace(info=lambda *args, **kwargs: None),
+                SimpleNamespace(info=lambda *args, **kwargs: None, error=lambda *args, **kwargs: None),
                 0,
                 cfg,
                 self._dist_manager(),
