@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mixed_resolution_training_prospective_amendment",
+  "amends": {
+    "preregistration": "mixedres_training_preregistration_2026-07-31.json",
+    "sha256": "fb2d986a537a49b6545d551fc02c5adf0133df76a88f5a0c17123533a696fb02"
+  },
+  "registered_at_utc": "2026-08-01T22:20:00Z",
+  "results_inspected": false,
+  "what_happened": "Both arms crashed deterministically during training: one DDP rank raised the model's strict finite-positive-measure validation and its peers hung in ALLREDUCE (the incident that motivated the step failure barrier, commit 1503b853). No gate quantity, resolution-sweep value, or validation comparison was ever computed.",
+  "diagnosis": {
+    "raw_data": "All 484 DrivAerML vehicle surfaces scanned: zero cells with non-positive or non-finite fp32 area (per-case minima 1.4e-11 to 2.3e-9).",
+    "mechanism": "The z-rotation augmentation recomputes areas from rotated fp32 points; on sliver cells this erodes the computed area by up to 5770x in a 16-angle probe (run_44: 1.38e-11 raw -> 2.39e-15 rotated), i.e. to the edge of fp32 subnormal. Continuous training-time angles across 500 epochs x 484 cases make an exact-zero draw inevitable; the model's measure validation then rightly rejects the sample.",
+    "artifact": "area_scan.jsonl in the HSG task dir (484 rows, per-case raw and rotated minima)."
+  },
+  "amendment": {
+    "augment": "true -> false for BOTH arms (the rotation augmentation was incidental to the registered question and is the failure mechanism; it also restores the historical no-augmentation protocol)",
+    "mixedres_draw_location": "moves from the augmentation slot to the transform chain (replacing the fixed SubsampleMesh); validation batches therefore also draw random resolutions, which affects monitoring only -- every registered gate reads the final-checkpoint resolution sweep",
+    "restart": "all four lanes restart from epoch 0 under the amended protocol; the 87/73/210/153 epochs trained under augment=true are discarded rather than mixed into a heterogeneous-protocol run",
+    "unchanged": "arms, seeds, model, epochs, learning rate, precision, instrument, and every deciding gate of the preregistration"
+  }
+}

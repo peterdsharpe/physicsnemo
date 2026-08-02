@@ -2116,3 +2116,24 @@ prediction is a genuine coin flip (p ~ 0.55).
 [Preregistration](../results/mixedres_training_preregistration_2026-07-31.json)
 (sha256 fb2d986a...); implementation: `RandomResolutionSubsampleMesh` (HT
 measure unbiasedness unit-tested exact) and the mixedres dataset variant.
+
+## 2026-08-01 — The rotation augmentation manufactures degenerate measures; amended out before any result {#sec-nb-mixedres-amendment}
+
+Both arms of the mixed-resolution experiment crashed deterministically: one
+rank raised the model's finite-positive-measure validation and its peers
+hung in the gradient collective -- the incident that produced the recipe's
+new rank-synchronized step failure barrier and the audit of the whole
+rank-divergence class. The diagnosis separated data from pipeline: all 484
+raw surfaces are clean (per-case fp32 minimum areas 1.4e-11 to 2.3e-9, none
+non-positive), while the z-rotation augmentation's fp32 area recomputation
+erodes sliver areas by up to 5770x in a 16-angle probe (run_44: 1.38e-11 to
+2.39e-15) -- continuous training-time angles make an exact-zero draw
+inevitable. The strict validation caught a real numerical defect of the
+augmentation, not bad data. Prospective amendment, no result inspected:
+augmentation off for both arms (it was incidental to the registered
+question and never part of the historical protocol -- this experiment was
+the first to ever execute it), the resolution draw moves into the transform
+chain, and all lanes restart from epoch 0 rather than mixing protocols
+within a run. Every deciding gate is unchanged
+([amendment](../results/mixedres_training_amendment_2026-08-01.json),
+sha256 f3b284ae...).

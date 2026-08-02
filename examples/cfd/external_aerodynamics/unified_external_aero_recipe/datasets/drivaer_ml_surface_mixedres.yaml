@@ -1,7 +1,8 @@
-# MIXED-RESOLUTION VARIANT of drivaer_ml_surface.yaml: identical except a
-# train-only RandomResolutionSubsampleMesh augmentation (and the expectation
-# that sampling_resolution=20000). See the lab notebook's mixed-resolution
-# preregistration for the experiment this serves.
+# MIXED-RESOLUTION VARIANT of drivaer_ml_surface.yaml: identical except the
+# fixed SubsampleMesh is replaced by a per-sample RandomResolutionSubsampleMesh
+# draw (and the expectation that sampling_resolution=20000, the reader cap).
+# Run with augment=false; see the lab notebook's mixed-resolution
+# preregistration and its 2026-08-01 amendment for the experiment this serves.
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -41,14 +42,6 @@ pipeline:
     # DomainMesh's global_data and merge its keys onto each sample.
     merge_global_data_from: "../../global_data"
   augmentations:
-    # MIXED-RESOLUTION ARM (model-quality agenda, @sec-nb-mixedres-prereg):
-    # per-sample cell count drawn from the declared choices, train-only.
-    # HT measure weights compose through every draw, so the effective
-    # quadrature measure stays unbiased at each resolution. Run with
-    # sampling_resolution=20000 so the pipeline's fixed cap never re-cuts
-    # a draw (it becomes a no-op) and validation runs at 20000.
-    - _target_: ${dp:RandomResolutionSubsampleMesh}
-      n_cells_choices: [2500, 5000, 10000, 20000]
     - _target_: ${dp:RandomRotateMesh}
       axes: ["z"]
       transform_cell_data: true
@@ -85,8 +78,16 @@ pipeline:
     - _target_: ${dp:ComputeSurfaceNormals}
       store_as: cell_data
       field_name: normals
-    - _target_: ${dp:SubsampleMesh}
-      n_cells: ${sampling_resolution}
+    # MIXED-RESOLUTION ARM (model-quality agenda; amendment 2026-08-01):
+    # the per-sample resolution draw lives in the transform chain, not the
+    # augmentation slot, so the experiment runs augment=false -- the
+    # rotation augmentation erodes fp32 sliver areas by up to ~5,800x
+    # (measured across all 484 cases) and can round them to exact zero,
+    # which the model's measure validation rightly rejects. Validation
+    # also draws randomly (monitoring only; gates use the final-checkpoint
+    # resolution sweep). HT weights keep the measure unbiased per draw.
+    - _target_: ${dp:RandomResolutionSubsampleMesh}
+      n_cells_choices: [2500, 5000, 10000, 20000]
     # Constant scale gauge for models that declare an explicit reference
     # length read from global_data (the MeshTransformer templates'
     # `reference_length_key: reference_length`). The value is in the
