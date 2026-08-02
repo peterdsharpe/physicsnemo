@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mixed_resolution_training_prospective_amendment",
+  "amends": {
+    "preregistration": "mixedres_training_preregistration_2026-07-31.json",
+    "prior_amendment": "mixedres_training_amendment_2026-08-01.json"
+  },
+  "registered_at_utc": "2026-08-02T18:40:00Z",
+  "results_inspected": false,
+  "what_happened": "Under augment=false the same finite-positive-measure failure recurred deterministically on two lanes (control epoch 73, mixedres seed 44 at epoch 153 -- the same epoch as its pre-amendment death). The crash-loop guard stood both lanes down after two identical failures; the step failure barrier surfaced the true ValueError on every occurrence.",
+  "revised_diagnosis": "Rotation was sufficient but not necessary. The ~1e-11-area sliver cells sit deep enough in fp32 cross-product cancellation that ANY coordinate perturbation -- centering, rotation, or device-specific evaluation order -- can round their recomputed area to exact zero. The prior amendment's rotation-removal treated one trigger, not the hazard.",
+  "amendment": {
+    "guard": "DropDegenerateCells appended as the last pre-conversion transform in BOTH dataset variants: drops cells whose fp32 area is non-finite or non-positive, computed on the same device and points the model's validation will see. Dropped cells carry ~1e-12 of total measure.",
+    "augment": "stays false (no reason to revert)",
+    "resume": "lanes RESUME from their checkpoints (epochs 73/206/296/153) rather than restarting: the guard's only effect is removing cells of numerically zero measure, whose loss contribution is zero to fp32 precision, so pre- and post-guard training are equivalent to roundoff -- unlike the augmentation change, which altered the data distribution and required the epoch-0 restart.",
+    "unchanged": "arms, seeds, protocol, instrument, and every deciding gate"
+  }
+}

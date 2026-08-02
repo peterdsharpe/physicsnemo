@@ -59,6 +59,8 @@ YAML configs.  Import this module before Hydra instantiation
 
 from __future__ import annotations
 
+from warnings import warn
+
 import torch
 from tensordict import TensorDict
 
@@ -347,3 +349,31 @@ class RandomResolutionSubsampleMesh(SubsampleMesh):
         )
         self.n_cells = self.n_cells_choices[index]
         return super().__call__(mesh)
+
+
+@register()
+class DropDegenerateCells(MeshTransform):
+    r"""Drop cells whose fp32 area is non-finite or non-positive.
+
+    DrivAerML surfaces contain sliver cells with areas down to ~1e-11 --
+    deep enough in cross-product cancellation territory that any fp32
+    coordinate perturbation (centering, rotation, device-specific
+    evaluation order) can round the recomputed area to exact zero, which
+    downstream measure validation rightly rejects. Place this LAST in the
+    transform chain so it sees exactly the points the model will: the
+    same tensor, device, and kernel produce the same areas at encode.
+    Dropped cells carry ~1e-12 of the total measure, so the effective
+    quadrature is unchanged to fp32 precision.
+    """
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        areas = mesh.cell_areas
+        keep = torch.isfinite(areas) & (areas > 0)
+        n_bad = int((~keep).sum())
+        if n_bad == 0:
+            return mesh
+        warn(
+            f"DropDegenerateCells: dropping {n_bad} cell(s) with "
+            "non-finite or non-positive fp32 area"
+        )
+        return mesh.slice_cells(keep.nonzero(as_tuple=True)[0])

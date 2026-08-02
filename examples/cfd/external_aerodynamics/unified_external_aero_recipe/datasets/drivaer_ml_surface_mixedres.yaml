@@ -88,6 +88,12 @@ pipeline:
     # resolution sweep). HT weights keep the measure unbiased per draw.
     - _target_: ${dp:RandomResolutionSubsampleMesh}
       n_cells_choices: [2500, 5000, 10000, 20000]
+    # Guard against fp32-manufactured degenerate slivers (2026-08-02
+    # amendment): raw areas are all positive, but ~1e-11 slivers sit deep
+    # enough in cross-product cancellation that centering/rotation/device
+    # rounding can zero them; drop such cells just before the model, on the
+    # same device and points the model's measure validation will see.
+    - _target_: ${dp:DropDegenerateCells}
     # Constant scale gauge for models that declare an explicit reference
     # length read from global_data (the MeshTransformer templates'
     # `reference_length_key: reference_length`). The value is in the

@@ -69,3 +69,27 @@ class TestRandomResolutionSubsampleMesh:
             RandomResolutionSubsampleMesh(n_cells_choices=[100])
         with pytest.raises(ValueError, match="at least two positive"):
             RandomResolutionSubsampleMesh(n_cells_choices=[100, -5])
+
+
+class TestDropDegenerateCells:
+    def test_drops_only_degenerate_cells(self):
+        from domain_transforms import DropDegenerateCells
+
+        mesh = _grid_mesh(4)  # 32 healthy cells
+        # Append a zero-area cell (repeated vertex) and keep data aligned.
+        cells = torch.cat(
+            [mesh.cells, torch.tensor([[0, 1, 1]], dtype=torch.long)]
+        )
+        broken = Mesh(points=mesh.points, cells=cells)
+        assert (broken.cell_areas <= 0).sum() == 1
+
+        with pytest.warns(UserWarning, match="dropping 1 cell"):
+            out = DropDegenerateCells()(broken)
+        assert out.n_cells == 32
+        assert (out.cell_areas > 0).all()
+
+    def test_noop_on_healthy_mesh_returns_same_object(self):
+        from domain_transforms import DropDegenerateCells
+
+        mesh = _grid_mesh(4)
+        assert DropDegenerateCells()(mesh) is mesh

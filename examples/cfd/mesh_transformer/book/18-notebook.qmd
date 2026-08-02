@@ -2137,3 +2137,22 @@ chain, and all lanes restart from epoch 0 rather than mixing protocols
 within a run. Every deciding gate is unchanged
 ([amendment](../results/mixedres_training_amendment_2026-08-01.json),
 sha256 f3b284ae...).
+
+## 2026-08-02 — Rotation was a trigger, not the hazard: the slivers themselves are degenerate under any fp32 perturbation {#sec-nb-mixedres-amendment2}
+
+The rotation-removal amendment was refuted within a day: under
+augment=false the identical measure-validation failure recurred, on one
+lane at the very epoch where it had died before. The revised mechanism is
+sharper: ~1e-11-area sliver cells sit deep enough in fp32 cross-product
+cancellation that *any* coordinate perturbation -- centering, rotation, or
+device evaluation order -- can round their recomputed area to exact zero.
+The new guard machinery worked exactly as designed on its first outing:
+the step failure barrier surfaced the true ValueError on every occurrence,
+and the crash-loop guard stood both affected lanes down after two
+identical fingerprints instead of burning the chain. Second prospective
+amendment (no gate value inspected): a DropDegenerateCells transform ends
+both pipelines, removing cells whose fp32 area is non-positive or
+non-finite on exactly the points and device the model validates; lanes
+resume from checkpoints because the dropped cells carry zero measure to
+fp32 precision, unlike the augmentation change that required a restart
+([amendment](../results/mixedres_training_amendment2_2026-08-02.json)).
