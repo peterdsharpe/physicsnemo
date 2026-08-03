@@ -2193,3 +2193,32 @@ vanishes there too, the cure is inference-side measure handling alone and
 no retraining was ever needed; if the collapse persists, the cure
 required the measure-consistent objective during training.
 [Gate reduction](../results/mixedres_training_2026-07-31/sweep/gate_reduction.json).
+
+## 2026-08-03 — Attribution: the resolution cure required measure-consistent training, and the convention is breaking for old checkpoints {#sec-nb-mixedres-attribution}
+
+The registered attribution fork resolves on its second branch. The
+old-code-trained flagship, evaluated through the identical new-code
+instrument (on the second cluster after the allocation cut; same
+snapshot, same gates), outputs pure NaN -- 100% of points, all 48
+validation cases, at every resolution, with targets clean. The mechanism
+closes coherently: the new pipeline composes Horvitz--Thompson inclusion
+weights into the quadrature the model consumes, making the effective
+total measure resolution-invariant (the cure), but thereby scaling it by
+up to ~1,770x relative to what unweighted-era checkpoints were calibrated
+to -- far outside the norm-free drive stream's operating range, whose
+measured dose-response NaN'd at 8x shifts. Three conclusions:
+
+1. Defect 1 of the model-quality agenda (coverage-specific collapse) is
+   SOLVED by training under the measure-consistent convention; error at
+   40k is now slightly *below* 10k on every seed.
+2. Mixed-resolution sampling contributed nothing detectable and its
+   2--12% in-family cost is unearned: the fixed-resolution
+   measure-consistent arm is the recommended default.
+3. The convention is calibration-breaking both ways: old checkpoints
+   NaN under new-code pipelines (they need a compatibility strip-weights
+   path, and would then re-exhibit the collapse), so the fix cannot be
+   deployed to historical models without retraining. This deserves a
+   loud compatibility note wherever the measure machinery is upstreamed.
+
+[Attribution reduction](../results/mixedres_training_2026-07-31/sweep/attrib_reduction.json).
+Next per the agenda ladder: defect 2, the bounded drive path.
