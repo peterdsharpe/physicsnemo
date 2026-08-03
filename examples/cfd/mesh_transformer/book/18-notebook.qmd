@@ -2156,3 +2156,40 @@ non-finite on exactly the points and device the model validates; lanes
 resume from checkpoints because the dropped cells carry zero measure to
 fp32 precision, unlike the augmentation change that required a restart
 ([amendment](../results/mixedres_training_amendment2_2026-08-02.json)).
+
+## 2026-08-03 — All three mixed-resolution gates pass, and the control refutes its own prediction {#sec-nb-mixedres-verdict}
+
+The experiment completed under its two amendments (all four lanes at 500
+epochs; 20 sweep evaluations on the 49 held-out validation cases -- the
+`id_reference` split named in the preregistration never existed in the
+curated manifest, so the val split, disjoint from training, was declared
+as the instrument before any value was read). Every registered gate
+passes:
+
+| Gate | mixedres s42 / s43 / s44 | Verdict |
+|---|---|---|
+| G1: `pred_rms/true_rms` at 40k in [0.7, 1.3] | 0.979 / 0.977 / 0.973 | pass |
+| G2: rel-L2 40k / 10k < 3 | 0.976 / 0.974 / 0.971 | pass |
+| G3: in-family 10k cost <= 1.15x control | 1.024 / 1.029 / 1.119 | pass |
+
+Error is now *lower* at 40k than at 10k -- against a historical ratio of
+5.5--246 with RMS collapse to 0.055--0.355.
+
+**The registered control prediction failed, and that is the finding.**
+The fresh fixed-10k control was predicted to collapse at 40k (p ~ 0.85);
+it did not (`pred_rms/true_rms` = 0.973, indistinguishable from the
+mixed-resolution arms). The coverage cliff is gone for BOTH arms, so the
+cure cannot be attributed to mixed-resolution sampling: it rode a bundled
+component of the new code epoch -- most plausibly the measure-consistent
+quadrature (Horvitz--Thompson weights and the target quadrature measure)
+that the model and objective now consume, which both arms share and the
+historical runs lacked. Mixed-resolution sampling is, on this evidence,
+unnecessary for resolution transfer at a ~2--12% in-family cost.
+
+**Attribution test, registered before its result:** sweep a historical
+old-code-trained flagship checkpoint (the adaptation pilot's frozen
+source model) through the identical new-code instrument. If the collapse
+vanishes there too, the cure is inference-side measure handling alone and
+no retraining was ever needed; if the collapse persists, the cure
+required the measure-consistent objective during training.
+[Gate reduction](../results/mixedres_training_2026-07-31/sweep/gate_reduction.json).
