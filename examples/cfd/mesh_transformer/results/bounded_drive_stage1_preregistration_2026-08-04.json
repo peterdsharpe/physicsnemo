@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "bounded_drive_stage1_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-04T21:30:00Z",
+  "agenda": "model-quality; defect 2 (boundedness) and defect 3 (seed stability), jointly",
+  "question": "In the 2x2 of {linear, homogeneous} x {fixed-10k, mixed-resolution} training (all measure-consistent), which factors buy foreign-family boundedness, and does the declared-degree mode add anything over mixed-resolution sampling?",
+  "known_cells": {
+    "linear_x_fixed": "detonates both families (estate mean 1850 / max 6146; fastback mean 1670 / max 38968), 1 seed",
+    "linear_x_mixedres": "bounded on all 99 cases of BOTH families at 3/3 seeds (means 0.89-1.05, max <= 1.37, seed band 1.18x); no transfer skill (mean-predictor level)"
+  },
+  "arms": {
+    "homog_fixed": {"field_mode": "homogeneous", "dataset": "drivaer_ml_surface", "sampling_resolution": 10000, "seeds": [42, 43, 44]},
+    "homog_mixed": {"field_mode": "homogeneous", "dataset": "drivaer_ml_surface_mixedres", "sampling_resolution": 20000, "seeds": [42, 43, 44, 45, 46]}
+  },
+  "protocol": "identical to the defect-1 experiment otherwise: flagship, 500 epochs, lr 3e-3, bf16, augment=false, DropDegenerateCells, measure-consistent convention, 4-GPU single-node DDP, final-epoch checkpoint only; trained on AGA GB300 (fresh runs, no cross-silicon resumption)",
+  "instrument": "the stage-0 smoke instrument verbatim (shift_suv_surface fixed-gauge, estate AND fastback val, res 10000, fleet-comparable normalized pressure_l2) plus the defect-1 resolution sweep for the in-family guard",
+  "deciding_gates": {
+    "B1_conjunction_bounded": "homog_mixed: pressure_l2 finite and mean < 3.0 on both families for 5/5 seeds",
+    "B2_mixedres_necessity": "homog_fixed: same criterion for 3/3 seeds; PASS means mixed-resolution is unnecessary under the declared degree, FAIL localizes boundedness to the sampling axis",
+    "B3_guard_infamily": "in-family 10k pressure rel-L2 <= 1.20 x the defect-1 linear control, per seed (homogeneous historically cost ~15%)",
+    "B4_seed_band_report": "report min-max across seeds on the smoke means; no hard bar (the Q2-mirage lesson), but the linear_x_mixedres 1.18x band is the comparison point"
+  },
+  "exploratory": "any seed with smoke mean < 0.8 on either family is flagged as a transfer-skill signal (none expected; p ~ 0.15)",
+  "predictions": {
+    "B1": "p ~ 0.8 (mixed-resolution boundedness should survive the mode change)",
+    "B2": "p ~ 0.4 (homogeneous alone historically spanned 2.07-5157; the new convention may or may not close it)",
+    "B3": "p ~ 0.7"
+  },
+  "falsifier": "If B1 fails, the stage-0 boundedness does not compose with the declared-degree mode and the two mechanisms interact destructively -- the conjunction is rejected and linear x mixedres remains the boundedness baseline.",
+  "launch_state": {"results_inspected": false}
+}

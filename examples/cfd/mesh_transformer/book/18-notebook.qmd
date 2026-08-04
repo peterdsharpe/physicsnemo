@@ -2270,3 +2270,41 @@ family (boundedness expected to generalize, p ~ 0.7), then stage 1 as a
 2x2 completion -- homogeneous x {fixed, mixed-resolution} at five and
 three seeds -- since stage 0 already supplies the linear row of the
 factorial.
+
+## 2026-08-04 — Fastback smoke: boundedness generalizes across the second family {#sec-nb-bounded-fastback}
+
+The declared prediction (p ~ 0.7) holds, cleanly. Identical instrument
+on the SHIFT-SUV fastback val split (99 cases, res 10,000, fixed gauge,
+fleet-comparable normalized pressure L2): the fixed-resolution linear
+control detonates again (mean 1,670, median 955, max 38,968 -- worse at
+the tail than estate), while **all three mixed-resolution seeds are
+bounded on every case** -- means 0.92--1.05, max 1.21, zero non-finite,
+a 1.13x seed band. Boundedness from mixed-resolution training is now a
+two-family, three-seed, 198-case result with an unbounded paired
+control on both families. Reduction:
+[fastback](../results/mixedres_training_2026-07-31/sweep/fastback_reduction.json).
+Still no transfer skill (mean-predictor level on both families); the
+claim stays exactly "bounded", per the scorecard axis.
+
+## 2026-08-04 — Stage-1 preregistration: the 2x2 completion, homogeneous x sampling {#sec-nb-bounded-stage1-prereg}
+
+Registered before launch
+([artifact](../results/bounded_drive_stage1_preregistration_2026-08-04.json),
+sha256 923d256738a9d401): train the missing row of the factorial --
+`field_mode=homogeneous` under fixed-10k (3 seeds) and under
+mixed-resolution sampling (5 seeds), everything else frozen to the
+defect-1 protocol (flagship, 500 epochs, lr 3e-3, bf16, augment=false,
+DropDegenerateCells, measure-consistent), on AGA GB300. Stage 0
+supplies the linear row: linear x fixed detonates on both families,
+linear x mixedres is bounded on both. Deciding gates: B1 --
+homogeneous x mixedres bounded (finite, mean < 3.0) on both families
+for 5/5 seeds (p ~ 0.8); B2 -- homogeneous x fixed bounded for 3/3
+seeds (p ~ 0.4; a PASS localizes boundedness away from the sampling
+axis, a FAIL localizes it to it); B3 -- in-family 10k guard within
+1.20x the defect-1 linear control (homogeneous historically cost
+~15%); B4 -- seed band reported, no hard bar (the Q2-mirage lesson),
+with linear x mixedres's 1.18x as the comparison point. Exploratory
+only: any smoke mean < 0.8 flags transfer skill (p ~ 0.15). Falsifier:
+if B1 fails, the declared-degree mode destroys the stage-0 boundedness
+and linear x mixedres stays the baseline. This is also the first read
+on defect 3 (seed stability) at five seeds under the new convention.
