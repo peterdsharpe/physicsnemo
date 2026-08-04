@@ -2286,25 +2286,44 @@ control on both families. Reduction:
 Still no transfer skill (mean-predictor level on both families); the
 claim stays exactly "bounded", per the scorecard axis.
 
+## 2026-08-04 — Correction: the stage-0 arms are `zero_preserving_nonlinear`, not "linear" {#sec-nb-stage0-mode-correction}
+
+Caught while staging stage 1, before anything launched: the stage-0
+preregistration, verdict (@sec-nb-bounded-stage0-verdict), and fastback
+entry above all call the fixed-resolution and mixed-resolution arms
+"linear-mode". They are not. The flagship config sets
+`field_mode: zero_preserving_nonlinear`, the stage-0 training command
+carried no override, and the HSG training logs confirm it (verified
+2026-08-04 on `runs/mixedres_control_seed42/train.log`). Every "linear"
+label in the stage-0 artifacts should read `zero_preserving_nonlinear`
+-- the implicit-drive-degree read-in (measured implicit degree ~8--21)
+whose off-range amplification the declared-degree wave diagnosed
+(@sec-nb-wave-summary). The results are untouched; the interpretation
+sharpens: the detonating control is the known amplification mechanism,
+and stage 1's mode axis is exactly the degree-declaration question --
+does declaring degree one (`homogeneous`) remove the detonation the
+way mixed-resolution sampling empirically suppresses it?
+
 ## 2026-08-04 — Stage-1 preregistration: the 2x2 completion, homogeneous x sampling {#sec-nb-bounded-stage1-prereg}
 
 Registered before launch
 ([artifact](../results/bounded_drive_stage1_preregistration_2026-08-04.json),
-sha256 923d256738a9d401): train the missing row of the factorial --
+sha256 65bcddd2d4377405): train the missing row of the factorial --
 `field_mode=homogeneous` under fixed-10k (3 seeds) and under
 mixed-resolution sampling (5 seeds), everything else frozen to the
 defect-1 protocol (flagship, 500 epochs, lr 3e-3, bf16, augment=false,
 DropDegenerateCells, measure-consistent), on AGA GB300. Stage 0
-supplies the linear row: linear x fixed detonates on both families,
-linear x mixedres is bounded on both. Deciding gates: B1 --
+supplies the `zero_preserving_nonlinear` row (see the correction
+above): zpn x fixed detonates on both families, zpn x mixedres is
+bounded on both. Deciding gates: B1 --
 homogeneous x mixedres bounded (finite, mean < 3.0) on both families
 for 5/5 seeds (p ~ 0.8); B2 -- homogeneous x fixed bounded for 3/3
 seeds (p ~ 0.4; a PASS localizes boundedness away from the sampling
 axis, a FAIL localizes it to it); B3 -- in-family 10k guard within
-1.20x the defect-1 linear control (homogeneous historically cost
+1.20x the defect-1 zpn control (homogeneous historically cost
 ~15%); B4 -- seed band reported, no hard bar (the Q2-mirage lesson),
-with linear x mixedres's 1.18x as the comparison point. Exploratory
+with zpn x mixedres's 1.18x as the comparison point. Exploratory
 only: any smoke mean < 0.8 flags transfer skill (p ~ 0.15). Falsifier:
 if B1 fails, the declared-degree mode destroys the stage-0 boundedness
-and linear x mixedres stays the baseline. This is also the first read
+and zpn x mixedres stays the baseline. This is also the first read
 on defect 3 (seed stability) at five seeds under the new convention.
