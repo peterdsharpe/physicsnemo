@@ -307,51 +307,6 @@ class BoundaryMeshToDomainMesh(MeshToDomainMesh):
 
 
 @register()
-class RandomResolutionSubsampleMesh(SubsampleMesh):
-    r"""``SubsampleMesh`` whose cell count is drawn per sample.
-
-    Mixed-resolution training against the coverage-specific-accuracy
-    defect: every draw keeps the Horvitz--Thompson measure bookkeeping of
-    the base class, so the effective quadrature measure stays unbiased at
-    every resolution. Place it in the ``augmentations:`` list (train-only);
-    the pipeline's fixed ``SubsampleMesh`` cap must be at least
-    ``max(n_cells_choices)`` so it never re-cuts a draw.
-    """
-
-    def __init__(
-        self,
-        n_cells_choices: list[int],
-        compact: bool = True,
-    ) -> None:
-        choices = tuple(int(n) for n in n_cells_choices)
-        if len(choices) < 2 or any(n <= 0 for n in choices):
-            raise ValueError(
-                "n_cells_choices must list at least two positive cell counts, "
-                f"got {n_cells_choices!r}"
-            )
-        super().__init__(n_cells=max(choices), compact=compact)
-        self.n_cells_choices = choices
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        ### The draw must live on the generator's device: pipelines running
-        ### on CUDA seed a CUDA generator, and torch.randint defaults to CPU.
-        ### An unseeded transform (generator still None) uses the global CPU
-        ### RNG, matching the base class's behavior.
-        generator = self._generator
-        device = generator.device if generator is not None else "cpu"
-        index = int(
-            torch.randint(
-                len(self.n_cells_choices),
-                (1,),
-                generator=generator,
-                device=device,
-            ).item()
-        )
-        self.n_cells = self.n_cells_choices[index]
-        return super().__call__(mesh)
-
-
-@register()
 class DropDegenerateCells(MeshTransform):
     r"""Drop cells whose fp32 area is non-finite or non-positive.
 
