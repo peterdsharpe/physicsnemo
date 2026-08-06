@@ -2339,3 +2339,37 @@ protocol verbatim, so the B4 seed-band comparison is 5-vs-5 rather than
 exposes the stage-0 boundedness claim to two fresh seeds (both bounded
 on both families predicted at p ~ 0.75; a detonation weakens the
 stage-0 result and the verdict must say so). Gates B1-B4 unchanged.
+
+## 2026-08-06 — Stage-1 verdict: declaring drive degree one removes the detonation at the root; mixed-resolution was a workaround {#sec-nb-bounded-stage1-verdict}
+
+All deciding gates read out
+([gates](../results/bounded_drive_stage1_gates_2026-08-06.json),
+[reduction](../results/mixedres_training_2026-07-31/sweep/stage1_reduction.json)).
+**B1 PASS 5/5, B2 PASS 3/3**: every homogeneous checkpoint -- including
+the fixed-10k arm with no mixed-resolution sampling at all -- is bounded
+zero-shot on all 100 cases of BOTH foreign families (means 0.78--1.37,
+max 1.66, zero non-finite). The registered B2 interpretation applies:
+mixed-resolution sampling is unnecessary for boundedness under a
+declared degree. Stage 0's mixedres boundedness was a workaround; the
+root cause was the zero_preserving_nonlinear read-in's implicit drive
+degree (the iteration-34 diagnosis), and declaring degree one removes
+the mechanism rather than damping it. **B3**: homog x fixed costs
+1.03--1.13x the zpn control in-family (PASS); homog x mixedres runs
+1.13--1.24x and FAILS as registered (2/5 seeds over 1.20x). **Resolution
+transfer is intact everywhere** (40k/10k rel-L2 0.93--1.04, RMS ratios
+0.97--0.98 at 40k) -- the defect-1 result replicates in homogeneous
+mode, so the measure-consistent convention, not sampling diversity,
+carries resolution transfer. **B4**: smoke seed bands 1.25--1.28x
+(mixedres arms) and 1.53--1.56x (fixed, inflated by seed 44's 1.35
+mean) against the homogeneous arm's HISTORICAL 2491x -- three orders of
+magnitude of the seed-instability defect gone under the new convention.
+Exploratory flag as registered: homog x mixed seed 46 means 0.796/0.782
+dip under 0.8 on both families -- noted, not banked; all arms remain at
+mean-predictor level (no transfer skill). **The winning cell is
+homogeneous x fixed-resolution**: bounded on two families, cheapest
+in-family, no mixedres machinery -- boundedness from a declared
+structural property rather than a training-data trick, which is the
+model-quality agenda's answer. Still open: the zpn x mixedres 5-seed
+band (seeds 45-46 training, for the symmetric B4 comparison), and
+defect 4 (incumbent efficiency) / defect 5 (simplification), which now
+key off the homog x fixed cell.
