@@ -2393,3 +2393,23 @@ flagship_allbc_bal, trace_deep2, trace_deep2_members -- zero references
 outside their own lineage comments). Recipe tests: 229 passed, 1
 skipped. `DropDegenerateCells` stays (the fp32 sliver guard is
 convention, not experiment).
+
+## 2026-08-06 — Defect-4 stage-0 preregistration: re-anchor the incumbent under the current convention {#sec-nb-incumbent-stage0-prereg}
+
+Registered before launch
+([artifact](../results/incumbent_efficiency_stage0_preregistration_2026-08-06.json),
+sha256 61156fc579b31aca). The 2.34x per-parameter incumbent advantage
+(@sec-nb-x2l8-verdict lineage) was measured under the old convention
+with the zpn mode; every other defect moved when the convention changed,
+so the anchor must be refreshed before any mechanism hunt. Stage 0
+trains GeoTransolver (standard 12x256 surface config, ~9.5M params) at
+seeds 42-44 under the exact stage-1 protocol and instrument, paired
+against the already-trained homogeneous flagship (784k params). Decision
+rule declared: GT not >1.10x better in-family at 12x params closes
+defect 4 as not-reproduced; >1.25x triggers the matched-parameter /
+mechanism stage 1; in between, a matched-parameter rung comes first.
+Bonus measurements: GT's zero-shot boundedness on both SHIFT families
+(the "generic baseline stays structured" claim, quantified at 3 seeds)
+and GT's resolution-transfer curve (it has no quadrature pathway, so
+this tests whether resolution robustness is convention-bought or
+architecture-generic).

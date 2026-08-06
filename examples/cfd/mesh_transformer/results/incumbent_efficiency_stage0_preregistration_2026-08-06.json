@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "incumbent_efficiency_stage0_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-06T18:30:00Z",
+  "agenda": "model-quality; defect 4 (incumbent efficiency), stage 0: re-anchor under the current convention",
+  "question": "Does the soft-slice incumbent's in-distribution advantage (historically 2.34x per-parameter at matched 9.6M) persist against the current canonical MeshTransformer (homogeneous flagship, measure-consistent convention), and how does the incumbent behave zero-shot on foreign families under the same paired instrument?",
+  "known": {
+    "historical_anchor": "GeoTransolver ~9.5M params, matched recipe protocol, in-family 0.00249 (training-metric scale) vs MT x2L8 extrapolated 0.005828 at 9.6M -- measured 2.34x per-parameter gap, mechanism (learned soft-slice global exchange) never localized",
+    "current_mt_baseline": "homog_fixed seeds 42-44 (flagship, 784k params): in-family 10k val rel-L2 0.1907/0.2058/0.2093; zero-shot smoke bounded on both SHIFT families (means 0.88-1.37)",
+    "asymmetry_declared": "stage 0 compares standard configs (GT ~9.5M vs MT 784k, ~12x params); a matched-parameter MT rung is stage 1 IF the gap persists"
+  },
+  "arms": {
+    "gt_fixed": {"model": "geotransolver_surface", "dataset": "drivaer_ml_surface", "sampling_resolution": 10000, "seeds": [42, 43, 44]}
+  },
+  "protocol": "recipe defaults, identical to the stage-1 lanes: 500 epochs, lr 3e-3, StepLR 100/0.1, bf16, batch 1, augment=false, 4-GPU single-node DDP on AGA; no per-model tuning in either direction",
+  "instrument": "identical paired instrument to stage 1: in-family drivaer_ml val 5-resolution sweep (pdmsh rel-L2 + rms ratio) and zero-shot smoke on SHIFT estate+fastback val (metrics.jsonl normalized pressure_l2)",
+  "deciding_gates": {
+    "D1_infamily_anchor": "GT 10k val mean rel-L2, 3 seeds, vs MT homog flagship's 0.191-0.209. DECISION RULE: if GT (at 12x params) does not beat the MT flagship by more than 1.10x on the seed-mean, the historical incumbent advantage is declared not-reproduced under the current convention and defect 4 closes without a mechanism hunt; if GT is materially better (>1.25x), stage 1 preregisters the matched-parameter rung / mechanism-absorption experiment; between 1.10x and 1.25x, stage 1 is a matched-parameter rung before any mechanism claim",
+    "D2_boundedness_paired": "GT zero-shot pressure_l2 finite and mean < 3.0 on both families, per seed -- quantifies the historical 'generic baseline stays structured' claim with 3 fresh seeds under the paired instrument",
+    "D3_resolution_transfer_paired": "GT 40k/10k rel-L2 ratio, descriptive -- GT has no quadrature-measure pathway, so this measures whether resolution robustness is architecture-generic or convention-bought"
+  },
+  "predictions": {
+    "D1": "GT beats MT flagship in-family at 12x params (p ~ 0.7); GT beats by >1.25x triggering stage 1 (p ~ 0.45)",
+    "D2": "GT bounded on both families 3/3 seeds (p ~ 0.65)",
+    "D3": "GT 40k/10k within [0.9, 1.5] (p ~ 0.6)"
+  },
+  "falsifier": "If GT under the identical protocol lands at or below MT-flagship accuracy in-family, the 2.34x anchor was a property of the old convention/mode, not of the architectures, and the defect-4 mechanism hunt is cancelled as moot.",
+  "launch_state": {"results_inspected": false}
+}
