@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "incumbent_efficiency_stage1_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-07T04:00:00Z",
+  "agenda": "defect 4, stage 1: the matched-parameter rung the stage-0 decision rule routed to",
+  "question": "At matched parameters (~9.6M), does the canonical MeshTransformer (x2L8 capacity, homogeneous mode, measure-consistent convention) close the incumbent's 2.63x in-family advantage, and does capacity change MT's zero-shot skill or boundedness?",
+  "arms": {
+    "mt_x2l8h": {
+      "model": "x2L8 capacity rung with field_mode=homogeneous (config embedded in the task dir; recovered from git 5e5ca855^, single delta: field_mode zpn->homogeneous)",
+      "dims": "operator 128/32, drive 192/48, operator_layers 8, ranks 192/64, kernel members 8, no query chunk checkpointing",
+      "dataset": "drivaer_ml_surface", "sampling_resolution": 10000, "seeds": [42, 43, 44]
+    }
+  },
+  "protocol": "identical to every 2026-08 lane: 500 epochs, lr 3e-3, StepLR 100/0.1, bf16, batch 1, augment=false, 4-GPU single-node DDP, AGA",
+  "instrument": "the round-3 paired instrument verbatim: metrics.jsonl normalized pressure_l2, in-family 5-res sweep + SHIFT estate/fastback smoke",
+  "comparators_frozen": {
+    "gt_9.5M_10k_means": [0.05301, 0.05326, 0.0534],
+    "mt_784k_homog_10k_means": [0.13438, 0.14079, 0.14472]
+  },
+  "deciding_gates": {
+    "E1_matched_param_gap": "MT-9.6M seed-mean 10k pressure_l2 / GT seed-mean (0.05322). <=1.25x: gap closed by scale, defect 4 reduces to per-FLOP accounting; 1.25-2.0x: partial, mechanism work justified; >=2.0x: capacity does not close it, defect 4 becomes absorb-the-soft-slice-mechanism or an honest incumbent-wins statement for program review",
+    "E2_zero_shot_skill": "smoke means on both families: still mean-predictor level (>0.8) or skill (<0.8)",
+    "E3_boundedness_at_scale": "homogeneous boundedness criterion (finite, mean<3.0) at 9.6M, both families, 3/3 seeds",
+    "E4_seed_band": "report"
+  },
+  "predictions": {
+    "E1": "gap remains >= 1.6x (p ~ 0.6); historical scale-law extrapolation said 2.34x at this rung under the old convention",
+    "E2": "still unskilled (p ~ 0.7)",
+    "E3": "bounded 3/3 (p ~ 0.75)"
+  },
+  "falsifier": "If E1 <= 1.25x, the per-parameter framing of defect 4 was an artifact of comparing across 12x scale, and the mechanism hunt is cancelled in favor of per-FLOP/latency accounting.",
+  "launch_state": {"results_inspected": false}
+}
