@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "matched_resource_gt_big_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-08T02:30:00Z",
+  "agenda": "defect 4 under the resource frame (amendment 5b13c2cb): the direct matched-VRAM comparison",
+  "question": "What accuracy does the incumbent reach when scaled UP to the MeshTransformer flagship's training-resource envelope (~36 GB peak VRAM class)?",
+  "arms": {
+    "gt_big": {
+      "runs": "gt_big_seed{42,43}",
+      "config": "geotransolver_surface + model.n_layers=24 model.n_hidden=512 (~72M params by layer*hidden^2 scaling; actual num_parameters and peak VRAM recorded from telemetry)",
+      "resource_prediction": "peak VRAM lands within [25, 60] GB, i.e. the flagship-class envelope (p ~ 0.6); if it overshoots 110 GB the arm is descriptive only"
+    }
+  },
+  "protocol": "frozen 2026-08 protocol verbatim (500 epochs, lr 3e-3, bf16, augment=false); if the deep GT diverges under the frozen lr, that IS the result (stability-at-scale) and no retuning happens inside this prereg",
+  "instrument": "round-3 paired instrument (in-family sweep + both-family smoke)",
+  "predictions": {
+    "in_family": "gt_big improves on gt_9.0M's 0.0532 (p ~ 0.6); beats every MT arm at any scale (p ~ 0.7)",
+    "zero_shot": "retains skill (< 0.8 both families) (p ~ 0.6)",
+    "stability": "trains to completion without divergence at lr 3e-3 (p ~ 0.65)"
+  },
+  "decision_relevance": "completes the resource-normalized frontier: gt_small (sub-flagship VRAM), gt (5 GB), gt_big (flagship-class VRAM) vs mt_flagship, x2h, x2l4h, x2l8h -- accuracy-vs-VRAM and accuracy-vs-wall-clock curves with both architectures at multiple points.",
+  "launch_state": {"results_inspected": false}
+}
