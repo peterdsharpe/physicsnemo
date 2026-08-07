@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "scale_boundedness_wave_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-08T00:30:00Z",
+  "agenda": "defect-4 follow-through: the E3 detonation anomaly and the two ends of the per-parameter frontier, launched together for a 36h unattended window",
+  "context": "E1 read 1.42x at matched 9.6M; E3 FAILED 2/3 (x2l8h seed 42 detonates zero-shot, estate mean 41, despite homogeneous mode). The detonation pathway is non-drive (degree-1 is exact in drive); candidate: geometry-statistics excursions through the operator/kernel stream.",
+  "arms": {
+    "A_x2l8h_seed_extension": {
+      "runs": "mt_x2l8h_seed45, mt_x2l8h_seed46 (identical to the stage-1 rung arms)",
+      "question": "detonation rate at 9.6M: currently 1/3; five seeds give a usable frequency estimate",
+      "prediction": "at least one more of the two detonates or shows max > 5 (p ~ 0.5); rate 0/5 would isolate seed 42 as an outlier"
+    },
+    "B_x2l8h_mixedres": {
+      "runs": "mt_x2l8h_mix_seed{42,43,44}: x2l8h + drivaer_ml_surface_mixedres (res 20000) + kernel_checkpoint_query_chunks=true (exact rematerialization, memory-only change)",
+      "question": "does the sampling axis restore boundedness at the scale where the mode axis alone lost it? At 784k, homog x mixedres had the tightest band (1.25x).",
+      "note": "the mixedres machinery was retired from the repo (sec-nb-stage1-pruning) on the evidence then available; the E3 anomaly reopens the sampling axis as a scale-robustness question, run from the AGA snapshot which predates the pruning",
+      "prediction": "bounded 3/3 with max < 5 on both families (p ~ 0.6); if yes AND the seed-45/46 arm detonates, sampling diversity is the scale-robust boundedness mechanism and the pruning of mixedres gets partially reversed with a notebook correction"
+    },
+    "C_gt_small": {
+      "runs": "gt_small_seed{42,43,44}: geotransolver_surface with model.n_layers=4 model.n_hidden=128 (target ~0.8M params; actual num_parameters recorded from the config log)",
+      "question": "does the incumbent's advantage profile (in-family accuracy, zero-shot skill, boundedness, flat resolution) survive at MeshTransformer's parameter count?",
+      "prediction": "gt_small in-family beats the 784k homogeneous flagship (p ~ 0.55); retains zero-shot skill < 0.8 (p ~ 0.5); bounded 3/3 (p ~ 0.7)"
+    }
+  },
+  "protocol": "identical to all 2026-08 lanes (500 epochs, lr 3e-3, bf16, augment=false, 4-GPU DDP, AGA); instrument: the round-3 paired instrument verbatim",
+  "decision_relevance": "A+B decide how the boundedness claim is scoped and whether mixedres returns; C decides whether the incumbent-wins statement is scale-uniform (if gt_small wins at 784k too, MT has no scale niche in-family and the program case rests entirely on structure/contracts).",
+  "launch_state": {"results_inspected": false}
+}
