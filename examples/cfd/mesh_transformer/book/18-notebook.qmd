@@ -2541,3 +2541,28 @@ incumbent's whole advantage profile survives at 784k-class scale --
 deciding whether the incumbent-wins statement is scale-uniform. All
 under the frozen protocol and paired instrument. Sixteen training
 lanes now run through the window.
+
+## 2026-08-08 — Accounting amendment: defect 4 re-framed from matched parameters to matched resources {#sec-nb-resource-accounting}
+
+Peter's correction, registered mid-window
+([artifact](../results/incumbent_resource_accounting_amendment_2026-08-08.json),
+sha256 5b13c2cb16ea5f9b): the binding constraints on model size are peak
+training VRAM, throughput/wall-clock, and large-run scalability -- not
+parameter count, which is demoted to descriptive. Only training
+telemetry was inspected to write this (no new accuracy numbers). The
+extracted table is stark: the incumbent trains in **4.6 GB peak and
+~3.6 h** (500 epochs, 4x GB300, res 10k) where the 784k flagship needs
+35.8 GB / ~12.8 h and the "matched-parameter" rung 104 GB / ~14 h --
+so on resource axes the incumbent leads by roughly an order of
+magnitude before accuracy is even considered, and E1's 1.42x
+matched-parameter gap stops being the deciding frame. Also recorded:
+the rung is actually 11.4M parameters, not the prereg's ~9.6M
+estimate. The defect-4 mechanism question sharpens accordingly: the
+soft-slice exchange delivers its accuracy inside a ~5 GB / 0.13
+s-step envelope, so absorbing the mechanism must mean absorbing the
+*efficiency*, and MT's kernel-attention activation footprint is the
+named bottleneck. Declared analyses (no new training): accuracy-vs-VRAM
+and accuracy-vs-wall-clock frontiers over the existing and in-flight
+lanes; a measured (not asserted) resolution-scaling-of-memory
+statement; both feed the road decision when the window's sixteen lanes
+land.

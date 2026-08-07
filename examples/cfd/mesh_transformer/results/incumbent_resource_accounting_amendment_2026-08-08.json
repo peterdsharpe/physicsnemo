@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "incumbent_resource_accounting_amendment",
+  "amends": "incumbent_efficiency_stage0/stage1 preregistrations (61156fc5, d76b6671) and the scale_boundedness_wave (872206dd)",
+  "registered_at_utc": "2026-08-08T02:00:00Z",
+  "results_inspected": true,
+  "inspection_scope": "training-resource telemetry only (peak per-GPU memory, per-epoch wall time, num_parameters) extracted from already-committed lanes; no new accuracy numbers were read",
+  "change": "Defect-4 comparisons are re-framed from matched PARAMETERS to matched RESOURCES, per Peter 2026-08-08: the binding constraints are peak training VRAM, training throughput/wall-clock, and scalability headroom -- parameter count is a proxy that this amendment demotes to descriptive.",
+  "extracted_resource_table_bf16_4xGB300_res10k": {
+    "gt_9.0M":        {"peak_gpu_mem_gb": 4.62,  "train_wall_s_500ep": "~12900", "params": 9046016},
+    "mt_x2l8h_11.4M": {"peak_gpu_mem_gb": 104.24, "train_wall_s_500ep": "~50200", "params": 11420812},
+    "mt_flagship_784k": {"peak_gpu_mem_gb": 35.78, "train_wall_s_500ep": "~46100", "params": 783916},
+    "mt_flagship_784k_mixedres_res20k": {"peak_gpu_mem_gb": 71.2, "train_wall_s_500ep": "~60000", "params": 783916}
+  },
+  "immediate_implications_declared": [
+    "On resource axes the incumbent's lead is far larger than the parameter frame suggested: 7.7x less peak VRAM and 3.6x less wall-clock than even the 784k flagship, 22x less VRAM and 3.9x less wall-clock than the matched-parameter rung, while holding the accuracy lead.",
+    "The rung's actual parameter count is 11.4M, not the ~9.6M the stage-1 prereg estimated; recorded here.",
+    "The E1 1.42x 'gap at matched parameters' remains true but is no longer the deciding frame; accuracy-per-VRAM and accuracy-per-wall-clock frontiers become primary for the defect-4 road decision.",
+    "The mechanism question sharpens: the soft-slice exchange delivers accuracy in a ~5 GB / 0.13 s-step envelope; MT's kernel-attention activation footprint is the resource bottleneck. 'Absorb the mechanism' must mean absorbing the EFFICIENCY, not just the accuracy."
+  ],
+  "planned_analyses_no_new_training": [
+    "accuracy vs peak-VRAM and accuracy vs train-wall-clock frontiers from existing lanes (flagship, x2h, x2l4h, x2l8h, gt_small, gt) once the window's lanes complete",
+    "scalability-headroom statement: at 10k-cell resolution GT has ~50x VRAM headroom on GB300, MT rung ~2.5x; resolution-scaling of memory to be measured from the sweep evals' telemetry rather than asserted"
+  ],
+  "gates_unchanged": "all registered gates keep their letter; the ROAD DECISION criteria (mechanism hunt vs incumbent-wins statement) will be argued on resource-normalized frontiers with the parameter frame reported alongside"
+}
