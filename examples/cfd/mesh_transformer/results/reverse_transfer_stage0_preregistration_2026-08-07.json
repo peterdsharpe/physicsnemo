@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "reverse_transfer_stage0_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-07T16:00:00Z",
+  "agenda": "generalization claim hardening ahead of program review: is the incumbent's zero-shot skill direction-symmetric, and does the in-family gap replicate on a second training family?",
+  "question": "Train on SHIFT-SUV estate (train split; test split stays sealed) and measure: in-family estate accuracy, zero-shot DrivAerML, zero-shot fastback -- for both the incumbent (GeoTransolver 9.5M) and the canonical MeshTransformer (homogeneous flagship 784k).",
+  "arms": {
+    "gt_rev": {"model": "geotransolver_surface", "seeds": [42, 43, 44]},
+    "mt_rev": {"model": "mesh_transformer_surface_flagship + field_mode=homogeneous (snapshot default is zpn)", "seeds": [42, 43, 44]}
+  },
+  "protocol": "identical to all 2026-08 lanes: dataset=shift_suv_surface (estate, fixed reference_length 8.0), res 10000, 500 epochs, lr 3e-3, bf16, augment=false, 4-GPU single-node DDP, AGA",
+  "instrument": "metrics.jsonl normalized pressure_l2: in-family estate val; zero-shot drivaer_ml val (res 10000) and shift_suv fastback val",
+  "deciding_gates": {
+    "R1_gt_skill_symmetry": "GT zero-shot on DrivAerML: mean < 0.8 on 3/3 seeds means the incumbent's transfer skill is direction-symmetric and architecture-generic; mean >= 0.8 means the forward result was partly family/direction luck",
+    "R2_mt_level": "MT zero-shot on DrivAerML: mean-predictor level (>= 0.8) predicted; < 0.8 on any seed would be the program's first transfer-skill signal",
+    "R3_infamily_gap_second_family": "GT/MT in-family estate ratio; replication band declared 2.0-3.5x (forward measurement was 2.63x)",
+    "R4_mt_boundedness_reverse": "MT zero-shot finite and mean < 3.0 on both foreign targets, 3/3 seeds",
+    "R5_fastback_near_transfer": "both models zero-shot on fastback (near-family: same platform, different body style) -- descriptive, contextualizes far-transfer numbers"
+  },
+  "predictions": {
+    "R1": "symmetric skill, p ~ 0.55 (DrivAerML val is 5x smaller in case count than estate-train; geometry statistics differ more in this direction)",
+    "R2": "mean-predictor level, p ~ 0.75",
+    "R3": "in band, p ~ 0.65",
+    "R4": "bounded, p ~ 0.8"
+  },
+  "falsifier": "If R1 fails (GT unskilled in reverse), the incumbent-wins narrative on zero-shot transfer weakens to 'wins on the one measured direction' and the program review statement must say so; if R2 flips (MT skilled in reverse), the mode/convention stack deserves a dedicated follow-up before any incumbent-wins statement.",
+  "launch_state": {"results_inspected": false}
+}
