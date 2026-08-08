@@ -2620,3 +2620,21 @@ instrument:
    direction-asymmetric (candidate explanation, declared before the MT
    reverse lanes read out: DrivAerML's training diversity exceeds
    estate's, so the forward model generalizes further).
+
+## 2026-08-08 — Window readout, part 2 (telemetry): 564M parameters in the flagship's memory envelope {#sec-nb-window-readout-2}
+
+All remaining training finished except the three mixedres-at-scale
+lanes (epoch ~462). Two telemetry facts from the frontier-extension
+arms, recorded ahead of their accuracy evals: (1) **gt_huge trained to
+completion**: 564,334,532 parameters, 48 layers x 1024 hidden, at the
+frozen lr -- peak 36.6 GB, 7.2 h wall. That is the same memory
+envelope as our 784k-parameter flagship (35.8 GB): the incumbent fits
+**720x more parameters in the same VRAM**, and both stability
+predictions (p ~ 0.5-0.55) came in on the favorable side.
+(2) **Chunk-checkpointing relocates the MT rung** from 104 GB to
+55.8 GB at a 1.33x step-time cost (both inside the registered bands)
+-- MT's memory-efficient operating point still needs 1.5x the VRAM of
+the 564M GT. The activation-footprint asymmetry is structural: GT's
+soft-slice attention materializes O(N x slices) state where MT's
+kernel decode materializes O(N x members x rank)-class state per
+query block.
