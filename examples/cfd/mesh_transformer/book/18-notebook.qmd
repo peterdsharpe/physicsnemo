@@ -2578,3 +2578,45 @@ two-architecture-by-multiple-points on both axes. The frozen lr 3e-3
 protocol is kept deliberately: divergence at depth would itself be a
 stability-at-scale result, not an excuse to retune inside the prereg.
 Eighteen training lanes now run through the offline window.
+
+## 2026-08-08 — Window readout, part 1: the frontier is parallel, the incumbent's profile is scale-uniform, and near-transfer is nearly free {#sec-nb-window-readout-1}
+
+Eleven of eighteen lanes evaluated
+([reduction](../results/mixedres_training_2026-07-31/sweep/window_reduction.json));
+mt_rev x3, x2l8h x mixedres x3, and gt_rev seed 43 (deterministic
+estate sliver failure -- guard ported to the estate yaml, lane
+re-chained; the same fp32 sliver class as drivaer, caught by the step
+barrier on two different nodes) still running. Findings on the paired
+instrument:
+
+1. **Capacity curve (E1 context)**: MT in-family 10k walks
+   0.140 (784k) -> 0.101 (x2h) -> 0.081 (x2l4h) -> 0.076 (x2l8h,
+   3-seed mean), while GT walks 0.087 (gt_small) -> 0.053 (9M) ->
+   0.051 (72M). The frontiers are roughly PARALLEL -- MT's local slope
+   flattens (6% gain for the last 2.4x parameters) and does not
+   converge on GT's curve. Scale alone will not close the 1.42x.
+2. **Detonation rate at 11.4M (wave arm A)**: seeds 45/46 split --
+   seed 46 clean (0.83-0.85), seed 45 elevated with fastback max 6.0.
+   Five-seed picture: 1/5 hard detonation (mean 41), 1/5 tail escape
+   (max > 5), 3/5 clean. The registered prediction (>= 1 more
+   detonates or max > 5, p ~ 0.5) CONFIRMED via seed 45. Boundedness
+   at scale is genuinely unreliable for the homogeneous mode.
+3. **gt_small (wave arm C)**: at roughly MT-flagship parameter count
+   the incumbent still wins in-family (0.086-0.088 vs 0.134-0.145,
+   ~1.6x) AND keeps zero-shot skill (0.65-0.68 both families, tight
+   seeds) at 2.1 GB / 3.9 h. The incumbent-wins profile is
+   scale-uniform; MT has no in-family niche at any tested scale.
+4. **gt_big (matched-VRAM arm)**: 24x512 trains stably at the frozen
+   lr, reaches 0.050-0.051 in-family with retained skill (0.56-0.64),
+   at 11.2 GB peak -- my prereg predicted 25-60 GB; GT undershot the
+   flagship-class envelope by 3x. Resource predictions about GT keep
+   erring in GT's favor.
+5. **Reverse transfer, GT (2/3 seeds)**: in-family estate 0.0495-0.0500
+   matches the forward level; **near-transfer estate->fastback is
+   0.118-0.120** -- almost in-family quality across body styles on the
+   same platform; far-transfer estate->DrivAerML is 0.73-0.77 --
+   passing the R1 skill letter (< 0.8) but much weaker than the
+   forward direction's 0.54-0.64. Transfer skill is real but
+   direction-asymmetric (candidate explanation, declared before the MT
+   reverse lanes read out: DrivAerML's training diversity exceeds
+   estate's, so the forward model generalizes further).

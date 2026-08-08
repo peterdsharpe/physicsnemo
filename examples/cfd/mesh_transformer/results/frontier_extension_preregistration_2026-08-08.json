@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "frontier_extension_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-08T15:30:00Z",
+  "agenda": "resource-frame follow-through (amendment 5b13c2cb): fill the frontier while the window's evals run",
+  "arms": {
+    "D_gt_big_seed44": {
+      "runs": "gt_big_seed44 (third seed of the matched-VRAM arm c7634642)",
+      "why": "2 seeds is thin for a frontier point that may anchor the road decision"
+    },
+    "E_gt_huge_scalability": {
+      "runs": "gt_huge_seed42: geotransolver_surface + model.n_layers=48 model.n_hidden=1024 (~580M params by scaling; actual recorded)",
+      "why": "Peter's third axis: is one architecture more scalable to very large runs? This is a descriptive single-seed probe of GT's stability and resource scaling an order of magnitude up, under the frozen lr 3e-3.",
+      "predictions": "peak VRAM in [35, 110] GB (p ~ 0.55); trains without divergence (p ~ 0.5 -- depth 48 at lr 3e-3 is a genuine gamble and divergence is a result); if it converges, in-family beats gt_big (p ~ 0.6)"
+    },
+    "F_mt_chunked_telemetry": {
+      "runs": "mt_x2l8h_chunkprobe: x2l8h + kernel_checkpoint_query_chunks=true, seed 42, training.num_epochs=20 -- a TELEMETRY-ONLY probe (chunk rematerialization is mathematically exact, so accuracy is the existing rung's; only peak VRAM and step time are new)",
+      "why": "relocates the MT rung on the accuracy-vs-VRAM frontier to its memory-efficient operating point; 20 epochs suffice for stable telemetry",
+      "predictions": "peak VRAM falls from 104 GB to [25, 60] GB (p ~ 0.6) at a step-time cost of 1.2-2.0x (p ~ 0.6)"
+    }
+  },
+  "protocol": "frozen 2026-08 protocol; instrument for D/E: the round-3 paired instrument; F reports telemetry only",
+  "launch_state": {"results_inspected": false}
+}
