@@ -2638,3 +2638,32 @@ the 564M GT. The activation-footprint asymmetry is structural: GT's
 soft-slice attention materializes O(N x slices) state where MT's
 kernel decode materializes O(N x members x rank)-class state per
 query block.
+
+## 2026-08-09 — Window readout, part 3: reverse gates; GT's frontier turns; MT's first transfer skill {#sec-nb-window-readout-3}
+
+Eval wave 2 reduced
+([reduction](../results/mixedres_training_2026-07-31/sweep/window_reduction.json));
+only the mixedres-at-scale evals remain. Reverse-transfer gates
+(prereg bfbe38c9): **R1 PASS 3/3** -- GT far-transfer estate->DrivAerML
+0.73-0.77, under the 0.8 letter on every seed, so the incumbent's
+zero-shot skill is direction-symmetric in kind, though clearly weaker
+than forward (0.54-0.64): magnitude asymmetry consistent with the
+declared training-diversity explanation. **R2 held** -- MT far-transfer
+1.49-1.81, no skill. **R3 PASS at the band edge** -- in-family gap on
+the second family is 2.0x (MT 0.097-0.104 vs GT 0.0495-0.0500),
+inside the declared 2.0-3.5. **R4 PASS** -- MT reverse bounded 3/3
+(max 4.3). **R5, the genuine surprise**: MT near-transfer
+estate->fastback lands at **0.21-0.23** -- well into skill territory,
+the program's FIRST transfer-skill signal for MeshTransformer. GT does
+the same transfer at 0.11-0.12. Within-platform generalization works
+for both architectures; cross-dataset generalization belongs to the
+incumbent (and to training diversity). Also: the recovered
+gt_rev_seed43 matches its peers exactly (0.0500), so the sliver-guard
+patch did not perturb the result. **Frontier extension**: gt_big
+seed 44 reads 0.0644 vs its peers' 0.0504/0.0511 -- GT carries a
+~1.28x seed band at 72M; and **gt_huge's accuracy TURNS THE FRONTIER**:
+0.0872 at 564M, worse than both gt_big and gt-9M, with weakened
+zero-shot skill (0.74). Under the frozen protocol GT's scaling is
+non-monotone past ~72M -- naive depth-48 scaling stalls (lr untuned by
+declaration). Neither architecture scales blindly; GT's practical
+sweet spot on this dataset is at or below 72M.
