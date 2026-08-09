@@ -2793,3 +2793,36 @@ exact-equality smell test, declared here before any v2 value is read.
 V2 (launched): reader keeps a 40k pool, biased 10:1 draw at 10k, plus
 a uniform 40k->10k control to isolate the bias effect from the
 pipeline-depth change.
+
+## 2026-08-09 — P3 verdict and the three-probe synthesis {#sec-nb-contract-probes-synthesis}
+
+P3 resolved in two more rounds
+([v2](../results/mixedres_training_2026-07-31/sweep/p3v2_reduction.json),
+[v3](../results/mixedres_training_2026-07-31/sweep/p3v3_reduction.json)).
+The v2 uniform 40k->10k control matches every baseline (instrument
+sound). Under a 10:1 front/back density bias: **GT degrades 1.9-3.6x**
+-- a clean verdict, since GT never sees the weights; pure density
+sensitivity. **MT fails its own 10% gate too**: 1.9-2.5x with the
+approximate-HT sampler, and still **1.65-2.24x with exact Poisson
+inclusion probabilities (v3)** -- so the failure is the model's, not
+the instrument's. The honest mechanics: HT weighting keeps the
+quadrature *unbiased*, but a 10:1 allocation leaves the sparse half
+with ~11x fewer points and correspondingly higher estimator variance
+in every boundary integral that reads it -- a variance term no
+weighting scheme removes. The measure contract MITIGATES (MT
+degrades ~2x less than GT relative to its own baseline) but does not
+deliver density-robustness; the defect-1 closure generalizes only
+across uniform densities.
+
+**Three-probe synthesis for the MT2 gate list.** P1: exact-symmetry
+mechanism IN, decisively (GT 26-32x off-pose vs MT invariant to 0.6%;
+the pose-conditionality of every incumbent number is now measured).
+P2: degree declaration verified exact for MT, GT saturates rather
+than detonates -- slot retained on cheapness and on deployments where
+amplitude is live, but the forward-recipe motivation is weak. P3:
+measure-aware aggregation IN as mitigation (halves the damage), with
+a recorded caveat that density-robustness at inference is bounded by
+estimator variance, not by weighting. The probes also harden the
+program-review framing: the incumbent's dominance table
+(sec-nb-defect4-synthesis) holds ON-POSE AND ON-DENSITY; off either
+axis, the structural contracts are the only thing standing.
