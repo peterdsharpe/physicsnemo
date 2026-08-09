@@ -131,9 +131,12 @@ class MeshTransformer2(Module):
         if points.ndim == 2:
             points = points[None]
             normals = normals[None]
-        if drive.ndim == 1:
-            drive = drive[None]
         b, n, _ = points.shape
+        ### Tolerate any drive layout the recipe delivers: (3,), (B, 3), or
+        ### collated (B, 1, 3).
+        drive = drive.reshape(-1, 3)
+        if drive.shape[0] != b:
+            drive = drive.expand(b, 3)
 
         ### Drive-degree-one bypass: backbone sees the direction only.
         drive_mag = drive.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B,1)
@@ -160,8 +163,7 @@ class MeshTransformer2(Module):
         if measure_weights is None:
             log_w = h.new_zeros(b, n, 1)
         else:
-            if measure_weights.ndim == 1:
-                measure_weights = measure_weights[None]
+            measure_weights = measure_weights.reshape(b, n)
             log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
         for block in self.blocks:

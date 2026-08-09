@@ -76,3 +76,10 @@ def test_measure_weight_scale_invariance(setup):
     with torch.no_grad():
         ws = m(pts, nrm, drv, w * 137.0)
     assert torch.allclose(ws, base, atol=1e-9)
+
+
+def test_collated_input_shapes(setup):
+    m, pts, nrm, drv, w, base = setup
+    with torch.no_grad():
+        out = m(pts, nrm, drv[:, None, :], w[..., None].squeeze(-1))
+    assert torch.allclose(out, base, atol=1e-12)
