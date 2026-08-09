@@ -2667,3 +2667,61 @@ zero-shot skill (0.74). Under the frozen protocol GT's scaling is
 non-monotone past ~72M -- naive depth-48 scaling stalls (lr untuned by
 declaration). Neither architecture scales blindly; GT's practical
 sweet spot on this dataset is at or below 72M.
+
+## 2026-08-09 — Window readout, part 4: sampling does not rescue boundedness; detonation is an init-basin property {#sec-nb-window-readout-4}
+
+The last arm reduced (B, prereg 872206dd): **mixed-resolution sampling
+does NOT restore boundedness at 11.4M** -- seed 42 detonates
+catastrophically with mixedres training (estate mean 1,656, max
+110,447; fastback mean 3,324), seeds 43/44 are clean and tight
+(0.88-0.93, max 1.15). The registered prediction (bounded 3/3, p ~ 0.6)
+FAILED, and the conditional un-pruning clause does not trigger:
+mixedres stays retired. The sharper finding comes from reading arms A
+and B together: **seed 42 detonates in BOTH the fixed and mixedres
+x2l8h arms while 43/44 are clean in both** -- at this scale the
+detonation tracks the seed (the init basin), not the sampling
+distribution. Whatever escapes is decided at initialization and
+training-data diversity does not repair it. Mixedres retains its
+resolution-flattening (40k mean 0.075-0.081, below 10k) at an
+in-family cost of ~0.077-0.083 vs fixed 0.076.
+
+## 2026-08-09 — Defect-4 synthesis: the road decision {#sec-nb-defect4-synthesis}
+
+Every registered arm has read out. The complete paired evidence, all on
+the identical instrument and protocol
+([window](../results/mixedres_training_2026-07-31/sweep/window_reduction.json),
+[rung](../results/mixedres_training_2026-07-31/sweep/rung_reduction.json),
+[round 3](../results/mixedres_training_2026-07-31/sweep/round3_reduction.json)):
+
+| arch/scale | in-family 10k | peak VRAM | train wall | zero-shot foreign |
+|---|---|---|---|---|
+| MT 784k | 0.134-0.145 | 35.8 GB | 12.8 h | bounded, no skill |
+| MT 11.4M | 0.073-0.080 | 104 GB (55.8 chunked) | 14 h | seed-conditioned detonation (2/6 lanes across arms) |
+| GT 0.9M-class | 0.086-0.088 | 2.1 GB | 3.9 h | skilled (0.65-0.68) |
+| GT 9.0M | 0.053 | 4.6 GB | 3.6 h | skilled (0.54-0.64) |
+| GT 72M | 0.050-0.064 | 11.2 GB | 4.6 h | skilled (0.56-0.67) |
+| GT 564M | 0.087 | 36.6 GB | 7.2 h | weakened (0.74) |
+
+The honest statement for program review: **at every resource budget
+tested, the incumbent architecture dominates in-family accuracy,
+zero-shot transfer, boundedness reliability, and training cost.**
+MT's measured assets reduce to: near-transfer skill (0.21-0.23
+estate->fastback -- real, but GT does 0.11-0.12), three closed
+root-cause defects, and its exact structural contracts (similarity
+equivariance, declared drive degree, zero preservation, quadrature
+awareness) -- none of which showed a measured *differential* advantage
+on any axis this program has tested. GT's weaknesses are real but
+lesser: a 1.28x seed band at 72M and a frontier that turns at 564M
+under the frozen lr.
+
+Recommendation staged for Peter: the registered "absorb the mechanism"
+branch should be INVERTED. The evidence supports structuring the
+winner, not accelerating the loser -- port MT's earned conventions
+(measure-consistent quadrature; a degree-declared drive read-in, which
+GT's global_embedding pathway lacks and which the estate->DrivAerML
+weakness suggests could matter; the boundary-trace data contract) onto
+the soft-slice architecture as testable increments, each with the same
+preregistered discipline. Alternatively the program can conclude with
+the incumbent-wins statement and the three closed defects as its
+contribution. This is a direction decision above the notebook's pay
+grade; both roads are staged.
