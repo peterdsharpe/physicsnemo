@@ -2847,3 +2847,28 @@ survives; beyond 1.50x it is refuted and the fallback (frame-averaged
 raw coordinates) is already declared. S0_2 (rotation ratio <= 1.05)
 is a contract check gated by a pre-launch unit equivariance test --
 its failure would be an implementation bug, not a result.
+
+## 2026-08-10 — MT2 stage-0 verdict: v0 REFUTED at 3.08x; the invariants were non-separating {#sec-nb-mt2-stage0-verdict}
+
+The thesis-killer killed the v0 formulation
+([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_stage0_reduction.json)).
+**S0_1 FAILED**: in-family 10k seed-mean 0.1641 = 3.08x GT, past the
+registered 1.50x refutation bar (and below the 784k flagship). The
+autopsy is clean because the other gates passed: S0_2 rotation ratio
+1.000 (exact equivariance end-to-end), resolution transfer flat
+(40k/10k 0.97), the tightest seed band the program has measured
+(1.006x), training at 1.8 GB / 2.5 h (S0_3 passed with 2.5x margin),
+estate smoke 0.81-0.83. **Diagnosis**: the five per-point invariants
+(|r|, log|r|, r.d, r.n, n.d) are NON-SEPARATING -- they collapse the
+SO(2) orbit about the drive axis, so left/right-mirrored points with
+mirrored normals are bitwise indistinguishable to the backbone. The
+routing did not fail; the featurization quotiented the geometry away.
+Also recorded: the measure-biased assignment softmax alone does NOT
+buy density robustness (biased/uniform 5.7-6.4x, worse than GT's
+3.6x) -- consistent with P3's estimator-variance lesson. Registered
+next (stage 0b, an input-covariant repair rather than the declared
+frame-averaging fallback, which stays in reserve): augment the vector
+set with the cloud's measure-weighted principal axes -- data-derived,
+covariant, sign-fixed by projection skewness -- making the invariant
+set separating while keeping every contract exact and every cost at
+the edges.
