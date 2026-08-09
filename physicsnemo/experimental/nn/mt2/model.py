@@ -162,15 +162,18 @@ class MeshTransformer2(Module):
             w_pca = torch.ones(b, n, device=points.device)
         else:
             w_pca = measure_weights.reshape(b, n)
-        pca_dtype = torch.promote_types(r.dtype, torch.float32)
-        w_pca = (w_pca / w_pca.sum(dim=1, keepdim=True)).to(pca_dtype)
-        r32 = r.to(pca_dtype)
-        cov = torch.einsum("bn,bni,bnj->bij", w_pca, r32, r32)
-        _, evecs = torch.linalg.eigh(cov)  # ascending; columns are axes
-        proj = torch.einsum("bni,bik->bnk", r32, evecs)
-        skew = torch.einsum("bn,bnk->bk", w_pca, proj**3)
-        sign = torch.where(skew >= 0, 1.0, -1.0)
-        axes = (evecs * sign[:, None, :]).to(r.dtype)  # (B, 3, 3)
+        ### eigh has no bf16 CUDA kernel and autocast would downcast the
+        ### einsums, so the whole frame computation runs autocast-free.
+        with torch.autocast(device_type=r.device.type, enabled=False):
+            pca_dtype = torch.promote_types(r.dtype, torch.float32)
+            w_pca = (w_pca / w_pca.sum(dim=1, keepdim=True)).to(pca_dtype)
+            r32 = r.to(pca_dtype)
+            cov = torch.einsum("bn,bni,bnj->bij", w_pca, r32, r32)
+            _, evecs = torch.linalg.eigh(cov)  # ascending; columns are axes
+            proj = torch.einsum("bni,bik->bnk", r32, evecs)
+            skew = torch.einsum("bn,bnk->bk", w_pca, proj**3)
+            sign = torch.where(skew >= 0, 1.0, -1.0)
+            axes = (evecs * sign[:, None, :]).to(r.dtype)  # (B, 3, 3)
         e = axes.mT[:, None, :, :].expand(b, n, 3, 3)  # (B, N, 3 axes, 3)
 
         def dots(v):
