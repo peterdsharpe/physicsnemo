@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mt2_stage0_preregistration",
+  "status": "PREREGISTERED_PRE_IMPLEMENTATION",
+  "registered_at_utc": "2026-08-09T21:00:00Z",
+  "agenda": "MT2 program, stage 0: the thesis-killer -- does soft-slice global routing retain its power when fed exclusively invariant features?",
+  "thesis": "GT's measured advantages live in normalized global routing, not in raw-coordinate access; MT's contracts can be paid once at the network edges (GLOBE-style input-covariant featurization + vector-basis outputs) at ~zero interior cost.",
+  "architecture_v0": {
+    "name": "MeshTransformer2 (physicsnemo/experimental/nn/mt2)",
+    "inputs": "interior points (cell centroids), normals, unit drive direction, optional per-point quadrature measure weights",
+    "invariant_featurization": "per-point vector set {r_i=(x_i-mean)/L_ref, n_i, d}: |r|, log|r|, rhat.d, rhat.n, n.d (no chirality pseudo-scalar in v0 -- exact O(3))",
+    "backbone": "L pre-LN layers of measure-weighted soft-slice attention (S learned slices; assignment softmax; slice states measure-weighted means) + slice-mixing MLP + broadcast, all on invariant channels",
+    "equivariant_head": "pressure = MLP(h); wss = sum of invariant coefficients x basis {d, n_i, rhat_i + spherical-basis complements per GLOBE field_kernel}",
+    "contracts": "exact similarity equivariance by construction; exact drive degree 1 via output scaling by |d_input|; normalization on every pathway",
+    "target_scale": "~6-9M params (hidden 256, L 12, S 256), GT-class resources"
+  },
+  "arms": {
+    "mt2_v0": {"seeds": [42, 43, 44], "dataset": "drivaer_ml_surface", "res": 10000},
+    "baselines_frozen": "gt_fixed_seed{42,43,44} (10k in-family 0.0530-0.0534; rotation-orbit 26-32x degraded; density-bias 3.6x; VRAM 4.6GB; wall 3.6h)"
+  },
+  "protocol": "frozen 2026-08 protocol verbatim; paired instrument (in-family 5-res sweep, estate+fastback smoke) plus P1 rotation probe and P3v2/v3 density probes",
+  "deciding_gates": {
+    "S0_1_thesis": "in-family 10k seed-mean <= 1.30x GT's (0.0532): thesis survives; <= 1.10x: strong pass; > 1.50x: thesis REFUTED (invariant features break slice routing) and MT2 redesigns around frame-averaged raw coordinates",
+    "S0_2_contract": "P1 rotation ratio <= 1.05 on all seeds (exact equivariance verified end-to-end; anything else is an implementation bug, not a result)",
+    "S0_3_resources": "peak VRAM <= 1.5x GT (<= 7 GB) and wall <= 1.5x GT (<= 5.5 h)",
+    "S0_4_density": "P3v2-instrument ratio reported vs GT's 1.9-3.6x and MT's 1.7-2.5x (measure-weighted softmax should sit at or below MT's mitigation level)",
+    "S0_5_zero_shot": "estate+fastback smoke descriptive; GT-like local features + routing make skill (< 0.8) plausible (p ~ 0.4)"
+  },
+  "predictions": {
+    "S0_1": "survives at <= 1.30x (p ~ 0.55); strong pass <= 1.10x (p ~ 0.25)",
+    "S0_2": "passes after at most one bug-fix iteration (p ~ 0.8); unit equivariance test gates launch",
+    "S0_3": "passes (p ~ 0.75)",
+    "S0_4": "at or below MT's level (p ~ 0.6)"
+  },
+  "falsifier": "S0_1 > 1.50x with S0_2 passing kills the central MT2 bet as formulated; the recorded fallback is frame-averaging over input-derived frames on raw coordinates, which trades exactness cost for representation freedom.",
+  "launch_state": {"results_inspected": false, "implementation_state": "not yet written at registration"}
+}
