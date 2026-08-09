@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "contract_axis_probes_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-09T17:00:00Z",
+  "agenda": "MT2 design gating (sec-nb-defect4-synthesis): the three axes the scorecard never probed and where MT's structural contracts should show differential value. Eval-only, existing checkpoints.",
+  "checkpoints": {
+    "gt": "gt_fixed_seed{42,43,44} (defect-4 task dir)",
+    "mt": "homog_fixed_seed{42,43,44} (stage-1 task dir; similarity-equivariant, degree-declared, measure-consistent -- the paired positive control on every probe)"
+  },
+  "probes": {
+    "P1_rotation_orbit": {
+      "instrument": "drivaer_probe_rot.yaml: random per-sample z-rotation of geometry + all vector data (cell_data incl. normals/wss truth, global incl. U_inf and U_inf_dir); scalar truth per point unchanged; res 10000; metrics.jsonl pressure_l2 vs each model's existing unrotated 10k baseline",
+      "gates": "MT invariant: per-seed mean within 5% of baseline (equivariance is exact in theory; slack for fp and centering interactions). GT: ratio to baseline reported; DEGRADED means > 1.5x on >= 2 seeds",
+      "predictions": "MT invariant p ~ 0.85; GT degraded p ~ 0.7",
+      "decision": "GT degraded -> canonicalization front-end earns its MT2 slot AND the benchmark-incompleteness point is demonstrated, not asserted; GT robust -> pose diversity in DrivAerML apparently suffices and canonicalization is demoted to optional"
+    },
+    "P2_drive_amplitude_degree": {
+      "instrument": "redimensionalize=false; scale the drive input by k in {0.5, 2, 4} (U_inf_dir for MT, U_inf for GT) plus a k=1 baseline run in the same normalized space; effective degree per case d(k) = log(pred_rms_k / pred_rms_1) / log(k) from saved predictions; seeds 42 only (degree is an architecture property)",
+      "gates": "MT homogeneous: d(k) = 1.000 +/- 0.02 at every k (the declared contract, now measured end-to-end through the recipe). GT: d(k) reported; MISBEHAVED means |d| outside [0.5, 1.5] at any k or non-monotone response",
+      "predictions": "MT exact p ~ 0.85; GT misbehaved p ~ 0.55 (its euler-arm analogue measured implicit degree ~8-21, but softmax/layernorm may saturate instead)",
+      "decision": "GT misbehaved -> norm-factored drive read-in earns its MT2 slot; GT saturates gracefully -> declared degree is demoted to a nice-to-have"
+    },
+    "P3_nonuniform_sampling": {
+      "instrument": "drivaer_probe_biased.yaml: 10:1 front/back cell-density bias at res 10000 with per-cell inverse-inclusion weights composed into the measure (with-replacement HT approximation, declared); metrics.jsonl pressure_l2 vs uniform 10k baseline",
+      "gates": "MT (measure-consistent): per-seed mean within 10% of baseline. GT (measure-blind): ratio reported; SENSITIVE means > 1.10x on >= 2 seeds",
+      "predictions": "MT within band p ~ 0.7; GT sensitive p ~ 0.5 (weakest prediction: softmax normalization may confer robustness to density as well as to count)",
+      "decision": "GT sensitive -> measure-aware softmax earns its MT2 slot; GT robust -> plain softmax suffices and the quadrature machinery is demoted to the IO contract"
+    }
+  },
+  "protocol_notes": "all probes reuse the frozen infer protocol on AGA; job-local additions (ScaleGlobalField, BiasedSubsampleMesh, 8 yaml variants) live in the task-dir snapshot and are recorded here; P1/P3 compare against the already-committed 10k baselines on the identical instrument",
+  "launch_state": {"results_inspected": false}
+}
