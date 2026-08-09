@@ -107,18 +107,22 @@ class MeshTransformer2(Module):
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
         self.eps = eps
-        ### Invariants of {r, n, d}: |r|, log|r|, rhat.d, rhat.n, n.d.
+        ### Invariants of {r, n, d, e1, e2, e3}: |r|, log|r|, plus dots of
+        ### rhat and n against the drive and the cloud's skew-oriented
+        ### principal axes. The principal axes make the set SEPARATING
+        ### (stage-0 v0 failed because the SO(2) orbit about the drive axis
+        ### was collapsed; see sec-nb-mt2-stage0-verdict).
         self.embed = nn.Sequential(
-            nn.Linear(5, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+            nn.Linear(11, hidden), nn.GELU(), nn.Linear(hidden, hidden)
         )
         self.blocks = nn.ModuleList(
             _SliceBlock(hidden, n_slices, mlp_ratio) for _ in range(n_layers)
         )
         self.norm_out = nn.LayerNorm(hidden)
-        ### Vector head: coefficients over the basis {d, n, rhat} plus the
-        ### spherical-basis complements of (rhat, n) and (rhat, d) -- the
-        ### GLOBE multi-vector expansion (7 basis vectors total).
-        self.n_basis = 7
+        ### Vector head: coefficients over {d, n, rhat, e1, e2, e3} plus
+        ### the spherical-basis complements of (rhat, n) and (rhat, d) --
+        ### the GLOBE multi-vector expansion (10 basis vectors total).
+        self.n_basis = 10
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
 
     def forward(
@@ -148,6 +152,30 @@ class MeshTransformer2(Module):
         r_hat = r / r_mag
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
+        ### Measure-weighted principal axes of the centered cloud,
+        ### skew-oriented: covariant with rotations, deterministic signs,
+        ### computed in fp32 for eigh stability. Exactness holds where the
+        ### covariance spectrum is non-degenerate (generic for vehicle
+        ### geometry); near-degenerate spectra soften the frame -- the
+        ### known global obstruction to continuous equivariant frames.
+        if measure_weights is None:
+            w_pca = torch.ones(b, n, device=points.device)
+        else:
+            w_pca = measure_weights.reshape(b, n)
+        pca_dtype = torch.promote_types(r.dtype, torch.float32)
+        w_pca = (w_pca / w_pca.sum(dim=1, keepdim=True)).to(pca_dtype)
+        r32 = r.to(pca_dtype)
+        cov = torch.einsum("bn,bni,bnj->bij", w_pca, r32, r32)
+        _, evecs = torch.linalg.eigh(cov)  # ascending; columns are axes
+        proj = torch.einsum("bni,bik->bnk", r32, evecs)
+        skew = torch.einsum("bn,bnk->bk", w_pca, proj**3)
+        sign = torch.where(skew >= 0, 1.0, -1.0)
+        axes = (evecs * sign[:, None, :]).to(r.dtype)  # (B, 3, 3)
+        e = axes.mT[:, None, :, :].expand(b, n, 3, 3)  # (B, N, 3 axes, 3)
+
+        def dots(v):
+            return torch.einsum("bnc,bnkc->bnk", v, e)
+
         invariants = torch.cat(
             [
                 r_mag,
@@ -155,6 +183,8 @@ class MeshTransformer2(Module):
                 (r_hat * d_hat).sum(-1, keepdim=True),
                 (r_hat * n_hat).sum(-1, keepdim=True),
                 (n_hat * d_hat).sum(-1, keepdim=True),
+                dots(r_hat),
+                dots(n_hat),
             ],
             dim=-1,
         )
@@ -179,9 +209,16 @@ class MeshTransformer2(Module):
         ### non-orthogonal inputs span via the complements.
         _, e_th_n, e_ph_n = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
         _, e_th_d, e_ph_d = spherical_basis(r_hat, d_hat, normalize_basis_vectors=False)
-        basis = torch.stack(
-            [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
-        )  # (B, N, 7, 3)
+        basis = torch.cat(
+            [
+                torch.stack(
+                    [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d],
+                    dim=-2,
+                ),
+                e,
+            ],
+            dim=-2,
+        )  # (B, N, 10, 3)
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
 
         out_fields = torch.cat(

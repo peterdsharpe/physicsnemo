@@ -27,7 +27,12 @@ def setup():
     torch.manual_seed(0)
     m = MeshTransformer2(hidden=64, n_layers=3, n_slices=32).double().eval()
     n = 500
-    pts = torch.randn(1, n, 3, dtype=torch.float64)
+    ### Anisotropic cloud: the principal-axis frame is exactly covariant
+    ### only where the covariance spectrum is non-degenerate (generic for
+    ### vehicle geometry; an isotropic cloud is the degenerate corner).
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
     nrm = torch.nn.functional.normalize(
         torch.randn(1, n, 3, dtype=torch.float64), dim=-1
     )
