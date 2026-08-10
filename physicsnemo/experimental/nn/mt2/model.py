@@ -48,17 +48,24 @@ from physicsnemo.nn.functional.equivariant_ops import spherical_basis
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
 
+    N_GEO = 3  # |r - z_s|, rhat_is . d, rhat_is . n
+
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4) -> None:
         super().__init__()
         self.norm_assign = nn.LayerNorm(hidden)
         self.assign = nn.Linear(hidden, n_slices)
+        ### Relational geometry (v2): per-slice equivariant anchors and
+        ### point-anchor invariants -- many local, data-adaptive reference
+        ### points instead of any global frame (smooth by construction).
+        self.geo_logit = nn.Linear(self.N_GEO, 1)
+        self.geo_feat = nn.Linear(self.N_GEO, hidden // 4)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
             nn.Linear(hidden, mlp_ratio * hidden),
             nn.GELU(),
             nn.Linear(mlp_ratio * hidden, hidden),
         )
-        self.broadcast = nn.Linear(2 * hidden, hidden)
+        self.broadcast = nn.Linear(2 * hidden + hidden // 4, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
         self.mlp = nn.Sequential(
             nn.Linear(hidden, mlp_ratio * hidden),
@@ -70,17 +77,37 @@ class _SliceBlock(nn.Module):
         self,
         h: Float[torch.Tensor, "batch tokens hidden"],
         log_w: Float[torch.Tensor, "batch tokens 1"],
+        r: Float[torch.Tensor, "batch tokens 3"],
+        n_hat: Float[torch.Tensor, "batch tokens 3"],
+        d_hat: Float[torch.Tensor, "batch tokens 3"],
+        eps: float,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
         logits = self.assign(self.norm_assign(h))  # (B, N, S)
         a = torch.softmax(logits + log_w, dim=1)  # normalized over points
+        ### Equivariant anchors: weighted mean position per slice.
+        z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, 3)
+        rel = r[:, :, None, :] - z_pos[:, None, :, :]  # (B, N, S, 3)
+        dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
+        rel_hat = rel / dist
+        geo = torch.cat(
+            [
+                dist,
+                (rel_hat * d_hat[:, :, None, :]).sum(-1, keepdim=True),
+                (rel_hat * n_hat[:, :, None, :]).sum(-1, keepdim=True),
+            ],
+            dim=-1,
+        )  # (B, N, S, 3) invariants
+        ### Geometry refines the routing and the readback.
+        logits = logits + self.geo_logit(geo).squeeze(-1)
+        a = torch.softmax(logits + log_w, dim=1)
         z = torch.einsum("bns,bnh->bsh", a, h)  # slice states
         z = z + self.slice_mlp(z)
-        ### Broadcast back: each point reads its slice mixture.
         point_mix = torch.softmax(logits, dim=-1)  # normalized over slices
         back = torch.einsum("bns,bsh->bnh", point_mix, z)
-        h = h + self.broadcast(torch.cat([h, back], dim=-1))
+        geo_pool = torch.einsum("bns,bnsg->bng", point_mix, self.geo_feat(geo))
+        h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
         return h + self.mlp(self.norm_mlp(h))
 
 
@@ -107,22 +134,19 @@ class MeshTransformer2(Module):
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
         self.eps = eps
-        ### Invariants of {r, n, d, e1, e2, e3}: |r|, log|r|, plus dots of
-        ### rhat and n against the drive and the cloud's skew-oriented
-        ### principal axes. The principal axes make the set SEPARATING
-        ### (stage-0 v0 failed because the SO(2) orbit about the drive axis
-        ### was collapsed; see sec-nb-mt2-stage0-verdict).
+        ### Seed invariants of {r, n, d}; separation comes from the slice
+        ### blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
-            nn.Linear(11, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+            nn.Linear(5, hidden), nn.GELU(), nn.Linear(hidden, hidden)
         )
         self.blocks = nn.ModuleList(
             _SliceBlock(hidden, n_slices, mlp_ratio) for _ in range(n_layers)
         )
         self.norm_out = nn.LayerNorm(hidden)
-        ### Vector head: coefficients over {d, n, rhat, e1, e2, e3} plus
-        ### the spherical-basis complements of (rhat, n) and (rhat, d) --
-        ### the GLOBE multi-vector expansion (10 basis vectors total).
-        self.n_basis = 10
+        ### Vector head: coefficients over {d, n, rhat} plus the
+        ### spherical-basis complements of (rhat, n) and (rhat, d) -- the
+        ### GLOBE multi-vector expansion (7 basis vectors).
+        self.n_basis = 7
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
 
     def forward(
@@ -152,53 +176,6 @@ class MeshTransformer2(Module):
         r_hat = r / r_mag
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
-        ### Measure-weighted principal axes of the centered cloud,
-        ### skew-oriented: covariant with rotations, deterministic signs,
-        ### computed in fp32 for eigh stability. Exactness holds where the
-        ### covariance spectrum is non-degenerate (generic for vehicle
-        ### geometry); near-degenerate spectra soften the frame -- the
-        ### known global obstruction to continuous equivariant frames.
-        if measure_weights is None:
-            w_pca = torch.ones(b, n, device=points.device)
-        else:
-            w_pca = measure_weights.reshape(b, n)
-        ### eigh has no bf16 CUDA kernel and autocast would downcast the
-        ### einsums, so the whole frame computation runs autocast-free.
-        with torch.autocast(device_type=r.device.type, enabled=False):
-            pca_dtype = torch.promote_types(r.dtype, torch.float32)
-            w_pca = (w_pca / w_pca.sum(dim=1, keepdim=True)).to(pca_dtype)
-            r32 = r.to(pca_dtype)
-            cov = torch.einsum("bn,bni,bnj->bij", w_pca, r32, r32)
-            _, evecs = torch.linalg.eigh(cov)  # ascending; columns are axes
-            proj = torch.einsum("bni,bik->bnk", r32, evecs)
-            skew = torch.einsum("bn,bnk->bk", w_pca, proj**3)
-            ### v1 orientation (stage-0b residuals: skew is near-degenerate on
-            ### the lateral axis of symmetric geometry, and every extra
-            ### orientation statistic is density-jitter): the axis most
-            ### aligned with the drive orients by its drive projection, the
-            ### stronger-skew remaining axis orients by skew, and the third
-            ### is fixed by right-handedness. SO(3)-exact; parity is
-            ### deliberately given up (chirality-aware frame).
-            d32 = (drive / drive_mag).to(pca_dtype)
-            dproj = torch.einsum("bi,bik->bk", d32, evecs)  # (B, 3)
-            a_idx = dproj.abs().argmax(dim=-1)  # axis to orient by drive
-            sign = torch.where(skew >= 0, 1.0, -1.0)
-            s_d = torch.where(dproj.gather(1, a_idx[:, None]) >= 0, 1.0, -1.0)
-            sign = sign.scatter(1, a_idx[:, None], s_d)
-            ### Remaining axis with the smaller |skew| gets its sign from
-            ### right-handedness instead of its (unstable) skew.
-            skew_masked = skew.abs().scatter(1, a_idx[:, None], torch.inf)
-            c_idx = skew_masked.argmin(dim=-1)
-            oriented = evecs * sign[:, None, :]
-            det = torch.linalg.det(oriented)
-            s_c = torch.where(det >= 0, 1.0, -1.0)
-            flip = torch.ones_like(sign).scatter(1, c_idx[:, None], s_c[:, None])
-            axes = (oriented * flip[:, None, :]).to(r.dtype)  # (B, 3, 3)
-        e = axes.mT[:, None, :, :].expand(b, n, 3, 3)  # (B, N, 3 axes, 3)
-
-        def dots(v):
-            return torch.einsum("bnc,bnkc->bnk", v, e)
-
         invariants = torch.cat(
             [
                 r_mag,
@@ -206,8 +183,6 @@ class MeshTransformer2(Module):
                 (r_hat * d_hat).sum(-1, keepdim=True),
                 (r_hat * n_hat).sum(-1, keepdim=True),
                 (n_hat * d_hat).sum(-1, keepdim=True),
-                dots(r_hat),
-                dots(n_hat),
             ],
             dim=-1,
         )
@@ -220,7 +195,7 @@ class MeshTransformer2(Module):
             log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
         for block in self.blocks:
-            h = block(h, log_w)
+            h = block(h, log_w, r, n_hat, d_hat, self.eps)
         out = self.head(self.norm_out(h))
 
         scalars = out[..., : self.out_scalars]
@@ -232,16 +207,9 @@ class MeshTransformer2(Module):
         ### non-orthogonal inputs span via the complements.
         _, e_th_n, e_ph_n = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
         _, e_th_d, e_ph_d = spherical_basis(r_hat, d_hat, normalize_basis_vectors=False)
-        basis = torch.cat(
-            [
-                torch.stack(
-                    [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d],
-                    dim=-2,
-                ),
-                e,
-            ],
-            dim=-2,
-        )  # (B, N, 10, 3)
+        basis = torch.stack(
+            [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
+        )  # (B, N, 7, 3)
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
 
         out_fields = torch.cat(
