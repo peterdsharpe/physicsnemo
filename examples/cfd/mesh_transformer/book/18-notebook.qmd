@@ -2930,3 +2930,31 @@ deciding gate is S0c_4: density ratio materially below 0b's
 11.5-12.7x (< 8x, p ~ 0.5) -- this isolates the frame's contribution
 from the assignment-softmax redistribution, the other suspected
 density mechanism. Three seeds training under the frozen protocol.
+
+## 2026-08-10 — Stage-0c verdict: discrete frames are the wrong tool {#sec-nb-mt2-stage0c-verdict}
+
+([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_stage0c_reduction.json))
+S0c_1 passes (1.36x GT, from 0b's 1.41x). S0c_2 splits (1.020-1.039
+against the 1.03 letter). **S0c_4, the deciding gate, FAILS in the
+informative direction: density 19.8-28.4x, roughly DOUBLE 0b's
+11.5-12.7x.** The drive-oriented frame did not remove density
+sensitivity -- it amplified it, and the mechanism is clear in
+hindsight: the v1 orientation uses discrete selectors (argmax over
+drive projections, argmin over skews), and under resampling jitter a
+selector flip reorients whole axes discontinuously, where 0b's
+per-axis signs at least flipped independently. Zero-shot also
+regressed (0.76-0.94 vs 0b's 0.70-0.80). Two iterations now point at
+one design lesson: **any global frame built with discrete choices is
+a jitter amplifier under resampling; the density defect wants a
+SMOOTH construction.** Registered direction for v2, before any result
+is seen: drop the global frame entirely and make the slice mechanism
+itself carry the geometry -- each slice already computes a
+measure-weighted mean; extend that to an equivariant anchor vector
+per slice (a softmax functional, smooth by construction), and feed
+the backbone point-slice relational invariants (|r_i - z_s|,
+rhat_i . zhat_s, ...). Separating without any frame, no discrete
+selector anywhere, and the density behavior inherits the softmax's
+smoothness instead of an eigenbasis's cliff edges. This is a backbone
+change, not an orientation patch -- v2 gets its own preregistration.
+Stage-0 record to date: v0 refuted (non-separating), 0b survives
+(1.41x), 0c in-family 1.36x with the frame path exhausted.
