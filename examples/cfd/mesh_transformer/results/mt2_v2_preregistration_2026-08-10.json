@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mt2_v2_preregistration",
+  "status": "PREREGISTERED_PRE_IMPLEMENTATION",
+  "registered_at_utc": "2026-08-10T18:00:00Z",
+  "agenda": "MT2 v2: no global frame of any kind (Peter's directive + the 0b/0c evidence: discrete frames are jitter amplifiers as a class). Geometry enters through per-slice equivariant anchors -- many local, data-adaptive reference points -- and point-anchor relational invariants.",
+  "architecture_change": {
+    "removed": "the entire principal-axis frame (weighted PCA, skew/drive/handedness orientation)",
+    "added": "each slice block computes equivariant anchors z_s (measure-weighted softmax means of centered positions, smooth by construction) and feeds each point relational invariants against every anchor: |r_i - z_s|, rhat_is.d, rhat_is.n_i -- pooled through the same softmax machinery; separation by multilateration against ~256 anchors",
+    "contracts": "similarity equivariance EXACT with no degeneracy caveat (no eigenbasis) and full O(3) restored (chirality construction removed); drive degree 1 and measure-aware aggregation unchanged"
+  },
+  "arms": {"mt2_v2": {"seeds": [42, 43, 44]}, "protocol": "frozen; identical instrument incl. P1 rotation + P3 exact-HT density probes"},
+  "deciding_gates": {
+    "V2_1_infamily": "<= 1.36x GT (0c's level): the relational geometry must not cost accuracy; > 1.50x refutes",
+    "V2_2_rotation": "<= 1.02 (no frame left to jitter)",
+    "V2_4_density": "THE gate: < 8x (vs 0b 11.5-12.7x, 0c 19.8-28.4x); prediction p ~ 0.6 -- anchors move smoothly with resampling where eigenbases cliff",
+    "V2_5_zero_shot": "report; 0b's 0.70-0.80 is the bar"
+  },
+  "launch_state": {"results_inspected": false, "implementation_state": "not yet written at registration"}
+}
