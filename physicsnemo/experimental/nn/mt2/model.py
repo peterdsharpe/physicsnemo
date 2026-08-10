@@ -172,8 +172,28 @@ class MeshTransformer2(Module):
             _, evecs = torch.linalg.eigh(cov)  # ascending; columns are axes
             proj = torch.einsum("bni,bik->bnk", r32, evecs)
             skew = torch.einsum("bn,bnk->bk", w_pca, proj**3)
+            ### v1 orientation (stage-0b residuals: skew is near-degenerate on
+            ### the lateral axis of symmetric geometry, and every extra
+            ### orientation statistic is density-jitter): the axis most
+            ### aligned with the drive orients by its drive projection, the
+            ### stronger-skew remaining axis orients by skew, and the third
+            ### is fixed by right-handedness. SO(3)-exact; parity is
+            ### deliberately given up (chirality-aware frame).
+            d32 = (drive / drive_mag).to(pca_dtype)
+            dproj = torch.einsum("bi,bik->bk", d32, evecs)  # (B, 3)
+            a_idx = dproj.abs().argmax(dim=-1)  # axis to orient by drive
             sign = torch.where(skew >= 0, 1.0, -1.0)
-            axes = (evecs * sign[:, None, :]).to(r.dtype)  # (B, 3, 3)
+            s_d = torch.where(dproj.gather(1, a_idx[:, None]) >= 0, 1.0, -1.0)
+            sign = sign.scatter(1, a_idx[:, None], s_d)
+            ### Remaining axis with the smaller |skew| gets its sign from
+            ### right-handedness instead of its (unstable) skew.
+            skew_masked = skew.abs().scatter(1, a_idx[:, None], torch.inf)
+            c_idx = skew_masked.argmin(dim=-1)
+            oriented = evecs * sign[:, None, :]
+            det = torch.linalg.det(oriented)
+            s_c = torch.where(det >= 0, 1.0, -1.0)
+            flip = torch.ones_like(sign).scatter(1, c_idx[:, None], s_c[:, None])
+            axes = (oriented * flip[:, None, :]).to(r.dtype)  # (B, 3, 3)
         e = axes.mT[:, None, :, :].expand(b, n, 3, 3)  # (B, N, 3 axes, 3)
 
         def dots(v):
