@@ -3004,3 +3004,20 @@ density-mechanism factorial on the v2 backbone (assignment log-w bias
 on/off x anchor geometry on/off, 1 seed per cell, full instrument) --
 localize the ~11x floor before spending another design iteration on
 it.
+
+## 2026-08-11 — Density factorial: the decisive cell launched {#sec-nb-mt2-density-factorial}
+
+The 2x2 registered in the v2 verdict resolves to one new training run:
+cells (bias on, anchors on) = v2 and (bias on, anchors off) ~= v0
+already exist; the decisive missing cell is **v2 with the assignment
+measure bias OFF** (`model.use_measure_weights=false`, one CLI-visible
+knob, contract tests unaffected), launched at seed 42 under the frozen
+protocol. Prediction, registered now: if the ~11x density floor drops
+toward GT's 3.6x with the bias off, the quadrature weighting in the
+ROUTING is the mechanism and v3 moves measure-awareness out of the
+assignment (into the loss/aggregation side, where GT implicitly
+lives); if the floor persists, the anchors' population-shift is
+intrinsic and v3 attacks anchor stability instead (p ~ 0.55 for the
+first branch). The fourth cell (bias off, anchors off) stays unfilled
+unless the readout is ambiguous -- recorded as a deliberate asymmetry,
+not an oversight.
