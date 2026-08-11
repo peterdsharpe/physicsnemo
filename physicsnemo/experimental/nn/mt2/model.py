@@ -127,9 +127,14 @@ class MeshTransformer2(Module):
         n_slices: int = 256,
         mlp_ratio: int = 4,
         reference_length: float = 8.0,
+        use_measure_weights: bool = True,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### Density-factorial knob (prereg 3f4e4af7 follow-up): with False,
+        ### the assignment softmax ignores quadrature weights entirely,
+        ### isolating the measure-bias pathway of density sensitivity.
+        self.use_measure_weights = use_measure_weights
         self.out_scalars = out_scalars
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
@@ -188,7 +193,7 @@ class MeshTransformer2(Module):
         )
         h = self.embed(invariants)
 
-        if measure_weights is None:
+        if measure_weights is None or not self.use_measure_weights:
             log_w = h.new_zeros(b, n, 1)
         else:
             measure_weights = measure_weights.reshape(b, n)
