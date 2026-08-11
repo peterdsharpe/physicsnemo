@@ -2979,3 +2979,28 @@ eigenbases cliff, p ~ 0.6). Guards: in-family <= 1.36x, rotation
 <= 1.02, zero-shot vs 0b's 0.70-0.80. Contract tests: 7 green, the
 rotation test now exact without the anisotropy scoping. Three seeds
 training under the frozen protocol.
+
+## 2026-08-11 — v2 verdict: rotation solved exactly, density floor exposed, in-family paid the bill {#sec-nb-mt2-v2-verdict}
+
+([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v2_reduction.json))
+**V2_2 passes perfectly**: rotation ratio 0.996-1.000 -- with no frame
+left, equivariance is exact on real geometry, full stop. **V2_4
+FAILS**: density 10.8-12.0x -- better than 0c's 19.8-28.4x and at the
+0b level, but far from the < 8x gate. The smooth anchors removed the
+cliff-edge jitter and the ~11x floor REMAINS: the dominant density
+mechanism is not frame discontinuity but the measure-biased
+assignment itself (slice populations and anchor positions shift with
+the sampling distribution -- smoothly, but they shift), sitting on
+P3's estimator-variance floor. Notably GT, with no weights at all,
+is the LEAST density-sensitive model measured (3.6x). **V2_1 misses**:
+in-family 1.50x (vs 0c's 1.36x) -- the relational backbone paid
+accuracy for its purity, plausibly the double-softmax per block or
+the loss of the (frame-derived) global invariants' easy positional
+signal. Zero-shot 0.76-0.80 holds at the 0b level. The stage-0 map:
+no arm dominates -- 0b (1.41x, rot 1.03, dens 12x), 0c (1.36x, rot
+1.03, dens 24x), v2 (1.50x, rot 1.000, dens 11x), all at GT-class
+resources with near-GT transfer. Registered next: a 2x2
+density-mechanism factorial on the v2 backbone (assignment log-w bias
+on/off x anchor geometry on/off, 1 seed per cell, full instrument) --
+localize the ~11x floor before spending another design iteration on
+it.
