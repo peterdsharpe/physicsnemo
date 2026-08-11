@@ -48,7 +48,7 @@ from physicsnemo.nn.functional.equivariant_ops import spherical_basis
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
 
-    N_GEO = 3  # |r - z_s|, rhat_is . d, rhat_is . n
+    N_GEO = 8  # v3b: dist, log dist, rel dots (d, n, m_s), n.m_s, |z_s|, zhat_s.d
 
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4) -> None:
         super().__init__()
@@ -58,14 +58,14 @@ class _SliceBlock(nn.Module):
         ### point-anchor invariants -- many local, data-adaptive reference
         ### points instead of any global frame (smooth by construction).
         self.geo_logit = nn.Linear(self.N_GEO, 1)
-        self.geo_feat = nn.Linear(self.N_GEO, hidden // 4)
+        self.geo_feat = nn.Linear(self.N_GEO, hidden // 2)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
             nn.Linear(hidden, mlp_ratio * hidden),
             nn.GELU(),
             nn.Linear(mlp_ratio * hidden, hidden),
         )
-        self.broadcast = nn.Linear(2 * hidden + hidden // 4, hidden)
+        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
         self.mlp = nn.Sequential(
             nn.Linear(hidden, mlp_ratio * hidden),
@@ -86,19 +86,30 @@ class _SliceBlock(nn.Module):
         ### log-space bias so slice states are quadrature-weighted means.
         logits = self.assign(self.norm_assign(h))  # (B, N, S)
         a = torch.softmax(logits + log_w, dim=1)  # normalized over points
-        ### Equivariant anchors: weighted mean position per slice.
+        ### Equivariant anchors: weighted mean position AND mean normal
+        ### direction per slice (v3b) -- anchors gain orientation.
         z_pos = torch.einsum("bns,bnc->bsc", a, r)  # (B, S, 3)
+        m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+        m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(eps)
+        z_mag = z_pos.norm(dim=-1, keepdim=True).clamp_min(eps)
+        z_hat = z_pos / z_mag
         rel = r[:, :, None, :] - z_pos[:, None, :, :]  # (B, N, S, 3)
         dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
         rel_hat = rel / dist
+        n_exp = n_hat[:, :, None, :]
         geo = torch.cat(
             [
                 dist,
+                torch.log(dist),
                 (rel_hat * d_hat[:, :, None, :]).sum(-1, keepdim=True),
-                (rel_hat * n_hat[:, :, None, :]).sum(-1, keepdim=True),
+                (rel_hat * n_exp).sum(-1, keepdim=True),
+                (rel_hat * m_s[:, None, :, :]).sum(-1, keepdim=True),
+                (n_exp * m_s[:, None, :, :]).sum(-1, keepdim=True),
+                z_mag[:, None, :, :].expand(rel.shape[0], rel.shape[1], -1, 1),
+                (z_hat[:, None, :, :] * d_hat[:, :, None, :]).sum(-1, keepdim=True),
             ],
             dim=-1,
-        )  # (B, N, S, 3) invariants
+        )  # (B, N, S, 8) invariants
         ### Geometry refines the routing and the readback.
         logits = logits + self.geo_logit(geo).squeeze(-1)
         a = torch.softmax(logits + log_w, dim=1)
