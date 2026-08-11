@@ -3021,3 +3021,28 @@ intrinsic and v3 attacks anchor stability instead (p ~ 0.55 for the
 first branch). The fourth cell (bias off, anchors off) stays unfilled
 unless the readout is ambiguous -- recorded as a deliberate asymmetry,
 not an oversight.
+
+## 2026-08-11 — Density-factorial verdict: the anchors themselves are the mechanism {#sec-nb-mt2-factorial-verdict}
+
+The decisive cell read out (bias OFF, anchors ON, seed 42:
+[reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v2nw_reduction.json)):
+**density 13.75x -- the floor did not drop.** My registered p ~ 0.55
+prediction (routing bias as mechanism) was WRONG. The factorial across
+cells: no anchors + bias 5.7-6.4x (v0); anchors + bias 10.8-12.0x
+(v2); anchors + no bias 13.75x. The relational anchors add roughly 2x
+density sensitivity regardless of the assignment bias (which is
+neutral-to-slightly-helpful, consistent with HT weights doing their
+unbiasing job); anchor positions are population statistics, and under
+a 10:1 sampling shift they move -- smoothly, but they move, and every
+relational invariant moves with them. Sub-findings: dropping the bias
+slightly IMPROVED in-family (1.39x vs v2's 1.50x) and cost zero-shot
+(0.91 vs 0.78). The v3 fork this sets up: (a) accept that any
+geometry-adaptive statistic pays a density tax bounded below by
+estimator variance (GT pays 3.6x with NO spatial statistics at all),
+scope the claim, and spend v3 on the in-family gap instead; or
+(b) anchor-stabilization work (distance-weighted rather than
+population-weighted anchor updates; multi-resolution consistency
+training). The stage-0 evidence (density never better than ~2x GT's
+under any variant while in-family and equivariance improved steadily)
+leans (a) -- but that is a scoping decision with program-review
+weight, staged rather than taken unilaterally.
