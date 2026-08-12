@@ -3079,3 +3079,23 @@ frozen lr, exactly as gt_huge and x2l8h did; and rotation stays exact
 point normal and drive, anchor position magnitude/direction
 invariants) and a wider geo channel, at the 8.6M scale where the
 bias-off cell was healthiest.
+
+## 2026-08-12 — v3b verdict: the pipe was the bottleneck; accuracy and robustness now visibly trade {#sec-nb-mt2-v3b-verdict}
+
+**V3b_1 PASSES**: in-family 0.0596-0.0625 = **1.12-1.18x GT**
+(seed-mean 1.15x, from 1.39x), with rotation exact (1.000-1.001) and
+resolution flat. Featurization has now delivered every large in-family
+move in MT2's history (3.08x -> 1.41x -> 1.15x) while capacity
+delivered none. The costs, stated plainly: density 21.9-34.1x (richer
+geometric statistics couple harder to sampling, per the factorial
+mechanism) and zero-shot regressed to 1.00-1.87 (from 0b's 0.70-0.80)
+-- the oriented-anchor features appear to bind to family-specific
+statistics. The stage-0 map is now a clean anti-correlation: every
+richer-geometry step buys in-family and sells OOD. Note v3b is
+bias-OFF, and the factorial showed the measure bias HELPS zero-shot
+(v2 0.78 vs v2nw 0.91): the registered next arm (v3c) is v3b's
+features with the bias restored, 3 seeds -- the cheapest candidate for
+v3b accuracy at 0b-class transfer. If v3c recovers zero-shot < 0.85 at
+in-family <= 1.25x, it becomes the canonical MT2 configuration for the
+program review; if not, the anti-correlation is structural at this
+design point and the review presents the frontier, not a single model.
