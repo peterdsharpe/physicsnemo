@@ -3099,3 +3099,42 @@ v3b accuracy at 0b-class transfer. If v3c recovers zero-shot < 0.85 at
 in-family <= 1.25x, it becomes the canonical MT2 configuration for the
 program review; if not, the anti-correlation is structural at this
 design point and the review presents the frontier, not a single model.
+
+## 2026-08-12 — v3c verdict and the MT2 stage-0 synthesis {#sec-nb-mt2-stage0-synthesis}
+
+v3c ([reduction](../results/mixedres_training_2026-07-31/sweep/mt2_v3c_reduction.json)):
+in-family 1.18-1.20x GT (gate <= 1.25x PASSES), density recovered to
+13-14x (from v3b's 22-34x -- the bias does its job), rotation exact,
+tight seeds. Zero-shot 0.95-1.03: better than v3b's 1.0-1.9 but the
+< 0.85 letter FAILS. Per the registered rule, **the
+accuracy-robustness anti-correlation is structural at this design
+point, and the program review presents the frontier, not a single
+canonical model.**
+
+**The MT2 stage-0 frontier, eight preregistered iterations
+(2026-08-09 to -12), every arm on the identical frozen instrument:**
+
+| variant | in-family (xGT) | zero-shot | density | rotation |
+|---|---|---|---|---|
+| GT 9M (reference) | 1.00 | 0.54-0.64 | 3.6x | 26-32x BROKEN |
+| MT2-0b | 1.41 | 0.70-0.80 | 12x | 1.03 |
+| MT2-v3c | 1.18-1.20 | 0.95-1.03 | 13-14x | 1.00 |
+| MT2-v3b | 1.15 | 1.0-1.9 | 22-34x | 1.00 |
+
+All MT2 variants: exact similarity equivariance (v2 onward: no frame,
+no degeneracy caveat), drive degree 1 by construction, 1.8-9.8 GB /
+3-6 h training (GT-class), seed bands tighter than anything the
+program measured before. What stage 0 established: (1) the routing
+thesis is TRUE -- soft-slice routing works on invariant features once
+they separate; (2) featurization is the only in-family lever
+(3.08 -> 1.41 -> 1.15x; capacity flat); (3) richer geometric features
+trade OOD for in-family, monotonically, with the measure bias
+partially compensating; (4) GT's transfer superiority survives every
+MT2 variant -- pointwise local features generalize across families
+where relational-global features bind to them. The v4 question this
+frontier poses (open, for program review): can a pointwise-local
+feature channel (GT's generalizing ingredient) be added UNDER the
+equivariant contract -- local features are relational too -- to buy
+transfer without selling the in-family gains? Stage 0 closes here;
+the review decides v4 against the alternative of hardening what
+exists.
