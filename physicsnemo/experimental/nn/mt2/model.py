@@ -139,6 +139,8 @@ class MeshTransformer2(Module):
         mlp_ratio: int = 4,
         reference_length: float = 8.0,
         use_measure_weights: bool = True,
+        use_local_features: bool = False,
+        local_radii: tuple[float, ...] = (0.01, 0.03),
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
@@ -150,10 +152,16 @@ class MeshTransformer2(Module):
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
         self.eps = eps
+        ### v4 EXPERIMENT (prereg f16bef42, flag-gated, default off): local
+        ### measure-weighted patch integrals at physical radii -- the
+        ### family-portable channel. 7 invariants per radius.
+        self.use_local_features = use_local_features
+        self.local_radii = tuple(float(x) for x in local_radii)
+        n_seed = 5 + (7 * len(self.local_radii) if use_local_features else 0)
         ### Seed invariants of {r, n, d}; separation comes from the slice
         ### blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
-            nn.Linear(5, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+            nn.Linear(n_seed, hidden), nn.GELU(), nn.Linear(hidden, hidden)
         )
         self.blocks = nn.ModuleList(
             _SliceBlock(hidden, n_slices, mlp_ratio) for _ in range(n_layers)
@@ -164,6 +172,52 @@ class MeshTransformer2(Module):
         ### GLOBE multi-vector expansion (7 basis vectors).
         self.n_basis = 7
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
+
+
+    def _local_invariants(
+        self,
+        r: Float[torch.Tensor, "batch tokens 3"],
+        n_hat: Float[torch.Tensor, "batch tokens 3"],
+        d_hat: Float[torch.Tensor, "batch tokens 3"],
+        log_w: Float[torch.Tensor, "batch tokens 1"],
+    ) -> Float[torch.Tensor, "batch tokens feats"]:
+        """Measure-weighted Gaussian patch integrals at fixed physical radii.
+
+        Exactly equivariant (integrals of equivariant vectors, projected on
+        n_i and d); unbiased under HT sampling via the measure weights;
+        row-chunked so the pairwise kernel never materializes at full size.
+        """
+        b, n, _ = r.shape
+        w = torch.exp(log_w.squeeze(-1))  # (B, N) relative measure weights
+        feats = []
+        chunk = 4096
+        for rho in self.local_radii:
+            outs = []
+            for i0 in range(0, n, chunk):
+                ri = r[:, i0 : i0 + chunk]  # (B, C, 3)
+                d2 = torch.cdist(ri, r).square()  # (B, C, N)
+                k = torch.exp(-d2 / (rho * rho)) * w[:, None, :]
+                mass = k.sum(-1, keepdim=True).clamp_min(self.eps)  # (B, C, 1)
+                nbar = torch.einsum("bcn,bnk->bck", k, n_hat) / mass
+                delta = (torch.einsum("bcn,bnk->bck", k, r) / mass) - ri
+                ni = n_hat[:, i0 : i0 + chunk]
+                di = d_hat[:, i0 : i0 + chunk]
+                outs.append(
+                    torch.cat(
+                        [
+                            (nbar * ni).sum(-1, keepdim=True),
+                            (nbar * di).sum(-1, keepdim=True),
+                            nbar.norm(dim=-1, keepdim=True),
+                            (delta * ni).sum(-1, keepdim=True) / rho,
+                            (delta * di).sum(-1, keepdim=True) / rho,
+                            delta.norm(dim=-1, keepdim=True) / rho,
+                            torch.log(mass),
+                        ],
+                        dim=-1,
+                    )
+                )
+            feats.append(torch.cat(outs, dim=1))
+        return torch.cat(feats, dim=-1)
 
     def forward(
         self,
@@ -192,6 +246,12 @@ class MeshTransformer2(Module):
         r_hat = r / r_mag
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
 
+        if measure_weights is None or not self.use_measure_weights:
+            log_w = points.new_zeros(b, n, 1)
+        else:
+            measure_weights = measure_weights.reshape(b, n)
+            log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
+
         invariants = torch.cat(
             [
                 r_mag,
@@ -202,13 +262,13 @@ class MeshTransformer2(Module):
             ],
             dim=-1,
         )
+        if self.use_local_features:
+            invariants = torch.cat(
+                [invariants, self._local_invariants(r, n_hat, d_hat, log_w)],
+                dim=-1,
+            )
         h = self.embed(invariants)
 
-        if measure_weights is None or not self.use_measure_weights:
-            log_w = h.new_zeros(b, n, 1)
-        else:
-            measure_weights = measure_weights.reshape(b, n)
-            log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
         for block in self.blocks:
             h = block(h, log_w, r, n_hat, d_hat, self.eps)

@@ -88,3 +88,48 @@ def test_collated_input_shapes(setup):
     with torch.no_grad():
         out = m(pts, nrm, drv[:, None, :], w[..., None].squeeze(-1))
     assert torch.allclose(out, base, atol=1e-12)
+
+
+@pytest.fixture
+def setup_local():
+    torch.manual_seed(0)
+    m = (
+        MeshTransformer2(
+            hidden=64, n_layers=2, n_slices=16,
+            use_local_features=True, local_radii=(0.5, 1.5),
+        )
+        .double()
+        .eval()
+    )
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+    return m, pts, nrm, drv, w, base
+
+
+def test_local_rotation_equivariance(setup_local):
+    m, pts, nrm, drv, w, base = setup_local
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    with torch.no_grad():
+        rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10)
+    assert torch.allclose(v1, v0 @ q.T, atol=1e-10)
+
+
+def test_local_drive_degree_one(setup_local):
+    m, pts, nrm, drv, w, base = setup_local
+    with torch.no_grad():
+        sc = m(pts, nrm, drv * 2.0, w)
+    assert torch.allclose(sc, base * 2.0, atol=1e-10)

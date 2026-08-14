@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mt2_v4_experiment_preregistration",
+  "status": "PREREGISTERED_PRE_IMPLEMENTATION",
+  "registered_at_utc": "2026-08-14T00:30:00Z",
+  "agenda": "MT2 v4 EXPERIMENT (explicitly not a mainlined change): does a local geometric channel -- the incumbent's family-portable ingredient, expressed as exact relational invariants -- buy cross-family transfer without selling the in-family gains? Heilmeier writeup: conversation 2026-08-13; evidence basis sec-nb-mt2-stage0-synthesis.",
+  "design": {
+    "base": "v3c (bias on, N_GEO 8, 8.6M-class)",
+    "added_channel": "flag-gated (use_local_features, DEFAULT FALSE): per-point measure-weighted Gaussian-kernel patch integrals at two physical radii (0.01, 0.03 in the L_ref=8 gauge; ~0.4 m and ~1.2 m): mean neighbor normal (dots with n_i and d, magnitude as curvature proxy), mean displacement (dots with n_i and d, magnitude as concavity/skew proxy), patch mass -- 7 invariants x 2 radii appended to the seed invariants (5 -> 19)",
+    "why_radius_not_knn": "physical radii are sampling-density-robust in expectation (kNN would re-import the density defect); measure weights make the patch integrals unbiased under HT sampling",
+    "equivariance": "exact by construction (integrals of equivariant vectors, dotted against n_i and d); contract tests gate launch"
+  },
+  "arms": {"mt2_v4_seed{42,43,44}": "v3c + local channel on, frozen protocol, full instrument"},
+  "deciding_gates": {
+    "V4_1_transfer": "zero-shot < 0.85 on both families (v3c: 0.95-1.03; 0b's 0.70-0.80 is the aspiration)",
+    "V4_2_infamily": "held <= 1.25x GT (v3c: 1.18-1.20x)",
+    "V4_3_density": "not worse than v3c's 13-14x (the measure-weighted patch design should be neutral)",
+    "V4_4_contracts": "P1 rotation <= 1.02; fp64 tests exact",
+    "STRETCH": "zero-shot <= 0.80 AND in-family <= 1.20x: dominates every existing MT2 cell"
+  },
+  "predictions": {"V4_1": "p ~ 0.5", "V4_2": "p ~ 0.7", "V4_3": "p ~ 0.6", "failure_reading": "if local features do not transfer, the anti-correlation is a one-family-training property, and stage 1 pivots to training diversity (the reverse-probe hint) with architecture work de-emphasized"},
+  "launch_state": {"results_inspected": false}
+}
