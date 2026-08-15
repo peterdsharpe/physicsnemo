@@ -89,6 +89,11 @@ pipeline:
       field_name: normals
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
+    # fp32 sliver guard (2026-08-08, repo port 2026-08-15): seed-43 training
+    # deterministically hits a ~zero-area estate cell at epoch 472 whose
+    # measure fails validation; same guard and rationale as
+    # drivaer_ml_surface.yaml.
+    - _target_: ${dp:DropDegenerateCells}
     # Constant scale gauge for models that declare an explicit reference
     # length read from global_data (the MeshTransformer templates'
     # `reference_length_key: reference_length`). The value is in the
