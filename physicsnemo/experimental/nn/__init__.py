@@ -22,7 +22,6 @@ changes between releases.
 """
 
 from .diffusion_unet_3d_blocks import Conv3D, GroupNorm3D, UNetAttention3D, UNetBlock3D
-from .flare_attention import FLARE
 from .mesh_attention import (
     AttentionMoments,
     EncodedBoundary,
@@ -64,7 +63,6 @@ from .point_utils import (
 )
 
 __all__ = [
-    "FLARE",
     "UNetBlock3D",
     "Conv3D",
     "GroupNorm3D",
