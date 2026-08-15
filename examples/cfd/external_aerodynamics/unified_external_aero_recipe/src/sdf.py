@@ -162,8 +162,15 @@ class ComputeSDFFromBoundary(MeshTransform):
             # ``cell_normals`` returns a zero vector for it. Keep the raw
             # closest-point direction there instead of substituting zeros.
             face_normal_ok = (face_normals * face_normals).sum(-1) > 0.5
+            # The SDF's own sign is noise inside the near-surface band
+            # (upstream's sdf rewrite classifies on-wall points at ~-1e-7,
+            # which would 180-flip the substituted normal): flip only for
+            # points interior by more than the band width.
+            genuinely_inside = sdf_values < -(
+                128.0 * torch.finfo(torch.float32).eps * coord_scale
+            )
             oriented = torch.where(
-                (sdf_values >= 0).unsqueeze(-1), face_normals, -face_normals
+                genuinely_inside.unsqueeze(-1), -face_normals, face_normals
             )
             normals = torch.where(
                 (near_surface & face_normal_ok).unsqueeze(-1), oriented, normals
