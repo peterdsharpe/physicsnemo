@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mt2_stage1_diversity_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-15T09:00:00Z",
+  "agenda": "Stage 1 (the pivot): transfer as a TRAINING-DIVERSITY property. Plus the review's missing counterfactual: equivariance-via-augmentation.",
+  "arms": {
+    "multi_family": {
+      "runs": "mt2_multi_seed{42,43,44}, gt_multi_seed{42,43,44}: dataset=drivaer_ml_surface + extra_datasets=[shift_suv_surface] (estate), frozen protocol",
+      "instrument": "drivaer 5-res sweep (in-family 1) + estate smoke (in-family 2) + fastback smoke (the HELD-OUT family: the transfer measurement)",
+      "gates": "D1: fastback zero-shot < 0.85 for MT2-multi on 3/3 seeds (single-family v3c/v4 sat at 0.87-1.07) -- the pivot's central prediction, p ~ 0.6; D2: GT-multi fastback vs its single-family 0.54-0.64 (does diversity help the incumbent too, or was it already saturated); D3: in-family drivaer held within 1.1x of each architecture's single-family level"
+    },
+    "rotation_augmentation": {
+      "runs": "gt_rotaug_seed{42,43} (augment=true: the z-rotation augmentation that has sat unused in the yaml), mt2_v3c_rotaug_seed42 (control: an equivariant model should be indifferent, a consistency check)",
+      "gates": "R1: gt_rotaug P1 rotation ratio vs GT's 26-32x -- augmentation is the classic alternative to exact equivariance and the review must price it; R2: gt_rotaug in-family cost vs 0.053 (orbit coverage is expected to cost capacity, p ~ 0.7 that cost > 15%); R3: mt2 control shifts < 5% on everything"
+    },
+    "v4_band": {"runs": "mt2_v4_seed{45,46}: completes the best-cell 5-seed band for the review"}
+  },
+  "launch_state": {"results_inspected": false}
+}
