@@ -74,6 +74,11 @@ from physicsnemo.datapipes.transforms.mesh import (
 )
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.datapipes.transforms.mesh.transforms import (
+    SubsampleMesh,
+    _compact_points,
+)
+from physicsnemo.mesh.calculus.measure import compose_measure_weights
 
 
 @register()
@@ -332,3 +337,52 @@ class DropDegenerateCells(MeshTransform):
             "non-finite or non-positive fp32 area"
         )
         return mesh.slice_cells(keep.nonzero(as_tuple=True)[0])
+
+
+@register()
+class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
+    r"""Deterministic-prefix + random-complement subsampling (probe P4).
+
+    Keeps the first ``n_prefix`` cells in stable cell-index order (the same
+    PHYSICAL cells for every draw of a given case) plus a seeded random
+    sample of the remainder up to ``n_cells``. Two evaluations with
+    different ``n_cells`` (or seeds) then share the prefix exactly, so
+    prediction differences AT the prefix measure companion-set sensitivity
+    -- the query-independence probe. HT measure bookkeeping is inherited
+    for the random stage and set to 1 for the prefix (deterministic
+    inclusion).
+    """
+
+    def __init__(self, n_prefix: int, n_cells: int, compact: bool = True):
+        super().__init__(n_cells=n_cells, compact=compact)
+        if n_prefix > n_cells:
+            raise ValueError("n_prefix must be <= n_cells")
+        self.n_prefix = int(n_prefix)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        n = mesh.n_cells
+        if n <= self.n_cells:
+            return mesh
+        device = mesh.cells.device
+        prefix = torch.arange(self.n_prefix, device=device)
+        n_rest = self.n_cells - self.n_prefix
+        if n_rest > 0:
+            pool = n - self.n_prefix
+            generator = self._generator
+            if generator is not None and generator.device != device:
+                generator = None
+            perm = torch.randperm(pool, device=device, generator=generator)
+            rest = self.n_prefix + perm[:n_rest]
+            indices = torch.cat([prefix, rest])
+        else:
+            indices = prefix
+        mesh = mesh.slice_cells(indices)
+        if self.compact:
+            mesh = _compact_points(mesh)
+        ### Prefix cells have inclusion probability 1; the random stage
+        ### carries the usual inverse inclusion probability.
+        w = torch.ones(len(indices), device=device)
+        if n_rest > 0:
+            w[self.n_prefix :] = (n - self.n_prefix) / n_rest
+        compose_measure_weights(mesh, w)
+        return mesh

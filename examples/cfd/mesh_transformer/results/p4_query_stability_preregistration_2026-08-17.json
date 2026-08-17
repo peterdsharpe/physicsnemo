@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "p4_query_stability_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-17T15:00:00Z",
+  "agenda": "P4: query-set stability (the deployment property GLOBE/MT1 have by construction and GT/MT2 lack). Eval-only, existing checkpoints. Feeds the v5a encode/decode-split gate.",
+  "instrument": "drivaer_p4_base (deterministic 5000-cell prefix only) vs drivaer_p4_embed (same prefix + 5000 random companions), reader pool 40k. P4 metric per case: rel-L2 between the two runs' predictions AT the shared prefix cells. Note: for MT1 the boundary panels also change between variants, so its number includes source-resolution response (already characterized by the resolution sweep); for GT/MT2 the number additionally contains query-token interaction, which is the quantity of interest.",
+  "arms": "homog_fixed_seed42 (MT1), gt_fixed_seed42, mt2_v3c_seed42, mt2_v4_seed42 -- x 2 variants each",
+  "predictions": {
+    "MT1": "small and resolution-sweep-consistent (~2-8% -- pure source effect), p ~ 0.6",
+    "GT_and_MT2": "materially larger than MT1's (> 1.5x MT1's level), p ~ 0.6",
+    "decision": "the gap between (GT, MT2) and MT1 prices what v5a's passive decode buys; v5a's own P4 must land at MT1's level or below"
+  },
+  "launch_state": {"results_inspected": false}
+}
