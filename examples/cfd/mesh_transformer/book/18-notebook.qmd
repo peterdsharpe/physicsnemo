@@ -3232,3 +3232,55 @@ dataset_paths.yaml immediately restored after the sync clobbered it --
 the documented rsync trap, dodged this time by the ops note), lanes
 cleared and relaunched. The rotaug and v4-band lanes were unaffected;
 mt2_rev_seed43 completed under the repo-ported sliver guard.
+
+## 2026-08-17 — The consolidated readout: diversity delivers transfer; exact equivariance beats augmentation 1.6x; matched-tuning gap is 1.10x {#sec-nb-mega-synthesis}
+
+Twenty-five lanes reduced on one instrument
+([reduction](../results/mixedres_training_2026-07-31/sweep/mega_reduction.json)).
+
+**D1 -- the pivot's central prediction CONFIRMED, decisively.**
+Multi-family training (DrivAerML + estate, fastback held out):
+MT2-multi zero-shot fastback **0.125-0.129** on 3/3 seeds (single-family
+variants: 0.87-1.07); GT-multi 0.105-0.114. Estate in-family 0.064 /
+0.052. The accuracy-robustness anti-correlation was a single-family
+-training artifact, exactly as the v4 failure reading declared: one
+additional training family moves zero-shot transfer on a HELD-OUT
+family by ~7x, dwarfing every architectural intervention the program
+tried. Cost asymmetry worth flagging: MT2-multi pays 1.51-1.54x on
+DrivAerML (from 1.18x; capacity split at 8.6M) where GT-multi pays
+almost nothing (1.08x).
+
+**R1/R2 -- the augmentation counterfactual prices MT2's headline
+claim, favorably.** Rotation augmentation DOES close GT's orbit hole
+(rot 1.00) -- at **1.84-1.91x in-family cost** and degraded transfer
+(0.80-0.85). MT2 gets the same pose-robustness at 1.18x. At equal
+pose-robustness, exact equivariance beats augmentation by ~1.6x
+accuracy. The mt2 rotaug control sat at 1.21x, unchanged, as an
+equivariant model should. This is the release-grade differentiator,
+now measured rather than argued.
+
+**C -- tuning parity: the frozen lr flattered the incumbent
+slightly.** MT2-v3c prefers lr 1e-3 (0.0587 = **1.10x GT**, with
+zero-shot improving to 0.78); GT prefers the frozen 3e-3 (1e-3:
+1.03x). Neither crosses the declared 15% caveat trigger, but the
+honest matched-tuning in-family gap is ~1.10x, not 1.18x. Both
+architectures degrade at 6e-3.
+
+**Bands, radii, capacity, reverse:** v3c 5-seed in-family band ~1.07x
+(zero-shot band wider: 0.90-1.14); GT's band razor-thin. v4 radii
+matter for transfer (larger patches 0.89-0.90 vs smaller 1.51-1.52,
+in-family flat) -- patch scale is a transfer knob, noted for any v4
+mainlining. Capacity x features: still flat (1.17x at 15M). MT2
+reverse: estate in-family 1.16x GT-rev (the forward gap replicates),
+near-transfer fastback 0.117-0.131 -- PARITY with GT-rev's 0.11-0.12
+-- far-transfer none (GT-rev keeps its far edge, consistent with the
+diversity story).
+
+**The program-review picture in one line:** with one extra data
+family, both architectures transfer; with exact equivariance, MT2 is
+the only model that is simultaneously pose-robust (free), within
+1.10-1.18x in-family (matched tuning), at equal resources -- and the
+alternative (augmentation) is now measured at 1.6x more expensive for
+the same robustness. Next per the ratified plan: P4 query-stability
+probe and the v5a encode/decode split (query-independence + typed BC
+re-ingestion), both preregistered separately.
