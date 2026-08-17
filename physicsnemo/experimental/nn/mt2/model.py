@@ -122,6 +122,48 @@ class _SliceBlock(nn.Module):
         return h + self.mlp(self.norm_mlp(h))
 
 
+
+
+class _ReadBlock(nn.Module):
+    """Passive decoder layer (v5a): queries read encoder slices/anchors,
+    never write. Removing the write-back is what makes predictions at one
+    query independent of every other query (given a fixed source sample)."""
+
+    N_GEO = 3  # |q - z_s|, rhat.d, rhat.n against ENCODER anchors
+
+    def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4) -> None:
+        super().__init__()
+        self.norm = nn.LayerNorm(hidden)
+        self.assign = nn.Linear(hidden, n_slices)
+        self.geo_logit = nn.Linear(self.N_GEO, 1)
+        self.geo_feat = nn.Linear(self.N_GEO, hidden // 2)
+        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.norm_mlp = nn.LayerNorm(hidden)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden, hidden),
+        )
+
+    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, eps):
+        rel = q_r[:, :, None, :] - z_pos[:, None, :, :]
+        dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
+        rel_hat = rel / dist
+        geo = torch.cat(
+            [
+                dist,
+                (rel_hat * q_d[:, :, None, :]).sum(-1, keepdim=True),
+                (rel_hat * q_n[:, :, None, :]).sum(-1, keepdim=True),
+            ],
+            dim=-1,
+        )
+        logits = self.assign(self.norm(q_h)) + self.geo_logit(geo).squeeze(-1)
+        mix = torch.softmax(logits, dim=-1)
+        back = torch.einsum("bqs,bsh->bqh", mix, z_states)
+        geo_pool = torch.einsum("bqs,bqsg->bqg", mix, self.geo_feat(geo))
+        q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
+        return q_h + self.mlp(self.norm_mlp(q_h))
+
 class MeshTransformer2(Module):
     r"""Stage-0 MT2: invariant backbone, equivariant edges (see module docs)."""
 
@@ -141,6 +183,8 @@ class MeshTransformer2(Module):
         use_measure_weights: bool = True,
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
+        query_independent: bool = False,
+        n_decoder_layers: int = 4,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
@@ -166,6 +210,17 @@ class MeshTransformer2(Module):
         self.blocks = nn.ModuleList(
             _SliceBlock(hidden, n_slices, mlp_ratio) for _ in range(n_layers)
         )
+        ### v5a EXPERIMENT (flag-gated, default off): encode/decode split.
+        ### Queries decode passively from final encoder slices and anchors:
+        ### query-independent by construction given the source sample.
+        self.query_independent = query_independent
+        if query_independent:
+            self.final_assign = nn.Sequential(
+                nn.LayerNorm(hidden), nn.Linear(hidden, n_slices)
+            )
+            self.read_blocks = nn.ModuleList(
+                _ReadBlock(hidden, n_slices, mlp_ratio) for _ in range(n_decoder_layers)
+            )
         self.norm_out = nn.LayerNorm(hidden)
         ### Vector head: coefficients over {d, n, rhat} plus the
         ### spherical-basis complements of (rhat, n) and (rhat, d) -- the
@@ -173,6 +228,41 @@ class MeshTransformer2(Module):
         self.n_basis = 7
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
 
+
+    def _local_invariants_at(self, q_r, q_n, q_d, src_r, src_n, log_w):
+        """Query-passive variant: patch integrals of the SOURCE sample
+        evaluated at arbitrary query positions."""
+        b, nq, _ = q_r.shape
+        w = torch.exp(log_w.squeeze(-1))
+        feats = []
+        chunk = 4096
+        for rho in self.local_radii:
+            outs = []
+            for i0 in range(0, nq, chunk):
+                ri = q_r[:, i0 : i0 + chunk]
+                d2 = torch.cdist(ri, src_r).square()
+                k = torch.exp(-d2 / (rho * rho)) * w[:, None, :]
+                mass = k.sum(-1, keepdim=True).clamp_min(self.eps)
+                nbar = torch.einsum("bcn,bnk->bck", k, src_n) / mass
+                delta = (torch.einsum("bcn,bnk->bck", k, src_r) / mass) - ri
+                ni = q_n[:, i0 : i0 + chunk]
+                di = q_d[:, i0 : i0 + chunk]
+                outs.append(
+                    torch.cat(
+                        [
+                            (nbar * ni).sum(-1, keepdim=True),
+                            (nbar * di).sum(-1, keepdim=True),
+                            nbar.norm(dim=-1, keepdim=True),
+                            (delta * ni).sum(-1, keepdim=True) / rho,
+                            (delta * di).sum(-1, keepdim=True) / rho,
+                            delta.norm(dim=-1, keepdim=True) / rho,
+                            torch.log(mass),
+                        ],
+                        dim=-1,
+                    )
+                )
+            feats.append(torch.cat(outs, dim=1))
+        return torch.cat(feats, dim=-1)
 
     def _local_invariants(
         self,
@@ -225,6 +315,8 @@ class MeshTransformer2(Module):
         normals: Float[torch.Tensor, "batch tokens 3"],
         drive: Float[torch.Tensor, "batch 3"] | Float[torch.Tensor, " 3"],
         measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
+        query_points: Float[torch.Tensor, "batch queries 3"] | None = None,
+        query_normals: Float[torch.Tensor, "batch queries 3"] | None = None,
     ) -> Float[torch.Tensor, "batch tokens out_dim"]:
         if points.ndim == 2:
             points = points[None]
@@ -241,7 +333,8 @@ class MeshTransformer2(Module):
         d_hat = (drive / drive_mag)[:, None, :].expand(b, n, 3)
 
         ### Similarity reduction: center by the plain mean, scale by L_ref.
-        r = (points - points.mean(dim=1, keepdim=True)) / self.reference_length
+        center = points.mean(dim=1, keepdim=True)
+        r = (points - center) / self.reference_length
         r_mag = r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
         r_hat = r / r_mag
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
@@ -272,7 +365,47 @@ class MeshTransformer2(Module):
 
         for block in self.blocks:
             h = block(h, log_w, r, n_hat, d_hat, self.eps)
-        out = self.head(self.norm_out(h))
+
+        if self.query_independent:
+            ### Final encoder slice states and anchors (read-only for queries).
+            logits = self.final_assign(h)
+            a = torch.softmax(logits + log_w, dim=1)
+            z_states = torch.einsum("bns,bnh->bsh", a, h)
+            z_pos = torch.einsum("bns,bnc->bsc", a, r)
+            if query_points is None:
+                q_pts, q_nrm = points, normals
+            else:
+                q_pts = query_points
+                q_nrm = query_normals if query_normals is not None else normals
+            q_r = (q_pts - center) / self.reference_length
+            q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            q_rhat = q_r / q_mag
+            q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            bq, nq, _ = q_pts.shape
+            q_d = (drive / drive_mag)[:, None, :].expand(bq, nq, 3)
+            q_inv = torch.cat(
+                [
+                    q_mag,
+                    torch.log(q_mag),
+                    (q_rhat * q_d).sum(-1, keepdim=True),
+                    (q_rhat * q_nhat).sum(-1, keepdim=True),
+                    (q_nhat * q_d).sum(-1, keepdim=True),
+                ],
+                dim=-1,
+            )
+            if self.use_local_features:
+                ### Local integrals read the SOURCE sample -- query-passive.
+                q_inv = torch.cat(
+                    [q_inv, self._local_invariants_at(q_r, q_nhat, q_d, r, n_hat, log_w)],
+                    dim=-1,
+                )
+            q_h = self.embed(q_inv)
+            for rb in self.read_blocks:
+                q_h = rb(q_h, q_r, q_nhat, q_d, z_states, z_pos, self.eps)
+            h_out, r_hat, n_hat, d_hat, b, n = q_h, q_rhat, q_nhat, q_d, bq, nq
+        else:
+            h_out = h
+        out = self.head(self.norm_out(h_out))
 
         scalars = out[..., : self.out_scalars]
         coeffs = out[..., self.out_scalars :].reshape(

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "mt2_v5a_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-17T18:00:00Z",
+  "agenda": "v5a: encode/decode split (flag-gated experiment). The untested cell no prior evidence refutes: slice-routed encoder over source tokens + passive equivariant query decode. Targets the two regressions Peter identified (query-independence; the path back to typed-BC ingestion in v5b) while keeping everything MT2 measurably won.",
+  "design": "query_independent=true: encoder = unchanged MT2 backbone over the source sample; final slice states + anchors exposed; queries decode through n_decoder_layers=4 read-only blocks (cross-attend slices, relational invariants vs final anchors, local patch integrals of the SOURCE) -- no write-back. Contract test: same source, different query companions -> identical predictions at shared queries (1e-12); rotation and degree contracts re-verified in the split configuration (12 tests green).",
+  "arms": "mt2_v5a_seed{42,43,44}: v3c base + query_independent, frozen protocol",
+  "deciding_gates": {
+    "V5a_1_accuracy": "in-family 10k <= 1.25x GT (v3c band: 1.18-1.26); > 1.40x refutes passive decode at this design point",
+    "V5a_2_p4": "P4 companion-set instability at or below MT1's level (source-only effect); the query-interaction term must vanish",
+    "V5a_3_contracts": "rotation <= 1.02; density reported (prediction: at or below v3c's 13-14x, since query-interaction drops out of the biased-draw response, p ~ 0.55)",
+    "V5a_4_transfer": "zero-shot reported vs v3c's 0.90-1.14 band"
+  },
+  "predictions": {"V5a_1": "passes (p ~ 0.6): trace-mode information content is identical, only causal direction changes", "V5a_2": "passes (p ~ 0.8): by construction, modulo recipe source-sampling"},
+  "next_if_pass": "v5b: typed multi-boundary ingestion (BC partitions as encoder token sets), separately preregistered",
+  "launch_state": {"results_inspected": false}
+}
