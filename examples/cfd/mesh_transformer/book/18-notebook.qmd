@@ -3318,3 +3318,21 @@ and everything else unchanged, 12 contract tests exact, three seeds
 relaunched under the same prereg gates. P4's four-architecture
 stability table reduces in the background; the high-lift copy
 continues (~ETA tomorrow).
+
+## 2026-08-18 — v5a2 verdict at epoch 70: the pipe was not the cause; lanes stood down early {#sec-nb-mt2-v5a2-verdict}
+
+The widened decoder pipe changed nothing: v5a2's losses sat at
+0.0637-0.0658 at epoch 70 -- the exact v5a-v1 collapse plateau --
+so the lanes were cancelled at 14% of budget rather than burning to
+500 (the trajectory-pilot lesson, now adopted as standing practice
+for new architectures: check the loss leaves the known-collapse
+plateau before committing full seeds). Diagnosis #1 (thin pipe)
+REFUTED as the cause. The remaining structural suspect is the
+information bottleneck itself: 256 slice states cannot carry
+per-point detail, and v3c's queries had their own token stream where
+v5a's queries have none. The principled repair (v5a3, to be
+implemented with a 50-epoch pilot gate): passive decoder
+cross-attention to NEARBY SOURCE TOKENS' features (radius-based, like
+v4's patches but over encoder states) alongside the slice readout --
+local + global, exactly the split GT uses, query-independent by
+construction since queries still never write.
