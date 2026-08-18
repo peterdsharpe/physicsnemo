@@ -386,3 +386,124 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
             w[self.n_prefix :] = (n - self.n_prefix) / n_rest
         compose_measure_weights(mesh, w)
         return mesh
+### ---------------------------------------------------------------------
+### Contract-axis probe transforms (prereg: contract_axis_probes_2026-08-09)
+### Job-local additions for the 2026-08-06-defect4-incumbent task dir.
+### ---------------------------------------------------------------------
+
+
+@register()
+class ScaleGlobalField(MeshTransform):
+    r"""Multiply one global_data field by a constant factor (probe P2).
+
+    Applied to the drive input only: ``U_inf_dir`` for the MeshTransformer
+    arms (the recipe's unit-direction drive, scaled to amplitude ``factor``)
+    or ``U_inf`` for GeoTransolver (its physical-velocity global embedding).
+    """
+
+    def __init__(self, field_name: str, factor: float) -> None:
+        super().__init__()
+        self.field_name = field_name
+        self.factor = float(factor)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        new_gd = mesh.global_data.clone()
+        new_gd[self.field_name] = new_gd[self.field_name] * self.factor
+        return Mesh(
+            points=mesh.points,
+            cells=mesh.cells,
+            point_data=mesh.point_data,
+            cell_data=mesh.cell_data,
+            global_data=new_gd,
+        )
+
+    def extra_repr(self) -> str:
+        return f"field_name={self.field_name!r}, factor={self.factor}"
+
+
+@register()
+class BiasedSubsampleMesh(SubsampleMesh):
+    r"""Spatially biased cell subsampling with per-cell HT weights (probe P3).
+
+    Cells with centroid x below the per-sample median draw with
+    ``bias``:1 relative probability. Inclusion probabilities are composed
+    into the measure weights per cell (pi_i ~= k * w_i / sum(w), the
+    with-replacement approximation, adequate at k << N and recorded as an
+    approximation in the preregistration), so a measure-consistent
+    consumer sees an asymptotically unbiased quadrature while a
+    measure-blind consumer sees a front-loaded point cloud.
+    """
+
+    def __init__(self, n_cells: int, bias: float = 10.0, compact: bool = True):
+        super().__init__(n_cells=n_cells, compact=compact)
+        self.bias = float(bias)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        n_before = mesh.n_cells
+        if n_before <= self.n_cells:
+            return mesh
+        x = mesh.cell_centroids[:, 0]
+        w = torch.where(
+            x < x.median(),
+            torch.full_like(x, self.bias),
+            torch.ones_like(x),
+        )
+        generator = self._generator
+        if generator is not None and generator.device != w.device:
+            generator = None
+        indices = torch.multinomial(
+            w, self.n_cells, replacement=False, generator=generator
+        )
+        pi = (self.n_cells * w[indices] / w.sum()).clamp(max=1.0)
+        mesh = mesh.slice_cells(indices)
+        if self.compact:
+            mesh = _compact_points(mesh)
+        compose_measure_weights(mesh, 1.0 / pi)
+        return mesh
+
+
+@register()
+class PoissonBiasedSubsampleMesh(MeshTransform):
+    r"""Biased cell subsampling with EXACT per-cell HT weights (probe P3 v3).
+
+    Independent (Poisson) sampling: cell i is kept with probability
+    pi_i = min(1, c * w_i) where w_i is the 10:1 front/back bias and c is
+    set so the expected kept count is ``n_cells_expected``. Inclusion
+    probabilities are exact by construction (no with-replacement
+    approximation), at the cost of a variable per-sample cell count.
+    """
+
+    def __init__(self, n_cells_expected: int, bias: float = 10.0,
+                 compact: bool = True) -> None:
+        super().__init__()
+        self.n_cells_expected = int(n_cells_expected)
+        self.bias = float(bias)
+        self.compact = compact
+        self._generator: torch.Generator | None = None
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        n = mesh.n_cells
+        if n <= self.n_cells_expected:
+            return mesh
+        x = mesh.cell_centroids[:, 0]
+        w = torch.where(x < x.median(), torch.full_like(x, self.bias),
+                        torch.ones_like(x))
+        c = self.n_cells_expected / w.sum()
+        pi = (c * w).clamp(max=1.0)
+        ### One renormalization pass restores the expected count lost to
+        ### clamping (exactness of pi is what matters, not the count).
+        deficit = self.n_cells_expected - pi.sum()
+        if deficit > 0:
+            free = pi < 1.0
+            pi[free] = (pi[free] * (1 + deficit / pi[free].sum())).clamp(max=1.0)
+        generator = self._generator
+        if generator is not None and generator.device != pi.device:
+            generator = None
+        keep = torch.rand(n, device=pi.device, generator=generator) < pi
+        indices = keep.nonzero(as_tuple=True)[0]
+        kept_pi = pi[indices]
+        mesh = mesh.slice_cells(indices)
+        if self.compact:
+            mesh = _compact_points(mesh)
+        compose_measure_weights(mesh, 1.0 / kept_pi)
+        return mesh
