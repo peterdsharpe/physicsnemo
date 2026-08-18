@@ -129,7 +129,8 @@ class _ReadBlock(nn.Module):
     never write. Removing the write-back is what makes predictions at one
     query independent of every other query (given a fixed source sample)."""
 
-    N_GEO = 3  # |q - z_s|, rhat.d, rhat.n against ENCODER anchors
+    N_GEO = 8  # v5a2: the full v3b relational-feature set (thin decoder
+    # pipes collapse training -- measured twice now, v3a and v5a-v1)
 
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4) -> None:
         super().__init__()
@@ -145,15 +146,23 @@ class _ReadBlock(nn.Module):
             nn.Linear(mlp_ratio * hidden, hidden),
         )
 
-    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, eps):
+    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, m_s, eps):
         rel = q_r[:, :, None, :] - z_pos[:, None, :, :]
         dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
         rel_hat = rel / dist
+        z_mag = z_pos.norm(dim=-1, keepdim=True).clamp_min(eps)
+        z_hat = z_pos / z_mag
+        n_exp = q_n[:, :, None, :]
         geo = torch.cat(
             [
                 dist,
+                torch.log(dist),
                 (rel_hat * q_d[:, :, None, :]).sum(-1, keepdim=True),
-                (rel_hat * q_n[:, :, None, :]).sum(-1, keepdim=True),
+                (rel_hat * n_exp).sum(-1, keepdim=True),
+                (rel_hat * m_s[:, None, :, :]).sum(-1, keepdim=True),
+                (n_exp * m_s[:, None, :, :]).sum(-1, keepdim=True),
+                z_mag[:, None, :, :].expand(rel.shape[0], rel.shape[1], -1, 1),
+                (z_hat[:, None, :, :] * q_d[:, :, None, :]).sum(-1, keepdim=True),
             ],
             dim=-1,
         )
@@ -372,6 +381,8 @@ class MeshTransformer2(Module):
             a = torch.softmax(logits + log_w, dim=1)
             z_states = torch.einsum("bns,bnh->bsh", a, h)
             z_pos = torch.einsum("bns,bnc->bsc", a, r)
+            m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+            m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             if query_points is None:
                 q_pts, q_nrm = points, normals
             else:
@@ -401,7 +412,7 @@ class MeshTransformer2(Module):
                 )
             q_h = self.embed(q_inv)
             for rb in self.read_blocks:
-                q_h = rb(q_h, q_r, q_nhat, q_d, z_states, z_pos, self.eps)
+                q_h = rb(q_h, q_r, q_nhat, q_d, z_states, z_pos, m_s, self.eps)
             h_out, r_hat, n_hat, d_hat, b, n = q_h, q_rhat, q_nhat, q_d, bq, nq
         else:
             h_out = h
