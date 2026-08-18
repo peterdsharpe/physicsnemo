@@ -139,6 +139,7 @@ class _ReadBlock(nn.Module):
         self.geo_logit = nn.Linear(self.N_GEO, 1)
         self.geo_feat = nn.Linear(self.N_GEO, hidden // 2)
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.local_read = nn.Linear(2 * hidden, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
         self.mlp = nn.Sequential(
             nn.Linear(hidden, mlp_ratio * hidden),
@@ -146,7 +147,8 @@ class _ReadBlock(nn.Module):
             nn.Linear(mlp_ratio * hidden, hidden),
         )
 
-    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, m_s, eps):
+    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, m_s, eps,
+                src_r=None, src_h=None, src_w=None, local_rho=None):
         rel = q_r[:, :, None, :] - z_pos[:, None, :, :]
         dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
         rel_hat = rel / dist
@@ -171,7 +173,29 @@ class _ReadBlock(nn.Module):
         back = torch.einsum("bqs,bsh->bqh", mix, z_states)
         geo_pool = torch.einsum("bqs,bqsg->bqg", mix, self.geo_feat(geo))
         q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
+        if src_h is not None:
+            ### v5a3: local token readout -- the per-point detail 256 slice
+            ### states cannot carry. Measure-weighted Gaussian kernel over
+            ### SOURCE positions attending to encoder states; queries still
+            ### never write, so query-independence is preserved exactly.
+            local = _kernel_readout(q_r, src_r, src_h, src_w, local_rho, eps)
+            q_h = q_h + self.local_read(torch.cat([q_h, local], dim=-1))
         return q_h + self.mlp(self.norm_mlp(q_h))
+
+
+
+def _kernel_readout(q_r, src_r, src_h, src_w, rho, eps):
+    """Measure-weighted Gaussian-kernel average of source states at query
+    positions, row-chunked. Passive: a pure function of the source."""
+    b, nq, _ = q_r.shape
+    outs = []
+    chunk = 4096
+    for i0 in range(0, nq, chunk):
+        d2 = torch.cdist(q_r[:, i0 : i0 + chunk], src_r).square()
+        k = torch.exp(-d2 / (rho * rho)) * src_w[:, None, :]
+        mass = k.sum(-1, keepdim=True).clamp_min(eps)
+        outs.append(torch.einsum("bcn,bnh->bch", k, src_h) / mass)
+    return torch.cat(outs, dim=1)
 
 class MeshTransformer2(Module):
     r"""Stage-0 MT2: invariant backbone, equivariant edges (see module docs)."""
@@ -194,6 +218,7 @@ class MeshTransformer2(Module):
         local_radii: tuple[float, ...] = (0.01, 0.03),
         query_independent: bool = False,
         n_decoder_layers: int = 4,
+        local_readout_rho: float = 0.02,
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
@@ -223,6 +248,7 @@ class MeshTransformer2(Module):
         ### Queries decode passively from final encoder slices and anchors:
         ### query-independent by construction given the source sample.
         self.query_independent = query_independent
+        self.local_readout_rho = float(local_readout_rho)
         if query_independent:
             self.final_assign = nn.Sequential(
                 nn.LayerNorm(hidden), nn.Linear(hidden, n_slices)
@@ -411,8 +437,13 @@ class MeshTransformer2(Module):
                     dim=-1,
                 )
             q_h = self.embed(q_inv)
+            src_w = torch.exp(log_w.squeeze(-1))
             for rb in self.read_blocks:
-                q_h = rb(q_h, q_r, q_nhat, q_d, z_states, z_pos, m_s, self.eps)
+                q_h = rb(
+                    q_h, q_r, q_nhat, q_d, z_states, z_pos, m_s, self.eps,
+                    src_r=r, src_h=h, src_w=src_w,
+                    local_rho=self.local_readout_rho,
+                )
             h_out, r_hat, n_hat, d_hat, b, n = q_h, q_rhat, q_nhat, q_d, bq, nq
         else:
             h_out = h
