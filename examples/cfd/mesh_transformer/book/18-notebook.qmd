@@ -3336,3 +3336,32 @@ cross-attention to NEARBY SOURCE TOKENS' features (radius-based, like
 v4's patches but over encoder states) alongside the slice readout --
 local + global, exactly the split GT uses, query-independent by
 construction since queries still never write.
+
+## 2026-08-18 — v5a3 pilot PASSES; P4 read out with a declared instrument artifact {#sec-nb-v5a3-pilot-p4}
+
+**The v5 line is alive.** The v5a3 pilot (local-token readout added to
+the passive decoder) left the collapse plateau decisively: loss 0.0129
+at epoch 49 vs the 0.064 wall that killed v1 and v2 -- the missing
+ingredient was per-point detail no 256-slice bottleneck can carry,
+restored by a measure-weighted kernel readout of nearby ENCODER states
+(still strictly read-only; the 1e-12 companion-invariance test covers
+the new path). Full 3-seed run launched under the original v5a gates.
+The pilot-gate discipline earned its keep: three collapse diagnoses
+cost ~15 node-hours total instead of three full waves.
+
+**P4 (query-set stability), with an honest instrument note.** Measured
+companion-set instability at the shared 5000-cell prefix: GT 0.020,
+MT2-v3c 0.068, MT1 1.48, MT2-v4 1.81. The two large numbers are an
+INSTRUMENT ARTIFACT declared here: the base variant's deterministic
+prefix carries inclusion weight 1 and represents only itself, so
+measure-CONSUMING models (MT1's boundary quadrature, v4's patch
+integrals) correctly see the two variants as different surfaces --
+the probe conflates query-sensitivity with measure-representation
+sensitivity for those models. The interpretable readouts: GT is
+nearly companion-stable at matched counts (2%; my prereg prediction
+of GT >> MT1 was WRONG in both directions), and v3c carries a real
+but modest 6.8% query-interaction term. A symmetric P4-v2 (both
+variants prefix+random, differing only in the random complement)
+would fix the artifact if the number ever becomes decision-relevant;
+for now v5a3's by-construction exactness exceeds every measured
+alternative and the probe has served its purpose.
