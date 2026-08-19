@@ -1,0 +1,213 @@
+# Program review: the 2026-08 campaign {#sec-program-review-2026-08}
+
+::: {.callout-note title="What this chapter is"}
+This chapter is the authoritative synthesis of the research program as of
+2026-08-19. It supersedes the earlier "future directions" chapter (whose open
+questions have all since been measured) and compresses roughly sixty
+preregistered training runs, four adversarial probes, and three architecture
+generations into the tables and verdicts a reviewer actually needs. Every
+number is computed live from the committed reduction artifacts in
+`results/`, and every claim links to the dated lab-notebook entry
+(@sec-notebook) where it was preregistered and read out.
+:::
+
+## The one-paragraph verdict
+
+The program set out to build a boundary-driven-PDE surrogate whose
+generalization comes from **declared physical structure** rather than data
+coverage. After a falsification campaign against the strongest available
+incumbent (GeoTransolver, a soft-slice global-attention architecture), the
+honest verdict is a *decomposition*: *accuracy* at industrial scale comes
+from normalized global routing and rich features, and the incumbent had it;
+*pose robustness* comes from exact equivariance, the incumbent measurably
+lacks it, and buying it with data augmentation costs 1.8--1.9$\times$
+accuracy where our contracts provide it free; *cross-family transfer* comes
+from training-data diversity, not from any architecture we tested; and
+*query-independence* — the ability to evaluate the surrogate anywhere without
+the answer depending on which other points are sampled — trades directly
+against accuracy in every design we built. The program's product is
+`MeshTransformer2` (MT2): the incumbent's routing wrapped in exact contracts
+at the network's edges, within 10--18% of the incumbent's in-family accuracy
+at equal-or-lower cost, exactly pose-robust, and transferring at parity when
+trained on two families.
+
+## The frozen instrument {#sec-review-instrument}
+
+Every comparison in this chapter runs on one instrument, frozen on
+2026-08-04 and never widened retroactively: DrivAerML surface pressure at
+10,000-cell sampling (in-family), a five-resolution sweep (2.5k--40k cells),
+zero-shot evaluation on two held-out SHIFT-SUV vehicle families (estate and
+fastback, normalized pressure $L_2$ from the fleet-comparable
+`metrics.jsonl` pathway), and — added mid-campaign as adversarial probes —
+a full random-yaw rotation orbit (P1), a drive-amplitude scaling ladder
+(P2), a 10:1 spatially-biased sampling density with exact
+Horvitz--Thompson weights (P3), and a shared-prefix companion-set stability
+test (P4). Training protocol is identical for every arm ever compared: 500
+epochs, batch 1, lr $3\times10^{-3}$ StepLR, bfloat16, no augmentation
+unless the augmentation *is* the arm, four-GPU single-node DDP on identical
+hardware. A two-point learning-rate parity check ran for both architectures;
+it moves the headline gap from 1.18$\times$ to 1.10$\times$ in MT2's favor
+and is reported wherever it matters.
+
+## The frontier, in one table {#sec-review-frontier}
+
+```{python}
+#| label: tbl-frontier
+#| output: asis
+#| code-fold: true
+import json
+from pathlib import Path
+
+R = Path("..") / "results" / "mixedres_training_2026-07-31" / "sweep"
+mega = json.load(open(R / "mega_reduction.json"))
+round3 = json.load(open(R / "round3_reduction.json"))
+v3c = json.load(open(R / "mt2_v3c_reduction.json"))
+
+def mean(vals):
+    return sum(vals) / len(vals)
+
+gt10 = mean([round3[f"gt_fixed_seed{s}"]["sweep_metrics"]["10000"]["mean"]
+             for s in (42, 43, 44)])
+gt_zs = mean([round3[f"gt_fixed_seed{s}"]["smoke_estate"]["mean"]
+              for s in (42, 43, 44)])
+
+rot_in = mean([mega[f"gt_rotaug_seed{s}"]["in10k"]["mean"] for s in (42, 43)])
+rot_zs = mean([mega[f"gt_rotaug_seed{s}"]["estate"]["mean"] for s in (42, 43)])
+
+v3c_in = mean(
+    [v3c[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
+    + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)]
+)
+v3c_zs = mean([v3c[f"mt2_v3c_seed{s}"]["smoke_estate"]["mean"] for s in (42, 43, 44)])
+
+mt2m_in = mean([mega[f"mt2_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)])
+mt2m_zs = mean([mega[f"mt2_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
+gtm_in = mean([mega[f"gt_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)])
+gtm_zs = mean([mega[f"gt_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
+
+rows = [
+    ("GeoTransolver 9M", 1.0, gt_zs, "3.6x", "26-32x broken", "4.6 GB",
+     "incumbent reference"),
+    ("GT + rotation aug.", rot_in / gt10, rot_zs, "--", "closed (1.00)",
+     "4.6 GB", "the augmentation price"),
+    ("MT2-v3c (8.6M)", v3c_in / gt10, v3c_zs, "13-14x", "exact (1.00)",
+     "5.9 GB", "canonical single-family MT2"),
+    ("GT multi-family", gtm_in / gt10, gtm_zs, "--", "26-32x broken",
+     "4.6 GB", "zero-shot on HELD-OUT family"),
+    ("MT2 multi-family", mt2m_in / gt10, mt2m_zs, "--", "exact (1.00)",
+     "5.9 GB", "zero-shot on HELD-OUT family"),
+]
+out = ("| configuration | in-family (xGT) | zero-shot | density (P3) "
+       "| rotation (P1) | peak VRAM | note |\n|---|---|---|---|---|---|---|\n")
+for (n, i, z, d, r_, m, note) in rows:
+    out += f"| {n} | {i:.2f}x | {z:.2f} | {d} | {r_} | {m} | {note} |\n"
+print(out)
+print(f": The frontier on the frozen instrument. In-family is normalized "
+      f"pressure $L_2$ at 10k cells relative to the GeoTransolver reference "
+      f"({gt10:.4f}); zero-shot is the mean normalized pressure $L_2$ on a "
+      f"held-out vehicle family (estate for single-family rows, fastback "
+      f"for the multi-family rows; 1.0 is mean-predictor level). Sources: "
+      f"mega_reduction.json, round3_reduction.json, mt2_v3c_reduction.json.")
+```
+
+Three facts to read off the table before any narrative. First, **the
+augmentation price**: closing GeoTransolver's rotation hole with the classic
+data-augmentation remedy costs it most of its accuracy lead —
+1.8--1.9$\times$ in-family — while MT2's exact equivariance is free by
+construction; at equal pose-robustness the structured model is the
+*more* accurate one by roughly 1.6$\times$. Second, **transfer belongs to
+data**: one additional training family moves zero-shot error on a genuinely
+held-out family from mean-predictor level to 0.11--0.13 for *both*
+architectures — a $\sim$7$\times$ improvement that dwarfs every
+architectural intervention this program ever measured against that axis.
+Third, **the remaining accuracy gap is small and tuning-sensitive**: 1.18×
+at the frozen learning rate, 1.10× when each architecture uses its
+preferred rate.
+
+## How we got here: the campaign in five verdicts {#sec-review-arc}
+
+**1. The old architecture's defects were real, and three closed at root
+cause** (@sec-nb-model-quality-agenda ff.). Resolution collapse was a
+quadrature-bookkeeping error, cured by measure-consistent
+Horvitz--Thompson weighting (@sec-nb-mixedres-verdict). Foreign-family
+detonation was the nonlinear read-in's implicit drive degree, removed
+exactly by declaring degree one (@sec-nb-bounded-stage1-verdict). Seed
+instability collapsed from 2491$\times$ to order-1.3$\times$ as a
+byproduct. These closures are the program's clearest demonstrations that
+mechanism-first debugging beats remedy-first patching.
+
+**2. The incumbent comparison was re-anchored honestly and the incumbent
+won the measured axes** (@sec-nb-incumbent-stage0-verdict,
+@sec-nb-defect4-synthesis). At every resource budget tested,
+GeoTransolver dominated in-family accuracy, zero-shot transfer, density
+robustness, and training cost — including a resource re-framing
+(@sec-nb-resource-accounting) that showed the original matched-*parameter*
+comparison had flattered our side. The synthesis recommended inverting the
+program: structure the winner rather than accelerate the loser.
+
+**3. The probes made the benchmark's blind spots measurable**
+(@sec-nb-contract-probes-synthesis). Rotation: the incumbent loses
+26--32$\times$ off-pose — every number it posts carries an implicit "in
+the dataset's canonical pose." Amplitude: its output is drive-amplitude
+*blind* (layer normalization saturates scale), while the declared-degree
+contract measures exactly 1.0000. Density: geometry-adaptive statistics
+pay a variance-bounded tax no weighting scheme removes; the measure
+contract halves the damage but cannot zero it.
+
+**4. MT2 was built in eleven preregistered iterations, most of which
+failed informatively** (@sec-nb-mt2-charter through
+@sec-nb-v5-line-verdict). The thesis — the incumbent's routing on
+exclusively invariant features, contracts paid once at the network edges —
+was refuted at v0 (non-separating invariants), survived at v0b, shed its
+global frames entirely at v2 on Peter's correction that no canonical frame
+exists in the physics, and closed its in-family gap by featurization alone
+(3.08$\times \to$ 1.15$\times$; capacity was flat at every rung tested).
+The accuracy--robustness trade that emerged was then shown to be a
+*single-family-training artifact*, dissolved by data diversity rather than
+architecture.
+
+**5. Query-independence was priced, and the price is the finding**
+(@sec-nb-v5-line-verdict). Three passive-decoder designs either collapsed
+in training or, once the collapse was fixed by a local token readout,
+converged 2.7$\times$ worse in-family while achieving the best density
+robustness of any variant. Conclusion, now measured rather than argued:
+**in this design family, accuracy and query-interaction are entangled** —
+the query-side token stream is where the accuracy comes from, which is
+also precisely why the accurate models carry companion-set sensitivity
+(2% for the incumbent, 6.8% for MT2-v3c on the P4 probe). A deployable
+surrogate can have exact evaluate-anywhere semantics at 3.9$\times$ the
+error, or near-incumbent accuracy with single-digit-percent sensitivity;
+it cannot currently have both.
+
+## What this does not solve {#sec-review-honesty}
+
+The claims above are scoped by construction, and the scoping is part of
+the result. Everything rests on two automotive dataset families plus a
+harder third (high-lift) in flight; no volume fields; no varying boundary
+conditions — the typed-BC ingestion that distinguishes the GLOBE lineage
+is designed but unbuilt *because no current benchmark can measure it*, and
+building unmeasurable structure is how this program wasted its first week.
+Density robustness is scoped at $\sim$13$\times$ under a 10:1 sampling
+bias (variance-floored). Both architectures misbehave at scale extremes
+under the frozen learning rate (seed-conditioned detonations at 11M for
+the old architecture; a turned frontier at 564M for the incumbent), so
+no "scales to very large runs" claim is made by either side. And the
+irreducible-error question — whether the 1.10$\times$ residual gap is
+architecture or the dataset's time-averaging noise floor — is exactly
+what the in-flight high-lift wave (@sec-nb-highlift-prereg) exists to
+answer.
+
+## Roads from here {#sec-review-roads}
+
+In recommended order: (1) a scoped experimental release of MT2-v3c/v4 —
+"exactly pose-robust surface aero surrogate at incumbent-class accuracy
+and cost," with the augmentation pricing as its headline evidence and the
+entanglement finding as its stated limitation; (2) the high-lift verdict,
+which either extends the claim to harder physics or bounds it; (3) the
+upstream PR series for the engineering bycatch (rank-failure barrier,
+distributed-timeout knob, degenerate-cell guards, measure machinery — all
+verified still absent upstream); (4) a BC-varying benchmark *before* any
+typed-BC architecture work; and (5) the shelved query-independence line,
+revisited only with the two untried levers (auxiliary encoder supervision,
+warm-starting) and only if a deployment actually demands
+evaluate-anywhere semantics at the measured price.
