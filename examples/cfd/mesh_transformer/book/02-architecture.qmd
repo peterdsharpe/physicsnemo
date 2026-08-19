@@ -482,3 +482,43 @@ decisive one-head loss. The frozen benchmark capacity configuration
 comparability with every archived arm.
 Chapter @sec-benchmarks carries every number; the notebook (@sec-notebook)
 carries every step of how they were obtained.
+
+## MeshTransformer2: the successor architecture {#sec-mt2-architecture}
+
+The 2026-08 campaign (@sec-program-review-2026-08) produced a successor,
+`MeshTransformer2` (`physicsnemo/experimental/nn/mt2/`), whose design
+inverts this chapter's central trade: instead of enforcing physical
+contracts inside every layer, MT2 pays for them **once at the network's
+edges** and spends the interior on the empirically strongest routing.
+
+The forward pass, in words. All sampled surface points are reduced to
+similarity invariants of the per-point vector set (centered position,
+unit normal, unit drive direction) — no coordinate frame is ever
+constructed, a design constraint the campaign validated twice by
+refutation. A stack of pre-norm *soft-slice* layers routes information
+globally: each layer softly assigns points to a few hundred learned
+slices, computes measure-weighted slice states and **equivariant anchor
+positions** (weighted mean positions per slice — many local,
+data-adaptive reference points), and hands every point relational
+invariants against those anchors (distances, direction dots against
+normal, drive, and the slice's mean normal). Separation comes from
+multilateration against the anchor constellation, not from coordinates.
+Vector outputs are expanded in the GLOBE-style multi-vector basis (input
+vectors plus spherical-basis complements) with invariant coefficients;
+a norm-factored bypass makes every output exactly degree one in the
+drive. All four contracts — similarity equivariance, full O(3), drive
+degree, measure-weight scale invariance — are exact by construction and
+enforced by fp64 unit tests (`test/experimental/nn/test_mt2.py`), not by
+training.
+
+What MT2 deliberately gives up relative to this chapter's architecture:
+per-layer typed scalar/vector streams (the resource cost was measured at
+$\sim$8--20$\times$ peak memory), the kernel-member dictionary
+(evidence-orphaned at industrial scale), strict superposition (MT2
+targets nonlinear regimes), query-independence (measured to trade
+2.7$\times$ against accuracy at this design family,
+@sec-nb-v5-line-verdict), and — currently — typed multi-boundary
+ingestion, which awaits a benchmark that can measure it. The optional
+flag-gated extras (`use_local_features`: measure-weighted local patch
+integrals; `query_independent`: a passive decoder) are experiments with
+their prices recorded in the review chapter, not defaults.
