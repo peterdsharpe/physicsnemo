@@ -3525,3 +3525,55 @@ meshings/families), discretization-invariance theory from neural
 operators, equivariance-sample-efficiency theory (the G1 n=14 parity
 begs its known formalization), and scaling-law methodology for PDE
 surrogates.
+
+## 2026-08-20 — Literature synthesis: four reviews land; the MT3 design is now evidence- and literature-constrained {#sec-nb-lit-synthesis}
+
+Four parallel literature agents reported (artifacts:
+lit_review_{equivariance_theory, intrinsic_surfaces, sota_scaling,
+discretization_theory}_2026-08-20.md). What they change:
+
+**1. The G1 anomaly has two literature-supplied, cheaply-testable
+mechanisms.** Theory (Elesedy-Zaidi; Tahmasebi-Jegelka) predicts the
+DECAY of the equivariance advantage with n but FORBIDS our sign flip
+under well-specified symmetry -- so an assumption is violated. Either
+(i) over-symmetrization: our exact SCALE equivariance is physically
+wrong (Reynolds dependence) and exact rotation equivariance is wrong
+unless inflow/ground are explicit transformed inputs
+(Petrache-Trivedi's bias floor binds at large n); or (ii) the
+invariant-only featurization has a provable per-layer expressivity
+ceiling (Joshi GWL: invariant features cannot propagate orientation;
+Brehmer 2024: equivariant models that keep up at scale carry FEATURE
+FIELDS). Distinguishing probes: residual-vs-scale correlation on
+existing checkpoints; degenerate-pair separation audits.
+
+**2. The G2/anchor-binding diagnosis is externally corroborated
+twice** (AB-UPT transfer paper: zero-shot R^2 = -5.27 with the GLOBAL
+geometry encoder as the non-portable part; CarBench: size beats
+diversity for Transolver-family transfer) -- and our multi-family
+near-parity result plus the 1.87x augmentation pricing are both
+STRONGER than anything published (Symmetry in the Wild found
+equivariance costs accuracy on aligned aero data; ours is free).
+
+**3. The shelved v5 line has a literature answer**: AB-UPT-style
+anchor-conditioned decoding (interaction upstream of queries) is
+expected to deliver query-independence at ~zero accuracy cost -- our
+v5a3 was one design step short. Plus an implementation audit item:
+NEO-style measure weights must enter EVERY normalization; ours entered
+only the assignment softmax.
+
+**4. Program positioning**: nobody publishes scaling curves,
+biased-sampling tests, or query-stability statistics for this model
+class -- P3/P4 and the curve-dominance protocol are themselves
+publishable; the live threat is AB-UPT+LoRA (published bar: zero-shot
+4.4x degradation between related families), so AB-UPT joins the
+measured-baseline set; HiLiftAeroML ships curated data-efficiency/OOD
+splits that the high-lift wave should adopt.
+
+**MT3, now constrained from both sides**: local stream = mass-matrix
+continuous-operator communication (DiffusionNet-class) + gauge-local
+frames carrying FEATURE FIELDS (not invariants only) + per-panel BC
+scalars; global stream = slice routing with Galerkin-linear
+measure-aware aggregation and an anchor-conditioned decode; symmetry =
+exact rotation/translation with inflow+ground explicit, scale
+RELAXED to conditioning (Reynolds); selection pressure = the G-ledger
+curves with AB-UPT in the baseline set.
