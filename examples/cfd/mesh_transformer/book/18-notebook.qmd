@@ -3752,3 +3752,57 @@ loss with a quarter of the interacting tokens. If the
 query-independence question reopens, the registered follow-up is a
 matched-resource anchor-count scaling study (new preregistration),
 not a rerun of this arm.
+
+## 2026-08-20 — M1 verdict: scale-relaxation refuted on DrivAerML; literature wave complete, all four arms resolved {#sec-nb-m1-verdict-wave-close}
+
+**M1 verdict: refuted, per the preregistered falsifier.** The arm
+asked whether MeshTransformer2's exact scale equivariance is an
+over-symmetrization costing accuracy at large training-set sizes —
+the leading literature explanation for the G1 scaling anomaly. The
+intervention (a log raw-cloud-radius scalar appended to the seed
+invariants) produced in-family gains of only 2.0% at n=54 (0.1198 vs
+0.1223) and **1.3% at n=218 (0.0740 vs 0.0750)** — inside the
+declared ±3% seed-spread band, far from the preregistered >5%
+threshold (`results/m1_reduction.json`, evals job 528683).
+GeoTransolver still leads both rungs (0.1004 / 0.0599). A secondary
+observation with the expected sign: scale conditioning **hurts
+zero-shot transfer** (estate 0.949–0.956 vs plain MT2's 0.825–0.856)
+— conditioning on absolute size lets the model bind to the training
+family's size distribution, exactly the failure exact equivariance
+prevents. The preregistered caveat stands: DrivAerML's scale signal
+is weak (fixed freestream), so this bounds the scale axis on this
+dataset; the Reynolds-varying HighLiftAeroML wave is the strong test.
+
+**The literature wave is now fully resolved, one day after
+preregistration** (prereg 69a81e2a, @sec-nb-lit-wave-prereg):
+
+- **M1 scale-relaxation: REFUTED** (this entry) — no in-family gain
+  outside seed spread, and a transfer penalty.
+- **M2 anchor-conditioned decode: CLOSED at the pilot gate**
+  (@sec-nb-v5a4-gate) — 0.01517 vs the 0.01500 bar; the
+  query-independence cost finding stands.
+- **M3 invariant completeness: PARTIAL** (@sec-nb-m3-verdict) — a
+  real expressivity ceiling exists but not at DrivAerML scale; the
+  audit's by-product was finding and fixing a genuine
+  reflection-equivariance defect in the vector head (`parity_fix`).
+- **M4 NEO normalization audit: CLOSED BY DERIVATION**
+  (@sec-nb-lit-wave-prereg) — MT2 was already measure-complete; the
+  P3 density floor is information-limited, not a bug.
+
+**What survives as the explanation of the G2 transfer gap.** With
+locality refuted (@sec-nb-locality-verdict), the scale axis refuted
+here, and the expressivity ceiling ruled out at this scale, the
+surviving candidates for GeoTransolver's data-compounding zero-shot
+transfer are its **pointwise raw coordinate features** and its
+**non-equivariant global encoder** — i.e., the hypothesis that
+transfer on this instrument is carried by representations that exact
+similarity equivariance forbids MT2 from learning, with the honest
+corollary that MT2's equivariance still buys its rotation robustness
+(P1: free vs GeoTransolver's 1.87x augmentation price) and small-data
+parity. The discriminating next experiments are (a) the
+HighLiftAeroML wave (Reynolds-varying, curated OOD splits — the
+strong version of M1) and (b) the G3 boundary-condition ladder on ORD
+(exact labels, isolated BC factors), both already in flight. MT3's
+design brief inherits: keep exact rotation/translation, keep the
+parity gate and a local channel, and treat scale/Reynolds as explicit
+conditioning only where the data actually varies it.
