@@ -216,6 +216,7 @@ class MeshTransformer2(Module):
         use_measure_weights: bool = True,
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
+        n_boundary_scalars: int = 0,
         query_independent: bool = False,
         n_decoder_layers: int = 4,
         local_readout_rho: float = 0.02,
@@ -235,7 +236,12 @@ class MeshTransformer2(Module):
         ### family-portable channel. 7 invariants per radius.
         self.use_local_features = use_local_features
         self.local_radii = tuple(float(x) for x in local_radii)
-        n_seed = 5 + (7 * len(self.local_radii) if use_local_features else 0)
+        ### G3 experiment channel (prereg pending): per-point boundary-condition
+        ### scalars (e.g. a Dirichlet trace). Scalars are invariants, so every
+        ### contract is untouched; they simply widen the seed features.
+        self.n_boundary_scalars = int(n_boundary_scalars)
+        n_seed = (5 + (7 * len(self.local_radii) if use_local_features else 0)
+                  + self.n_boundary_scalars)
         ### Seed invariants of {r, n, d}; separation comes from the slice
         ### blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
@@ -350,6 +356,7 @@ class MeshTransformer2(Module):
         normals: Float[torch.Tensor, "batch tokens 3"],
         drive: Float[torch.Tensor, "batch 3"] | Float[torch.Tensor, " 3"],
         measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
+        boundary_scalars: Float[torch.Tensor, "batch tokens n_bscalars"] | None = None,
         query_points: Float[torch.Tensor, "batch queries 3"] | None = None,
         query_normals: Float[torch.Tensor, "batch queries 3"] | None = None,
     ) -> Float[torch.Tensor, "batch tokens out_dim"]:
@@ -395,6 +402,9 @@ class MeshTransformer2(Module):
                 [invariants, self._local_invariants(r, n_hat, d_hat, log_w)],
                 dim=-1,
             )
+        if self.n_boundary_scalars:
+            bs = boundary_scalars.reshape(b, n, self.n_boundary_scalars)
+            invariants = torch.cat([invariants, bs.to(invariants.dtype)], dim=-1)
         h = self.embed(invariants)
 
 

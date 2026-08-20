@@ -194,3 +194,33 @@ def test_qi_drive_degree_one(setup_qi):
         base = m(pts, nrm, drv, w)
         sc = m(pts, nrm, drv * 2.0, w)
     assert torch.allclose(sc, base * 2.0, atol=1e-10)
+
+
+def test_boundary_scalar_channel_contracts():
+    torch.manual_seed(0)
+    m = (
+        MeshTransformer2(
+            hidden=64, n_layers=2, n_slices=16, n_boundary_scalars=2
+        )
+        .double()
+        .eval()
+    )
+    n = 300
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    bs = torch.randn(1, n, 2, dtype=torch.float64)
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w, boundary_scalars=bs)
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    with torch.no_grad():
+        rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w, boundary_scalars=bs)
+    assert torch.allclose(rot[..., :1], base[..., :1], atol=1e-10)
+    assert torch.allclose(rot[..., 1:4], base[..., 1:4] @ q.T, atol=1e-10)

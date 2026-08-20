@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "g3_2d_bc_generalization_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-20T08:00:00Z",
+  "agenda": "G3 of the generalization north star (02ca9432): out-of-distribution generalization over CONTROLLABLE boundary-condition factors, measured exactly on the procedurally-generated 2D conformal-Laplace suite (exact analytic labels; zero solver error).",
+  "problem": "Dirichlet Laplace on conformally-deformed disks (problems/conformal_laplace.py): boundary = polygonal panels carrying a smooth Dirichlet trace (harmonic modes with k^-2 regularity); targets = exact interior potential.",
+  "train_distribution": "drive modes 1-4, boundary_rms = 1.0, geometry deformation kappa <= 0.3, 256 training cases, n_boundary 128 / n_query 512",
+  "ood_axes": {
+    "T0_in_range": "fresh cases from the training distribution (control)",
+    "T1_bc_spectrum": "drive modes 5-8 ONLY (frequencies never seen)",
+    "T2_bc_amplitude": "boundary_rms in {2, 4} (the PDE is linear: exact extrapolation = linear scaling; MT1's drive-linearity contract should be EXACT here by construction, giving the ledger an exactness anchor)",
+    "T3_geometry": "deformation kappa in (0.3, 0.6] (shapes beyond the training range)",
+    "each axis isolated": "one factor moves per test set; 64 cases each"
+  },
+  "arms": {
+    "mt2_bscalar": "MeshTransformer2 + n_boundary_scalars=1 (the Dirichlet trace as an invariant seed feature), 2D embedded in 3D (z = 0 plane, in-plane normals, constant unit drive vector), out_vectors = 0",
+    "softslice_2d": "the suite's in-tree Transolver-class soft-slice baseline (the GeoTransolver mechanism family) at matched parameter count",
+    "mt1_linear": "the native MeshTransformer in drive-linear mode -- the contract-exactness reference for T2"
+  },
+  "protocol": "identical optimizer/epochs across arms (small: minutes per run); 3 seeds per arm; matched parameter counts within 20%",
+  "deciding_readouts": {
+    "G3_1": "per-axis degradation ratio rel-L2(OOD axis) / rel-L2(T0), per architecture: the GENERALIZATION fingerprint. Curve/table dominance, not single numbers.",
+    "G3_2": "T2 linearity: mt1_linear predicted EXACT (ratio 1.0 to machine precision, p ~ 0.85); the other two arms' T2 ratios measure what undeclared linearity costs",
+    "G3_3": "any axis where mt2_bscalar beats softslice_2d by > 1.5x degradation ratio at equal T0 = the first measured architecture-driven BC generalization"
+  },
+  "launch_state": {"results_inspected": false, "implementation_state": "MT2 boundary-scalar channel implemented and contract-tested (13 tests); harness adapter delegated to a fresh-context subagent with this prereg as its brief"}
+}
