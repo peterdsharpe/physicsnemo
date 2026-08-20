@@ -3414,3 +3414,27 @@ existing 5-seed runs), both architectures, 2 seeds per rung, plus one
 declared double-epoch control per architecture at n=54 to probe the
 fixed-epochs-vs-fixed-steps confound. Same frozen instrument; the G2
 curves come from the same lanes' zero-shot smokes for free.
+
+## 2026-08-20 — G3 launched: BC generalization measured exactly on the 2D procedural suite {#sec-nb-g3-launch}
+
+Peter's directive: start the 2D version now, consider a 3D BC-varying
+dataset only if the 2D readout earns it. G3
+([prereg](../results/g3_2d_bc_generalization_preregistration_2026-08-20.json),
+sha256 ae2dee9115286f97) revives the conformal-Laplace generator (exact
+analytic labels, zero solver error) as the program's first instrument
+that can isolate boundary-condition factors one at a time: train on
+drive modes 1-4 at unit amplitude on mildly deformed disks; test on
+unseen frequencies (T1), doubled and quadrupled amplitudes (T2 -- where
+the PDE's linearity makes the correct extrapolation EXACT, and the
+original MeshTransformer's drive-linearity contract serves as the
+ledger's exactness anchor), and out-of-range geometry (T3). Arms:
+MeshTransformer2 with a new minimal boundary-scalar channel (per-point
+BC values as invariant seed features; contracts untouched, 13 fp64
+tests), the in-tree soft-slice baseline (the GeoTransolver mechanism
+family), and MeshTransformer-v1 in linear mode. The readout is each
+architecture's per-axis degradation fingerprint -- generalization as a
+table of ratios, not a point. Implementation and runs delegated to a
+fresh-context subagent briefed solely from the preregistration (the
+durable record, not this conversation), per the autoresearch
+delegation discipline. Meanwhile: the G1/G2 scaling ladder (22 lanes)
+trains on AGA and the high-lift copy continues.
