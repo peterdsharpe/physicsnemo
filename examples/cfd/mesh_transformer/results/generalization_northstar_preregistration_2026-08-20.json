@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "artifact_kind": "generalization_northstar_preregistration",
+  "status": "PREREGISTERED_PRELAUNCH",
+  "registered_at_utc": "2026-08-20T02:00:00Z",
+  "agenda": "NEW PROGRAM NORTH STAR (Peter, 2026-08-19): generalization means performance BEYOND the training distribution -- coverage expansion is the null hypothesis, not the achievement. The prior multi-family result is hereby reframed as a coverage demonstration. Goal: an architecture that generalizes better than state of the art, with the measurement framework built FIRST.",
+  "measurement_framework": {
+    "G1_data_scaling": "in-family error vs n_train on a FIXED 48-case val split: the comparison object is the scaling CURVE (log-log slope + small-n intercept), not any single point. Structure that means anything must show at small n.",
+    "G2_transfer_vs_data": "zero-shot error on two held-out families as a function of n_train (same lanes, free): does structure change the transfer curve's shape, or only its coverage-limited asymptote?",
+    "G3_ood_factors": "the procedurally-generated 2D suite (exact solutions, parametric BCs) revived for MT2-vs-GeoTransolver: train on a BC-parameter range, test beyond it -- amplitude extrapolation, unseen BC shapes, unseen geometry classes. Designed second, after G1/G2 land (needs model-agnostic harness work).",
+    "G4_group_orbit": "already measured (P1): exact generalization over declared groups; the existence proof that declared structure buys true OOD. Kept as the ledger's anchor.",
+    "sota_criterion": "MT2-class beats GeoTransolver on the G1 slope or small-n intercept AND on G2 shape, at equal protocol, without losing the full-data point -- curve dominance, not point dominance."
+  },
+  "stage_A_arms": {
+    "ladder": "n_train in {14, 27, 54, 109, 218} NESTED seeded subsets of DrivAerML's 435 (n=435 points reuse the existing gt_fixed / mt2_v3c 5-seed runs)",
+    "runs": "{gt, mt2_v3c-config} x 5 ladder rungs x 2 seeds (42, 43) = 20 lanes, frozen protocol (500 epochs -- epochs, not steps, held fixed; the protocol confound of fewer steps at small n is DECLARED and will be probed with one double-epoch control at n=54 per architecture)",
+    "instrument": "fixed 48-case val at 10k (G1) + estate/fastback smoke (G2), identical to every prior wave"
+  },
+  "predictions": {
+    "G1": "MT2's small-n intercept is better (structure regularizes when data is scarce), p ~ 0.5 -- genuinely uncertain, which is the point; GeoTransolver's full-data point stays best or tied",
+    "G2": "both transfer curves are flat at mean-predictor level for all n (transfer is coverage-limited at every scale we can test), p ~ 0.6; ANY downward slope for either architecture would be the program's first evidence of architecture-driven cross-family generalization"
+  },
+  "launch_state": {"results_inspected": false}
+}
