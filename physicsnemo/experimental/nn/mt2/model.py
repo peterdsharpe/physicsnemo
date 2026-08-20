@@ -217,7 +217,9 @@ class MeshTransformer2(Module):
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
         n_boundary_scalars: int = 0,
+        scale_conditioning: bool = False,
         query_independent: bool = False,
+        n_anchors: int = 0,
         n_decoder_layers: int = 4,
         local_readout_rho: float = 0.02,
         eps: float = 1e-12,
@@ -240,8 +242,18 @@ class MeshTransformer2(Module):
         ### scalars (e.g. a Dirichlet trace). Scalars are invariants, so every
         ### contract is untouched; they simply widen the seed features.
         self.n_boundary_scalars = int(n_boundary_scalars)
+        ### M1 experiment (lit synthesis 2026-08-20): deliberately BREAK exact
+        ### scale equivariance with a log-size scalar (Reynolds proxy) --
+        ### the Petrache-Trivedi over-symmetrization test.
+        self.scale_conditioning = scale_conditioning
+        ### v5a4 experiment: AB-UPT-style anchor-conditioned decode -- only a
+        ### fixed-size anchor subset runs the interacting encoder; all points
+        ### decode through the read-only path. The anchor count is absolute
+        ### (not a fraction) so the anchor set cannot depend on the query set,
+        ### which is the query-independence contract. 0 disables (v5a3).
+        self.n_anchors = int(n_anchors)
         n_seed = (5 + (7 * len(self.local_radii) if use_local_features else 0)
-                  + self.n_boundary_scalars)
+                  + self.n_boundary_scalars + (1 if scale_conditioning else 0))
         ### Seed invariants of {r, n, d}; separation comes from the slice
         ### blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
@@ -405,19 +417,46 @@ class MeshTransformer2(Module):
         if self.n_boundary_scalars:
             bs = boundary_scalars.reshape(b, n, self.n_boundary_scalars)
             invariants = torch.cat([invariants, bs.to(invariants.dtype)], dim=-1)
+        if self.scale_conditioning:
+            raw_scale = (points - center).norm(dim=-1).mean(dim=1, keepdim=True)
+            log_s = torch.log(raw_scale.clamp_min(self.eps))[..., None]
+            invariants = torch.cat(
+                [invariants, log_s.expand(b, n, 1)], dim=-1
+            )
         h = self.embed(invariants)
 
 
-        for block in self.blocks:
-            h = block(h, log_w, r, n_hat, d_hat, self.eps)
+        if not (self.query_independent and 0 < self.n_anchors < n):
+            for block in self.blocks:
+                h = block(h, log_w, r, n_hat, d_hat, self.eps)
 
         if self.query_independent:
+            if 0 < self.n_anchors < n:
+                ### v5a4: the interacting core is a random anchor subset in
+                ### training (deterministic prefix at eval), so predictions at
+                ### non-anchor points are query-independent given the anchors.
+                n_anchor = self.n_anchors
+                if self.training:
+                    idx = torch.randperm(n, device=points.device)[:n_anchor]
+                else:
+                    idx = torch.arange(n_anchor, device=points.device)
+                h = h[:, idx]
+                r_enc, n_enc = r[:, idx], n_hat[:, idx]
+                d_enc = d_hat[:, idx]
+                log_w_enc = log_w[:, idx]
+            else:
+                r_enc, n_enc, d_enc, log_w_enc = r, n_hat, d_hat, log_w
             ### Final encoder slice states and anchors (read-only for queries).
+            if 0 < self.n_anchors < n:
+                for block in self.blocks:
+                    h = block(h, log_w_enc, r_enc, n_enc, d_enc, self.eps)
             logits = self.final_assign(h)
-            a = torch.softmax(logits + log_w, dim=1)
+            a = torch.softmax(logits + (log_w_enc if 0 < self.n_anchors < n else log_w), dim=1)
+            r_src = r_enc if 0 < self.n_anchors < n else r
+            n_src = n_enc if 0 < self.n_anchors < n else n_hat
             z_states = torch.einsum("bns,bnh->bsh", a, h)
-            z_pos = torch.einsum("bns,bnc->bsc", a, r)
-            m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+            z_pos = torch.einsum("bns,bnc->bsc", a, r_src)
+            m_s = torch.einsum("bns,bnc->bsc", a, n_src)
             m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             if query_points is None:
                 q_pts, q_nrm = points, normals
@@ -447,11 +486,11 @@ class MeshTransformer2(Module):
                     dim=-1,
                 )
             q_h = self.embed(q_inv)
-            src_w = torch.exp(log_w.squeeze(-1))
+            src_w = torch.exp((log_w_enc if 0 < self.n_anchors < n else log_w).squeeze(-1))
             for rb in self.read_blocks:
                 q_h = rb(
                     q_h, q_r, q_nhat, q_d, z_states, z_pos, m_s, self.eps,
-                    src_r=r, src_h=h, src_w=src_w,
+                    src_r=r_src, src_h=h, src_w=src_w,
                     local_rho=self.local_readout_rho,
                 )
             h_out, r_hat, n_hat, d_hat, b, n = q_h, q_rhat, q_nhat, q_d, bq, nq

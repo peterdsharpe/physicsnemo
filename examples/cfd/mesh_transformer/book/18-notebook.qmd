@@ -3577,3 +3577,59 @@ measure-aware aggregation and an anchor-conditioned decode; symmetry =
 exact rotation/translation with inflow+ground explicit, scale
 RELAXED to conditioning (Reynolds); selection pressure = the G-ledger
 curves with AB-UPT in the baseline set.
+
+## 2026-08-20 — Literature-driven wave preregistered: scale-relaxation M1, anchor-decode v5a4 M2, invariant audit M3; NEO audit closed by derivation {#sec-nb-lit-wave-prereg}
+
+**The setting.** The literature synthesis (@sec-nb-lit-synthesis)
+left three testable claims about MeshTransformer2 (MT2), our
+similarity-equivariant slice-routing surrogate: (a) its exact scale
+equivariance may be an over-symmetrization, since aerodynamic pressure
+depends on Reynolds number and hence on absolute size; (b) its
+data-scaling disadvantage against GeoTransolver at large training-set
+sizes could instead be an invariant-only expressivity ceiling; and
+(c) the query-independence line we closed at 2.7--3.8x accuracy cost
+(v5a3, fully passive decode) was one design step short of AB-UPT's
+anchor-conditioned decoding, where a fixed anchor subset carries all
+token--token interaction and every query decodes passively from it.
+
+**Preregistration.** `results/lit_wave_preregistration_2026-08-20.json`
+(sha256 prefix `69a81e2a`), declared before any run. Four arms:
+
+- **M1 (scale relaxation):** `scale_conditioning=true` appends the log
+  raw cloud radius to the seed invariants — deliberately breaking
+  scale equivariance, keeping rotation/translation exact (new contract
+  test asserts equivariance AND that the flag is not inert). Runs at
+  ladder rungs n∈{54, 218} × 2 seeds against the existing G1 ladder
+  MT2 rungs. Prediction: >5% in-family gain at n=218 if the scale
+  axis is the G1 mechanism; falsifier: within the ±3% seed spread.
+  Caveat declared: DrivAerML's scale signal is weak (fixed freestream),
+  so a null bounds only this dataset.
+- **M2 (v5a4 anchor-conditioned decode):** `query_independent=true,
+  n_anchors=2560` — a fixed-size anchor subset (deterministic prefix
+  at eval) runs the interacting encoder; all points use the v5a3
+  read-only decode. The anchor count is absolute, not fractional: a
+  first draft used a fraction of the query count and the new contract
+  test caught it — the anchor set then depends on the query set,
+  violating the very contract the arm exists for. Pilot-gated (50
+  epochs must reach ≤ 0.0129×1.15, the v5a3 pilot value) before seeds.
+  Prediction: in-family within 1.3x of MT2-v3c; falsifier: >2x closes
+  the anchor-conditioned line.
+- **M3 (invariant-completeness audit):** analytic probe, no training —
+  construct geometry pairs that MT2's invariant set cannot separate
+  but that differ aerodynamically (e.g. handedness of a swept
+  feature). Delegated as a self-contained analysis.
+- **M4 (NEO normalization audit): closed by derivation.** Checked the
+  code, not the paper trail: measure weights already enter every
+  point-population normalization in MT2 (assignment softmax carries
+  `log_w`; slice states and anchors use the weighted assignment; v4
+  patch integrals are weighted; the per-point softmax normalizes over
+  slices, where no point measure applies). MT2 is NEO-complete, so
+  the P3 biased-sampling floor (4.3--4.5x at 10:1) is the
+  information-limited component the SNIS analysis predicts — **no
+  retrain arm is warranted**, and the density result stands as a
+  property of the estimator class, not a bug.
+
+**Instruments.** Both training arms are one-flag diffs against frozen
+configs (G1 ladder rungs for M1; the v5a3 pilot for M2) on the frozen
+DrivAerML instrument. Contract tests: 15/15 passing in fp64,
+including the two new ones.

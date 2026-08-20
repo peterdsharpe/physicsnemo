@@ -224,3 +224,80 @@ def test_boundary_scalar_channel_contracts():
         rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w, boundary_scalars=bs)
     assert torch.allclose(rot[..., :1], base[..., :1], atol=1e-10)
     assert torch.allclose(rot[..., 1:4], base[..., 1:4] @ q.T, atol=1e-10)
+
+
+def test_scale_conditioning_rotation_equivariance():
+    """M1 arm: the log-size scalar breaks scale equivariance by design but
+    must leave rotation equivariance and translation invariance exact."""
+    torch.manual_seed(0)
+    m = (
+        MeshTransformer2(hidden=64, n_layers=2, n_slices=16, scale_conditioning=True)
+        .double()
+        .eval()
+    )
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+        rot = m(pts @ q.T + shift, nrm @ q.T, drv @ q.T, w)
+        double = m(pts * 2.0, nrm, drv, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10)
+    assert torch.allclose(v1, v0 @ q.T, atol=1e-10)
+    ### the flag must actually break scale equivariance (else it is inert)
+    assert not torch.allclose(double, base, atol=1e-6)
+
+
+def test_anchor_conditioned_decode_query_independence():
+    """v5a4 contract: with a fixed source cloud, the interacting core runs on
+    a deterministic anchor subset at eval, so predictions at shared queries
+    must not depend on the companion query set."""
+    torch.manual_seed(0)
+    m = (
+        MeshTransformer2(
+            hidden=64, n_layers=2, n_slices=16,
+            query_independent=True, n_decoder_layers=2, n_anchors=100,
+        )
+        .double()
+        .eval()
+    )
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    qa, na = pts[:, :50], nrm[:, :50]
+    q_big = torch.cat([qa, pts[:, 200:300]], dim=1)
+    n_big = torch.cat([na, nrm[:, 200:300]], dim=1)
+    with torch.no_grad():
+        out_small = m(pts, nrm, drv, w, query_points=qa, query_normals=na)
+        out_big = m(pts, nrm, drv, w, query_points=q_big, query_normals=n_big)
+    assert torch.allclose(out_small, out_big[:, :50], atol=1e-12, rtol=0.0)
+
+    ### rotation equivariance must survive the anchor subset
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+        rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10)
+    assert torch.allclose(v1, v0 @ q.T, atol=1e-10)

@@ -1,0 +1,37 @@
+{
+  "title": "Literature-driven wave: G1-mechanism scale-relaxation (M1), anchor-conditioned decode v5a4 (M2), invariant-completeness audit (M3), NEO normalization audit (M4)",
+  "date": "2026-08-20",
+  "motivation": "The 2026-08-20 literature synthesis (book sec-nb-lit-synthesis) identified two candidate mechanisms for the G1 anomaly (MeshTransformer2's data-scaling curve crossing below GeoTransolver's at small n but losing at large n): over-symmetrization (exact scale equivariance is physically wrong for Reynolds-number-dependent aerodynamics) and an invariant-only expressivity ceiling (Joshi GWL). It also identified AB-UPT anchor-conditioned decoding as the missing design step in our v5 query-independence line, and NEO's requirement that measure weights enter every normalization.",
+  "arms": {
+    "M1_scale_relaxation": {
+      "question": "Is exact scale equivariance an over-symmetrization that costs MT2 accuracy at large training-set sizes?",
+      "intervention": "MeshTransformer2 with scale_conditioning=true: the log of the raw (pre-normalization) mean cloud radius is appended to the seed invariants, deliberately breaking exact scale equivariance while keeping rotation/translation exact (contract test test_scale_conditioning_rotation_equivariance, includes an anti-inertness assertion).",
+      "runs": "lw_m1_n{54,218}_seed{42,43} on DrivAerML scaling manifest, 500 epochs, lr 3e-3, identical to the G1 ladder MT2 rungs except the one flag.",
+      "comparators": "lad_mt2_n{54,218}_seed{42,43} (existing G1 ladder rungs) and lad_gt rungs.",
+      "prediction": "If over-symmetrization via the scale axis is the operative G1 mechanism, in-family pressure_l2 improves by more than 5% at n=218 (outside the observed +-2-3% seed spread) and the MT2/GT ratio narrows; the effect should be larger at n=218 than n=54.",
+      "falsifier": "Improvement at n=218 within seed spread (<=3%) refutes the scale axis as the G1 mechanism; attention shifts to the expressivity-ceiling mechanism (M3) and to explicit inflow/ground conditioning as the remaining over-symmetrization candidates.",
+      "caveat": "DrivAerML is run at fixed freestream with modest geometric size variation, so the available scale signal is weak; a null here bounds the scale axis on THIS dataset only. A strong version requires a Reynolds-varying dataset (HighLiftAeroML wave)."
+    },
+    "M2_anchor_conditioned_decode_v5a4": {
+      "question": "Does moving the interaction upstream of the queries (AB-UPT-style anchor-conditioned decoding) deliver query-independence at near-zero accuracy cost, where the fully passive v5a3 decode cost 2.7-3.8x?",
+      "intervention": "MeshTransformer2 with query_independent=true and n_anchors=2560: a fixed-size random anchor subset (deterministic prefix at eval) runs the full interacting encoder; all points decode through the v5a3 read-only path (slice broadcast + local kernel readout). Absolute anchor count, not a fraction, so the anchor set cannot depend on the query set (contract test test_anchor_conditioned_decode_query_independence, allclose 1e-12).",
+      "runs": "Pilot gate first (standing practice after the v5a collapse): mt2_v5a4p_seed42, 50 epochs on full DrivAerML, config identical to the v5a3 pilot except n_anchors.",
+      "gate": "Pilot val loss at epoch 49 must be <= 0.0129 (the v5a3 pilot value) x 1.15 and must have escaped the 0.064 near-mean-predictor plateau. Pass -> promote to 2 seeds x 500 epochs + standard eval battery incl. P4. Fail -> arm closed.",
+      "prediction": "In-family pressure_l2 within 1.3x of MT2-v3c (0.0633 x 1.3 = 0.082), because 2560 interacting anchors at training resolution 10000 retain most token-token interaction; P4 companion sensitivity ~0 by construction.",
+      "falsifier": "Full-run in-family > 2x v3c closes the anchor-conditioned line and strengthens the finding that MT2 accuracy requires query-set interaction all the way through."
+    },
+    "M3_invariant_completeness_audit": {
+      "question": "Is MT2's invariant set (per-point {r,n,d} dots + per-slice relational invariants) expressive enough to separate geometry pairs that differ aerodynamically, or is there a Joshi-GWL-style expressivity ceiling?",
+      "intervention": "Analytic/CPU probe, no training: construct explicit surface pairs (or 1-parameter families) whose MT2 seed-invariant and slice-relational-invariant statistics match to tolerance while the geometries differ in an aerodynamically meaningful way (e.g. chirality/handedness of a swept feature). Executed as a self-contained subagent task writing an artifact + verdict.",
+      "prediction": "If separating pairs exist within DrivAerML-scale geometry variation, the expressivity ceiling is live and MT3 needs feature fields (Brehmer/GATr direction); if the construction fails everywhere except contrived corners, the invariant set is adequate at this task scale.",
+      "falsifier": "No pair construction with matched invariants and materially different geometry -> ceiling mechanism refuted at this scale."
+    },
+    "M4_neo_normalization_audit": {
+      "status": "CLOSED_BY_DERIVATION",
+      "question": "Do measure weights enter every point-population normalization in MT2 (the NEO requirement), or only the assignment softmax?",
+      "verdict": "Derivation from the code (model.py as of commit 1af3314c): the assignment softmax carries log_w; slice states, anchor positions z_pos, and anchor normals m_s are formed with the weighted assignment a; v4 local patch integrals are measure-weighted; the per-point softmax over slices (point_mix/broadcast) normalizes across SLICES, not across points, so no point measure applies. MT2 is already NEO-complete. Consequence: the P3 density-robustness floor (4.3-4.5x under 10:1 biased sampling) is the information-limited SNIS component, not an implementation gap. No retrain arm is warranted."
+    }
+  },
+  "shared_instrument": "Frozen DrivAerML instrument: normalized pressure_l2 from metrics.jsonl, sampling_resolution=10000, val split; G1 ladder comparators from ladder_reduction.json.",
+  "declared_before_results": true
+}
