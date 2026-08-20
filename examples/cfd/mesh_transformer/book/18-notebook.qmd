@@ -3633,3 +3633,43 @@ token--token interaction and every query decodes passively from it.
 configs (G1 ladder rungs for M1; the v5a3 pilot for M2) on the frozen
 DrivAerML instrument. Contract tests: 15/15 passing in fp64,
 including the two new ones.
+
+## 2026-08-20 — Locality-ladder verdict: local channel refuted as the transfer carrier; small constant in-family gain {#sec-nb-locality-verdict}
+
+**The setting.** The locality-hypothesis ladder (@sec-nb-locality-ladder)
+asked whether GeoTransolver's data-compounding zero-shot transfer —
+the one curve in the G2 experiment that improves monotonically with
+training-set size while MeshTransformer2's stays flat — is carried by
+local features. The test: MT2 with its flag-gated local
+patch-integral channel (the v4 experiment) at training-set sizes
+n ∈ {27, 109, 218}, two seeds each, on the frozen DrivAerML→SHIFT-SUV
+instrument. Preregistered prediction (p ~ 0.45): a monotone decrease
+in zero-shot error across the rungs; a flat curve refutes locality as
+sufficient.
+
+**What we saw** (`results/locladder_reduction.json`, evals job
+527924). In-family, the local channel buys a **consistent but
+constant 3–5% improvement** over plain MT2: 0.1695 vs 0.1779 at
+n=27, 0.0881 vs 0.0913 at n=109, 0.0729 vs 0.0750 at n=218
+(GeoTransolver still leads every rung: 0.1536 / 0.0713 / 0.0599). The
+ratio to plain MT2 *rises* with n (0.953 → 0.965 → 0.972), so the
+channel is an offset, not a slope change. Zero-shot transfer to the
+held-out SHIFT-SUV estate is **not monotone and not improved**:
+0.885 → 0.819 → 1.031 across the rungs, with the n=218 seeds at
+0.970 and 1.091 — worse than the n=27 rung, worse than plain MT2 at
+the same rung (0.825), and nowhere near GeoTransolver's compounding
+0.740 → 0.669 → 0.657. Fastback numbers track estate throughout.
+
+**Verdict: the prediction is refuted.** Patch-integral locality is
+not the mechanism behind GeoTransolver's transfer compounding — and
+adding it can *destabilize* transfer at the largest rung (0.12
+seed spread there vs 0.02 in-family). The surviving candidate
+mechanisms for the G2 gap are now (a) GeoTransolver's pointwise raw
+features (pointwise-vs-patch distinction), (b) its non-equivariant
+global encoder learning dataset-transcending regularities that exact
+similarity equivariance forbids — which is exactly the
+over-symmetrization mechanism the M1 scale-relaxation arm
+(@sec-nb-lit-wave-prereg) is testing right now — and (c) the
+expressivity ceiling under audit in M3. For MT3, the local channel
+earns its place as a cheap in-family offset only; nothing about it
+addresses generalization.
