@@ -3673,3 +3673,55 @@ over-symmetrization mechanism the M1 scale-relaxation arm
 expressivity ceiling under audit in M3. For MT3, the local channel
 earns its place as a cheap in-family offset only; nothing about it
 addresses generalization.
+
+## 2026-08-20 — M3 verdict: expressivity ceiling real but not DrivAerML-relevant; audit finds and fixes a reflection-equivariance defect in the vector head {#sec-nb-m3-verdict}
+
+**The setting.** Arm M3 of the literature wave
+(@sec-nb-lit-wave-prereg) asked whether MeshTransformer2's
+invariant-only feature set has a Joshi-GWL-style expressivity ceiling
+— geometry pairs it provably cannot separate. Executed as an analytic
+fp64 probe with random weights (no training), artifact
+`results/m3_invariant_completeness_audit_2026-08-20.md`, demo script
+`results/m3_demo.py`.
+
+**Verdict: PARTIAL.** A ceiling **exists**: for any geometry with a
+discrete rotational symmetry about an axis parallel to the drive,
+every adaptive slice anchor collapses exactly onto that axis, and
+independent azimuthal scrambling of the symmetry orbits — for
+example straight versus helically twisted fins at zero incidence —
+is provably invisible: 127–138% geometry changes produce output
+separations of 5e-16 to 2e-15 (roundoff), while every non-degenerate
+control separates at 1e-2 to 4e-1. But the ceiling is **refuted as a
+DrivAerML-scale limitation** — no car has such a symmetry, and 1° of
+drive misalignment already restores measurable separation (3.5e-3 to
+1.5e-2). The originally conjectured chirality blindness is refuted
+outright: MT2(mirror geometry, d) equals MT2(geometry, mirror d)
+bitwise, which is exactly the parity covariance of Navier–Stokes, and
+chirality under yaw is separated at 0.13–0.37. The flag-gated v4
+local channel (inter-point distances) fully breaks the constructed
+ceiling instance (6e-2 to 8.6e-2) — so the cheap escape hatch
+already exists in the codebase.
+
+**The surprise the audit was worth running for**: the full-problem
+mirror test exposed a real **reflection-equivariance violation in the
+vector head**. The two e_phi basis complements are cross products —
+pseudovectors — but their coefficients come from the parity-even
+invariant trunk, so vector outputs (wall shear stress direction)
+deviate from the physically correct mirror by 0.56–1.37 relative
+error, dropping to exactly zero when those channels are zeroed.
+Scalar outputs (pressure, the headline metric) match bitwise, which
+is why the frozen instrument never caught it. **Fixed** by gating the
+e_phi coefficients with the smooth parity-odd invariant
+r̂·(n̂×d̂) (`parity_fix` flag, default OFF so frozen checkpoints keep
+their trained behavior; new contract test asserts exact reflection
+covariance at 1e-10 with the fix AND that the unfixed head violates
+it, so the fix cannot silently go inert; 16/16 contract tests pass).
+Also disclosed: the audit's first version was fooled by O(1e-4)
+noise from the m_s normalization clamp on symmetric geometries —
+caught and corrected in-session.
+
+**Implication for MT3**: full feature fields are sufficient but not
+necessary for the observed failure modes; the minimal repairs are the
+parity-odd gate (now built) plus a distance-bearing local channel on
+by default. The M1 arms (running) decide the remaining
+over-symmetrization question on the scale axis.

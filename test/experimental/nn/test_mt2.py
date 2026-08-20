@@ -301,3 +301,42 @@ def test_anchor_conditioned_decode_query_independence():
     p1, v1 = _split(rot)
     assert torch.allclose(p1, p0, atol=1e-10)
     assert torch.allclose(v1, v0 @ q.T, atol=1e-10)
+
+
+def test_parity_fix_reflection_equivariance():
+    """M3 audit fix: with parity_fix=True the full output must be exactly
+    reflection-covariant (scalars invariant, vectors mirrored) -- the parity
+    covariance of Navier-Stokes. Without the fix the e_phi pseudovector
+    channels break this; the test also asserts the defect is real so the
+    fix cannot silently become inert."""
+    torch.manual_seed(0)
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    M = torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=torch.float64))  # mirror
+
+    torch.manual_seed(1)
+    fixed = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, parity_fix=True)
+    fixed = fixed.double().eval()
+    torch.manual_seed(1)
+    broken = MeshTransformer2(hidden=64, n_layers=2, n_slices=16).double().eval()
+
+    with torch.no_grad():
+        base = fixed(pts, nrm, drv, w)
+        mirr = fixed(pts @ M.T, nrm @ M.T, drv @ M.T, w)
+        base_b = broken(pts, nrm, drv, w)
+        mirr_b = broken(pts @ M.T, nrm @ M.T, drv @ M.T, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(mirr)
+    assert torch.allclose(p1, p0, atol=1e-10)
+    assert torch.allclose(v1, v0 @ M.T, atol=1e-10)
+    ### the unfixed head must violate reflection covariance on vectors
+    _, v0b = _split(base_b)
+    _, v1b = _split(mirr_b)
+    assert not torch.allclose(v1b, v0b @ M.T, atol=1e-6)

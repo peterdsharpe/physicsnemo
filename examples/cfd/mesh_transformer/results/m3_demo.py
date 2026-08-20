@@ -152,13 +152,21 @@ for seed in (0, 1, 2):
 
         # ---- T5: aerodynamic instance of T4 -- straight vs helically
         # twisted two-fin body under axial drive; then yaw restoration.
-        def fin_body(twist_rate=0.0, n_h=150):
+        # Fin normals are tilted (n_z = sin 0.3 != 0) so the slice mean-normal
+        # anchors m_s are well-conditioned. With untilted normals (n_z = 0)
+        # the antipodal pair sums make m_s numerators exactly zero and the
+        # eps-clamped normalization (0/1e-12) injects O(1e-4) roundoff noise
+        # that fakes an O(1e-2) separation -- an artifact, not expressivity
+        # (verified separately; see artifact markdown).
+        import math
+        def fin_body(twist_rate=0.0, n_h=150, tilt=0.3):
             z = torch.linspace(0.0, 2.0, n_h)
             # fin A at azimuth 0 (extends radially), fin B antipodal
             rad = 1.0 + 0.5 * torch.rand_like(z)  # radial extent samples
             pA = torch.stack([rad, torch.zeros_like(z), z], dim=-1)
-            nA = torch.stack([torch.zeros_like(z), torch.ones_like(z),
-                              torch.zeros_like(z)], dim=-1)  # fin side normal
+            nA = torch.stack([torch.zeros_like(z),
+                              torch.full_like(z, math.cos(tilt)),
+                              torch.full_like(z, math.sin(tilt))], dim=-1)
             th = twist_rate * z
             c, s = torch.cos(th), torch.sin(th)
             R = torch.zeros(n_h, 3, 3)
@@ -180,7 +188,6 @@ for seed in (0, 1, 2):
         s_tw, _ = split(model(p_twist, n_twist, d_axial))
         t5_blind = rel_diff(s_tw, s_st)
         t5_yaw = {}
-        import math
         for deg in (1.0, 5.0, 10.0):
             a_ = math.radians(deg)
             d_y = torch.tensor([math.sin(a_), 0.0, math.cos(a_)])

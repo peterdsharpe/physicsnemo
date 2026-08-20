@@ -217,6 +217,7 @@ class MeshTransformer2(Module):
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
         n_boundary_scalars: int = 0,
+        parity_fix: bool = False,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -246,6 +247,13 @@ class MeshTransformer2(Module):
         ### scale equivariance with a log-size scalar (Reynolds proxy) --
         ### the Petrache-Trivedi over-symmetrization test.
         self.scale_conditioning = scale_conditioning
+        ### M3 audit fix (2026-08-20): the e_phi basis complements are cross
+        ### products (pseudovectors) while the trunk's coefficients are
+        ### parity-even, so the vector head violated reflection equivariance.
+        ### Gating the e_phi coefficients with the smooth pseudoscalar
+        ### r_hat . (n_hat x d_hat) restores exact parity covariance. Off by
+        ### default so frozen checkpoints keep their trained behavior.
+        self.parity_fix = parity_fix
         ### v5a4 experiment: AB-UPT-style anchor-conditioned decode -- only a
         ### fixed-size anchor subset runs the interacting encoder; all points
         ### decode through the read-only path. The anchor count is absolute
@@ -510,6 +518,14 @@ class MeshTransformer2(Module):
         basis = torch.stack(
             [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
         )  # (B, N, 7, 3)
+        if self.parity_fix:
+            p_odd = (
+                r_hat * torch.linalg.cross(n_hat, d_hat, dim=-1)
+            ).sum(-1)[..., None, None]  # (B, N, 1, 1), parity-odd invariant
+            gate = torch.ones_like(coeffs[..., :1, :]).expand_as(coeffs).clone()
+            gate[..., 4] = p_odd[..., 0]
+            gate[..., 6] = p_odd[..., 0]
+            coeffs = coeffs * gate
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
 
         out_fields = torch.cat(
