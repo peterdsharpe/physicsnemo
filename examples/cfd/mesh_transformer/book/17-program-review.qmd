@@ -15,19 +15,18 @@ number is computed live from the committed reduction artifacts in
 
 The program set out to build a boundary-driven-PDE surrogate whose
 generalization comes from **declared physical structure** rather than data
-coverage. After a falsification campaign against the strongest available
-incumbent (GeoTransolver, a soft-slice global-attention architecture), the
+coverage. After a falsification campaign against the strongest available baseline (GeoTransolver, a soft-slice global-attention architecture), the
 honest verdict is a *decomposition*: *accuracy* at industrial scale comes
-from normalized global routing and rich features, and the incumbent had it;
-*pose robustness* comes from exact equivariance, the incumbent measurably
+from normalized global routing and rich features, and GeoTransolver had it;
+*pose robustness* comes from exact equivariance, GeoTransolver measurably
 lacks it, and buying it with data augmentation costs 1.8--1.9$\times$
 accuracy where our contracts provide it free; *cross-family transfer* comes
 from training-data diversity, not from any architecture we tested; and
 *query-independence* — the ability to evaluate the surrogate anywhere without
 the answer depending on which other points are sampled — trades directly
 against accuracy in every design we built. The program's product is
-`MeshTransformer2` (MT2): the incumbent's routing wrapped in exact contracts
-at the network's edges, within 10--18% of the incumbent's in-family accuracy
+`MeshTransformer2` (MT2): GeoTransolver's routing wrapped in exact contracts
+at the network's edges, within 10--18% of GeoTransolver's in-family accuracy
 at equal-or-lower cost, exactly pose-robust, and transferring at parity when
 trained on two families.
 
@@ -87,7 +86,7 @@ gtm_zs = mean([mega[f"gt_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 4
 
 rows = [
     ("GeoTransolver 9M", 1.0, gt_zs, "3.6x", "26-32x broken", "4.6 GB",
-     "incumbent reference"),
+     "GeoTransolver reference"),
     ("GT + rotation aug.", rot_in / gt10, rot_zs, "--", "closed (1.00)",
      "4.6 GB", "the augmentation price"),
     ("MT2-v3c (8.6M)", v3c_in / gt10, v3c_zs, "13-14x", "exact (1.00)",
@@ -126,7 +125,7 @@ preferred rate.
 
 ## How we got here: the campaign in five verdicts {#sec-review-arc}
 
-**1. The old architecture's defects were real, and three closed at root
+**1. The original MeshTransformer's defects were real, and three closed at root
 cause** (@sec-nb-model-quality-agenda ff.). Resolution collapse was a
 quadrature-bookkeeping error, cured by measure-consistent
 Horvitz--Thompson weighting (@sec-nb-mixedres-verdict). Foreign-family
@@ -136,7 +135,7 @@ instability collapsed from 2491$\times$ to order-1.3$\times$ as a
 byproduct. These closures are the program's clearest demonstrations that
 mechanism-first debugging beats remedy-first patching.
 
-**2. The incumbent comparison was re-anchored honestly and the incumbent
+**2. GeoTransolver comparison was re-anchored honestly and GeoTransolver
 won the measured axes** (@sec-nb-incumbent-stage0-verdict,
 @sec-nb-defect4-synthesis). At every resource budget tested,
 GeoTransolver dominated in-family accuracy, zero-shot transfer, density
@@ -146,7 +145,7 @@ comparison had flattered our side. The synthesis recommended inverting the
 program: structure the winner rather than accelerate the loser.
 
 **3. The probes made the benchmark's blind spots measurable**
-(@sec-nb-contract-probes-synthesis). Rotation: the incumbent loses
+(@sec-nb-contract-probes-synthesis). Rotation: GeoTransolver loses
 26--32$\times$ off-pose — every number it posts carries an implicit "in
 the dataset's canonical pose." Amplitude: its output is drive-amplitude
 *blind* (layer normalization saturates scale), while the declared-degree
@@ -156,7 +155,7 @@ contract halves the damage but cannot zero it.
 
 **4. MT2 was built in eleven preregistered iterations, most of which
 failed informatively** (@sec-nb-mt2-charter through
-@sec-nb-v5-line-verdict). The thesis — the incumbent's routing on
+@sec-nb-v5-line-verdict). The thesis — GeoTransolver's routing on
 exclusively invariant features, contracts paid once at the network edges —
 was refuted at v0 (non-separating invariants), survived at v0b, shed its
 global frames entirely at v2 on Peter's correction that no canonical frame
@@ -174,9 +173,9 @@ robustness of any variant. Conclusion, now measured rather than argued:
 **in this design family, accuracy and query-interaction are entangled** —
 the query-side token stream is where the accuracy comes from, which is
 also precisely why the accurate models carry companion-set sensitivity
-(2% for the incumbent, 6.8% for MT2-v3c on the P4 probe). A deployable
+(2% for GeoTransolver, 6.8% for MT2-v3c on the P4 probe). A deployable
 surrogate can have exact evaluate-anywhere semantics at 3.9$\times$ the
-error, or near-incumbent accuracy with single-digit-percent sensitivity;
+error, or near-GeoTransolver accuracy with single-digit-percent sensitivity;
 it cannot currently have both.
 
 ## What this does not solve {#sec-review-honesty}
@@ -190,7 +189,7 @@ building unmeasurable structure is how this program wasted its first week.
 Density robustness is scoped at $\sim$13$\times$ under a 10:1 sampling
 bias (variance-floored). Both architectures misbehave at scale extremes
 under the frozen learning rate (seed-conditioned detonations at 11M for
-the old architecture; a turned frontier at 564M for the incumbent), so
+the original MeshTransformer; a turned frontier at 564M for GeoTransolver), so
 no "scales to very large runs" claim is made by either side. And the
 irreducible-error question — whether the 1.10$\times$ residual gap is
 architecture or the dataset's time-averaging noise floor — is exactly
@@ -200,7 +199,7 @@ answer.
 ## Roads from here {#sec-review-roads}
 
 In recommended order: (1) a scoped experimental release of MT2-v3c/v4 —
-"exactly pose-robust surface aero surrogate at incumbent-class accuracy
+"exactly pose-robust surface aero surrogate at GeoTransolver-class accuracy
 and cost," with the augmentation pricing as its headline evidence and the
 entanglement finding as its stated limitation; (2) the high-lift verdict,
 which either extends the claim to harder physics or bounds it; (3) the
