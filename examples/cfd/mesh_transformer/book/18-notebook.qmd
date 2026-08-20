@@ -3725,3 +3725,30 @@ necessary for the observed failure modes; the minimal repairs are the
 parity-odd gate (now built) plus a distance-bearing local channel on
 by default. The M1 arms (running) decide the remaining
 over-symmetrization question on the scale axis.
+
+## 2026-08-20 — v5a4 pilot gate: FAIL by 1.2%; anchor-conditioned decode arm closed per prereg {#sec-nb-v5a4-gate}
+
+The M2 arm of the literature wave (@sec-nb-lit-wave-prereg) tested
+whether AB-UPT-style anchor-conditioned decoding — a fixed 2,560-token
+interacting anchor core with all 10,000 points decoding passively —
+recovers the accuracy that the fully passive v5a3 decode lost. The
+preregistered gate: 50-epoch pilot mean validation loss at epoch 49
+must be ≤ the v5a3 pilot value × 1.15. Measured with the identical
+statistic on both runs (mean over the 12 validation batches of epoch
+49): v5a3 pilot 0.01304, so the gate is 0.01500; the v5a4 pilot came
+in at **0.01517 — a fail by 1.2%**. The collapse-escape condition
+passed easily (the run left the 0.064 near-mean plateau immediately;
+first-epoch losses were already at 0.037). Per the preregistration,
+**the arm is closed**: no seeds are promoted.
+
+Two honest margins on this verdict. First, it is a single seed and a
+2% miss against a gate whose own reference (v5a3) went on to fail its
+full-run accuracy bar at 3.8x — the gate is a cheap necessary filter,
+not a sufficient one, and passing it would not have implied success.
+Second, the resource picture is real but was not the preregistered
+axis: the anchor core trains at 6.3 GB versus 9.8 GB and runs
+validation steps ~3x faster, while landing within 16% of v5a3's pilot
+loss with a quarter of the interacting tokens. If the
+query-independence question reopens, the registered follow-up is a
+matched-resource anchor-count scaling study (new preregistration),
+not a rerun of this arm.
