@@ -1,0 +1,107 @@
+{
+  "mt2_bscalar": {
+    "2": {
+      "T0": 0.06482722400687635,
+      "T1": 1.2807593205943704,
+      "T2a": 0.38146712025627494,
+      "T2b": 0.6870161527767777,
+      "T3": 0.06861872479203157
+    }
+  },
+  "config": {
+    "preregistration": "g3_2d_bc_generalization_preregistration_2026-08-20.json",
+    "device": "cuda",
+    "dtype": "float32",
+    "matmul_precision": "highest",
+    "optimizer": "Adam",
+    "learning_rate": 0.001,
+    "epochs": 200,
+    "batch": "1 case",
+    "training_loss": "relative_mse (area-jacobian-weighted relative L2^2, the suite's standard)",
+    "eval_metric": "unweighted rel-L2 = ||pred-target||_2 / ||target||_2 per case, mean over cases",
+    "n_train_cases": 256,
+    "n_test_cases_per_split": 64,
+    "n_boundary": 128,
+    "n_query": 512,
+    "smoke": false,
+    "geometry_modes": [
+      2,
+      3
+    ],
+    "train_deformation_range": [
+      0.05,
+      0.3
+    ],
+    "t3_deformation_range": [
+      0.3,
+      0.6
+    ],
+    "train_drive_modes": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "t1_drive_modes": [
+      5,
+      6,
+      7,
+      8
+    ],
+    "t1_include_constant": false,
+    "drive_regularity": 2.0,
+    "boundary_rms": {
+      "train/T0/T1/T3": 1.0,
+      "T2a": 2.0,
+      "T2b": 4.0
+    },
+    "similarity": "sample_similarity defaults (scale 0.5-2 log-uniform, random O(2) incl. reflections, translation extent 2)",
+    "split_base_seeds": {
+      "train": 10000000,
+      "T0": 20000000,
+      "T1": 30000000,
+      "T2a": 40000000,
+      "T2b": 50000000,
+      "T3": 60000000
+    },
+    "seed_streams": {
+      "geometry": 0,
+      "drive": 1,
+      "query": 2,
+      "similarity": 3
+    },
+    "arms": {
+      "mt2_bscalar": {
+        "out_scalars": 1,
+        "out_vectors": 0,
+        "hidden": 56,
+        "n_layers": 2,
+        "n_slices": 32,
+        "mlp_ratio": 4,
+        "reference_length": 1.0,
+        "n_boundary_scalars": 2,
+        "query_independent": false,
+        "adapter": "boundary panels + interior queries as one token set; z=0 embedding; interior normals (0,0,1); constant drive (1,0,0); boundary scalars [value, is_boundary]; measure weights = panel lengths / shoelace-area per query"
+      },
+      "softslice_2d": "transolver_intree preset intree_matched (native suite adapter)",
+      "mt1_linear": "make_model('mesh_transformer', 'reference'): moment decoder, field_mode=linear, explicit gauge"
+    },
+    "deviations": [
+      "MT2 uses n_boundary_scalars=2 ([value, is_boundary flag]) instead of the prereg's 1: interior query tokens need a zero-scalar channel plus a flag to be distinguishable from zero-Dirichlet boundary panels.",
+      "T1 drops the constant drive term (include_constant=False) so the test set contains modes 5-8 ONLY, matching the suite's unseen_boundary_frequencies convention."
+    ],
+    "parameter_counts": {
+      "mt2_bscalar": 125915
+    },
+    "wall_time_seconds": {
+      "mt2_bscalar": {
+        "2": 556.6681971549988
+      }
+    },
+    "final_train_rel_mse": {
+      "mt2_bscalar": {
+        "2": 0.0036878373377930984
+      }
+    }
+  }
+}

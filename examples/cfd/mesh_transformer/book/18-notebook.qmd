@@ -3806,3 +3806,78 @@ strong version of M1) and (b) the G3 boundary-condition ladder on ORD
 design brief inherits: keep exact rotation/translation, keep the
 parity gate and a local channel, and treat scale/Reynolds as explicit
 conditioning only where the data actually varies it.
+
+## 2026-08-21 — G3 verdict: linearity contract buys exact amplitude extrapolation; no architecture generalizes across BC frequency content {#sec-nb-g3-verdict}
+
+**The setting.** G3 is the boundary-condition axis of the
+generalization north star: out-of-distribution generalization over
+*controllable* BC factors, measured with exact analytic labels on the
+procedurally generated 2D conformal-Laplace suite (Dirichlet Laplace
+on conformally deformed disks — zero solver error, so every
+degradation is the model's). Preregistered as
+`results/g3_2d_bc_generalization_preregistration_2026-08-20.json`
+(sha ae2dee91); three arms at matched parameters and identical
+training: **mt2_bscalar** (MeshTransformer2 with the Dirichlet trace
+as an invariant boundary-scalar seed feature), **softslice_2d** (the
+Transolver-class soft-slice mechanism, GeoTransolver's family), and
+**mt1_linear** (MeshTransformer in drive-linear mode — the
+contract-exactness reference). Train: drive modes 1–4, boundary RMS
+1.0, deformation ≤ 0.3. Test axes, one factor each: T0 in-range
+control, T1 unseen drive modes 5–8, T2a/T2b amplitude ×2/×4, T3
+deformation 0.3–0.6. Results in `results/g3/` (9 per-seed artifacts +
+`g3_reduction.json`), 3 seeds per arm, mean unweighted rel-L2.
+
+**What we saw** (mean over 3 seeds; degradation ratio = axis / T0):
+
+| arm | T0 | T1 modes | T2a ×2 | T2b ×4 | T3 geom |
+|---|---|---|---|---|---|
+| mt1_linear | 0.0723 | 1.0043 (13.9×) | 0.0667 (0.92×) | 0.0632 (0.87×) | 0.0898 (1.24×) |
+| mt2_bscalar | **0.0624** | 1.1485 (18.4×) | 0.3883 (6.2×) | 0.7289 (11.7×) | **0.0669** (1.07×) |
+| softslice_2d | 0.1114 | 1.2090 (10.9×) | 0.4979 (4.5×) | 0.7760 (7.0×) | 0.1221 (1.10×) |
+
+**Readout G3_2 — confirmed (p ~ 0.85 held).** mt1_linear's
+drive-linearity contract makes amplitude extrapolation *free*: its
+T2 ratios are 0.92× and 0.87× (statistically 1.0; the deviation is
+case-sampling noise, since rel-L2 is exactly invariant under the
+linear scaling). The two learned-amplitude arms price what an
+undeclared linearity costs: **6–12× degradation for mt2_bscalar and
+4.5–7× for softslice_2d**, worsening with extrapolation distance.
+This is the program's cleanest contract-buys-generalization result to
+date: the axis where an exact structural property was declared is the
+axis where extrapolation is exact.
+
+**Readout G3_3 — trigger not met, and the honest reading is
+sharper.** mt2_bscalar dominates softslice_2d in *absolute* error on
+every axis (1.8× better at T0, 1.8× at T3), but the declared
+readout demanded a better *degradation ratio at equal T0*, and T0 is
+not equal — mt2_bscalar's fingerprint on the BC-amplitude axes is
+actually the worst of the three (its boundary-scalar channel binds to
+the training amplitude). Architecture-driven BC generalization, as
+preregistered, was NOT observed: mt2's advantage is in-distribution
+accuracy plus geometry robustness (T3 ratio 1.07×), not BC-axis
+transfer.
+
+**Readout G3_1 — the fingerprint's starkest row: nobody generalizes
+across frequency content.** On T1 (drive modes never seen in
+training) every arm lands at rel-L2 ≈ 1.0–1.2 — as bad as or worse
+than predicting zero. Even the exactly-linear mt1 fails: linearity
+constrains amplitude response but says nothing about basis
+coverage — the model has simply never learned the harmonic response
+to those modes. This is a *data/coverage* limit, not an architecture
+gap, and no candidate mechanism in the program (equivariance,
+measure-weighting, BC channels, locality) addresses it. For the
+north star: spectrum coverage must be treated like training-set size
+— an explicit axis of the data-scaling ledger, not something
+structure can buy.
+
+**Program consequence.** G3 delivers the first measured
+generalization *fingerprint* decomposition: amplitude extrapolation
+is purchasable by contract (declare linearity where the PDE has it —
+for aerodynamics, the drive-degree-1 contract MT2 already carries is
+exactly this and its value is now measured at 4.5–12×);
+geometry extrapolation is mild and slightly favors the equivariant
+slice router; frequency-content extrapolation is purchasable by
+neither contract nor mechanism tested here. The 3D BC-varying
+dataset question (whether to generate one) should be decided on the
+axes where architecture can matter — amplitude and geometry — and
+those G3 measures now exist.
