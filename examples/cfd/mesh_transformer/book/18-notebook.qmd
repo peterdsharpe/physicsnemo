@@ -3881,3 +3881,46 @@ neither contract nor mechanism tested here. The 3D BC-varying
 dataset question (whether to generate one) should be decided on the
 axes where architecture can matter — amplitude and geometry — and
 those G3 measures now exist.
+
+## 2026-08-24 — High-lift wave mid-flight: GeoTransolver destabilizes at the frozen lr; lr-parity amendment preregistered before any readout {#sec-nb-hl-lr-amendment}
+
+**The setting.** The high-lift wave (prereg
+`highlift_wave_preregistration_2026-08-17.json`) is training
+GeoTransolver and MeshTransformer2 (v3c config) on the HiLiftAeroML
+curated `full` split, 2 seeds each, under the frozen DrivAerML
+protocol (lr 3e-3, 500 epochs). At mid-flight (~epoch 250 of 500),
+the two architectures' health diverges in a way that must be handled
+before results exist, not after.
+
+**The symptom.** Both GeoTransolver seeds destabilize after roughly
+epoch 130: seed 42 reaches val loss 0.016 at epoch 134 and then
+*rises monotonically* to 0.070 by epoch 255 — training loss rising in
+lockstep, so this is optimizer instability, not overfitting; seed 43
+dips to 0.013 and re-plateaus at 0.021–0.024. MeshTransformer2
+descends smoothly through the identical restart schedule (0.0039 at
+epoch 248, still improving), which also rules out the checkpointing
+machinery as the cause. The mechanism is mundane: the frozen lr 3e-3
+was tuned on DrivAerML where an epoch is 54 optimizer steps; HiLift's
+1,260-case training split makes an epoch 315 steps, ~6x more
+optimizer steps at any given scheduler position.
+
+**Amendment, preregistered before any lr-1e-3 result exists.** A
+learning-rate parity grid, symmetric across architectures per the
+steel-man rule: gt_hl_lr1_seed{42,43} and mt2_hl_lr1_seed{42,43} at
+lr 1e-3, all else identical (jobs under name hl-lr). Declared
+selection rule: for each architecture, the headline high-lift number
+is its best val-metric configuration over the grid {3e-3, 1e-3},
+with both configurations reported. The 3e-3 lanes run to completion
+regardless (a cosine schedule can re-converge late; killing them
+would bias against GeoTransolver). H1/H2 readouts of the original
+prereg are unchanged — they now just take each architecture's best
+lane. Precedent: the DrivAerML lr-parity treatment that produced
+MT2's honest 1.10x (@sec-nb-lit-wave-prereg cites it).
+
+**Also fixed this wave (recorded for reproducibility):** the
+Sisyphus trap — the frozen save_interval=50 exceeded the ~35 epochs a
+4-hour link covers cold, so early links restarted from epoch 1
+(caught by a checkpoint-progress watcher, twice: the second catch was
+Slurm snapshotting the batch script at submission, so the fix
+required resubmitting the queue, not just editing the script).
+save_interval=5 since; checkpoints now track epochs exactly.
