@@ -21,7 +21,12 @@ buying that robustness the conventional way (rotation augmentation) is
 measured to cost GeoTransolver 1.8--1.9× of its accuracy. Cross-family
 transfer turned out to be a property of training-data diversity, not of
 any architecture tested; query-independence is measured to trade 2.7×
-against accuracy and is shelved with its price tag attached. Everything
+against accuracy and is shelved with its price tag attached. The
+mechanism hunt that followed (the refutation wave of 2026-08-20/21,
+@sec-review-refutation-wave) closed locality, scale relaxation,
+anchor-conditioned decoding, the expressivity ceiling, and the
+normalization audit; the live status of every experiment is the tech
+tree of @sec-tech-tree. Everything
 below and in earlier chapters is the historical record that earned those
 sentences; the dated lab notebook (@sec-notebook) holds every
 preregistration and verdict, including the failed ones.
@@ -445,6 +450,90 @@ fig.tight_layout()
 plt.show()
 ```
 
+
+## Research tech tree {#sec-tech-tree}
+
+The generalization campaign — the program's current phase — is run as an
+explicit tech tree: every experiment is a node with a preregistered
+question, a dependency, an acceptance criterion, and a dated verdict in
+the lab notebook (@sec-notebook). Three architectures recur throughout.
+**MeshTransformer2 (MT2)** is the program's product: a similarity-equivariant
+slice-routing surrogate whose physical contracts (rotation, translation,
+scale, drive degree) are exact by construction. **GeoTransolver** is the
+strongest external baseline, a soft-slice global-attention architecture
+with pointwise raw-coordinate features and no equivariance contract.
+**MeshTransformer (MT1)** is the original GLOBE-lineage architecture,
+retained where its drive-linearity contract makes it the exactness
+reference. The central open question the tree is organized around is the
+**G2 transfer gap**: on the frozen DrivAerML→SHIFT-SUV instrument,
+GeoTransolver's zero-shot error on a held-out vehicle family improves
+monotonically with in-family training data (0.784 → 0.657 across five
+rungs) while MT2's stays flat — the one measured axis where the baseline
+generalizes and the structured model does not.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   The generalization-campaign tech tree as of 2026-08-24. Green: done,
+%%|   with the verdict in the node. Amber: running. Gray dashed: planned,
+%%|   gated on an upstream readout. Every node has a ledger row below with
+%%|   its acceptance criterion and notebook evidence link.
+flowchart TB
+    classDef done fill:#eaf7ea,stroke:#2a6a2a,color:#1a1a1a
+    classDef running fill:#fff8e8,stroke:#8a6d1a,color:#1a1a1a
+    classDef planned fill:#f2f1ec,stroke:#898781,color:#1a1a1a,stroke-dasharray:4 3
+
+    NSTAR["NSTAR: generalization north star<br/>(measure curves, not points)<br/>DONE - framing adopted"]:::done
+    G1G2["G1G2: data-scaling + transfer ladder<br/>DONE - GeoTransolver's transfer compounds<br/>with data; MT2's is flat"]:::done
+    LOC["LOC: locality-hypothesis ladder<br/>DONE - REFUTED as the transfer carrier<br/>(constant 3-5% in-family offset only)"]:::done
+    M1["M1: scale-relaxation arm<br/>DONE - REFUTED on DrivAerML<br/>(1.3-2.0% gain, inside seed spread)"]:::done
+    M2["M2: v5a4 anchor-conditioned decode<br/>DONE - CLOSED at pilot gate<br/>(0.01517 vs 0.01500 bar)"]:::done
+    M3["M3: invariant-completeness audit<br/>DONE - PARTIAL: ceiling real, not<br/>DrivAerML-scale; parity_fix by-product"]:::done
+    M4["M4: NEO normalization audit<br/>DONE - CLOSED BY DERIVATION<br/>(MT2 already measure-complete)"]:::done
+    G3["G3: 2D BC-generalization ladder<br/>DONE - linearity contract buys exact<br/>amplitude extrapolation; nobody<br/>generalizes across frequency content"]:::done
+    HL["HL: high-lift wave (HiLiftAeroML)<br/>RUNNING - ~epoch 260/500;<br/>lr-parity amendment preregistered"]:::running
+    HLGEN["HLGEN: HiLift generalization ladder<br/>PLANNED - gated on HL readout"]:::planned
+    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on HL readout"]:::planned
+
+    NSTAR --> G1G2
+    NSTAR --> G3
+    G1G2 --> LOC
+    G1G2 --> M1
+    G1G2 --> M2
+    G1G2 --> M3
+    G1G2 --> M4
+    G1G2 --> HL
+    LOC --> HL
+    M1 --> HL
+    HL --> HLGEN
+    HL --> MT3
+    M3 --> MT3
+    G3 --> MT3
+```
+
+The refutation wave of 2026-08-20/21 resolved every mechanism candidate
+then on the table. What survives as the candidate explanation of the G2
+transfer gap: GeoTransolver's **pointwise raw coordinate features** and
+its **non-equivariant global encoder** — the hypothesis that transfer on
+this instrument is carried by representations that exact similarity
+equivariance forbids MT2 from learning (@sec-nb-m1-verdict-wave-close).
+The discriminating experiments in flight are the high-lift wave (HL) and,
+next, the HiLift generalization ladder (HLGEN).
+
+| ID | Status | Question and why it matters | Depends on | Acceptance criterion | Evidence |
+|---|---|--------|---|------|---|
+| NSTAR | DONE | Reframe the program's goal: multi-family transfer was a coverage demonstration, not generalization; measure generalization as curves (error vs training-set size, error beyond the training hull), not points. Sets the ledger G1–G4. | — | Preregistered framing adopted (sha 02ca9432) with a declared ladder design. | @sec-nb-generalization-northstar |
+| G1G2 | DONE | Do MT2's contracts buy performance-per-sample (G1) and does either architecture's zero-shot transfer improve with in-family data (G2)? The G2 slope is the program's first measured architecture-carried generalization. | NSTAR | 22-lane nested ladder, n ∈ {14…435}, 2 seeds per rung; preregistered predictions scored. | @sec-nb-g1g2-verdict |
+| LOC | DONE — refuted | Is GeoTransolver's data-compounding transfer carried by *local* features? If yes, MT2's flag-gated local patch-integral channel should bend MT2's G2 curve downward. | G1G2 | Preregistered (p ~ 0.45): monotone zero-shot decrease across n ∈ {27, 109, 218}; a flat curve refutes locality as sufficient. Verdict: refuted — the local channel is a constant 3–5% in-family offset with no G2 slope change, and destabilizes transfer at n=218 (seed spread 0.12). | @sec-nb-locality-verdict |
+| M1 | DONE — refuted | Is MT2's exact scale equivariance an over-symmetrization (aerodynamics depends on Reynolds number, hence absolute size)? Literature wave arm, prereg 69a81e2a. | G1G2 | Preregistered: >5% in-family gain at n=218 from scale conditioning; falsifier: within the ±3% seed band. Verdict: refuted — 1.3–2.0% gains, plus a zero-shot transfer *penalty*. | @sec-nb-m1-verdict-wave-close |
+| M2 | DONE — closed | Does AB-UPT-style anchor-conditioned decoding (fixed 2,560-token interacting core, all queries passive) recover the accuracy the fully passive v5a3 decode lost? | G1G2 | Preregistered pilot gate: 50-epoch validation loss ≤ v5a3 pilot × 1.15 (= 0.01500). Verdict: fail at 0.01517 (1.2% over); arm closed per prereg, no seeds promoted. | @sec-nb-v5a4-gate |
+| M3 | DONE — partial | Does MT2's invariant-only feature set have a provable expressivity ceiling (geometry pairs it cannot separate)? | G1G2 | Analytic fp64 probe: constructed pairs separate at roundoff vs controls. Verdict: ceiling real (rotationally symmetric geometries, separations 5e-16–2e-15) but not DrivAerML-relevant; by-product: a reflection-equivariance defect in the vector head found and fixed (`parity_fix`). | @sec-nb-m3-verdict |
+| M4 | DONE — closed by derivation | Does MT2 miss a measure-weighted (NEO-style) normalization somewhere, explaining the P3 density floor? | G1G2 | Code audit: every point-population normalization carries measure weights. Verdict: MT2 is already measure-complete; the P3 floor is information-limited, not a bug — no retrain arm warranted. | @sec-nb-lit-wave-prereg |
+| G3 | DONE | Which boundary-condition generalization axes can architecture or contract buy? Exact-label 2D conformal-Laplace suite; three arms (MT2+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Verdict: the linearity contract buys *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×); no arm generalizes across BC frequency content (rel-L2 ≈ 1.0 on unseen modes); MT2+BC-scalar wins absolute error on every axis but has the worst amplitude degradation ratio. | @sec-nb-g3-verdict |
+| HL | RUNNING | Does the DrivAerML frontier (MT2 within 1.10× of GeoTransolver, exactly pose-robust) extend to harder, Reynolds-varying physics? GeoTransolver vs MT2-v3c on the HiLiftAeroML curated full split, 2 seeds each. | G1G2, LOC, M1 | Preregistered H1/H2 readouts (prereg 2026-08-17); lr-parity amendment preregistered mid-flight after GeoTransolver destabilized at the frozen lr 3e-3 — symmetric 1e-3 lanes added, each architecture reports its best lane over {3e-3, 1e-3}. ~Epoch 260/500. | @sec-nb-hl-lr-amendment |
+| HLGEN | PLANNED | The HiLift analogue of the G1/G2 ladder: does GeoTransolver's transfer compounding — the surviving G2-gap discriminator — reproduce on Reynolds-varying physics with curated OOD splits? | HL | Gated on the high-lift full-split readout; to be preregistered with scaling rungs and falsifiers before any run. | @sec-nb-hl-lr-amendment |
+| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation, keep the parity gate and a local channel (cheap in-family offset), treat scale/Reynolds as explicit conditioning only where data varies it — and address whatever the high-lift readout says about the surviving G2-gap candidates. | HL, M3, G3 | Gated on the high-lift readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-m1-verdict-wave-close |
+
+: The tech-tree ledger. Every status is as of 2026-08-24; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. {#tbl-tech-tree}
 
 ## How the book is organized
 

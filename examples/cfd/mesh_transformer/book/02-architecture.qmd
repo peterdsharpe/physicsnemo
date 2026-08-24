@@ -511,6 +511,24 @@ degree, measure-weight scale invariance — are exact by construction and
 enforced by fp64 unit tests (`test/experimental/nn/test_mt2.py`), not by
 training.
 
+One defect in that contract set was found and fixed after the fact. The
+2026-08-20 invariant-completeness audit (@sec-nb-m3-verdict) ran a
+full-problem mirror test and exposed a **reflection-equivariance
+violation in the vector head**: two of the output basis vectors (the
+`e_phi` spherical-basis complements) are cross products — pseudovectors,
+which flip sign under reflection — but their coefficients come from the
+parity-even invariant trunk, so vector outputs such as wall-shear-stress
+direction deviated from the physically correct mirror by 0.56--1.37
+relative error. Scalar outputs (pressure, the headline metric) were
+unaffected — they match a mirrored input bitwise — which is why the
+frozen benchmark instrument never caught it. The fix gates the `e_phi`
+coefficients with the smooth parity-odd invariant
+$\hat r \cdot (\hat n \times \hat d)$, exposed as the `parity_fix` flag
+(default OFF, so frozen checkpoints keep their trained behavior). Two
+new contract tests pin it down: one asserts exact reflection covariance
+at $10^{-10}$ with the fix on, and one asserts the unfixed head
+*violates* it, so the fix cannot silently go inert.
+
 What MT2 deliberately gives up relative to this chapter's architecture:
 per-layer typed scalar/vector streams (the resource cost was measured at
 $\sim$8--20$\times$ peak memory), the kernel-member dictionary

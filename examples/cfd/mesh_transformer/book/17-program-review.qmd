@@ -2,13 +2,17 @@
 
 ::: {.callout-note title="What this chapter is"}
 This chapter is the authoritative synthesis of the research program as of
-2026-08-19. It supersedes the earlier "future directions" chapter (whose open
+2026-08-24. It supersedes the earlier "future directions" chapter (whose open
 questions have all since been measured) and compresses roughly sixty
 preregistered training runs, four adversarial probes, and three architecture
 generations into the tables and verdicts a reviewer actually needs. Every
 number is computed live from the committed reduction artifacts in
 `results/`, and every claim links to the dated lab-notebook entry
-(@sec-notebook) where it was preregistered and read out.
+(@sec-notebook) where it was preregistered and read out. The campaign
+narrative (@sec-review-arc) ends 2026-08-19; the refutation wave that
+followed (@sec-review-refutation-wave) resolved every mechanism candidate
+then open and is the current state of the mechanism hunt. The live
+tech-tree ledger is @sec-tech-tree.
 :::
 
 ## The one-paragraph verdict
@@ -183,35 +187,147 @@ surrogate can have exact evaluate-anywhere semantics at 3.9$\times$ the
 error, or near-GeoTransolver accuracy with single-digit-percent sensitivity;
 it cannot currently have both.
 
+## The refutation wave: every open mechanism candidate, resolved {#sec-review-refutation-wave}
+
+The G1/G2 scaling ladder (@sec-nb-g1g2-verdict) gave the mechanism hunt
+its target: **the G2 transfer gap** — GeoTransolver's zero-shot error on
+a held-out vehicle family improves monotonically with in-family training
+data (0.784 → 0.657 across five training-set-size rungs) while
+MeshTransformer2's stays flat at 0.83–0.94. Between 2026-08-20 and
+2026-08-21, five preregistered lines resolved every candidate
+explanation then on the table. None of these are open questions anymore;
+each verdict below is dated and anchored.
+
+**Locality: refuted as the transfer carrier** (@sec-nb-locality-verdict).
+The hypothesis that GeoTransolver's transfer compounding is carried by
+local features predicted that MeshTransformer2's flag-gated local
+patch-integral channel would bend MT2's G2 curve downward. Measured: the
+local channel buys a consistent but *constant* 3–5% in-family improvement
+(the ratio to plain MT2 rises 0.953 → 0.972 across rungs — an offset,
+not a slope change), does not improve zero-shot transfer, and
+*destabilizes* it at the largest rung (n=218 seed spread 0.12 vs 0.02
+in-family). The channel earns its place in MT3 as a cheap in-family
+offset only.
+
+**The literature wave: all four arms resolved one day after
+preregistration** (prereg 69a81e2a, @sec-nb-lit-wave-prereg;
+wave-close @sec-nb-m1-verdict-wave-close):
+
+- **M1 scale relaxation: REFUTED** (@sec-nb-m1-verdict-wave-close).
+  Appending a log raw-cloud-radius scalar — deliberately breaking MT2's
+  exact scale equivariance — gained only 1.3–2.0% in-family, inside the
+  declared ±3% seed band and far from the preregistered >5% threshold,
+  and *hurt* zero-shot transfer (0.949–0.956 vs plain MT2's
+  0.825–0.856). Caveat preserved: DrivAerML's scale signal is weak
+  (fixed freestream); the Reynolds-varying high-lift wave is the strong
+  test.
+- **M2 anchor-conditioned decode: CLOSED at the pilot gate**
+  (@sec-nb-v5a4-gate). The AB-UPT-style design (a fixed 2,560-token
+  interacting anchor core, all queries decoding passively) came in at
+  0.01517 against the preregistered 0.01500 bar — a fail by 1.2%; no
+  seeds promoted. The query-independence price finding of
+  @sec-nb-v5-line-verdict stands; any reopening requires a new
+  matched-resource preregistration, not a rerun.
+- **M3 invariant completeness: PARTIAL** (@sec-nb-m3-verdict). An
+  expressivity ceiling is real — geometries with a discrete rotational
+  symmetry about the drive axis are provably invisible to MT2's
+  invariant set — but it is refuted as a DrivAerML-scale limitation (no
+  car has such a symmetry; 1° of drive misalignment restores
+  separation). The audit's by-product was finding and **fixing a genuine
+  reflection-equivariance defect in MT2's vector head** (the `parity_fix`
+  flag; see @sec-mt2-architecture).
+- **M4 NEO normalization audit: CLOSED BY DERIVATION**
+  (@sec-nb-lit-wave-prereg). MT2 was already measure-complete — measure
+  weights enter every point-population normalization — so the P3
+  density floor (4.3–4.5× at 10:1 bias) is the information-limited
+  component the importance-sampling analysis predicts, not a bug. No
+  retrain arm was warranted.
+
+**G3, the boundary-condition axis: contracts buy exactly what they
+declare, and nothing buys frequency coverage** (@sec-nb-g3-verdict).
+On the exact-label 2D conformal-Laplace suite (three arms at matched
+parameters: MeshTransformer2 with a boundary-scalar channel, the
+soft-slice mechanism of GeoTransolver's family, and MeshTransformer in
+drive-linear mode), the drive-linearity contract makes amplitude
+extrapolation *free* — exact at ×2 and ×4 amplitude — while the two
+learned-amplitude arms degrade 6–12× (MT2+BC-scalar) and 4.5–7×
+(soft-slice): the first measured price of an undeclared linearity. But
+*no* arm generalizes across BC frequency content: on drive modes never
+seen in training, every architecture lands at rel-L2 ≈ 1.0–1.2, as bad
+as predicting zero — a data-coverage limit no tested mechanism
+addresses. MT2+BC-scalar wins absolute error on every axis (1.8× better
+than soft-slice at control) but has the *worst* amplitude degradation
+ratio; architecture-driven BC generalization, as preregistered, was not
+observed.
+
+**What survives.** With locality refuted, the scale axis refuted, the
+expressivity ceiling ruled out at DrivAerML scale, and the normalization
+audit closed, the surviving candidate mechanisms for the G2 transfer
+gap are GeoTransolver's **pointwise raw coordinate features** and its
+**non-equivariant global encoder** — the hypothesis that transfer on
+this instrument is carried by representations exact similarity
+equivariance forbids MT2 from learning, with the honest corollary that
+that same equivariance buys MT2's free pose robustness and small-data
+parity. The discriminators in flight: the **high-lift wave**
+(GeoTransolver vs MeshTransformer2 on the HiLiftAeroML curated full
+split, ~epoch 260 of 500 as of 2026-08-24) and, gated on its readout,
+the **HiLift generalization ladder**. Mid-flight, both GeoTransolver
+seeds destabilized at the frozen lr 3e-3 (tuned on DrivAerML, where an
+epoch is 54 optimizer steps; HiLift's is 315), so an lr-parity
+amendment was preregistered *before any readout exists*: symmetric
+lr-1e-3 lanes for both architectures under the steel-man rule, each
+architecture reporting its best lane over {3e-3, 1e-3}
+(@sec-nb-hl-lr-amendment).
+
 ## What this does not solve {#sec-review-honesty}
 
 The claims above are scoped by construction, and the scoping is part of
-the result. Everything rests on two automotive dataset families plus a
-harder third (high-lift) in flight; no volume fields; no varying boundary
-conditions — the typed-BC ingestion that distinguishes the GLOBE lineage
-is designed but unbuilt *because no current benchmark can measure it*, and
-building unmeasurable structure is how this program wasted its first week.
+the result. The industrial evidence rests on two automotive dataset
+families plus a harder third (high-lift) in flight; no volume fields.
+Boundary-condition variation is now measured, but only in 2D with exact
+labels (the G3 suite, @sec-nb-g3-verdict); its verdict — amplitude
+generalization is purchasable by a declared linearity contract at a
+measured 4.5--12$\times$ value, frequency-content generalization is
+purchasable by nothing tested — is what any 3D BC-varying dataset
+decision should be built on. The typed-BC ingestion that distinguishes
+the GLOBE lineage remains unbuilt at industrial scale for the same
+reason as before: no *industrial* benchmark can yet measure it.
 Density robustness is scoped at $\sim$13$\times$ under a 10:1 sampling
-bias (variance-floored). Both architectures misbehave at scale extremes
+bias — and the M4 audit closed the question of whether that floor is a
+normalization bug: MeshTransformer2 is already measure-complete, so the
+floor is information-limited (@sec-nb-lit-wave-prereg). Both
+architectures misbehave at scale extremes
 under the frozen learning rate (seed-conditioned detonations at 11M for
 the original MeshTransformer; a turned frontier at 564M for GeoTransolver), so
 no "scales to very large runs" claim is made by either side. And the
 irreducible-error question — whether the 1.10$\times$ residual gap is
 architecture or the dataset's time-averaging noise floor — is exactly
-what the in-flight high-lift wave (@sec-nb-highlift-prereg) exists to
-answer.
+what the running high-lift wave (@sec-nb-highlift-prereg) exists to
+answer, now under its preregistered lr-parity amendment
+(@sec-nb-hl-lr-amendment).
 
 ## Roads from here {#sec-review-roads}
 
 In recommended order: (1) a scoped experimental release of MT2-v3c/v4 —
 "exactly pose-robust surface aero surrogate at GeoTransolver-class accuracy
 and cost," with the augmentation pricing as its headline evidence and the
-entanglement finding as its stated limitation; (2) the high-lift verdict,
-which either extends the claim to harder physics or bounds it; (3) the
+entanglement finding as its stated limitation; (2) the high-lift verdict
+(running, @sec-nb-hl-lr-amendment), which either extends the claim to
+harder physics or bounds it, and which gates the two planned nodes of
+the tech tree (@sec-tech-tree): the HiLift generalization ladder — the
+Reynolds-varying analogue of the G1/G2 ladder, the strongest remaining
+discriminator for the surviving G2-gap candidates — and the MT3
+preregistration; (3) the
 upstream PR series for the engineering bycatch (rank-failure barrier,
 distributed-timeout knob, degenerate-cell guards, measure machinery — all
-verified still absent upstream); (4) a BC-varying benchmark *before* any
-typed-BC architecture work; and (5) the shelved query-independence line,
-revisited only with the two untried levers (auxiliary encoder supervision,
-warm-starting) and only if a deployment actually demands
+verified still absent upstream); (4) any 3D BC-varying dataset decision,
+now informed by the completed 2D G3 fingerprint (@sec-nb-g3-verdict):
+build it for the axes where architecture can matter — amplitude and
+geometry — because frequency-content coverage is a data axis no tested
+mechanism buys; and (5) the closed query-independence line — the fully
+passive decode priced at 2.7$\times$ (@sec-nb-v5-line-verdict) and the
+anchor-conditioned variant closed at its pilot gate
+(@sec-nb-v5a4-gate) — revisited only via the registered follow-up (a
+matched-resource anchor-count scaling study under a new
+preregistration) and only if a deployment actually demands
 evaluate-anywhere semantics at the measured price.
