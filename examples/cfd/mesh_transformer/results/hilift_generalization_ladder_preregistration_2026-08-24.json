@@ -1,0 +1,19 @@
+{
+  "title": "HiLift generalization ladder: data-efficiency and OOD splits on a Reynolds-varying dataset (north-star G-ledger, stage 2)",
+  "date": "2026-08-24",
+  "status": "PREREGISTERED_PRE_LAUNCH (gated on high-lift full-split readout)",
+  "motivation": "The generalization north star requires measuring data-efficiency and OOD transfer on axes the training distribution does not cover. DrivAerML gave the G1/G2 curves but has no controllable OOD axes; the G3 2D suite gave exact-label BC axes but is 2D. HiLiftAeroML ships curated splits that isolate exactly the axes the program needs: data-efficiency (full 1260 / scarce 210 / super_scarce 35 train cases with IDENTICAL val+test), geometry generalization, AoA extrapolation (low->high), flow-regime transfer (pre-stall -> post-stall), and deflection extrapolation. This is the strong version of both G1 (scaling) and G2 (transfer) on genuinely harder, Reynolds-relevant physics.",
+  "gate": "Launches only after the high-lift full-split wave (prereg 2026-08-17 + lr-parity amendment sec-nb-hl-lr-amendment) completes and each architecture's best lr configuration over {3e-3, 1e-3} is determined by val metric. The ladder inherits that per-architecture lr choice; this rule is declared now so the ladder never tunes on its own results.",
+  "arms": {
+    "data_efficiency": "GeoTransolver and MT2-v3c on splits {scarce, super_scarce}, 2 seeds each (8 lanes; the full-split lanes from the current wave are the third rung). Readout: per-architecture scaling curve over n_train in {35, 210, 1260} with the SHARED val set.",
+    "ood_axes": "GeoTransolver and MT2-v3c on splits {aoa, stall}, 2 seeds each (8 lanes). Deflection deferred to a second round unless aoa/stall produce a gap. Readout: val-metric degradation of the OOD-trained model on its in-distribution val (health check) plus the published-split OOD evaluation protocol; test split remains sealed until a final, single, preregistered evaluation."
+  },
+  "predictions": {
+    "P1_scaling": "Based on DrivAerML G1 (MT2 parity at n=14, GT slope 0.47 vs MT2 0.42), MT2 is predicted to be at-or-better at super_scarce (35 cases) and behind at full; the crossing point is the measurement. Falsifier for the small-data claim: GT leads at super_scarce outside 2-seed spread.",
+    "P2_ood": "Based on G2 (GT transfer compounds with data, MT2 flat) and the surviving mechanism hypothesis (GT's non-equivariant pointwise features carry transfer), GT is predicted to degrade LESS on aoa and stall extrapolation at the full-data rung. Falsifier: MT2 degrades less on either axis outside seed spread - which would localize GT's transfer advantage to cross-FAMILY shifts rather than physical-regime shifts, a materially different mechanism.",
+    "P3_regime": "Stall (attached->separated) is predicted to be the hardest axis for BOTH architectures (larger degradation than aoa), since separation changes the local physics rather than the geometry statistics."
+  },
+  "protocol": "Frozen wave protocol otherwise: sampling_resolution 10000, 500 epochs, bfloat16, augment=false, per-architecture lr from the declared gate rule, 2 seeds, singleton 3:59 chains with save_interval=5, evals on val splits only.",
+  "budget": "16 lanes x 4 GPUs, staged: data_efficiency first (8 lanes), ood_axes second (8 lanes).",
+  "declared_before_results": true
+}
