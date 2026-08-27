@@ -3924,3 +3924,33 @@ Sisyphus trap — the frozen save_interval=50 exceeded the ~35 epochs a
 Slurm snapshotting the batch script at submission, so the fix
 required resubmitting the queue, not just editing the script).
 save_interval=5 since; checkpoints now track epochs exactly.
+
+## 2026-08-27 — High-lift interim (1 seed, frozen lr): MT2 leads GeoTransolver 3.0x on pressure — pending the lr-parity steel-man {#sec-nb-hl-interim}
+
+**INTERIM readout — not the wave verdict.** The first two completed
+lanes of the high-lift wave (seed 43 of each architecture, frozen
+lr 3e-3, 500 epochs, curated `full` split, 180-case val set) have
+been evaluated. Mean relative-L2 over the val set:
+
+| field | GeoTransolver | MeshTransformer2 | ratio GT/MT2 |
+|---|---|---|---|
+| pressure | 0.1476 | **0.0490** | 3.0x |
+| velocity | 0.1731 | 0.0704 | 2.5x |
+| wall shear | 0.2709 | 0.1144 | 2.4x |
+| temperature | 0.1181 | 0.0525 | 2.2x |
+| density | 0.1967 | 0.0667 | 2.9x |
+
+This *reverses* the DrivAerML ordering (GeoTransolver led by
+1.10–1.18x there). Two observations, one caveat. **H2 (absolute
+difficulty):** MT2's high-lift pressure error (0.049) is *lower* than
+its DrivAerML error (0.0633) — the "harder" dataset is easier for
+MT2 — while GeoTransolver got 2.8x worse (0.148 vs 0.053). **The
+mandatory caveat:** this GeoTransolver lane trained at the frozen
+lr 3e-3 where it demonstrably destabilizes on this dataset
+(@sec-nb-hl-lr-amendment — best val loss 0.013 at epoch ~130,
+plateau at 0.021–0.024 after), so this gap conflates architecture
+with optimizer instability. Per the preregistered amendment, the H1
+verdict takes each architecture's best over the lr grid {3e-3,
+1e-3}; the 1e-3 lanes are at epoch ~240/500. No wave verdict is
+declared until they land, and the seed-42 frozen-lr lanes complete
+(~30 epochs remaining each).
