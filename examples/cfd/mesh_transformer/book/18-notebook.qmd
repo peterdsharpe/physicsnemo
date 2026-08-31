@@ -3962,3 +3962,55 @@ spread 0.045–0.049 — tight); GeoTransolver pressure 0.3974 (2-seed
 optimizer visibly diverged, @sec-nb-hl-lr-amendment). At the frozen
 lr, GeoTransolver on HiLift is not a usable baseline: the lr-parity
 lanes are now fully load-bearing for the H1 verdict.
+
+## 2026-08-31 — High-lift wave verdict: parity at best-lr (MT2/GT = 0.98); the DrivAerML gap does not transfer; MT2's edge is optimizer robustness {#sec-nb-hl-verdict}
+
+**The wave is complete**: GeoTransolver and MeshTransformer2 (v3c),
+2 seeds x 2 learning rates each on the HiLiftAeroML curated `full`
+split, evaluated on the sealed-protocol 180-case val set
+(`results/highlift_wave_reduction.json`). Mean pressure rel-L2, all
+eight lanes:
+
+| arch / lr | 3e-3 (frozen) | 1e-3 (parity arm) |
+|---|---|---|
+| GeoTransolver | 0.148 / 0.397 (unstable) | **0.0408 / 0.0435** |
+| MeshTransformer2 | 0.0452 / 0.0490 | **0.0401 / 0.0425** |
+
+**H1 (the architecture gap on harder physics): the gap does not
+transfer — it closes.** At each architecture's best configuration
+(lr 1e-3 for both, per the preregistered selection rule), the 2-seed
+means are GeoTransolver 0.0422 and MeshTransformer2 0.0413 — a
+MT2/GT ratio of **0.98**, i.e. statistical parity with MT2 nominally
+ahead, versus GeoTransolver's 1.10–1.18x lead on DrivAerML. MT2 is
+also nominally ahead on every other field (velocity 0.059 vs 0.062,
+wall shear 0.094 vs 0.101, temperature, density), all within
+seed-spread-scale margins.
+
+**H2 (absolute difficulty): HiLiftAeroML is more learnable, not
+harder.** Both architectures beat their own DrivAerML pressure
+levels (GeoTransolver 0.042 vs 0.053; MT2 0.041 vs 0.063). Combined
+with H1 this supports the irreducible-error reading of the DrivAerML
+gap that motivated this wave (Corey's suggestion): DrivAerML's
+time-averaged transient labels carry a noise floor that the
+architectures resolve differently, and on cleaner high-lift labels
+both models go lower and the difference evaporates. The claim
+"GeoTransolver is architecturally more accurate in-family" does not
+survive the dataset change.
+
+**The reproducible architecture difference on this dataset is
+optimizer robustness.** MT2's eight lane-results span 0.040–0.049
+across both learning rates and both seeds; GeoTransolver spans
+0.041–0.397, destabilizing at the lr that its own frozen protocol
+prescribed (@sec-nb-hl-lr-amendment). An honest summary for the
+program: exact contracts cost MT2 nothing here, MT2 trains stably
+where GeoTransolver requires tuning, and in-family accuracy at tuned
+settings is a tie.
+
+**Consequence.** The generalization ladder
+(prereg `499bcfe8`) launches now with LR_GT = LR_MT2 = 1e-3 per its
+declared gate rule. With in-family parity established, the ladder's
+data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA
+extrapolation, pre-to-post-stall) are the deciding measurements for
+the north-star question — whether MT2's structure buys
+generalization that GeoTransolver's tuned pointwise attention does
+not.
