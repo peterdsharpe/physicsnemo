@@ -4070,3 +4070,59 @@ cost nothing in-family on either dataset; MT2 trains stably where
 GeoTransolver needs tuning; exact symmetries buy exact generalization
 on their own axes; the measurement methodology is itself novel. The
 claim to retire: "beat GeoTransolver in-family."
+
+## 2026-09-01 — N1 verdict: the shared-residual probe does not discriminate; "DrivAerML gap = label noise" is unproven {#sec-nb-n1-verdict}
+
+**The question.** Arm N1 of the instrument wave
+(@sec-nb-campaign-review, prereg `1f6cb942`) tested the campaign
+review's central reframing: that DrivAerML's 1.10–1.18x GeoTransolver
+lead was a property of noisy time-averaged labels rather than of the
+architectures. Method: dump per-point pressure predictions from two
+GeoTransolver and two MeshTransformer2 checkpoints on bit-identical
+val points (verified: max |Δpoints| = max |Δtargets| = 0), and
+measure how much of each model's residual is shared across all four.
+HiLiftAeroML (lr 1e-3 checkpoints) served as the cleaner-label
+control. Results: `results/n1_noise_floor_2026-09-01.json`.
+
+**What we saw** (measure-weighted, mean over cases):
+
+| statistic | DrivAerML (48 cases) | HiLift (180 cases) |
+|---|---|---|
+| shared-residual fraction (4 models) | 0.713 | 0.703 |
+| per-case error correlation GT vs MT2 | 0.887 | 0.968 |
+| pointwise residual correlation, cross-arch / same-arch | 0.52 / 0.70 | 0.79 / 0.86 |
+| cross-arch disagreement ratio D | 0.927 | 0.914 |
+| same-arch seed-pair D (GT, MT2) | 0.66, 0.83 | 0.73, 0.84 |
+
+**Verdict: the instrument does not discriminate, and the review's
+attribution is unsupported.** DrivAerML shows the predicted shared
+structure (71% of residual energy common to all four models), but the
+cleaner-label control shows the *same or more* (70%, with higher
+per-case and pointwise correlation). Whatever is shared is not
+DrivAerML-specific label noise — or cannot be attributed to it with
+this probe. The preregistered falsifier (D ≥ 0.8 with weak
+correlation) did not fire; the prediction "D larger on HiLift" failed
+on the mean. Two disclosures: (1) the preregistration's thresholds
+were not mutually calibrated — for equal-norm residuals
+D = √(2(1−ρ)), so D ≤ 0.5 demanded ρ ≥ 0.875 while shared fraction
+≥ 0.5 needed only ρ ≥ 1/3; the measured ρ = 0.52 passes one and
+fails the other by construction. (2) Shared residual is an *upper
+bound* on label noise: the four models share training set, pipeline,
+loss, and point subsample, so shared inductive bias is
+indistinguishable from label noise here. Attribution needs a
+model-free estimate (time-window splits of the DrivAerML averages, or
+mesh-refinement pairs), which the shipped dataset does not contain.
+
+**What stands, what falls.** The high-lift *parity* result
+(@sec-nb-hl-verdict) is untouched: it is a measurement, not an
+attribution. What falls is the review's explanatory story that the
+DrivAerML gap "was noise." The honest statement is narrower: the gap
+does not transfer across datasets, and the residuals on both datasets
+are dominated by structure common to both architectures. **A new
+observation worth its own follow-up:** MT2 has larger seed-to-seed
+prediction spread than GeoTransolver on both datasets (same-arch D
+0.83 vs 0.66–0.73), even though MT2 is far more robust to learning
+rate. Hyperparameter robustness and seed variance are different
+properties; the R1 arm now running should be read with both in view.
+Measure-weighting caveat: unweighted HiLift D drops to 0.64 — the
+architectures disagree most in large-area cells.
