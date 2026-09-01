@@ -104,10 +104,10 @@ $\mathcal N(0, 10^{-2})$ — *not* seeded at the analytic value.
 
 : H1e confirmed (seed 17, 1,000 updates, early bank). The frequency-OOD gap closes from 0.605 to 0.090, at the analytic operator's own level. {#tbl-h1e}
 
-The learned $c_1$ lands at $-0.1513$ against $-1/2\pi = -0.1592$ (5%) from
+The learned $c_1$ is $-0.1513$ against $-1/2\pi = -0.1592$ (5%) from
 random init, on interior supervision alone; at 3,000 steps it reaches
 $-0.15801$ (0.7%) with ID 0.0062 — the 1,000-step gap was optimization, not
-representation. The chain that survives falsification:
+representation. The ablations support this chain:
 
 > **operator generalization = PDE-conforming kernel *basis* (exactly
 > harmonic, containing the true kernel) + exact singular *quadrature* +
@@ -121,7 +121,7 @@ double-layer kernel, with $c_1$ within 0.8% of $-1/2\pi$ on every seed.
 This is the strongest form of interpretability the program has — the
 learned object *is* a known object of potential theory — and it is what
 licenses classical acceleration (FMM, $\mathcal H$-matrices) downstream:
-the machinery built for the analytic kernel applies verbatim to the
+the acceleration methods developed for the analytic kernel apply unchanged to the
 learned one. The training trajectories below show the same convergence
 dynamically, including the Neumann model's slow kernel–solve
 co-adaptation.
@@ -279,10 +279,10 @@ sharper meaning. Free-form learned kernels are **value interpolators**:
 excellent supervised accuracy, no operator fidelity (frequency-OOD 0.6–0.9,
 Laplacian residuals of 8–10). Exact PDE-conforming structure wins decisively
 wherever it is available — but it was available here only because the
-benchmark's PDE was deliberately chosen to be known. The 3-parameter model
+benchmark was selected because its PDE is known. The 3-parameter model
 is therefore an **oracle-in-family diagnostic**, not a deployable recipe:
 it establishes the ceiling that structure sets and identifies which
-ingredients are load-bearing. What *does* carry over unconditionally is the
+ingredients are essential. What *does* carry over unconditionally is the
 PDE-agnostic part of the chain (@sec-pde-agnostic): the factorization, the
 second-kind solve with its gauge rule, and the singular-quadrature
 discipline. The open question the ladder sharpens for the unknown-PDE

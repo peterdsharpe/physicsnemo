@@ -224,7 +224,7 @@ independence contract:
 ### Interface split with the FLARE thread (task #43)
 
 BH serves the **exact singular members only**. The smooth learned members
-(now load-bearing on nonlinear problems) are O(Q·S) through their pair
+(now essential on nonlinear problems) are O(Q·S) through their pair
 MLP and are NOT multipole-expandable (learned, non-harmonic). The
 combined-backend picture:
 

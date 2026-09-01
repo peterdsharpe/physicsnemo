@@ -1,4 +1,4 @@
-# The architecture, plainly {#sec-architecture}
+# The architecture {#sec-architecture}
 
 ::: {.callout-warning title="Implementation audit correction"}
 This chapter describes the intended architecture. The 2026-07-27 audit found
@@ -124,7 +124,7 @@ In words:
    data doubles the solution) holds to floating point — a guarantee worth
    taking **when** the governing PDE is linear, but a straitjacket when it
    is not. In *quadratic* mode the drive **degree is declared the way
-   linearity is**: the linear machinery plus exactly one bilinear typed
+   linearity is**: the linear path plus exactly one bilinear typed
    composition at the query read-in makes the output an exact
    degree-$\le 2$ polynomial in the drive for any weights — built for
    targets of known drive degree (a Bernoulli pressure is exactly
@@ -159,8 +159,8 @@ In words:
    composition, so it is the only one safe to stack
    (@sec-nonlinear-fragility). In
    *nonlinear* mode the drive enters through structurally
-   multiplicative updates: zero-preservation survives, superposition is
-   deliberately given up, and the model can represent nonlinear solution
+   multiplicative updates: zero-preservation remains exact, superposition is
+   not enforced, and the model can represent nonlinear solution
    operators (this mode, not the linear one, broke the superposition wall
    on the Liouville benchmark). The program targets **any** steady PDE
    without interior data — linearity, like polynomial degree, is a
@@ -196,7 +196,7 @@ product of two arrows. A **polar vector** is an ordinary arrow — a
 displacement, a velocity, a surface normal: rotate the scene and the arrow
 rotates with it.
 
-There is a third kind of quantity we deliberately *exclude*, and the
+There is a third kind of quantity we *exclude*, and the
 cleanest way to see it is the **mirror test**. Hold a spinning wheel in
 front of a mirror. Its velocity arrows reflect like ordinary arrows — a
 velocity pointing at the mirror comes back pointing out of it. But its
@@ -261,7 +261,7 @@ two **irreducible representations** ("irreps") of the rotation-reflection
 group — the smallest families of quantities that transform only among
 themselves. We use exactly these two irreps and no others; anything a layer
 tries to produce outside them is rejected at construction time rather than
-silently mangled.
+accepted with the wrong transformation law.
 
 The combination rules are the ones your hands already know:
 
@@ -280,9 +280,9 @@ coordinate-consuming baseline). Boundary *scalar* data rides along freely
 through all of this — scalars are directionless, so they can modulate
 everything without ever breaking the symmetry.
 
-This refusal is not hypothetical: it has been measured, diagnosed, and
-lifted. When a benchmark's target was a pseudoscalar, the model refused
-it exactly as the type system predicts (relative error ~1.0, every
+This constraint has been measured, diagnosed, and then relaxed. When a
+benchmark's target was a pseudoscalar, the model could not represent it,
+exactly as the type system predicts (relative error ~1.0, every
 seed) rather than faking handedness from noise — and the principled
 fix was one **opt-in extension for parity-odd 2D problems**: pseudoscalar
 channels with the wedge product as a typed operation. (Irrep labels,
@@ -316,8 +316,7 @@ How much attention does the physics actually need? Measured answer: **one
 layer, one full-width head**. On every all-Dirichlet benchmark, even
 *zero* layers nearly suffices (the boundary system is dominated by its
 local part — a second-kind Fredholm property; see @sec-encoder-depth); on
-mixed Dirichlet/Neumann problems, where the boundary solve is genuinely
-nonlocal, zero layers becomes unreliable and one layer restores full
+mixed Dirichlet/Neumann problems, where the boundary solve is nonlocal, zero layers becomes unreliable and one layer restores full
 accuracy (@sec-mixed-bc). Splitting that layer into multiple heads at
 fixed total score capacity turned out to be pure bookkeeping — one
 full-width head matches or beats it everywhere measured
@@ -356,7 +355,7 @@ members" alongside the exact kernels. Systematic ablation removed them: on
 linear problems they ranged from useless to actively harmful for
 extrapolation, and the two exact members alone are best-in-class on every
 linear benchmark (the nonlinear mode is the exception — there the
-polynomial members are load-bearing; @sec-dictionary-ablation and
+polynomial members are essential; @sec-dictionary-ablation and
 @sec-single-layer hold the evidence). The far-field study added a second
 design rule to the motto: **learned coefficients should be bounded
 functions of query position — trust nothing learned beyond its data —
@@ -430,11 +429,11 @@ gradient (asserted by test in all field modes, with the pseudo sector,
 and in 3D). The price is one extra decode forward inside each backward.
 Default off.
 
-## What the architecture refuses to do
+## What the architecture excludes
 
-Each refusal is a falsifiable contract with a test attached, not a slogan:
+Each exclusion is a falsifiable contract with a test attached:
 
-| Refusal | Why | Where tested |
+| Exclusion | Why | Where tested |
 |---|---|---|
 | Never read absolute coordinates or orientations | equivariance to machine precision for any weights | similarity-contract eval, every run |
 | Never mix scalar/vector types outside the allowed products | no symmetry leaks, no hidden pseudo-quantities | construction-time rejection + unit tests |
@@ -468,7 +467,7 @@ architecture" of @sec-future), used as the default comparison arm:
 | Total | | **81,547** |
 
 Caveats that keep this a synthesis rather than a verdict: the vector
-channels are prunable on easy 2D geometry but load-bearing in 3D and on
+channels are prunable on easy 2D geometry but essential in 3D and on
 parametric problems (keep them); the single-layer member costs some
 extrapolation on very easy geometry while being decisively necessary on
 hard geometry; the nonlinear field mode re-admits polynomial members;
@@ -527,9 +526,9 @@ $\hat r \cdot (\hat n \times \hat d)$, exposed as the `parity_fix` flag
 (default OFF, so frozen checkpoints keep their trained behavior). Two
 new contract tests pin it down: one asserts exact reflection covariance
 at $10^{-10}$ with the fix on, and one asserts the unfixed head
-*violates* it, so the fix cannot silently go inert.
+*violates* it, so the fix cannot become ineffective unnoticed.
 
-What MT2 deliberately gives up relative to this chapter's architecture:
+What MT2 omits relative to this chapter's architecture:
 per-layer typed scalar/vector streams (the resource cost was measured at
 $\sim$8--20$\times$ peak memory), the kernel-member dictionary
 (evidence-orphaned at industrial scale), strict superposition (MT2

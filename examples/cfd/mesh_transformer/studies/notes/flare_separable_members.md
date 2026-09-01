@@ -52,7 +52,7 @@ with two member families of very different character:
   expansion is the classical answer — see GLOBE's Barnes–Hut with
   `expand_far_targets`, which is the same two-sided expansion idea).
 - **Smooth MLP members**: `member_mlp(stacked pair invariants)` — the
-  H4 verdict made these **load-bearing** (6× velocity on AirFRANS),
+  H4 verdict made these **essential** (6× velocity on AirFRANS),
   and they cost O(Q·S·hidden) with hidden=48 and 2-layer SiLU — per
   pair, far more FLOPs than the exact members. This is the
   FLARE-shaped target: replace the pairwise evaluation with per-point

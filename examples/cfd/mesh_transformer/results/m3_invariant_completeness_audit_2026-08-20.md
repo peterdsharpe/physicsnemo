@@ -89,7 +89,7 @@ inspection, in both of its versions:
   is what Navier–Stokes says too. Measured below: separation 0.13–0.37
   relative, identification residual exactly 0.
 
-The only scalar targets genuinely outside the function class are
+The only scalar targets outside the function class are
 **pseudoscalar fields** (odd under the full-problem mirror), e.g. wall
 helicity density or a signed streamwise-vorticity field. Neither DrivAerML
 target (pressure, wall shear stress) is a pseudoscalar.
@@ -170,7 +170,7 @@ are relative L2 differences `‖Δ‖/‖ref‖` over the point cloud.
 Test-power control: the T4/T5 clouds change by 127–138% in relative L2 while
 producing roundoff-level output differences, whereas every non-degenerate
 comparison in the same battery (T3, T6, T5-with-yaw) separates at the 1e−2 to
-4e−1 level. The instrument can see differences; these pairs genuinely have
+4e−1 level. The instrument can see differences; these pairs have
 none visible to the model.
 
 **Instrument note (eps artifact, worth fixing independently).** With exactly

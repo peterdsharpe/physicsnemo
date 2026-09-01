@@ -1,6 +1,6 @@
 # The rotational-Euler suite {#sec-ds-euler-rotational}
 
-Steady ideal flow with genuinely nonzero vorticity — neither potential
+Steady ideal flow with nonzero vorticity — neither potential
 flow nor viscous flow, and exactly the step between them. Labels stay
 exact (Bessel-series solutions with momentum balance certified to
 $10^{-15}$), the pressure is drive-quadratic like the Bernoulli
@@ -33,7 +33,7 @@ reason to exist.
 
 Two escalations over @sec-ds-euler-bernoulli. *Rotation*: the velocity
 is no longer curl-free, so representations tuned to potential structure
-get their first honest test against vortical fields — without a solver
+are tested against vortical fields for the first time — without a solver
 in the loop. *Amplification*: as $\tilde c \to j_{0,1}$ the interior
 response to unit boundary data grows without bound — the suite's
 targets span 150–6,000× amplification in the near-eigenvalue band,
@@ -205,7 +205,7 @@ print("\n".join(lines))
 The declared-degree arm was *built* on this suite: the nonlinear
 read-in's implicit drive degree (~21) detonated by $10^6$–$10^{13}$
 under amplitude extrapolation here, and the `quadratic` mode — the
-linear machinery plus one bilinear composition, exactly degree ≤ 2 for
+linear path plus one bilinear composition, exactly degree ≤ 2 for
 any weights — repaired it with a structurally certified degree
 (fit residual $2\times10^{-15}$; @sec-nonlinear-fragility). Momentum
 certification, the amplification bands, and the declared-degree
@@ -228,16 +228,16 @@ Moved from the benchmarks chapter.
 
 ### Rotational Euler: exact vorticity, and the wall's third instance {#sec-euler-rotational}
 
-The first genuinely **rotational** steady Euler family (checked-in key
+The first **rotational** steady Euler family (checked-in key
 `iteration_33_euler_rotational`; driver `problems/euler_rotational.py`).
 Every previous fluid suite is irrotational — zero vorticity, harmonic
 velocity. Here the vorticity is nonzero *everywhere* and the momentum
-balance is genuinely nonlinear, yet the labels stay closed-form: 2D
+balance is nonlinear, yet the labels stay closed-form: 2D
 steady Euler admits solutions with vorticity constant along streamlines,
 $\omega = F(\psi)$, and for the **linear** choice $F(\psi) = c^2\psi$
 the streamfunction solves the Helmholtz equation
 $\Delta\psi + c^2\psi = 0$ — exact Bessel $J_m$ series on disks, the
-oscillatory sibling of the screened testbed's $I_m/K_m$ machinery
+oscillatory sibling of the screened testbed's $I_m/K_m$ construction
 (@sec-parametric). The velocity is
 $u = (\partial_y\psi, -\partial_x\psi)$ — $\psi$ pseudoscalar, $u$
 polar, exactly the typing of the fluid-suite arc (@sec-fluid-suites,
@@ -364,7 +364,7 @@ fig.tight_layout()
 plt.show()
 ```
 
-**The learning problem, posed honestly.** Steady Euler boundary-value
+**Scope of the learning problem.** Steady Euler boundary-value
 problems are subtle in general (through-flow needs inflow vorticity
 data; neither existence nor uniqueness is generic), and this family
 claims nothing about them. It poses the *learning* problem
@@ -429,12 +429,12 @@ What this establishes:
   wall from the physics side: the linear arm's two heads describe two
   different flows (0.98 — its pressure is a forced no-response), while
   the $0o$ arm's outputs are the most mutually consistent (0.23).
-- **The honest half-miss of the pre-registration:** the linear arm's
+- **The pre-registration was only partly correct:** the linear arm's
   velocity does *not* merely match the nonlinear arms — it beats them
   2.3$\times$ in-distribution (0.026 vs 0.061) and degrades gracefully
   on every OOD axis (worst split 0.26). Exact drive-linearity remains
   the best velocity model wherever it is licensed; nonlinear mode
-  buys the pressure at a measurable velocity cost.
+  provides the pressure at a measurable velocity cost.
 - **A new stress axis, isolated sharply: nonlinear-mode
   operator-parameter extrapolation.** On the near-eigenvalue tier the
   linear arm reads velocity 0.20 ± 0.05 — while the nonlinear arms
@@ -447,7 +447,7 @@ What this establishes:
   into a structural liability: the zero-preserving nonlinear read-in
   extrapolates catastrophically along the *operator* axis, precisely
   where the exactly-linear arm is graceful. The discriminator is clean
-  because the velocity map is genuinely linear — the physics is
+  because the velocity map is linear — the physics is
   representable in both modes, so the blowup prices the mode, not the
   problem.
 - **Multi-field composition replicates on a second family.** Targets

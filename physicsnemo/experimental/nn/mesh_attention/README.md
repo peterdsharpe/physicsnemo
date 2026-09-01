@@ -167,8 +167,8 @@ Changing `field_mode` to `"quadratic"` or `"zero_preserving_nonlinear"` keeps
 the same schemas and API while changing the field-dependence guarantee
 described in Section 9.
 
-The implementation defaults are deliberately modest capacity settings, not
-physical constants:
+The implementation defaults are modest capacity settings, not physical
+constants:
 
 | Setting | Default |
 | --- | ---: |
@@ -292,8 +292,8 @@ c'=sRc+t,\qquad z_j'=Rz_j,qquad
 Under the intrinsic gauge, \(L'=sL\) holds automatically (degree-1
 homogeneity), so the scale part of the contract is unconditional. With an
 explicit `reference_length_key`, the caller must update the declared length
-consistently -- a stale or re-conventioned length silently breaks the
-contract, which is why the intrinsic gauge is the default.
+consistently -- a stale or re-conventioned length breaks the contract without
+an API error, which is why the intrinsic gauge is the default.
 
 Thus the model is translation invariant, O(\(D\))-covariant, and
 positive-scale covariant under the full declared problem transformation. The
@@ -489,7 +489,7 @@ create an \(m\geq3\) irrep under these assumptions. Important limits of the
 statement are:
 
 - it concerns `linear` mode and scalar output;
-- a genuine physical operator vector can introduce additional directional
+- a physical operator vector can introduce additional directional
   invariants, whereas fabricating a Cartesian axis would violate the intended
   coordinate-frame independence;
 - nonlinear field mode can form higher products, but gives up exact drive
@@ -632,8 +632,8 @@ or additional invariance assumptions.
 
 ## 8. Two-stream model
 
-The model deliberately separates a nonlinear operator stream from the physical
-drive stream:
+The model separates a nonlinear operator stream from the physical drive
+stream:
 
 ```mermaid
 flowchart LR
@@ -693,7 +693,7 @@ The selected field block then performs global boundary-to-boundary propagation.
 The implementation uses a different Python class per declared field-mode law
 (`LinearMeshFieldBlock`, `QuadraticFieldReadIn`, `NonlinearZeroMeshFieldBlock`)
 so a normalization, bias, or activation added to nonlinear mode cannot
-silently invalidate the linear-mode or declared-degree proof.
+invalidate the linear-mode or declared-degree proof unnoticed.
 
 ### 8.3 Reusable boundary encoding and queries
 
@@ -769,7 +769,7 @@ permitted because those projections read only the operator state.
 ### 9.2 `quadratic` (declared degree)
 
 The quadratic mode DECLARES the drive degree the way the linear mode declares
-linearity. Structurally it is the linear machinery end to end — the drive
+linearity. Structurally it is the linear path end to end — the drive
 lift, `LinearMeshFieldBlock` stack, and linear query decoder, each exactly
 drive-linear — plus exactly one bilinear, operator-conditioned typed
 composition (`QuadraticFieldReadIn`) applied to the assembled query field
@@ -943,7 +943,7 @@ the present four moments could not evaluate it exactly. If such a layer later
 uses low-rank, hierarchical, or multipole acceleration, it must provide:
 
 1. a dense oracle for the same nonseparable formula;
-2. no silently dropped field/content term;
+2. no field or content term omitted by the approximation;
 3. a convergence or error-control test; and
 4. an explicit statement when rotations or other invariances become only
    approximate.
@@ -1016,10 +1016,10 @@ Tests should distinguish exact algebraic properties from empirical convergence:
   frame scale invariant, while an explicit `reference_length_key` consumes
   exactly the declared scalar and never invokes the intrinsic estimator;
 - split identical quadrature samples with conserved measure and separately test
-  convergence under genuine surface refinement;
+  convergence under surface refinement;
 - verify that data attached only to `domain.interior` cannot affect output;
 - verify zero output with all drive-role fields zero;
-- verify superposition in `linear` mode and deliberately avoid claiming it in
+- verify superposition in `linear` mode and do not claim it in
   `zero_preserving_nonlinear` mode;
 - compare query results across chunk sizes and across reused boundary encodings;
 - reject degenerate or nonfinite-measure boundary cells; and

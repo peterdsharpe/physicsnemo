@@ -2,7 +2,7 @@
 
 ## Scientific question
 
-Does the admitted nonseparable elliptic task retain a genuine multi-field
+Does the admitted nonseparable elliptic task retain a multi-field
 target-learning regime for a capable learner that is exactly linear in the
 boundary drive?
 

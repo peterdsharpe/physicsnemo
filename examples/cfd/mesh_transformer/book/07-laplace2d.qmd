@@ -124,8 +124,8 @@ evaluation of @sec-part-eval possible at all.
 Its **hard-geometry extension** — the multi-body and deep-cavity
 families below — keeps the same exact physics while making the
 *geometry* the hard part: fields that pairwise invariants alone
-provably cannot resolve, which is where boundary self-attention earns
-its keep (@sec-mixed-bc, @sec-encoder-stress).
+provably cannot resolve, which is where boundary self-attention is
+needed (@sec-mixed-bc, @sec-encoder-stress).
 
 ## The gallery
 
@@ -230,7 +230,7 @@ deep cavities whose openings hide it.
 #|   Hard-geometry samples: multi-body (left pair, narrow-gap dial shown)
 #|   and deep-cavity (right pair, deep-slot dial shown). Exact fields on
 #|   masked grids; excluded bodies read as solid gray; x marks are the
-#|   charges generating the exact solutions — label machinery, never model
+#|   charges generating the exact solutions — part of label construction, never model
 #|   input.
 import matplotlib.patheffects as mpe
 
@@ -310,7 +310,7 @@ plt.show()
 ## Benchmarks
 
 The headline rows, from the checked-in archives (protocols in
-@sec-part-eval). The division of labor is deliberate: this table
+@sec-part-eval). This table
 carries the suite's headline; the *cross-suite* component matrices —
 dictionary ablations, heads-versus-rank, encoder depth — live in
 @sec-part-accuracy because they are evidence about the architecture,
@@ -368,10 +368,10 @@ is the dataset itself.
 
 ::: {.callout-note title="In flight"}
 The unseen-geometry showcase (dials pushed past training, fused stars,
-topology changes — predicted vs exact fields with the honest
-"reasonable or garbage?" framing) and the per-suite resolution-transfer
-gallery run as cluster experiments E2/E3 of the dataset-chapters
-thread; their cells land here when the artifacts do.
+topology changes — predicted vs exact fields for a direct visual check)
+and the per-suite resolution-transfer gallery run as cluster experiments
+E2/E3 of the dataset-chapters thread; their cells will be added here when
+the artifacts are available.
 :::
 
 ## The full evidence: encoder-stress families
@@ -395,9 +395,9 @@ closure) and unit-RMS boundary traces:
 - **Multi-body**: the interior of a circle minus two disjoint disks —
   multiply connected, three Dirichlet boundaries merged into a single
   boundary mesh (identity conveyed geometrically). Some in-disk charges
-  are deliberately biased toward the gap-facing surface of their disk,
+  are biased by construction toward the gap-facing surface of their disk,
   so in the narrow-gap regime the trace on the near face of one body is
-  dominated by a charge hidden inside the *other* — genuine inter-body
+  dominated by a charge hidden inside the *other* — inter-body
   coupling. The difficulty dial is the surface gap over the sum of disk
   radii; splits: in-distribution, narrow-gap, single-body, and
   unseen-charge-count.
@@ -573,10 +573,10 @@ winding numbers place all queries inside and all charges outside, charge
 standoff from the discretized boundary is checked numerically, the
 cavity curve passes an exact all-pairs segment-intersection test, and
 the multi-body boundaries are verified disjoint. The **free-form pair
-kernel is the load-bearing control**: it is exactly the model class that
+kernel is the essential control**: it is exactly the model class that
 sees only pair invariants, so any split where it fails and an
 encoder-bearing model succeeds is direct evidence for global boundary
-coupling. One honest caveat from the suite's validation: the families
+coupling. One caveat from the suite's validation: the families
 are a *separation dial*, not a binary proof — the construction makes
 pair invariants blind to the coupling, but how much that blindness
 costs is an empirical question the control answers, not a theorem.

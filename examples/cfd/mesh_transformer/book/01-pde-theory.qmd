@@ -59,8 +59,8 @@ $$
 where $\omega_x$ is harmonic measure. On a regular domain it has a
 Poisson-kernel density with respect to $dS$, and — critically — that density
 depends on the *whole domain*, not on $x - y$ and $n_y$ alone. Every boundary
-patch influences every interior point, with no cutoff radius that survives a
-change of geometry. This is why the program excludes graph neighborhoods,
+patch influences every interior point, with no cutoff radius that remains
+valid after a change of geometry. This is why the program excludes graph neighborhoods,
 distance envelopes, and near/far truncations: for connected elliptic problems
 the correct inductive bias is **all-to-all**, and locality is a numerical
 acceleration concern (FMM, $\mathcal H$-matrices), never a modeling
@@ -140,7 +140,7 @@ Both boxes use the *same* kernel $\kappa$: the trace operator $K$ is the
 boundary restriction of the propagation kernel. Tying them is not an
 aesthetic choice — it is what makes the trace residual of the solve
 meaningful as a boundary condition (and, as @sec-ladder shows, tying alone
-buys nothing without the right kernel).
+provides no benefit without the right kernel).
 
 The kernel is singular: in 2D the double-layer kernel is
 
@@ -244,12 +244,11 @@ consequences:
   field, because exposing the dimensional scale to a learned path would
   defeat the contract;
 - what is banned is any length that fails to transform covariantly: a
-  fitted constant radius or a training-set length statistic would silently
-  break scale covariance on out-of-distribution sizes. A per-instance
+  fitted constant radius or a training-set length statistic would break scale
+  covariance on out-of-distribution sizes without an explicit error. A per-instance
   functional of the input geometry that is itself degree-1 homogeneous —
   the measure-weighted RMS boundary radius the architecture derives
-  (@sec-forward-pass) — is licensed precisely because it transforms with
-  the data.
+  (@sec-forward-pass) — is valid because it transforms with the data.
 
 The group action also dictates what a propagation kernel may depend on.
 Rotating a problem rotates the displacement $x - y$, the boundary normal
@@ -278,7 +277,7 @@ $K_1(\tilde\kappa\rho)$), not inside a learned conditioning network. (When
 the operator is unknown that rule inverts into a limitation statement; see
 the closing note of @sec-parametric.)
 
-## What survives when the PDE is unknown {#sec-pde-agnostic}
+## What remains when the PDE is unknown {#sec-pde-agnostic}
 
 Under the product scope the governing equations are not given, and for the
 eventual targets they are not perfectly knowable. It is worth stating

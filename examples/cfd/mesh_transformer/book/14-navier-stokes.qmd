@@ -23,7 +23,7 @@ $$
 
 with $\mathrm{Re}$ a global operator scalar. Labels come from a
 Taylor–Hood P2–P1 solver with analytic-Jacobian Newton (MMS-verified at
-orders 2.9/1.9), and **every case ships its own certification**:
+orders 2.9/1.9), and **every case includes its own certification**:
 Newton residual ($\sim 10^{-15}$), momentum balance
 ($\sim 10^{-14}$), normalized divergence, and — on a deterministic
 subset — a finer-mesh re-solve bounding the label-noise floor.
@@ -33,7 +33,7 @@ subset — a finer-mesh re-solve bounding the label-noise floor.
 #| fig-cap: >
 #|   One training sample, as posed: the cavity wall colored by its
 #|   tangential drive speed (the moving-wall band; the rest is no-slip),
-#|   query points inside (with the deliberate near-wall band visible), and
+#|   query points inside (with the near-wall band visible), and
 #|   the case's own certification stamped beside it — every label carries
 #|   its measured error bars.
 import json
@@ -146,7 +146,7 @@ def smooth_panel(ax, k, show_re=None):
     # sqrt scaling: the wall jet (speed ~ 1, a thin band) would otherwise
     # push the cavity-scale recirculation (speed ~ 0.05-0.2, most of the
     # area) into invisibility on a white-anchored map. The scale is shared
-    # by every panel, so cross-panel comparison stays honest; the caption
+    # by every panel, so cross-panel comparison remains valid; the caption
     # states the scaling.
     ax.tripcolor(tri, speed, shading="gouraud", cmap=SEQUENTIAL,
                  norm=PowerNorm(0.5, vmin=0.0, vmax=1.0), rasterized=True)
@@ -190,10 +190,10 @@ plt.show()
 ```
 
 What the model actually receives is far sparser: 160 query points per
-case (128 interior plus a deliberate near-wall band) against 64
+case (128 interior plus a selected near-wall band) against 64
 boundary panels. The pair below shows the same case both ways — the
-smooth truth and the as-posed sampling — which is the honest way to
-present a point-cloud dataset: the cloud is the *supervision*, not the
+smooth truth and the as-posed sampling — an accurate presentation of
+a point-cloud dataset because the cloud is the *supervision*, not the
 solution.
 
 ```{python}
@@ -339,7 +339,7 @@ plt.show()
 The suite's headline variation — accuracy versus Reynolds, with the
 label-noise floor drawn beside the model error — was pre-registered
 as experiment E1 with two predictions. All twelve band-training
-reports have landed (three log-banded v2 catalogs generated under
+reports are complete (three log-banded v2 catalogs generated under
 v1's exact verification protocol, plus v1 itself; three seeds per
 band, protocol frozen at iteration 17; cluster artifacts
 `output/e1_bands/` on HSG, @sec-nb-e1-curve). One prediction was
@@ -351,7 +351,7 @@ confirmed and made irrelevant; the other was **refuted**.
 #|   Accuracy versus Reynolds number on the steady cavity family. Each
 #|   band is an independently trained 3-seed arm under one frozen
 #|   protocol; horizontal bars show each band's Reynolds extent (the
-#|   re10 and v1 bands genuinely overlap), vertical bars the seed
+#|   re10 and v1 bands overlap), vertical bars the seed
 #|   range. The pre-registered prediction was monotone degradation with
 #|   Re; the measured curve is U-SHAPED -- the middle decades are
 #|   easiest and BOTH the near-Stokes and advective ends are harder.
@@ -381,7 +381,7 @@ unseen = [b[5] for b in bands]
 floor = [b[6] for b in bands]
 
 ### Split axes: the U-shape lives in a 0.2-0.4 window, the floor three
-### decades below.  One shared log-Re axis, two honest y windows.
+### decades below. One shared log-Re axis and two y windows.
 fig, (ax, ax_floor) = plt.subplots(
     2, 1, figsize=(6.9, 4.6), sharex=True,
     gridspec_kw={"height_ratios": [3.1, 1.0], "hspace": 0.12},
@@ -393,7 +393,7 @@ for axis in (ax, ax_floor):
 ax.text(4550, 0.412, "steady-solver\nceiling (measured)", fontsize=7.5,
         color="#a83a39", va="top")
 
-### Band extents as horizontal bars -- re10 and v1 overlap, honestly shown.
+### Band extents as horizontal bars -- re10 and v1 overlap.
 for (label, (lo, hi), med, *_), center in zip(bands, centers):
     ax.plot([lo, hi], [med, med], color="#2a78d6", lw=1.0, alpha=0.45,
             solid_capstyle="butt", zorder=2)
@@ -458,7 +458,7 @@ plt.show()
 **Verdict 1 — "the label-noise floor rises with Re": CONFIRMED, and
 irrelevant.** The floor does rise, 2× from the near-Stokes band to
 the advective one. It also sits three orders of magnitude below the
-model error in every band. The honest annotation is *"floor drawn,
+model error in every band. The annotation reads *"floor drawn,
 nowhere binding"* — the labels are not what limits this suite, and
 the measurement's value is that it retires the question.
 
@@ -502,15 +502,15 @@ it would be.
 One engineering consequence, recorded because it cost a run: a single
 unsolvable case took down the whole worker pool
 (`pool.imap_unordered`), so per-case solve failures must be
-logged-and-skipped rather than raised. Generation is not fault
-tolerant until that lands.
+logged-and-skipped rather than raised. Generation remains non-fault-tolerant
+until that behavior is implemented.
 :::
 
 ## The full evidence {#sec-part-ns}
 
 Moved from the benchmarks chapter: the suite's founding record — label credential, arms, pre-registered verdicts, and the low-Re band.
 
-The evaluation discipline survives contact with a **real solver**:
+The evaluation discipline also works with a **real solver**:
 Navier–Stokes labels from a certified FEM solve, with measured
 label-noise floors reported per case, and the contract story carries
 over — the pressure wall becomes a *function of Reynolds number*, graded
@@ -519,11 +519,11 @@ program's current frontier.
 
 ### Navier–Stokes: the first solver-labeled viscous suite {#sec-ns-cavity}
 
-**The evaluation discipline survives contact with a real solver, and
+**The evaluation discipline works with a real solver, and
 the contract story becomes Reynolds-graded.** Every ground truth so far
 was either closed-form (harmonic constructions, Bessel series, exact
 Euler flows) or, in the FEM catalog, a *linear* solve; this suite's
-labels come from a numerical solver on a genuinely **nonlinear** PDE —
+labels come from a numerical solver on a **nonlinear** PDE —
 steady incompressible Navier–Stokes at moderate Reynolds number,
 
 $$
@@ -551,7 +551,7 @@ and arms), archive key `iteration_36_navier_stokes`.
 `datasets/fem_navier_stokes.py`). Star-deformed disks from the bank's
 geometry family carry a smooth, band-limited **tangential** boundary
 velocity localized on a boundary arc — a driven lid bent around a
-smooth cavity. Tangential-only is the load-bearing choice: the drive
+smooth cavity. Tangential-only is the essential choice: the drive
 has zero normal flux *pointwise*, so the incompressibility
 compatibility condition $\oint u\cdot n\,ds = 0$ holds exactly at the
 continuous level by construction, and the small discrete defect of the
@@ -713,8 +713,8 @@ print(": The suite's label credential: manufactured-solutions accuracy "
 "certificates, all from checked-in artifacts. {#tbl-ns-verification}")
 ```
 
-One resolution decision is worth stating plainly, because it was
-*revised by a measurement*. The first-pass plan ran production at
+One resolution decision was *revised by a measurement*. The first-pass
+plan ran production at
 $h = 0.02$ — velocity labels two orders under the $10^{-3}$ floor
 target, the $10^{-6}$ MMS bar demonstrated separately at $h = 0.01$ —
 on the estimate that the $O(h^2)$ pressure floor would land near
@@ -729,7 +729,7 @@ $10^{-3}$ on four of five splits (worst $8.7\times10^{-4}$ on train;
 the unseen-drive split's worst sampled case reads $1.26\times10^{-3}$,
 26% over target, reported as-is), the velocity floor sits at
 $\le 5.8\times10^{-5}$ everywhere, *and* the MMS velocity bar of
-$10^{-6}$ is met at production resolution outright
+$10^{-6}$ is met at production resolution
 (@tbl-ns-verification), dissolving the two-resolution compromise. The
 Newton robustness grid behind the declared Reynolds band — train
 $[10, 200]$, unseen-Re $(200, 300]$ — converges in 4–8 iterations
@@ -894,7 +894,7 @@ print(": The iteration's pre-registered ledger (rules logged in the lab "
 "numbers from the checked-in artifact). {#tbl-ns-ledger}")
 ```
 
-**The anomaly, stated plainly.** P1's deciding measurement split: the
+**The anomaly.** P1's deciding measurement split: the
 pressure leg passed decisively (gap ratio 4.2$\times$, bar 3$\times$),
 but the *velocity* leg's low-Re prediction was refuted — the linear
 arm's velocity gap to the nonlinear arms is flat at $\approx 0.19$
@@ -907,17 +907,17 @@ quadratic-dominant) shows the graded approach; (b) part of the
 velocity gap is not the nonlinearity wall at all but a
 representation/optimization deficit of the linear read-in on this
 feature-rich solver-labeled family. Discriminating (a) from (b) needs
-a genuinely Stokes-regime band (Re $\le 1$), which the solver
+a Stokes-regime band (Re $\le 1$), which the solver
 handles trivially — logged as the follow-up experiment rather than
 argued away, and completed as iteration 37 (@sec-ns-lowre). The Transolver baseline's landing point (0.95 combined,
 against the floor's 1.19 and the transformer arms' 0.23–0.44) is its
 first measurement on a solver-labeled nonlinear suite at the shared
-15-epoch protocol; no ordering was pre-registered, and the honest
-caveat is that this budget may simply undertrain it — the number is
+15-epoch protocol; no ordering was pre-registered, and this budget may
+simply undertrain it — the number is
 reported, not weaponized.
 
-**What this iteration establishes, honestly.** The suite exists with a
-measured label credential — that is the load-bearing deliverable. The
+**What this iteration establishes.** The suite exists with a
+measured label credential — that is the essential deliverable. The
 labels are two orders (velocity) and one order (pressure) below typical
 model errors; the pressure floor is the binding one and is stated in
 the manifest rather than assumed. The Re-dependent wall gives the
@@ -931,7 +931,7 @@ single 1.0.
 operator-fidelity block (strong-form momentum residual of the model's
 own outputs) was emitted by the N-S driver — on the exact-label suites
 that block came from autograd against closed-form scales, and porting
-it to solver-labeled data was logged as deliberate future work.
+it to solver-labeled data was logged for later work.
 Iteration 37 closed that gap (@sec-ns-lowre); the archived runs in
 @tbl-ns-arms predate it and keep their em-dash. The suite is
 2D, steady, and moderate-Re by construction; nothing here speaks to
@@ -963,7 +963,7 @@ on the slice at the identical 15-epoch/3-seed protocol, and their
 per-case velocity gap joins the archived iteration-36 curve into one
 measurement spanning Re 0.5–300. Iteration 38 then closed the one
 confound iteration 37 logged inside its own verdict — its linear arm
-differed from nl_pseudo in parity machinery and capacity as well as
+differed from nl_pseudo in parity components and capacity as well as
 read-in class — by adding the fair control
 `mt_singpair_linear_pseudo` (linear read-in *plus* the nonlinear arm's
 `drive_pseudo_dim=8` sector) on both catalogs and recomputing the
@@ -985,7 +985,7 @@ whole curve with three arms. Artifacts:
 #|   internally controlled, so the GAP crosses the seam (dashed) even
 #|   though absolute errors do not. The plain linear arm (red)
 #|   reproduces iteration 37: velocity gap flat at ~0.13-0.23
-#|   everywhere, including the genuinely drive-linear band. The
+#|   everywhere, including the drive-linear band. The
 #|   iteration-38 fair control (blue, the same linear read-in PLUS the
 #|   nl arm's drive_pseudo_dim=8 sector) collapses the velocity gap to
 #|   zero-or-negative across the entire near-Stokes band and leaves a
@@ -1062,8 +1062,8 @@ be blamed: at Re $\le 1$ the map is near-Stokes — and the same
 figure's pressure gap sitting at zero *proves the linear arm can match
 the nonlinear arm on this band when the map is near-linear* — yet the
 velocity gap stays at the same $\approx 0.18$ as at Re 300.
-Reading (b) of the iteration-36 anomaly survived at that point — but
-iteration 37's own verdict flagged the entanglement honestly: its
+The result at that point supported reading (b) of the iteration-36 anomaly,
+but iteration 37 also recorded the confound: its
 linear arm lacked the nonlinear arm's pseudo sector and carried
 2.2$\times$ fewer parameters, so "linear read-in deficit" was
 confounded with "parity/capacity deficit". The
@@ -1108,7 +1108,7 @@ was just an order of magnitude smaller than the parity artifact that
 sat on top of it. One caveat stays on the record: linear+pseudo
 matches nl_pseudo's sector structure, not its full width (131k vs
 233k); a width-matched linear control was not run, so "capacity" and
-"parity machinery" are separated from the read-in class but not from
+"parity components" are separated from the read-in class but not from
 each other.
 
 ```{python}
@@ -1179,7 +1179,7 @@ operator (consistent with every suite since @sec-fidelity-columns:
 $L^2$-fit fields, unsatisfied operators). The three-arm ordering
 tracks the velocity story exactly: the plain linear arm's momentum
 residual (47.7) and divergence norm (2.70) sit 2–3$\times$ above the
-other two, while the iteration-38 linear+pseudo control lands beside
+other two, while the iteration-38 linear+pseudo control is comparable to
 nl_pseudo (momentum 22.2 vs 16.1) and *beats* it on divergence (0.85
 vs 1.07) — the fidelity instrument independently confirms that the
 pseudo sector, not the nonlinear read-in, is what the plain linear

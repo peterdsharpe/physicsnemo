@@ -32,10 +32,10 @@ with **structural contracts asserted to roundoff** rather than averaged
 into scores. Nothing here depends on trusting a learned model's
 self-report: labels come from closed forms or certified solvers, banks
 are frozen before any model sees them, and a model that claims a
-contract must pass it as a test. This part records the machinery —
+contract must pass it as a test. This part records the procedures —
 label constructions, information hygiene, split design, contract
-checks, and the operator-fidelity columns that keep supervised accuracy
-honest.
+checks, and the operator-fidelity columns that check supervised accuracy
+against the governing operator.
 
 ### Exact labels without a PDE solver
 
@@ -242,7 +242,7 @@ roundoff tolerances), separately from accuracy:
 
 - **superposition and zero-drive**: two-drive linearity to $\sim 10^{-7}$; a
   model claiming `linear` mode must pass, and `zero_preserving_nonlinear`
-  deliberately does not claim it;
+  does not claim it;
 - **similarity covariance**: paired transformed cases must agree to
   $128\,\epsilon_{\mathrm{fp32}}$ — measured at $10^{-7}$–$2\times10^{-6}$
   across the model families;
@@ -251,10 +251,11 @@ roundoff tolerances), separately from accuracy:
 - **interior-data hygiene**: attaching arbitrary data to `domain.interior`
   must not change any output;
 - **quadrature consistency**: splitting a panel into measure-conserving
-  duplicates must leave moment operators algebraically unchanged, and genuine
+  duplicates must leave moment operators algebraically unchanged, and
   refinement is tested separately as finite Cauchy evidence.
 
-Beyond contracts, physics diagnostics keep supervised accuracy honest: the
+Beyond contracts, physics diagnostics check whether supervised accuracy also
+respects the operator: the
 autograd Laplacian residual $\|L^2\Delta u_\theta\|/\|u_\theta\|$, the
 boundary-trace error, and a *certified* continuous maximum-principle check
 whose trace grid is enlarged by the analytic derivative bound
@@ -270,7 +271,7 @@ item of the redirected agenda,
 @sec-future). Every problem driver's report JSON carries an additive
 `fidelity` block: a strong-form PDE residual *per evaluation split*, under
 each testbed's pre-existing autograd convention (float64, two cases and 32
-queries per split — deliberately subsampled, so the block costs a rounding
+queries per split — subsampled by design, so the block costs a rounding
 error next to training), plus a maximum-principle violation where the PDE
 licenses one — the sampled boundary-range convention on the harmonic
 Dirichlet suites (2D encoder-stress, 3D all-Dirichlet; the conformal bank
@@ -308,8 +309,8 @@ boundary-driven PDE must possess: **spatial equivariance**,
 encodings), and **global interaction**. This program inherited that
 framing and asserted all four. Two of them were asserted for a long
 time before anyone measured them in the form the words actually claim,
-and doing so (2026-07-24/25) found one genuine gap and closed it.
-The current honest scorecard:
+and doing so (2026-07-24/25) found one gap and closed it.
+The current scorecard:
 
 | property | status | evidence |
 |---|---|---|
@@ -615,7 +616,7 @@ $\alpha = 128$). One engine, two symptoms.
 **Rung 2 — the fix: declare the degree the way linearity is declared.**
 Both targets have *known* drive degree (velocity exactly 1, pressure
 exactly 2), so the fix is a third field mode rather than a regularizer:
-`field_mode="quadratic"` is the linear machinery end to end — drive
+`field_mode="quadratic"` is the linear path end to end — drive
 lift, linear field blocks, linear kernel decode, each exactly
 drive-linear — plus **exactly one** bilinear, operator-conditioned typed
 composition at the query read-in ($F = u + B(L_2 u, L_3 u)$, the
@@ -736,7 +737,7 @@ detonates off-range" — did not fire: there is no off-range detonation
 anywhere in the q2 arms' twelve run reports (worst split anywhere:
 far-field 0.78, a known separate axis). {#tbl-declared-degree}
 
-What the ladder establishes, honestly:
+What the ladder establishes:
 
 - **The mechanism is gone, not damped.** The rotational near-eigenvalue
   tier falls from $10^{6}$–$10^{13}$ to 0.670 ± 0.111, and unseen-modes
@@ -768,7 +769,7 @@ What the ladder establishes, honestly:
   logged as such) delivers the axis: circulation-OOD **0.086 ± 0.059**
   against the typed nonlinear arm's 0.352 ± 0.110 — a 4$\times$
   reduction that crosses the pre-registered 0.15 bar at the mean (one
-  seed at 0.154, stated plainly) — with in-distribution *better* than
+  seed was 0.154) — with in-distribution *better* than
   the typed nonlinear arm (0.032 vs 0.046 combined; pressure 0.035 vs
   0.063) and the same $10^{-15}$ structural degree contract (slopes
   1.000/2.000 every seed). Three declared structures now compose
@@ -817,8 +818,8 @@ What this establishes:
   model wins Laplace ID by 3.6$\times$ the seed spread (0.0485 vs
   0.0606): the separation costs nothing; it helps. And it is the only
   arm with roundoff-exact contracts.
-- **H2 falsified — an honest refutation of a motivating belief.**
-  Structural drive-linearity did *not* buy frequency extrapolation: the
+- **H2 falsified — a motivating belief was wrong.**
+  Structural drive-linearity did *not* improve frequency extrapolation: the
   free control is slightly better (0.179 vs 0.211) and more seed-stable.
   Spectrum extrapolation lives in the **dictionary and its
   conditioning** (@sec-dictionary-ablation), not in the linearity
@@ -862,7 +863,7 @@ their dataset chapters (multi-body and deep cavity in
 
 Which members carry the kernel decoder? The question was settled by a
 pre-registered four-arm 2D matrix, its 3D disentangler, and two
-universality checks (the hypotheses that died on the way are recorded in
+universality checks (the hypotheses refuted along the way are recorded in
 @sec-nb-iter11 and @sec-nb-iter12). All arms at the reference protocol
 (3,000 steps, seeds 17/29/43, frozen 64-case bank); the full and
 sing+poly rows are the iteration-7 arms of @tbl-kernel-refbank at
@@ -957,7 +958,7 @@ plt.show()
 
 What this establishes:
 
-- **Singular-only wins outright in 2D**: best ID of the matrix (0.0375),
+- **Singular-only is best in 2D**: best ID of the matrix (0.0375),
   best stronger-deformation (0.0774), freq-OOD statistically identical to
   sing+poly (0.0748 vs 0.0713, tightest seed spread 0.073–0.076) — one
   member, fewest parameters, best-in-class on every split. The smooth
@@ -974,7 +975,7 @@ matrix refuted.*
 
 #### The 3D disentangler {#sec-dictionary-3d}
 
-Does 3D genuinely need smooth members? Protocol identical to
+Does 3D need smooth members? Protocol identical to
 @sec-3d-meshtransformer, on the T1 sphere / T2 star / T3 shell tiers
 defined in @sec-3d-suite (seeds 17–22, 3,000 steps; checked-in key
 `iteration_12_dictionary_ablation_3d`):
@@ -1025,17 +1026,17 @@ seeds, 2,000 steps, the exact protocol of @sec-screened):
 singular-only archived runs predate fidelity-first reporting, hence the
 em-dash (@sec-fidelity-columns). {#tbl-screened-singonly}
 
-The $\tilde\kappa$-conditioning **survives a one-member dictionary**: the
+The $\tilde\kappa$-conditioning **remains effective with a one-member dictionary**: the
 operator encoder carries the parameter dependence into the coefficients
 of a single exact kernel.
 
 **Nonlinear Liouville: catastrophic failure.** The same pruning in
 `zero_preserving_nonlinear` field mode (1,500 steps, the exact protocol
 of @sec-liouville) destroys the model: ID 0.9583 / 36.5348 / 2.30 across
-seeds 17/18/19 — seed 18 outright diverged — against $\sim$0.46–0.48 for
+seeds 17/18/19 — seed 18 diverged — against $\sim$0.46–0.48 for
 both polynomial-bearing nonlinear arms and 0.769 for the linear wall
 itself. In nonlinear field mode the polynomial members are
-**load-bearing** for the drive-nonlinear correction.
+**essential** for the drive-nonlinear correction.
 
 The closing rule of the dictionary program (the artifact's
 `refined_rule`, restated in @sec-decoder-role):
@@ -1044,7 +1045,7 @@ The closing rule of the dictionary program (the artifact's
 > smoothness; nonlinearity needs a smooth basis.** In drive-linear
 > operation the dictionary is the exact singular member(s) alone —
 > best-in-class on 2D Laplace, screened Laplace, and 3D Laplace alike.
-> In nonlinear field mode the polynomial members are load-bearing. MLP
+> In nonlinear field mode the polynomial members are essential. MLP
 > members are prunable everywhere.
 
 One question stays open: is the nonlinear failure representational or an
@@ -1057,14 +1058,14 @@ the protocol-hygiene items (@sec-future).
 ### The single-layer member and hard geometry {#sec-single-layer}
 
 **Two exact singular members are the default dictionary for hard
-geometry; the honest cost is extrapolation on easy geometry.** The
+geometry; the measured cost is worse extrapolation on easy geometry.** The
 second member is the **single-layer potential** alongside the double
 layer (2D Hess–Smith segment closed form; 3D per-edge
 $\operatorname{asinh}$ plus solid-angle form; quadrature validated to
 $\sim 10^{-14}$; +276 parameters, the `singpair` arm at 104,537 —
 exactly two exact singular members). It entered as a targeted
 fix for the shell tier and failed its pre-registered prediction there
-(the arc is @sec-nb-iter16); what survived contact with the data is a
+(the arc is @sec-nb-iter16); the resulting evidence supports a
 sharper rule, established on the encoder-stress suites — the
 multiply connected multi-body family and the deep-cavity family with
 its convex control, defined in @sec-encoder-stress
@@ -1097,7 +1098,7 @@ PDE residual em-dashed: archived runs predate fidelity-first reporting
 What this establishes:
 
 - **On multiply connected data the single-layer member is decisively
-  load-bearing.** `singpair` sweeps all 12 split-seed comparisons against
+  essential.** `singpair` sweeps all 12 split-seed comparisons against
   singular-only and beats the pair-kernel control everywhere; *without*
   it, the `MeshTransformer` loses to the pair kernel in-distribution
   (0.115 vs 0.097) — the double layer's flux deficiency binds exactly
@@ -1105,7 +1106,7 @@ What this establishes:
 - **The gate is not purely topological.** Deep cavity is simply connected
   and the member helps there too (deep-slot 0.240 vs 0.393, ID 0.067 vs
   0.098). The rule: **two exact singular members are the default
-  dictionary for hard geometry; the honest cost is extrapolation on easy
+  dictionary for hard geometry; the measured cost is worse extrapolation on easy
   geometry** (the 2D star-bank freq-OOD regresses 0.075 $\to$ 0.17–0.27
   with the member present). The mechanism is conditioned-coefficient
   freedom: in classical BIE the single-layer density is determined by the
@@ -1120,10 +1121,10 @@ What this establishes:
 hypothesis that did not survive, and a two-seed failure flag that the
 third seed downgraded.*
 
-### Are the vector channels load-bearing? {#sec-scalar-only}
+### Are the vector channels essential? {#sec-scalar-only}
 
-The vector channels stay: not load-bearing on easy 2D geometry,
-genuinely load-bearing off it — and the gap is oriented transport, not
+The vector channels stay: not essential on easy 2D geometry,
+essential off it — and the gap is oriented transport, not
 width. They are a substantial share of the stack's complexity
 (@sec-typed-channels), so the question got the
 sharpest of the component-level questions (@sec-future).
@@ -1137,7 +1138,7 @@ parameter count drops $\approx$60%: singular-only 104,261 $\to$ 41,941.
 Checked-in key `iteration_14_scalar_only_2d` (with
 `wide_scalar_capacity_control`).
 
-**2D Laplace: not load-bearing.** At the reference protocol (3,000
+**2D Laplace: not essential.** At the reference protocol (3,000
 steps, seeds 17/29/43):
 
 | arm (3-seed means) | params | ID | unseen geometry | stronger deformation | freq-OOD |
@@ -1155,7 +1156,7 @@ machine precision ($2.5$–$2.8\times10^{-7}$ per seed) — equivariance
 never depended on the vector channels, only on the invariant
 construction.
 
-**Screened and 3D: load-bearing — and it is transport, not width.**
+**Screened and 3D: essential — and it is transport, not width.**
 
 | suite / split | scalar singular-only | vector-ful singular-only | ratio |
 |---|--:|--:|--:|
@@ -1172,7 +1173,7 @@ The capacity-matched **wide-scalar control** (52/76 scalar dims, rank 18
 — 105,301 parameters, +1% of vector-ful) does **not** recover the gap
 (3D sphere 0.024 vs 0.0072 = 3.3$\times$; screened ID 0.024 vs 0.0099 =
 2.5$\times$; 2D stays at parity). What this establishes: **oriented
-inter-cell state transport is genuine physics capacity off plain 2D
+inter-cell state transport is physics capacity off plain 2D
 geometry — the vector channels stay.** Two side observations: modes-OOD
 and the shell tier are indifferent to the ablation (the shell error is
 representational, which motivated the single-layer member,
@@ -1186,7 +1187,7 @@ overfit with).
 
 **Splitting attention into heads at fixed total score capacity is
 bookkeeping — and blocking the value maps into head groups is a
-restriction that buys nothing measured.** The setup (checked-in key
+restriction with no measured benefit.** The setup (checked-in key
 `iteration_31_heads_vs_rank`; pre-registered design in
 `studies/heads_rank_study.py`): per attention head the effective score
 matrix has rank at most $R_0 + DR_1$ (module README §7), so one layer's
@@ -1203,7 +1204,7 @@ two-stream row, reproduced to all four archived decimals. Pre-registered
 rule: per probe arm and split, a 3-seed mean within twice the larger
 seed sd of the reference is a match; all cells matching means heads are
 bookkeeping, any decisive miss localizes the effect in the per-head
-value/output structure — the only unmatched machinery.
+value/output structure — the only unmatched component.
 
 | arm (3-seed mean ± sd) | $H$ | $R_0/R_1$ | params | ID | unseen geometry | stronger deformation | freq-OOD |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -1234,8 +1235,8 @@ What this establishes:
   matched exactly, so the one-head gain prices the head-blocking of the
   value/output maps: with $H = 1$ the drive values ride full-width
   (48 scalar / 12 vector) maps instead of four aligned blocks. The
-  aligned-moment-group restriction buys nothing measured here.
-- **Scope, stated plainly:** one PDE, one capacity point, three seeds;
+  aligned-moment-group restriction shows no measured benefit here.
+- **Scope:** one PDE, one capacity point, three seeds;
   the win is decisive under the pre-registered rule but modest in
   magnitude. The parsimony question — default to one head? — moves to
   the roadmap (@sec-future) rather than flipping the reference config
@@ -1298,14 +1299,14 @@ What this establishes:
   after the one-layer encoder and the two-member dictionary: fewer
   heads, fewer parameters on every suite, one less architectural degree
   of freedom, and nowhere measurably worse.
-- **What the confirmation did *not* confirm, stated plainly:** the
+- **What the confirmation did *not* confirm:** the
   iteration-31 *win* did not travel. The 15% Laplace ID gain reappears
   nowhere; one head is directionally worse on 11 of 13 cells (both
   exceptions are mode-OOD splits). The cross-suite evidence is
   **non-inferiority, not superiority** — the flip is carried by
   parsimony, with the Laplace ID win recorded as Laplace-specific.
 - **A bias in the rule, named:** the tolerance keys to the larger of
-  the two arms' seed sds, so the noisier arm buys itself slack — the
+  the two arms' seed sds, so the noisier arm receives a wider tolerance — the
   closest cell (screened ID, $+0.0107$ against $0.0135$) is within
   tolerance partly because the one-head arm's own spread is 2.3$\times$
   the archived one. Three seeds bound the claim: these are
@@ -1313,11 +1314,11 @@ What this establishes:
 - **The pseudo sector composes.** The one-head trade leaves
   `drive_pseudo_dim=8` untouched (its per-head split widens $2 \to 8$
   exactly as the scalar channels do), and circulation-OOD stays at the
-  typed-circulation level — the @sec-pseudo-extension fix survives the
+  typed-circulation level — the @sec-pseudo-extension fix remains valid after the
   head change.
 - **Standing falsifier:** the flip reverts if any future suite shows a
   decisive one-head loss. The frozen benchmark capacity configs and
-  every archived arm stay bitwise as recorded; the flip lands in the
+  every archived arm stay bitwise as recorded; the flip applies only to the
   documented reference configuration (@sec-reference-config, 81,961
   $\to$ 81,547 parameters).
 
@@ -1335,25 +1336,25 @@ checked-in key `iteration_18_encoder_depth`). This is expected, not anomalous: t
 Dirichlet double-layer density solves a second-kind Fredholm system
 dominated by the local $\tfrac12 I$ term (@sec-pde-theory), so the
 boundary-to-boundary solve is nearly local even though the
-boundary-to-interior map is not. The genuine attention-necessity test is
+boundary-to-interior map is not. The attention-necessity test is
 therefore mixed and Neumann boundary conditions — the next section —
 where the answer changes.
 
 *History: @sec-nb-iter18.*
 
-### The mixed-BC discriminator: where attention earns its keep {#sec-mixed-bc}
+### The mixed-BC discriminator: where attention matters {#sec-mixed-bc}
 
-**Attention earns its keep exactly where the boundary solve is
-genuinely nonlocal — and one encoder layer suffices even there.** The
+**Attention matters exactly where the boundary solve is
+nonlocal — and one encoder layer suffices even there.** The
 pre-registered hypothesis behind that verdict: mixed-BC Cauchy solves
 are nonlocal — unknown Dirichlet data on one boundary must be inferred
 from Neumann data on another — where the all-Dirichlet solve is
 $\tfrac12 I$-dominated and nearly local; therefore encoder depth should
 matter on mixed problems where it did not on Dirichlet
-(@sec-encoder-depth). One honest setup constraint: the 3D generator
+(@sec-encoder-depth). One setup constraint: the 3D generator
 assigns BC types *per boundary*, so the shell tier — inner boundary
 carrying the Dirichlet trace, outer boundary carrying the Neumann flux —
-is the only genuinely mixed tier available. Arms
+is the only mixed tier available. Arms
 (`mixed_bc_study.py`): `mt_singpair_mixed` at operator depths 2/1/0
 (104,713 / 82,137 / 59,561 parameters), 3,000 steps, seeds 17/18/19,
 splits `shell_mixed` and `shell_mixed_fine` (resolution OOD); checked-in
@@ -1374,10 +1375,10 @@ carries flux data, so the known Dirichlet trace bounds nothing
 
 What this establishes — the hypothesis, confirmed in direction with a
 parsimony twist. enc0 degrades on mixed BCs (mean 0.079 against 0.049),
-and the honest characterization of *how* is **unreliability, not uniform
+and the failure mode is **unreliability, not uniform
 degradation**: seed 18 is catastrophic (0.112, and 0.182 on the fine
 split) while the other seeds are merely worse. Meanwhile **enc1 matches
-enc2** (0.051 vs 0.049). Attention earns its keep exactly where the
+enc2** (0.051 vs 0.049). Attention matters exactly where the
 Fredholm structure is nonlocal, and **one encoder layer suffices** — the
 second layer is prunable even here. A physics note worth one sentence:
 `shell_mixed` at 0.049 is 7$\times$ easier than the all-Dirichlet shell
@@ -1386,7 +1387,7 @@ explicitly removes the winding-inference difficulty.
 
 Caveats, from the archive: a single mixed geometry tier (the
 per-boundary BC assignment permits no other); and `drive_layers` was
-held at 1 in every arm — the genuinely nonlocal *data* coupling lives in
+held at 1 in every arm — the nonlocal *data* coupling lives in
 the drive blocks, so a drive-depth sweep is the sharper follow-up,
 parked unless a sharper claim is needed (@sec-future).
 
@@ -1425,8 +1426,7 @@ applications. Three pre-registered checks, all confirmed:
   2.9–3.1$\times$10$^{-7}$ on trained models, including 0.2$\times$ and
   5$\times$ rescalings, with no convention a caller can break.
 
-One honest bonus, recorded because the discipline found it: the gauge
-work flushed out a **latent bitwise-query-independence bug** — the
+The gauge work also exposed a **latent bitwise-query-independence bug** — the
 pair-invariant einsum took a CUDA batched-GEMM path with 1-ulp drift for
 any $L \neq 1$, masked until now by test data that always had $L = 1$.
 Found, fixed, and noted in the engineering review (@sec-future).
@@ -1443,8 +1443,8 @@ constant, `reference_length: 8.0`, sized to the tunnel.
 A constant with units of length is exactly the object this section
 says the architecture abolished. It encodes one family's absolute
 size, and it does not transform with the geometry — so for any
-geometry drawn from a *different* family, scale equivariance buys
-nothing, because the input the model nondimensionalizes by is no
+geometry drawn from a *different* family, scale equivariance provides
+no protection, because the input the model nondimensionalizes by is no
 longer a function of the input at all.
 
 The cost was measured, and it was total: on zero-shot transfer to a
@@ -1453,15 +1453,16 @@ non-physical output (relative $L^2$ of $10^4$–$10^{15}$, and NaN at
 the largest capacity) while a gauge-agnostic baseline stayed
 structured at 0.677. A monotone, test-set-touching dose-response in the
 gauge initially implicated that constant, but intrinsic retraining later
-failed too; it was a lever, not an identified cause. The audit also
+failed too; the gauge was an intervention that changed the magnitude, not an
+identified cause. The audit also
 found that the calibration labeled train-only included held-out cases.
 The full corrected account is @sec-program-review.
 
 The lesson generalizes past this program: **a contract that holds by
 default and is escapable by an override is only as strong as the
 discipline governing the override.** The override here was licensed,
-documented, and used for a good local reason — and it still silently
-withdrew the guarantee the rest of the architecture is built on. The
+documented, and used for a good local reason — and it still withdrew the
+guarantee without an explicit failure. The
 repair is not to remove the override but to make the licensed use of
 it *derive* its value from the geometry too.
 :::
@@ -1497,9 +1498,9 @@ rather than learns.
 
 The program's first mainstream-baseline comparison, run as **the ablation
 of the program's thesis** — what does building boundary-integral
-structure into attention buy, and at what cost?
+structure into attention provide, and at what cost?
 
-**Setup, honestly.** The baseline is a faithful port of **Transolver**
+**Setup.** The baseline is a faithful port of **Transolver**
 (Wu et al., ICML 2024, arXiv
 [2402.02366](https://arxiv.org/abs/2402.02366)) — the strongest
 physics-agnostic attention architecture for PDE surrogacy — verified
@@ -1613,7 +1614,7 @@ Three findings, in decreasing order of negotiability:
 Both fairness regimes are tested — the streaming small-data regime above
 (this program's claimed strength) and Transolver's own published regime
 below (@sec-transolver-dataset) — so the steel-man is complete.
-Transolver still retains genuine advantages outside this benchmark's
+Transolver still retains advantages outside this benchmark's
 scope: volumetric and piecewise inputs (its native habitat, which the
 boundary-only `MeshTransformer` cannot ingest at all), and linear $O(N)$
 attention at industrial $N$, where the kernel decoder's dense

@@ -22,7 +22,7 @@ efficiency probes (corrector no-go), the flagship composition arm,
 the scale-vs-iteration round (H-C round 2), the parameter scale law
 with GeoTransolver placed on it, the multi-node and decode-chunking
 controls, and the OOD generalization protocol (boundary and deep).
-Since that snapshot, both former PENDING items landed: the
+Since that snapshot, both former PENDING items completed: the
 ×2-dims–8-layer rung (measured inside its pre-registered band; the
 frontier below is complete and the scaling ladder closed) and the
 GeoTransolver-on-OOD-splits differential evaluation (no differential at
@@ -40,9 +40,9 @@ small-batch mechanism; and the 5-seed differential extension SEALED
 the deep-S1 WSS differential (disjoint 5-vs-5) while demoting the
 pressure differential to suggestive.
 
-Since that update the chapter's sharpest result landed, and it went
-against us: the **cross-family zero-shot test fired its falsifier
-maximally** — the model as shipped does not transfer to a different
+The chapter's most consequential later result went against us: the
+**cross-family zero-shot test fired its falsifier maximally** — the
+model in its released configuration does not transfer to a different
 vehicle family at all (@sec-drivaerml-crossfamily). At this historical
 snapshot the fixed gauge was the leading explanation and transfer-v2
 was pending; later evidence rejected that explanation
@@ -66,7 +66,7 @@ BC-typed boundary meshes — the `vehicle`, a `no_slip` ground plane
 beginning just ahead of the car, `slip` tunnel walls and ceiling, an
 `inlet`, and an `outlet` — plus per-case freestream values
 ($U_\infty$, $p_\infty$, $\rho_\infty$, $\nu$, $L_{\mathrm{ref}}$) as
-global data. The public release ships only the vehicle geometry, which
+global data. The public release includes only the vehicle geometry, which
 is the interesting *shape* but not the posed *problem*.
 
 ## The standing hypothesis
@@ -75,8 +75,8 @@ Every model currently wired into the unified external-aero recipe
 consumes only the vehicle surface; the other four labeled boundaries
 sit in the data unused. The `MeshTransformer`'s typed-boundary schema
 consumes all five natively — and the mixed-BC discriminator suite
-(@sec-mixed-bc) measured exactly this setting as the place attention
-earns its keep.
+(@sec-mixed-bc) measured exactly this setting as one where attention
+matters.
 
 - **H-ground (the headline experiment).** Feeding all five typed
   boundaries beats the vehicle-only formulation on surface pressure
@@ -118,7 +118,7 @@ capacity rungs they unlocked — ultimately moved the program's
 DrivAerML floor by 14.5× with a per-step mechanism attribution (the
 ledger below).
 
-### H-ground: level, and honestly answered
+### H-ground: a neutral result
 
 Three arms at matched 500-epoch, 4-node protocol (1 seed/arm;
 provenance `output/drivaer_v2/*.log`, HSG): vehicle-only val
@@ -139,7 +139,7 @@ upstreamed): the reader's dual-cap subsampling starved the vehicle to
 378 cells (fixed by the topology-aware reader, PR #1819), and the
 norm-free drive stream overflows on raw dimensional freestreams
 (fixed by unit-direction encoding — a model *lesson*, not a bug: the
-zero-preserving stream is deliberately norm-free, so its inputs must
+zero-preserving stream is norm-free by design, so its inputs must
 arrive nondimensionalized).
 
 ### The gap investigation and the trace mechanism
@@ -182,7 +182,8 @@ AGA):
 | **trace + operator_layers 2** | **0.0228** | **+26%** |
 
 The ladder is *selectively* ordered (@sec-nb-t2-verdict): encoder
-**depth** buys a solid 26%; attention **rank** buys nothing. The
+**depth** improves validation error by 26%; attention **rank** has no
+measured effect. The
 post-trace floor is limited by the compositional depth of boundary
 processing, not the width of the attention bottleneck. The depth
 rung's single-seed caveat is resolved: 3-seed finals
@@ -205,7 +206,7 @@ The windfall's converse later closed the multi-node question
 (@sec-nb-mn-verdict): 4-node DDP at matched LR and the same
 500-epoch budget pays **1.58× (flagship), 1.56× (×2), ~2.2× (×4)**
 against its 1-node twin — the effective-batch penalty does not
-shrink with model scale. Multi-node buys wall-clock for inference
+shrink with model scale. Multi-node reduces wall-clock for inference
 and production retrains; ladder rungs stay 1-node.
 
 The mechanism itself was then isolated by the pre-registered 2×2
@@ -262,8 +263,8 @@ the remaining distance lives (@sec-nb-tail-verdict,
 The efficiency probes locate it further — and then, on the strongest
 base, exclude the leading suspect. **P1** (optimizer): refuted by
 inspection — both models share the trainer's exact settings. **P2**
-(local-geometry diagnostic; deliberately contract-breaking, never a
-keeper): CONFIRMED for efficiency *on the singpair-trace base* —
+(local-geometry diagnostic; contract-breaking by design and never a
+candidate for retention): CONFIRMED for efficiency *on the singpair-trace base* —
 persistently ~100 epochs ahead at equal quality — but only +7% at
 the converged floor. **P3** (supervision density): ¼-density costs
 ~35% at protocol end. That P2 signature motivated a declared local
@@ -286,7 +287,7 @@ Synthesis: **local-geometry information is subsumed by
 depth+members capacity** — the strong base learns whatever those
 features encode quickly on its own (the same subsumption pattern as
 the AirFRANS pseudo-composition result, one level up). The corrector
-is a **no-go**: its premise died in a two-GPU-day probe instead of a
+is a **no-go**: its premise was refuted in a two-GPU-day probe instead of a
 multi-day build. GeoTransolver's ~25× epoch-efficiency advantage
 persists with local shortcuts now *excluded* as its mechanism on
 strong bases; the round-2 probes below take up the remaining
@@ -316,7 +317,7 @@ operator_layers 2, 1-node protocol — finished at
 **0.0138/0.0140/0.0156** across its three seeds
 (@sec-nb-flagship-verdict): every seed under the pre-registered
 ≤0.020 acceptance. Against the 3-seed depth rung (0.0224) the
-composition buys another 1.60× — the mechanisms stack rather than
+composition adds another 1.60× — the mechanisms stack rather than
 substitute, with the trace×width interaction carrying the load
 exactly as the factorial predicted.
 
@@ -344,10 +345,10 @@ on the flagship base answered both questions at once
 | iteration: 8 rounds, natural | ~4× | 0.0102 |
 
 **The iterate-refine hypothesis is falsified at matched parameters**
-— exchange-round count alone buys nothing (4 rounds flat, 8 rounds
+— exchange-round count alone provides no benefit (4 rounds flat, 8 rounds
 actively worse), and natural-depth gains track their parameter
 growth. **Scale carries**: ×2 dims meets its pre-registered ≥1.3×
-bar with margin. Two honest flags. First, the ×4 rung froze at
+bar with margin. Two caveats. First, the ×4 rung froze at
 initialization at the shared LR in both seeds (val 0.165 from ep1)
 and trains only at LR/4 — a μP-style LR ∝ 1/width stability
 constraint — where it finishes at **0.0123**, *worse* than ×2
@@ -356,8 +357,8 @@ constraint**, which is why the scale law below runs along the mixed
 width×depth direction instead. Second, GeoTransolver's
 epoch-efficiency edge *persists* (its ep-1 value still beats our ×2
 arm's) — it just no longer implies a floor disadvantage. The rungs
-PENDING at this round's close (further ×2 seeds, the
-×2-dims-4-layer rung) landed and are the next section's subject.
+PENDING at this round's close (further ×2 seeds and the
+×2-dims-4-layer rung) are complete and are the next section's subject.
 
 ### A provisional LR-stable frontier, and where parity sits on it
 
@@ -380,8 +381,8 @@ per-rung means.
 
 The fit over all six rungs:
 $\text{val} \approx 0.0125 \cdot P_{\mathrm{M}}^{-0.33}$, rms
-log-residual 0.052 — globally still a line, but with an honest
-wrinkle at the top: the newest doubling's local slope flattened to
+log-residual 0.052 — globally still a line, but with a top-end
+deviation: the newest doubling's local slope flattened to
 0.27 (×2→×2L4 was 0.42), a **mild bend at the 9.6M rung**
 (@sec-nb-x2l8-verdict).
 
@@ -484,7 +485,7 @@ params) on that curve:
 
 - At GeoTransolver's own budget the gap is now **measured, not
   extrapolated: 0.005828 at 9.6M — a 2.34× gap at matched
-  parameters** (the curve had predicted 2.5×). The rung landed
+  parameters** (the curve had predicted 2.5×). The rung fell
   inside its pre-registered band (@sec-nb-scalelaw: 0.0050–0.0061;
   falsifier ≥ 0.0070 refuted), toward the band's shallow end —
   which is the bend above showing up exactly where the
@@ -500,7 +501,7 @@ params) on that curve:
   kernel structure), not another rung; ×2L8 becomes the working
   scale reference.
 
-The honest reading: scaling pays on a clean-but-bending frontier,
+The interpretation is that scaling helps along a clean but bending frontier,
 and GeoTransolver holds a **measured 2.34× per-parameter advantage
 in-distribution**. The program's compensating assets are its
 pre-registered bets — OOD generalization (next section, now under
@@ -509,7 +510,7 @@ equivariance, zero-shot BC handling. Whether any of those is
 *differential* rather than merely absolute was pre-registered as
 the decisive comparison (@sec-nb-scalelaw-verdict), and the answer
 turned out to be depth- and metric-dependent. **At zero-shot depth
-the falsifier landed** (@sec-nb-geot-ood-zeroshot,
+the falsifier fired** (@sec-nb-geot-ood-zeroshot,
 @sec-nb-corrected-zeroshot): under the corrected metric both
 architectures degrade the same way (vector-WSS ~1.12× for each;
 pressure ≤1.03 ours / ≤1.07 theirs) — no differential at the
@@ -540,14 +541,14 @@ arm, against the flagship's own 3-seed control.
 MLP-only ≥ 1.25× the flagship; the measurement is 1.084×, with
 overlapping seed bands. At this rung the in-distribution result is
 carried by the rest of the architecture — the trace formulation,
-typed attention and moments, and capacity — and the honest
+typed attention and moments, and capacity — so the accurate
 description of the industrial model is **boundary-integral-inspired**.
 Exact-kernel *causation* is established only where it was proven:
 the synthetic program, whose ladders and margins stand unchanged.
 The external review forced this test, and its skepticism was
 substantially correct.
 
-What survives is precise and worth having: exact-only beats
+What remains is precise: exact-only beats
 MLP-only on **every paired seed** (~7% each) — two closed-form,
 zero-parameter members outperform eight learned ones at equal
 non-member parameters — and exact-only is indistinguishable from
@@ -594,13 +595,13 @@ Two findings, both structural:
    the small pre-ladder configuration — the mirror image of the
    kernel members, whose effect compressed to noise at the same
    rung. Mechanisms scale individually; measuring each at the
-   operating configuration is the only honest attribution. The
+   operating configuration is the only valid attribution. The
    ranking at flagship now reads: trace 3.8× ≫ capacity (the
    frontier's 2.4× from 0.6M→9.6M) ≫ member dictionary (0–8%).
 2. **The two trace sub-mechanisms are near-perfect substitutes.**
    Correction-only and readouts-only land within 0.1% of each other,
    each recovering ~96% of the log-gap; enabling both adds a final
-   ~6%. The mechanistic reading: the load-bearing information is
+   ~6%. The mechanistic reading: the essential information is
    *boundary self-identification* — a channel telling the decoder
    that a query point IS the boundary at its own panel. The exact
    exterior jump constant (+½, zero parameters, licensed by the
@@ -685,7 +686,7 @@ plt.show()
 
 This is the program's north-star axis — a surrogate that only
 interpolates its training geometry is not an engineering tool — and
-DrivAerML shipped with no out-of-distribution evaluation at all. We
+DrivAerML initially had no out-of-distribution evaluation. We
 defined one, in the dataset's own generative coordinates: the
 upstream design-of-experiments varies 16 shape parameters, and 483
 of the 484 runs carry their official DoE values
@@ -699,12 +700,12 @@ leakage audit:
 - **S1 — ride-height double-extreme**: top and bottom deciles of
   ride height, **98 cars** — single-factor extrapolation in both
   directions on ground-effect physics.
-- A third candidate (a neighborhood carve) was honestly downgraded:
+- A third candidate (a neighborhood carve) was downgraded based on its geometry:
   a space-filling 16-D DoE leaves no interior holes (nearest-
   neighbor ratio 0.98×), so it tests nothing.
 
 **Boundary read (zero-shot).** The standard-split flagship, evaluated
-on the OOD cars it never saw — with the overlap stated plainly: the
+on the OOD cars it never saw — with the overlap made explicit: the
 standard 435-car training set already contains 88/98 of S1 and 45/49
 of S2, so the valid zero-shot sets are the never-seen remainder
 (**n = 10 and 4**, at the *boundary* margin of the OOD regions),
@@ -767,15 +768,15 @@ independent rank-sum calculation gives $p \approx 0.008$, but it
 discards the matched-seed design; with only five same-sign paired
 differences, the minimum two-sided exact sign-test $p$ is 0.0625.
 GeoTransolver's mean excess degradation is
-1.4× ours (0.131 vs 0.092). The pre-registered extension sharpened
-the estimate honestly in both directions — the effect survived its
-falsifier (no overlap), but the original "ours ≤ 1.10" bound broke
+1.4× ours (0.131 vs 0.092). The pre-registered extension narrowed
+the estimate in both directions — the effect passed its no-overlap
+test, but the original "ours ≤ 1.10" bound failed
 (seeds 45/46 came in at 1.113/1.104), so the observed effect is
 thinner than the 3-seed read suggested (1.4×, not 1.65×). On
 pressure the extension ranges TOUCH (our 1.044 vs their 1.043):
 per the same falsifier logic the pressure differential is demoted
 to *suggestive* — consistent ordering of means (1.031 vs 1.056),
-not seed-separated. Scope stated plainly: the differential is in
+not seed-separated. Scope: the differential is in
 generalization *ratios* — absolute errors still favor GeoTransolver
 ~2.5–2.7× everywhere (its capacity advantage), and both models sit
 far inside the engineering bars.
@@ -976,8 +977,8 @@ Gauge 8 → 1.3 × 10¹⁵; gauge 16 → 5.12 (finite, structured); gauge 48
 → 1.71. Three framings are all true at once, and the chapter keeps
 all three:
 
-1. **The frozen-protocol verdict stands as measured.** The model as
-   shipped does not transfer. The falsifier fired legitimately
+1. **The frozen-protocol verdict stands as measured.** The deployed model
+   does not transfer. The falsifier fired
    against the deployed protocol, and no diagnostic run afterwards
    un-fires it.
 2. **The mechanism is a repairable protocol flaw, not deep
@@ -1015,7 +1016,7 @@ and the calibration iterated all 484 dataset cases rather than the
 $r_{\mathrm{RMS}} = 0.30215 \pm 0.0089$ and hence
 $C = 26.476593$, putting DrivAerML's per-sample gauges in
 $[7.41, 8.64]$ — a ±3.5% spread around the historical 8.0, well
-inside the measured stable zone. Any other family now lands at the
+inside the measured stable zone. Any other family now operates at the
 same *relative* operating point instead of inheriting DrivAerML's
 absolute size.
 
@@ -1072,10 +1073,10 @@ already flag something:
 {#tbl-intrinsic-retrain}
 
 Seeds 42 and 43 reproduce their twins almost exactly. **Seed 44
-landed in a 2.3× worse basin.** The tempting reading — "seed 44 is
+converged to a 2.3× worse basin.** The tempting reading — "seed 44 is
 just unlucky" — is available for most of this program's tables, but
 not this one: under the fixed gauge the three seeds were tight
-(0.01383 / 0.01404 / 0.01561). So the honest statement is that
+(0.01383 / 0.01404 / 0.01561). The supported conclusion is that
 **the intrinsic gauge introduced seed-dependent training instability
 that the fixed gauge did not have**, and the divergence guard (train
 loss > 10³) is not built to catch a soft 2.3× regression. Two
@@ -1125,8 +1126,8 @@ test-set-touching dose-response and
 described as "a repairable protocol flaw, not deep architectural
 brittleness". Retraining under a similarity-covariant, per-sample
 intrinsic gauge — using a constant mislabeled as train-only — leaves the
-model diverging. **The gauge was a lever that moved the magnitude, not
-the cause.** What the earlier section got right was insisting the
+model diverging. **The gauge was an intervention that changed the magnitude,
+not the cause.** What the earlier section got right was insisting the
 dose-response was exploratory and could not support a rehabilitated
 claim; that is why this is a clean refutation rather than a retraction.
 
@@ -1146,7 +1147,7 @@ probes — resolution (@sec-drivaerml-coverage), measure magnitude
 description: **the trained model is a regressor fitted to a narrow
 operating point, and the exact-kernel structure does not protect it
 outside that point.** That is consistent with the kernel factorial's
-0–8% (@sec-drivaerml-factorial): structure that is not load-bearing
+0–8% (@sec-drivaerml-factorial): structure that is not essential
 in-distribution should not have been expected to carry generalization.
 I now assign less than 5% probability to a cross-family *advantage* over the
 GeoTransolver on the current mechanism; the
@@ -1171,8 +1172,8 @@ are not identified. See @sec-program-review.
 
 Chapter @sec-future carries an item filed as *blocked on research, not
 wiring*: at full resolution — 17.7M query cells against 50k sources —
-the flagship's relative $L^2$ is $\sim$100, and nobody could name why.
-It now has a mechanism, and it is not the one anyone expected.
+the flagship's relative $L^2$ is $\sim$100, with no identified cause.
+It now has a mechanism, contrary to the initial hypotheses.
 
 The test is as simple as tests get: take one unchanged checkpoint
 (flagship s42, the best-characterised in the program), evaluate it on
@@ -1265,12 +1266,11 @@ model is 148 000× wrong at 4× its training resolution. Both cannot be
 properties of the architecture's quadrature, so **the pathology is in
 the learned weights, not the operator** (@sec-nb-measnorm-caveat). A
 gauge-based attempt to rescale the measure back to its training value
-did not rescue it either — and its control showed why the lever is
+did not rescue it either — and its control showed why the intervention is
 unusable: changing the gauge alone at fixed resolution costs 8×
 (@sec-nb-measmech-verdict).
 
-**Consequences, stated plainly because they bear on how every DrivAerML
-number in this chapter should be read.**
+**Consequences for interpreting every DrivAerML number in this chapter.**
 
 1. Every accuracy figure here is *at one coverage*, and is not evidence
    about the model at any other. The chapter's numbers are correct and
@@ -1281,12 +1281,12 @@ number in this chapter should be read.**
 3. It is a **protocol** pathology before it is an architectural one,
    which is good news: protocol is cheaper to change.
 
-Two arms are in flight against it, deliberately separable — one
+Two separable arms are in flight against it — one
 architectural (`measure_normalization`, which removes a measure-magnitude
-sensitivity the operator genuinely has) and one protocol
+sensitivity the operator has) and one protocol
 (`RandomCoverageSubsample`, which denies the model a single sampling
 rate to overfit). Both are pre-registered with falsifiers
-(@sec-nb-hca-launch); the honest prior favours the protocol arm, and
+(@sec-nb-hca-launch); current evidence favors the protocol arm, and
 neither is expected to touch the separate ~35% coverage-completeness
 floor that no reweighting scheme reduces (@sec-four-properties).
 
@@ -1295,7 +1295,7 @@ floor that no reweighting scheme reduces (@sec-four-properties).
 The archived profile that the cluster's idle-GPU telemetry forced found a
 102k-launch dispatch storm in the
 shared closed-forms path (an `einsum` lowering to a 4.2×10⁷-batch
-bmm) and a deliberately-sequential bitwise member loop. Both fixed —
+bmm) and a bitwise member loop that was sequential by design. Both fixed —
 the second under a physics-lined contract split: closed forms stay bitwise, learned members
 move to measured-tolerance GEMMs with a bitwise reference mode
 retained. Result: **7.2× (singpair) and 14.2× (members) step

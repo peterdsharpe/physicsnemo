@@ -1,6 +1,6 @@
 # MeshTransformer on exact variable-geometry Laplace problems
 
-This example asks a deliberately narrow first question: which mesh-native,
+This example asks one narrow question: which mesh-native,
 global operator structures can learn a boundary-to-interior PDE solution map
 and retain their behavior under new geometries, coordinate frames, physical
 scales, and boundary discretizations?
@@ -183,8 +183,8 @@ u_\theta[g]=\bar g+N_\theta[g-\bar g],
 It exactly maps constant Dirichlet data to the same constant, remains linear,
 and adds no coordinate or interaction-length heuristic. This is a valid
 Laplace prior but not a universal property of boundary-driven PDEs, so both
-the raw and lifted models are benchmarked rather than silently building it
-into the generic layer.
+the raw and lifted models are benchmarked rather than making it an implicit
+part of the generic layer.
 
 For this benchmark, the physical input is sufficient. The tuple
 
@@ -559,8 +559,8 @@ compression may work on this disk, but five physical channels are
 insufficient. These are composed-operator spectra at one
 geometry, not a claim of universal kernel rank across geometries.
 
-The common-budget external rows are deliberately controls, not published
-recipe reproductions:
+The common-budget external rows serve as controls, not published recipe
+reproductions:
 
 | Control | Parameters | ID L2 | Unseen geometry | Mode 3 | Mode 4 | Trace | Laplacian | Wall time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -775,7 +775,7 @@ replicate, making comparisons paired; override them only with the explicit
 Float32 matmul precision defaults to `highest`; selecting `high` or `medium`
 requires the explicit `--matmul-precision` flag and is recorded in that report.
 
-Five MeshTransformer capacities are exposed for honest rank/depth ablations:
+Five MeshTransformer capacities are exposed for controlled rank/depth ablations:
 `tiny`, `stf_matched`, `shallow`, `reference`, and `large`. `shallow` removes boundary
 self-propagation while retaining one high-rank global boundary-to-query
 operator; it isolates the simplest separable kernel. These settings change

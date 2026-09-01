@@ -23,9 +23,9 @@ The remediation is registered and partly executed:
   protocol (12/12 lanes, @sec-nb-b22-verdict). First read: the
   chapter's *recommended* arm `mt_nl_members_log` is tight and
   healthy across seeds ($u_x$ 0.0145 / 0.0145 / 0.0159, surface
-  $C_p \approx 0.007$) and lands **inside** the old development-set
+  $C_p \approx 0.007$) and falls **inside** the old development-set
   range — so the V4 log-radial rung and the surface-pressure story
-  look protocol-robust. Two things did not survive cleanly: the
+  look protocol-robust. Two findings did not reproduce cleanly: the
   `members` arm shows an outlier seed ($u_x$ 0.0657 vs 0.020/0.024),
   and **the `pseudo` arm's surface pressure collapsed to
   mean-predictor level (z-score 1.0–1.5) on all three clean seeds.**
@@ -59,7 +59,7 @@ roughly 180k mesh points per case. It fits the program's scope exactly:
 a steady, homogeneous PDE system, driven entirely from the boundary (an
 airfoil with a no-slip label plus a freestream), with no interior
 forcing and no interior data at the query points — and the governing
-equations are genuinely not knowable, because the turbulence closure is
+equations are not knowable, because the turbulence closure is
 an empirical model, not a derived operator.
 
 Two further reasons make it the *right* first industrial benchmark:
@@ -75,7 +75,7 @@ Two further reasons make it the *right* first industrial benchmark:
    generalize GLOBE (arXiv
    [2511.15856](https://arxiv.org/abs/2511.15856)) — keep its theory
    (similarity equivariance, boundary-integral information flow,
-   nondimensionalization), replace its bespoke machinery with
+   nondimensionalization), replace its bespoke components with
    transformer-native simplicity. GLOBE's published AirFRANS numbers
    (roughly 200× lower z-score MSE than the dataset's four reference
    baselines on the full split; 7–70× below the strongest newer
@@ -83,7 +83,7 @@ Two further reasons make it the *right* first industrial benchmark:
    the direct test of the program's founding bet: *does the
    simplification retain the family's advantage?*
 
-One honest framing note, stated before any result: 2D airfoil RANS is
+One framing note before the results: 2D airfoil RANS is
 classically solvable — integral-boundary-layer codes deliver
 XFOIL-quality answers in milliseconds on a CPU. AirFRANS is a
 *benchmark with unusually good labels*, never the use case. The use
@@ -110,14 +110,14 @@ license:
   predicts the disturbance field** $\Delta U = U - U_\infty$. The
   additive freestream baseline is exact structure (it is the solution
   at infinite distance), and the disturbance decays — which is what the
-  far-field machinery of @sec-farfield-ladder was built for.
+  far-field construction of @sec-farfield-ladder was built for.
 - **Reynolds number enters as one dimensionless global scalar**,
   $\ln\mathrm{Re}_c$ — scalars condition kernels freely without
   breaking equivariance (@sec-pde-theory). This replaces GLOBE's
   two-reference-length construction (chord plus viscous scale
   $\delta_{FS} = \sqrt{\nu c/|U_\infty|}$, whose log-ratio is
   $\tfrac12\ln\mathrm{Re}_c$) with the intrinsic gauge plus one scalar:
-  the same information, less machinery — itself a parsimony test.
+  the same information with fewer components — itself a parsimony test.
 - **The monopole-free deflation stays OFF.** A lifting airfoil carries
   net circulation — exactly the topological sector that knob
   structurally kills (@sec-farfield-ladder). Its physics license does
@@ -152,17 +152,17 @@ drive-linearity is not declared. The arms:
   solver-labeled test. *Falsifier: `mt_nl_decay` no better than
   `mt_nl` on far-from-body error bands.*
 - **Family acceptance (the head-to-head).** At matched training budget
-  and matched inputs, the best arm lands within **2×** of GLOBE's
+  and matched inputs, the best arm comes within **2×** of GLOBE's
   published scarce-split z-score MSE on velocity and pressure —
   supporting "the transformer-native simplification retains the
   family's advantage." *Refutation condition, reported as first-class
   if hit: worse than GLOBE by more than 5× on any headline metric,
-  which would mean GLOBE's bespoke machinery (hyperlayers, Padé
-  kernels, multi-scale expansion) is load-bearing, not removable.*
+  which would mean GLOBE's bespoke components (hyperlayers, Padé
+  kernels, multi-scale expansion) is essential, not removable.*
 - **Stretch (pre-registered, exploratory).** GLOBE's one partial loss
   is AoA-extrapolation volume pressure (11.38×10⁻², tied with the
   dataset baselines). Whether declared contracts help a global
-  flow-topology shift is a genuine coin-flip; we record the prediction
+  flow-topology shift is a coin-flip; we record the prediction
   "parity typing helps AoA asymmetry" and will report either outcome.
 - **H4 (declared viscous scale — added 2026-07-05 after the banded
   diagnostic, before the arm was built).** The pilot's error is
@@ -198,7 +198,7 @@ drive-linearity is not declared. The arms:
   reference implementation exactly (for direct comparability with the
   published table: the four dataset baselines, GLOBE, Transolver,
   MARIO, enf2enf), *plus* physically nondimensionalized MAE
-  (velocity/|U∞|, C_p), which we regard as the more honest unit and
+  (velocity/|U∞|, C_p), which we regard as the more interpretable unit and
   report alongside.
 - **Loss:** Huber, matching GLOBE's declared choice (robust to the
   dataset's known label artifacts); stated here so it is not a
@@ -227,7 +227,7 @@ drive-linearity is not declared. The arms:
   The screen is now recorded per case as a diagnostic count only. No
   model was trained under the earlier text; the amendment is logged in
   the notebook.
-- **Seeds:** 3 per arm during the campaign; 5 for any load-bearing
+- **Seeds:** 3 per arm during the campaign; 5 for any essential
   claim, per the program's standing rule.
 - **Compute:** single-GPU per seed (the airfoil boundary is ~10³
   segments — far below the dense-decode wall), seeds packed 4-per-node
@@ -253,7 +253,7 @@ tuning.
 | H4 members | smooth MLP members (capacity control **beat** the declared viscous scale) | control wins 6× | 6× | @sec-nb-h4-verdict |
 | V4 log-radial | $\ln$, $/\!\sqrt{\cdot}$ pair features | **confirmed** | 1.66× | @sec-nb-v-verdicts |
 
-H3 is the chapter's honest negative: the decay contract that closed
+H3 is the chapter's main negative result: the decay contract that closed
 the exact-label far-field ladder is *exactly enforced and exactly
 wrong* for a wake-shedding airfoil. H4's verdict is the program's
 strongest parsimony datum: the pre-registered capacity control
@@ -288,7 +288,7 @@ GraphSAGE within seed noise — H1's velocity clause reads "tied," not
 "met"); volume pressure ~8× past every baseline, within ~2× of MARIO;
 **surface pressure 3–4× better than MARIO**, second only to GLOBE.
 The family-acceptance bar (≤2× GLOBE) is not met on velocity; the
-refutation condition (>5× worse with bespoke machinery load-bearing)
+refutation condition (>5× worse with bespoke components essential)
 is also not the story — the gap closed 600× → ~40× by removable
 mechanisms and continues to close.
 
@@ -299,8 +299,7 @@ the member MLPs log-radial pair features
 ($\ln(a{+}\epsilon)$, $b/\sqrt{a{+}\epsilon}$,
 $v\!\cdot\!r/\sqrt{a{+}\epsilon}$) that make power-law scales
 *linearly learnable*. Pooled convention, test split, clean seeds
-(anomalous seeds reported separately below, nothing silently
-excluded):
+(anomalous seeds reported separately below; none are omitted):
 
 | arm | seeds (clean) | u_x median | vs members-8 |
 |---|---|---|---|
@@ -322,7 +321,7 @@ and the log-features' gain were the *same missing capability*
 
 **LR ladder (V3 coda):** halving LR costs medians monotonically
 (protocol 0.0213 → 5×10⁻⁴: 0.0246 → 2.5×10⁻⁴: 0.0356) — but see the
-anomaly census below for what lower LR *buys*.
+anomaly census below for how lower LR changes the result.
 
 ### The AoA-extrapolation windfall (pre-registered stretch)
 
@@ -349,7 +348,7 @@ Bonnet baselines). The parity-typed arm beats *every published model
 hardest, and the within-program control (`mt_nl`, no parity sector:
 0.024–0.048) pins the mechanism to the sector, not the architecture.
 
-The members-class extrapolation evals have now landed
+The members-class extrapolation evaluations are now complete
 (@sec-nb-probes-verdict; GLOBE per-sample convention, official
 held-out `reynolds` and `aoa` splits, zero-shot from scarce-trained
 checkpoints; provenance: evalx jobs 5048837/5048838,
@@ -364,7 +363,7 @@ pressure to **velocity**:
 
 The recommended arm (`members_log`) **extrapolates to within
 ~1.2–2× of its own in-distribution accuracy** on both official
-axes, where singpair-class arms degrade ~10×. One honest asterisk:
+axes, where singpair-class arms degrade ~10×. One caveat:
 `members_wide` seed 17 blows up on the Reynolds split (u_x 0.101)
 while clean in-distribution — the tail-anomaly signature (see the
 tail section below) surfacing under extrapolation stress; the census
@@ -385,7 +384,7 @@ across both datasets: the trace defect is a *learnable-but-slow bias*
 worth 2× where they don't (3D, 500 epochs). Trace mode stays on
 everywhere: it is exact and costs nothing.
 
-### The tail anomaly: LR-gated, deterministic, and partly load-bearing
+### The tail anomaly: LR-gated, deterministic, and partly essential
 
 Across all protocol-LR member-class arms, a minority of seeds blow up
 in a *single velocity field* while other fields stay clean. The
@@ -408,7 +407,7 @@ LR-quartered **0/5**. Three facts now pin the mechanism
    pre-registered ≤15% bound — the falsifier's trade-off branch.
 
 Verdict: an LR × member-capacity edge-of-stability interaction,
-confirmed in its anomaly prediction, refused in its free-lunch
+confirmed in its anomaly prediction but falsified in its free-lunch
 clause. Practical recommendation: run member-class arms at protocol
 LR with ≥5 seeds and report the census — anomalies are single-field,
 detectable, and seed-pinned — rather than paying 22% median for

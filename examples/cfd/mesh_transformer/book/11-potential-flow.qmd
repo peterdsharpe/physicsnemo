@@ -31,7 +31,7 @@ drive-linearity ($\psi$ is linear in $(U_\infty, \Gamma)$ jointly), and
 
 ## The gallery
 
-Streamlines are the honest visualization here: contours of the total
+Streamlines are the appropriate visualization here: contours of the total
 streamfunction, which is exactly zero on the body.
 
 ```{python}
@@ -172,7 +172,7 @@ earned.
 
 Vector drive, exterior domain, and parity each falsify something no
 earlier suite can touch: the vector-drive pathway (scalar-only arms
-reject the schema outright), far-field behavior (the decay-structure
+reject the schema), far-field behavior (the decay-structure
 ladder of @sec-farfield-ladder runs on this suite), and the type
 system itself — the streamfunction target is *provably* outside the
 span of dot-product-invariant scalar outputs, so an untyped model's
@@ -209,7 +209,7 @@ lines.append(
 print("\n".join(lines))
 ```
 
-The trace-informed controls — deliberately given the scalarized
+The trace-informed controls receive the scalarized
 disturbance trace the transformer arms never receive — and the
 representable velocity-target reformulation are the suite's
 fair-comparison apparatus (@sec-fluid-suites); the far-field column's
@@ -237,7 +237,7 @@ beyond the training annulus — resisted two architectural generations
 The arc is this program's method in miniature: rival mechanisms with
 pre-registered discriminators, a fix that refuted its own diagnosis
 instructively, a construction that excluded the leading mechanism
-outright, and licensed exact structure to finish. Archive keys
+by construction, and licensed exact structure to finish. Archive keys
 `iteration_27_farfield_strong_inference` through
 `iteration_30_decay_structure` (with `five_seed_close`); session
 artifacts `farfield_inference*.json` in `results/`.
@@ -266,7 +266,7 @@ independently.
 **Rung 2 — the gate fix, refuted instructively.** Bounding the gate
 inputs worked exactly as designed (smooth nonzero gate, no saturation
 regime) — and far-field got **4.3$\times$ worse** (0.694 $\to$ 2.98).
-The collapse was **load-bearing**: it had been suppressing polynomially
+The collapse was **essential**: it had been suppressing polynomially
 growing query-side direct-drive branches (a lifted-drive branch grows
 0.026 at $r = 1.1$ to 1.45 at $r = 12$; drive norms grow like
 $r$–$r^2$). The corrected root cause is the *pair* of unbounded radial
@@ -279,7 +279,7 @@ position* ($x \to x/\sqrt{1+|x|^2}$, equivariant), so every learned
 coefficient sees bounded invariants — with the kernel members verified
 **bitwise-pinned to raw positions**, keeping the physics path exact.
 This excludes M3 *by construction* (coefficient traces flat to
-$r = 12$; far/near ratio 1.03), and far-field lands at 0.452. The
+$r = 12$; far/near ratio 1.03), and far-field reaches 0.452. The
 residual is thereby isolated as purely **representational**: bounded is
 not decaying — the direct part converges to a direction-dependent
 constant (exponent $\approx 0$) where the exact field decays $r^{-2}$,
@@ -301,7 +301,7 @@ member is exactly similarity invariant.
 #| fig-cap: >
 #|   The far-field ladder (checked-in learned_bie_2026-07-02.json,
 #|   iterations 27-30; log scale). Per-rung far-field relative L2, with
-#|   the iteration-28 regression shown as the honest spike: the gate fix
+#|   the iteration-28 regression shown as the spike: the gate fix
 #|   worked as designed and made things 4.3x worse, correcting the
 #|   diagnosis. Rung 4 shows the five-seed close (small dots = seeds
 #|   17-21; large dot = mean 0.090), crossing the pre-registered
@@ -320,7 +320,7 @@ rungs = [
     ("baseline\n(rung 1: diagnosed)", it28["baseline_farfield"], "#eda100",
      "gate collapse found"),
     ("bounded gate\n(rung 2: refuted)", it28["farfield"], "#e34948",
-     "collapse was load-bearing"),
+     "collapse was essential"),
     ("source-bounded\n(rung 3: M3 excluded)", it29["farfield"], "#2a78d6",
      "residual is representational"),
     ("+ decay structure\n(rung 4: closed)", close["means"]["farfield"],
@@ -357,11 +357,11 @@ plt.show()
 ```
 
 **The five-seed close.** Far-field mean **0.090 ± 0.048** — the
-pre-registered fully-fixed bar ($< 0.10$) crossed at the mean, with the
-per-seed spread stated honestly: 0.036–0.147, two seeds above 0.10.
+pre-registered fully-fixed bar ($< 0.10$) crossed at the mean, with a
+per-seed range of 0.036–0.147 and two seeds above 0.10.
 That is **7.7$\times$ at an unchanged training annulus**, beating the
-coverage lever (0.179 from doubling the annulus), and every other split
-lands at family-best levels:
+coverage change (0.179 from doubling the annulus), and every other split
+reaches family-best levels:
 
 | decay-structure config (5 seeds) | ID | circulation-OOD | unseen geometry | wilder shapes | far-field |
 |---|--:|--:|--:|--:|--:|
@@ -395,7 +395,7 @@ represent (@sec-typed-channels). The arc completes within this section:
 the reformulated arms (@tbl-potential-flow-resolved) resolve the wall —
 the trace arms post the program's best exterior-domain numbers (ID
 0.013) — and the pre-registered pseudoscalar ($0o$) channel extension
-then lifts the one remaining refusal, confirmed at five seeds
+then removes the one remaining type-system exclusion, confirmed at five seeds
 (@tbl-pseudo-extension).
 :::
 
@@ -602,8 +602,8 @@ The control semantics matter here more than anywhere else in the book:
 the pair-kernel controls are **trace-informed** — they receive the exact
 disturbance trace as per-cell `boundary_value` data — while the
 `MeshTransformer` arms receive only the raw drive $\{U, \Gamma\}$. The
-controls are deliberately privileged; the point of the suite is to ask
-whether the architecture can *reconstruct* what the controls are handed.
+controls receive more information by design; the suite asks whether the
+architecture can *reconstruct* the trace supplied to the controls.
 
 | potential flow (3-seed means) | ID | unseen geometry | wilder shapes | circulation-OOD | far-field |
 |---|--:|--:|--:|--:|--:|
@@ -683,7 +683,7 @@ What this establishes:
   $\Gamma\, x^{\perp} / (2\pi |x|^2)$, and with $\Gamma$ typed as a
   *true* scalar that product is an **axial vector** — unrepresentable —
   so the residual decomposes exactly into representable potential flow
-  (learned) plus refused vortex flow. The pre-registered Armijo
+  (learned) plus vortex flow that the type system cannot represent. The pre-registered Armijo
   criterion — an acceptance bar set in advance: buy the added complexity
   only if the cheaper fix measurably fails (@sec-future) — is thereby
   **met**, precisely on the circulation component — and the extension
@@ -704,7 +704,7 @@ $v \wedge w \to 0o$; rotation $p \cdot v^{\perp} \to$ polar vector
 (exactly the refused $\Gamma\,x^{\perp}$ product); $p \cdot q \to 0e$;
 $s \cdot p \to 0o$ — and circulation declared `"0o"` in the field
 schema. The default path is bitwise-preserved (zero parameters at pseudo
-width 0), and the extension ships with 553 tests including reflection
+width 0), and the extension includes 553 tests, including reflection
 equivariance of every product. Evidence at **five seeds** (17–21), the
 program's evidentiary bar from here on; the untyped control pool is
 five-seed too, including fresh seeds 20/21 run alongside:
@@ -725,7 +725,7 @@ fidelity-first reporting (@sec-fidelity-columns).
 #|   The circulation-OOD split, per run (checked-in
 #|   learned_bie_2026-07-02.json, iterations 22-23; log scale). Every
 #|   untyped velocity arm -- nine iteration-22 runs plus four fresh
-#|   iteration-23 controls at seeds 20/21 -- sits on the type-refusal
+#|   iteration-23 controls at seeds 20/21 -- sits on the type-exclusion
 #|   floor at 0.645-0.651: the norm of the unrepresentable vortex
 #|   component. The 0o-channel arms (ten runs, five seeds, two
 #|   dictionaries) drop through it by 17x, joining the in-distribution
@@ -792,7 +792,7 @@ What this establishes:
   pay everywhere, not just in the vortex term.
 - **Parsimony holds under the extension**: singpair — the two exact
   members — remains the best dictionary in the pseudo setting.
-- **Scope, honestly**: $0o$ is 2D-only and **opt-in** (the 3D analogue is
+- **Scope**: $0o$ is 2D-only and **opt-in** (the 3D analogue is
   the axial vector, out of scope), and the default reference
   configuration is unchanged (@sec-reference-config). Far-field stays at
   $\sim$0.7 — confirmed as a non-type open axis (@sec-future).

@@ -304,8 +304,8 @@ Two readings. Across the smooth tiers the MeshTransformer sits 30–60×
 below the matched Transolver. On the **shell**, the dictionary story
 completes: the singonly arm (double layer only) reads ~0.37 — pinned
 near the size of the winding component it *cannot represent* — while
-adding the single-layer member (singpair) cuts the shell error and
-every arm's smooth-tier accuracy survives. The shell is also where the
+adding the single-layer member (singpair) cuts the shell error without
+reducing any arm's smooth-tier accuracy. The shell is also where the
 Transolver gap narrows to ~1.4×: representation limits bind everyone
 (@sec-part-baseline).
 
@@ -376,7 +376,7 @@ separable-moment encoder is $O(N_s)$ per layer, the measurements are
 kernel-launch-overhead dominated, and the fitted $S^{0.11}$ is a floor
 artifact — the encoder is explicitly *not* the wall.
 
-**The wall, stated honestly.** Extrapolated to the product scope
+**The memory limit.** Extrapolated to the product scope
 ($10^5$ boundary cells $\times$ $10^6$ queries — an extrapolation
 roughly an order of magnitude beyond the measured grid, not a
 measurement), **training memory breaks first**: one forward+backward
@@ -391,7 +391,7 @@ chunking: $\approx$85 GB (79.4 GiB) peak, at roughly **9–16 minutes per
 forward** at product scope (fitted forward 541 s; fitted dense decode
 956 s). One fit is suppressed in the archive, with reasons recorded:
 the forward+backward *time* extrapolation fell below forward-only (the
-surviving small grid points are overhead-dominated on this device), so
+remaining small grid points are overhead-dominated on this device), so
 the ideal $O(N_qN_s)$ projection from the largest measured point
 ($\approx$1,355 s) stands in for it.
 
@@ -482,7 +482,7 @@ a single 80 GiB-class accelerator**. And the price is a consistent
 $\approx$1.9$\times$ step time (the recomputed decode forward inside
 backward), with the operator, outputs, and gradients bitwise unchanged.
 Agenda item 2 of @sec-future is thereby closed; the hierarchical decode
-backend remains as the (approximate) speed lever, not a memory
+backend remains as an approximate speed optimization, not a memory
 necessity.
 
 *History: @sec-nb-iter20, @sec-nb-industrial-pivot.*
@@ -516,10 +516,10 @@ interior-query sampler, which currently hangs (see the engineering review,
   low-degree real spherical harmonics, with held-out degree-4 modes for
   geometry-OOD; homeomorphic to the sphere but with varied curvature.
 - **T3 shell** — an outer boundary plus an inward-oriented inner boundary;
-  multiply connected, with cavity charges so the solution has genuinely
+  multiply connected, with cavity charges so the solution has
   multiply-connected structure. The pure double-layer ansatz is
-  rank-deficient here, which is precisely why this tier is *declared
-  unsolved* for the first 3D model generation rather than quietly excluded.
+rank-deficient here, which is precisely why this tier is *declared
+unsolved* for the first 3D model generation rather than omitted.
 
 **BC regimes**, always well-posed (@sec-pde-theory): all-Dirichlet; mixed
 (exactly one boundary keeps Dirichlet, the other carries the dimensionless
@@ -549,7 +549,7 @@ best any double-layer representation can do at this panel resolution. The
 coefficient multiplying the exact solid-angle influence, one shared
 Richardson relaxation, eight solve steps), with **no reference frame at
 all** — solid angles are dimensionless and similarity-invariant by
-construction, so the 2D nondimensionalization machinery disappears entirely.
+construction, so the 2D nondimensionalization step disappears entirely.
 
 | split | learned 2-param (10k steps) | dense-solve oracle |
 |---|--:|--:|

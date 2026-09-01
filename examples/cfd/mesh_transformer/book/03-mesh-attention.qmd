@@ -16,7 +16,7 @@ structure of @sec-pde-theory (learned maps see only joint invariants of
 relative displacement, normals, and boundary vector data), all-to-all
 boundary information flow under quadrature weighting, and rigorous
 nondimensionalization. What is replaced: GLOBE's bespoke kernel MLPs and
-hand-assembled multiscale machinery give way to standard attention
+hand-assembled multiscale components give way to standard attention
 blocks, residual streams, and typed projections — mainstream transformer
 parts, with the contracts kept exact.
 
@@ -27,7 +27,7 @@ channels of shape $(N, C_s)$ and polar-vector channels of shape
 $(N, C_v, D)$. These are the two irreps of @sec-typed-channels, and they
 are the *only* representable types — pseudoscalars, axial vectors, and
 higher-order tensors are rejected at construction time rather than
-silently flattened into channels.
+implicitly flattened into channels.
 
 `TypedProjection` implements the allowed combination rules and nothing
 else:
@@ -49,8 +49,7 @@ represents anisotropic maps like the normal projection $(v \cdot n)n$,
 all while staying exactly linear in the field at fixed geometry.
 
 Whether the vector channels *earn their cost* is an empirical question
-with a measured answer: not load-bearing on easy 2D geometry, genuinely
-load-bearing on 3D and parametric problems — and it is oriented
+with a measured answer: not essential on easy 2D geometry, essential on 3D and parametric problems — and it is oriented
 transport, not raw width (@sec-scalar-only; history in
 @sec-notebook, iteration 14).
 
@@ -155,18 +154,18 @@ different streams:
   and the pointwise map is `GeometryConditionedLinear` — so the complete
   drive-to-output map satisfies $\mathcal N_\Gamma(0)=0$ and exact
   superposition at fixed geometry, to floating point.
-  `quadratic` mode (`QuadraticFieldReadIn`) keeps the linear machinery
+  `quadratic` mode (`QuadraticFieldReadIn`) keeps the linear path
   and adds exactly one bilinear typed composition at the query read-in,
   making the output an exact degree-$\le 2$ polynomial in the drive for
   any weights — the *declared-degree* contract (@sec-nonlinear-fragility).
   `zero_preserving_nonlinear` mode (`NonlinearZeroMeshFieldBlock`) lets
   keys and values read the field through structurally multiplicative
-  updates: zero-preservation survives, superposition intentionally does
+  updates: zero-preservation remains exact, superposition intentionally does
   not.
 
 The modes are **different Python classes**, not flags on one class,
 so a future normalization or bias added to the nonlinear block cannot
-silently invalidate the linear-mode (or declared-degree) proof.
+invalidate the linear-mode (or declared-degree) proof unnoticed.
 
 `encode` returns an `EncodedBoundary` — dimensionless source mesh,
 operator and drive states, center, reference length, cached moments.
@@ -284,7 +283,7 @@ lesson the program paid for earlier:
   $\operatorname{asinh}$ form in 3D. H1d showed that exactly singular
   kernels *lose* under midpoint quadrature — the optimizer mollifies the
   near field at the cost of operator fidelity — so the closed forms are
-  load-bearing, validated to $\sim 10^{-14}$.
+  essential, validated to $\sim 10^{-14}$.
 - **Operator-conditioned coefficients — the conditioning role the
   parametric study licenses (@sec-parametric).** The $C_{mh}$ are a linear map of each source
   token's operator-state invariants (scalars plus vector Gram
@@ -292,8 +291,8 @@ lesson the program paid for earlier:
   is exactly the encoder role the evidence licenses — conditioning
   coefficients of a fixed dictionary, with the dictionary, not the
   conditioner, carrying the angular and radial structure.
-- **A genuinely dense pair kernel — the factorial finding (above).** The
-  bottleneck was the source–query factorization; any genuine pair kernel
+- **A dense pair kernel — the factorial finding (above).** The
+  bottleneck was the source–query factorization; any pair kernel
   lifts the ceiling, and the subtended-angle member alone carries every
   angular order.
 
@@ -347,16 +346,16 @@ members; selection has to be imposed.
 
 That finding was then tested on every suite in the program — nonlinear
 Liouville, screened Laplace, 3D Laplace, and finally a pre-registered
-four-arm 2D ablation and its 3D disentangler. Two working hypotheses died
-on the way (the full chronology, with both refutations, is the notebook's
-iterations 8–13, @sec-notebook). The rule that survived everything:
+four-arm 2D ablation and its 3D disentangler. Two working hypotheses were
+refuted along the way (the full chronology is in notebook iterations 8–13,
+@sec-notebook). One rule remained consistent across every suite:
 
 > **The dictionary carries the singularity; conditioning carries the
 > smoothness; nonlinearity needs a smooth basis.** In drive-linear
 > operation the dictionary is the exact singular member(s) alone, and
 > operator conditioning carries all smoothness — best-in-class on 2D
 > Laplace, screened Laplace, and 3D Laplace. In nonlinear field mode the
-> polynomial members are load-bearing. MLP members are prunable
+> polynomial members are essential. MLP members are prunable
 > everywhere.
 
 This is the member-level instance of a rule the program established
@@ -371,7 +370,7 @@ Current-best evidence tables: @sec-dictionary-ablation,
 
 ## What the layer is, and is not
 
-The honest scope, carried through the rest of the book: `MeshAttention`
+The scope used throughout the rest of the book: `MeshAttention`
 is an exact, similarity-covariant, quadrature-weighted, low-order
 **global moment primitive** with linear cost and a dense oracle — a
 rigorous building block for boundary functionals. It is *not* a general
