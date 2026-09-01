@@ -4012,3 +4012,61 @@ extrapolation, pre-to-post-stall) are the deciding measurements for
 the north-star question — whether MT2's structure improves
 generalization that GeoTransolver's tuned pointwise attention does
 not.
+
+## 2026-09-01 — Campaign review: the month-one instrument was never characterized; agenda reset around measurement, robustness, and resource-normalized comparison {#sec-nb-campaign-review}
+
+A full critical review of the campaign at Peter's request, recorded
+here because the review itself reshaped the agenda.
+
+**Central misconception.** The defect-4 to MeshTransformer2 arc
+(eleven preregistered iterations) optimized against GeoTransolver's
+1.10–1.18x DrivAerML lead without ever measuring DrivAerML's
+label-noise floor. High-lift parity (@sec-nb-hl-verdict, MT2/GT =
+0.98, both architectures *better* than their DrivAerML levels) says
+that lead was substantially a property of the labels, not the
+architectures. A second conflation rode along: "harder dataset" was
+read as "harder for models"; HiLiftAeroML is harder physics with
+cleaner labels.
+
+**Aha moments that survive.** (1) G3 (@sec-nb-g3-verdict): structure
+buys generalization exactly on the axes where it is the PDE's own
+symmetry, and nothing tested generalizes across boundary-condition
+frequency content — a coverage lever, not an architecture lever.
+(2) Optimizer robustness is an architecture property: MT2 spanned
+0.040–0.049 across the high-lift lr × seed grid, GeoTransolver
+0.041–0.397. (3) The M3 audit's parity defect: contracts must be
+enumerated from the symmetry group, not from encountered failures.
+(4) Four literature hypotheses refuted in a day
+(@sec-nb-m1-verdict-wave-close).
+
+**Judgment errors.** The v5a4 anchor-decode arm was closed on an
+accuracy-only pilot gate (1.2% miss, one seed) despite running at 65%
+of the memory and 3x validation throughput — the resource frame Peter
+had explicitly asked for was not applied (@sec-nb-v5a4-gate). M1
+scale-relaxation was run on a dataset whose caveat predicted the
+null. The "frozen protocol" froze an lr *value* across datasets with
+6x different steps per epoch; protocols should freeze procedures (a
+grid and a selection rule). The 3.0x interim high-lift headline
+should not have been surfaced at all.
+
+**Stones unturned → this wave.** Preregistered as
+`results/instrument_wave_preregistration_2026-09-01.json`
+(sha `1f6cb942`): **N1** measures the DrivAerML shared-residual
+floor directly (cross-model disagreement vs error, per-case error
+correlation, shared-residual fraction; HiLift as the cleaner-label
+control) — eval-only, the highest-leverage unturned stone; **R1**
+symmetric lr-robustness grid {1e-3, 3e-3, 1e-2} × 2 seeds × both
+architectures on DrivAerML; **V6** re-opens anchor decode at
+matched peak VRAM (v5a4 vs v3c at 6,500 tokens); **W1** trains the
+parity fix and reads wall shear. Fourteen single-link DrivAerML lanes
+(jobs 635238+, self-resubmitting) plus the eval-only N1 probe.
+Still open after this wave: AB-UPT as a measured baseline; the G2
+transfer result re-read in light of the noise floor (the running
+HiLift ladder is the test); the mechanism of GeoTransolver's lr
+instability; two-seed statistical power stated plainly in the book.
+
+**Claims that survive for the book's hero framing:** exact contracts
+cost nothing in-family on either dataset; MT2 trains stably where
+GeoTransolver needs tuning; exact symmetries buy exact generalization
+on their own axes; the measurement methodology is itself novel. The
+claim to retire: "beat GeoTransolver in-family."
