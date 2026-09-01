@@ -465,10 +465,10 @@ are speculative; each was verified in the code or by execution.
 **A live, flagged footgun: concurrent recipe jobs race on the shared
 `dataset_paths.yaml`.** Every launch script in the campaign fleet points
 the recipe at its dataset by `sed`-ing one shared file; two concurrent
-jobs needing *different* datasets race, and the loser silently evaluates
+jobs needing *different* datasets race, and the loser evaluates without error
 or trains on the winner's data. This is not hypothetical: the first
 deep-OOD evaluation pass ran six jobs concurrently and the S1 lanes
-silently evaluated S2's held-out set — caught only by per-row run-ID
+evaluated S2's held-out set without an error — caught only by per-row run-ID
 provenance, purged, and rerun (@sec-nb-ood-deep-verdict). A durable fix
 (job-local recipe copy, or a code-level dataset-path override) is a
 **blocking precondition** for any future multi-dataset wave; until then,
@@ -487,7 +487,7 @@ surface's actual radial extrema** — exact for the mesh by construction; the
 star tier now builds in milliseconds and all 3D results in @sec-benchmarks
 postdate the fix. The residual lesson stands: `laplace3d.py` gained coverage
 only after the incident, and a loose analytic bound in a rejection sampler
-fails *silently* as an infinite loop rather than loudly as an error —
+becomes an infinite loop instead of raising an error —
 per-surface empirical bounds are the robust default.
 
 **Duplication: the panel-influence math exists four times.** The
@@ -495,7 +495,7 @@ subtended-angle singular integral and the entire-order antiderivatives are
 implemented in `layer_potential.py` (`double_layer_influence`),
 `HarmonicPanelBIE._influence`, `NeumannHarmonicPanelBIE._influence`, and
 `screened_laplace.harmonic_panel_influence` (whose docstring itself says
-"functional twin of `HarmonicPanelBIE._influence`"). This was a deliberate
+"functional twin of `HarmonicPanelBIE._influence`"). This was an intentional
 choice — benchmark-local isolation while a parallel session owned the core
 module — and each copy is separately tested. But the copies share a subtle
 convention (`zeta = n·r − i n×r`, the *conjugate* of the docstring frame,
@@ -504,9 +504,9 @@ fell into and documented) that is currently re-explained per file.
 Consolidation into one panel-quadrature helper, with the frame convention
 stated once and the brute-force quadrature tests attached to it, is the
 right refactor once the research surface stabilizes. *Status 2026-07-07
-(review execution): deliberately deferred again — the kernel feature
+(review execution): deferred again — the kernel feature
 surface is actively moving (log-radial features, auxiliary scales, and the
-member sweep landed or are in flight this week), which is exactly the
+member sweep completed or was in flight that week), which is exactly the
 instability the deferral condition names.*
 
 **Duplication that mattered, now resolved: the scale gauge existed
@@ -522,8 +522,8 @@ evaluation reach the gauge by different routes.
 
 Resolved by extracting one reduction
 (`mesh_attention.measure_weighted_rms_radius`) that both call, with a
-test pinning their agreement. Two details are deliberate rather than
-tidied away:
+test pinning their agreement. Two details reflect interface constraints
+rather than cleanup omissions:
 
 - **The two callers pass different weights, and for this statistic it
   provably does not matter — yet.** The model weights by bare
@@ -547,7 +547,7 @@ tidied away:
   invalidated. It moves it by $\le 7\times10^{-8}$ relative, so $C$
   and those runs stand.
 
-*Open, deferred deliberately:* the statistic is a pure mesh geometric
+*Open, deferred:* the statistic is a pure mesh geometric
 quantity and would sit naturally in
 `physicsnemo.mesh.calculus.measure` beside `cell_measures`. It lives
 in the experimental namespace instead, because promoting a symbol into
