@@ -1,4 +1,4 @@
-# FLARE and the kernel decoder: what low-rank routing can and cannot buy us
+# FLARE and the kernel decoder: what low-rank routing can and cannot provide
 
 **Thread**: task #43 (Peter's suggestion, 2026-07-07). Status: analysis
 complete; measured cost split below; recommendation at the end.
@@ -20,7 +20,7 @@ y = SDPA(K, G, z)   # distribute: N tokens read from S slots     O(N·S·D)
 
 The effective token-token attention matrix is
 `softmax(K·Gᵀ)·softmax(G·Kᵀ)` — rank ≤ S, row-stochastic both passes —
-so all-to-all coupling survives at O(N·S·D) instead of O(N²·D). The
+so all-to-all coupling remains at O(N·S·D) instead of O(N²·D). The
 slots are data-independent parameters; everything learned is in the
 projections.
 
@@ -47,7 +47,7 @@ u(x) = Σⱼ [ Σₘ Cₘ(opⱼ) · φₘ(x, yⱼ) ] · Vⱼ        O(Q·S) pair
 with two member families of very different character:
 
 - **Exact singular members** (double/single layer): closed-form panel
-  integrals (atan2 / log / asinh of pair geometry). Genuinely dense;
+  integrals (atan2 / log / asinh of pair geometry). Dense and nonseparable;
   the *hierarchical* thread (#41) owns their acceleration (far-field
   expansion is the classical answer — see GLOBE's Barnes–Hut with
   `expand_far_targets`, which is the same two-sided expansion idea).
@@ -61,7 +61,7 @@ with two member families of very different character:
 ## 3. The contract analysis: separability vs exactness
 
 A separable smooth member is `φ(x)ᵀψ(y)` with per-query and per-source
-features only. Our house standard is *exact* contracts. What survives?
+features only. Our house standard is *exact* contracts. What remains?
 
 **Exactly separable AND exactly contract-preserving: polynomial
 members.** Every pair invariant expands separably and exactly:
@@ -76,7 +76,7 @@ members.** Every pair invariant expands separably and exactly:
   in the gauge frame ⇒ **exact similarity invariance**.
 
 The catch is expressivity: the H4/banded evidence says the smooth
-members earn their keep on *sharp near-wall radial structure*
+members justify their cost on *sharp near-wall radial structure*
 (boundary layer at d/c ~ 5×10⁻⁴). Polynomials in `|r|²` are the wrong
 basis for boundary layers — degree needed to localize at 10⁻⁴ scales
 is absurd. **Exact separability is available but expressively wrong
@@ -89,7 +89,7 @@ translation-invariant, exactly separable, arbitrarily sharp in |r| with
 enough frequencies. But a *finite learned* frequency set picks
 directions: exact O(D) equivariance holds only if the frequency set is
 group-closed AND the learned coefficients are tied by the group action
-(a steerable basis — heavy machinery), or in expectation over random
+(a steerable basis — a substantial implementation), or in expectation over random
 frequencies (not exact). **Exact equivariance + separability + sharp
 radial expressivity do not coexist at finite rank with free
 coefficients.** A licensed-approximation arm (measured equivariance
@@ -99,7 +99,7 @@ precedent but is a *weaker* offer than the alternative below.
 **The in-house resolution: typed-moment routing for the smooth
 stream.** FLARE's real lesson is architectural, not spectral: route
 smooth content through a rank bottleneck of *slots*. We already own the
-exactly-equivariant version of that machinery — the typed moment
+exactly equivariant version of that construction — the typed moment
 cross-attention (the moment decoder path). A **hybrid decoder** keeps
 the exact singular members dense (they carry the singular physics and
 the hierarchical thread will price their acceleration) and moves the
@@ -110,7 +110,7 @@ u(x) = Σⱼ Σₘ∈exact Cₘ(opⱼ)·φₘ(x,yⱼ)·Vⱼ      dense, O(Q·S),
      + MomentCross(x; typed moments of the boundary)   O(Q + S)
 ```
 
-- Exact contracts by construction (the moment machinery is already
+- Exact contracts by construction (the moment operators are already
   typed, signed, measure-weighted, gauge-framed).
 - Rank knob = moment channels — the direct analogue of FLARE's
   `n_global_queries`.
@@ -136,7 +136,7 @@ median of 5, `query_chunk_size=2048`. Ratios are the durable quantity
 scales** — the members arm decodes 33–38× slower than singpair, and
 essentially all of it is the pairwise MLP, not the exact panel
 integrals. Consequences: (i) the FLARE-shaped target owns the cost of
-the current best-arm class almost entirely; a successful hybrid buys
+the current best-arm class almost entirely; a successful hybrid would improve
 up to ~30× decode speedup and ~3× decode memory; (ii) for
 *members-class* configurations, the hierarchical thread (#41)
 accelerates only the residual ~3% until the smooth stream is
@@ -159,10 +159,10 @@ on cluster nodes only (see the hpc-resources conventions).
    wrong for the near-wall structure the members exist to carry, and the
    expressive version (learned Fourier features) breaks exact
    equivariance. Neither meets the house standard; a prototype was
-   deliberately NOT built.
+   NOT built.
 3. **The supported direction is the hybrid decoder** (exact members
    dense + typed-moment smooth stream), a model-level change reusing
-   existing machinery. Pre-registered experiment (run only after the
+   existing implementation. Pre-registered experiment (run only after the
    V1–V5 sweep verdicts fix the smooth-member requirements):
    `mt_nl_hybrid` vs `mt_nl_members` on AirFRANS scarce, 3→5 seeds,
    protocol-v1. *Acceptance: ≥80% of the members arm's velocity gain

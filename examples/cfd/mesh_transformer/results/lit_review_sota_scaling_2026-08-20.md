@@ -24,7 +24,7 @@ measured baseline on the flagship curves. (2) The pose-axis referee trap:
 "vehicle aero is canonically aligned" — counter with breaking the published
 robustness/accuracy trade-off (Symmetry in the Wild numbers).
 
-DIRECTLY ACTIONABLE: HiLiftAeroML (arXiv:2605.19565) SHIPS deterministic
+DIRECTLY ACTIONABLE: HiLiftAeroML (arXiv:2605.19565) PROVIDES deterministic
 curated splits designed for data-efficiency/OOD measurement — our high-lift
 wave should use those curated splits, not ad-hoc ones. Also: "Transolver is
 a linear transformer" (arXiv:2511.06294) — slicing is efficient mixing, not

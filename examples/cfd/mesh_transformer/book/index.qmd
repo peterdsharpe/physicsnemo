@@ -8,16 +8,16 @@ exact/manufactured-label and solver-verified benchmark suite in
 
 The audience is applied mathematicians and ML researchers. The style is
 first-principles: every architectural decision is stated as a hypothesis, and
-the chapters record which hypotheses survived falsification and which did not.
+the chapters record which hypotheses were supported or refuted.
 
 ::: {.callout-important title="Start with the program review"}
 The authoritative, current synthesis of this program is
 @sec-program-review-2026-08 — one chapter holding the frozen-instrument
-frontier table, the five campaign verdicts, and the honest scoping. The
+frontier table, the five campaign verdicts, and their scope. The
 short version: the program's product is `MeshTransformer2`, which matches
 GeoTransolver to within 10--20% in-family at equal cost while
 being **exactly pose-robust where GeoTransolver degrades 26--32×** — and
-buying that robustness the conventional way (rotation augmentation) is
+recovering that robustness the conventional way (rotation augmentation) is
 measured to cost GeoTransolver 1.8--1.9× of its accuracy. Cross-family
 transfer turned out to be a property of training-data diversity, not of
 any architecture tested; query-independence is measured to trade 2.7×
@@ -27,7 +27,7 @@ mechanism hunt that followed (the refutation wave of 2026-08-20/21,
 anchor-conditioned decoding, the expressivity ceiling, and the
 normalization audit; the live status of every experiment is the tech
 tree of @sec-tech-tree. Everything
-below and in earlier chapters is the historical record that earned those
+below and in earlier chapters is the historical evidence behind those
 sentences; the dated lab notebook (@sec-notebook) holds every
 preregistration and verdict, including the failed ones.
 :::
@@ -62,10 +62,10 @@ capacity, its two sub-mechanisms (exact jump correction, learned
 own-cell readouts) near-perfect substitutes for the essential
 boundary self-identification signal
 (@sec-drivaerml-trace-factorial) — with capacity second and the
-exact singular dictionary itself contributing 0–8% (its surviving
+exact singular dictionary itself contributing 0–8% (its remaining
 advantage is parameter efficiency: two zero-parameter closed-form
 members match eight learned ones, @sec-drivaerml-factorial). The
-industrial model is honestly described as boundary-integral-inspired;
+industrial model is accurately described as boundary-integral-inspired;
 its strongest measured industrial asset is out-of-distribution
 behavior (@sec-drivaerml), where the deep-S1 wall-shear-direction
 degradation-ratio differential against the strongest baseline is
@@ -77,13 +77,13 @@ still 2.5–2.7× lower. The pressure differential is suggestive only
 
 A second scope line, corrected by the 2026-07-27 audit: the
 out-of-distribution asset is measured **within** the DrivAer family.
-Pushed to a different vehicle family, zero-shot, every shipped
+Pushed to a different vehicle family, zero-shot, every tested
 checkpoint diverged while a gauge-agnostic baseline stayed structured
 (@sec-drivaerml-crossfamily). The exploratory gauge dose-response did
 not identify the cause: intrinsic-gauge retraining also failed, and
 the supposedly train-only calibration included held-out cases. More
 decisively, offset-free diagnostics show that every tested field
-pattern is essentially unrelated to truth. The honest industrial
+pattern is essentially unrelated to truth. The supported industrial
 generalization claim is therefore within-family and provisional
 (@sec-program-review).
 
@@ -131,7 +131,7 @@ freely: scalars are directionless, so they can modulate everything without
 ever breaking rotational symmetry. The domain dependence lives in the
 boundary solve, not in the kernel (@sec-pde-theory).
 
-The benchmarks in this book deliberately pose the simplest members of the
+The benchmarks in this book pose the simplest members of the
 class — problems like
 
 $$
@@ -183,7 +183,7 @@ augmentation*:
 
 ## The headline
 
-The comparison below spans two deliberately different *model classes*, and it
+The comparison below spans two fundamentally different *model classes*, and it
 is important to read it that way:
 
 - **General-purpose architectures** (red/orange) know nothing about Laplace's
@@ -193,7 +193,7 @@ is important to read it that way:
   spent *learning* what the PDE does. The purple circle — `MeshTransformer`
   with the kernel-basis query decoder that repairs qualification 2 below, in
   its dictionary-only variant (@sec-kernel-decoder) — is this same
-  architecture class with one honestly flagged asterisk: its kernel
+  architecture class with one explicit asterisk: its kernel
   dictionary contains one Laplace-family member (the exact double-layer
   singular kernel) alongside PDE-agnostic polynomial members, which is why
   it wears its own color.
@@ -207,8 +207,8 @@ is important to read it that way:
   $\approx 0$. Nothing else. It is a boundary-element method whose kernel
   coefficient and solver relaxation are the only things learned.
 
-The benchmark is *exactly* Laplace — maximally favorable to the specialist
-class, and deliberately so. The PDE-conforming results are
+The benchmark is *exactly* Laplace — favorable to the specialist by
+construction. The PDE-conforming results are
 **oracle-in-family diagnostics**: on a problem whose answer is known, they
 quantify the value of each structural ingredient (factorization, kernel
 basis, singular quadrature, learned solve) and characterize what a learned
@@ -380,8 +380,8 @@ comparator run on that suite, and the oracle where one exists.
 #|   strongest comparator run there -- filled circles are the
 #|   steel-manned Transolver; open diamonds are non-Transolver controls
 #|   (the free-form pair kernel on the encoder-stress suites, and on
-#|   potential flow the trace-informed control, which is deliberately
-#|   privileged with data the MeshTransformer does not receive). Open
+#|   potential flow the trace-informed control, which receives boundary data
+#|   the MeshTransformer does not receive). Open
 #|   black circles: the exact or PDE-conforming oracle where one exists.
 #|   Every value is from the checked-in archive; per-suite provenance is
 #|   commented in the source.
@@ -489,7 +489,7 @@ flowchart TB
     M2["M2: v5a4 anchor-conditioned decode<br/>DONE - CLOSED at pilot gate<br/>(0.01517 vs 0.01500 bar)"]:::done
     M3["M3: invariant-completeness audit<br/>DONE - PARTIAL: ceiling real, not<br/>DrivAerML-scale; parity_fix by-product"]:::done
     M4["M4: NEO normalization audit<br/>DONE - CLOSED BY DERIVATION<br/>(MT2 already measure-complete)"]:::done
-    G3["G3: 2D BC-generalization ladder<br/>DONE - linearity contract buys exact<br/>amplitude extrapolation; nobody<br/>generalizes across frequency content"]:::done
+    G3["G3: 2D BC-generalization ladder<br/>DONE - linearity guarantees exact<br/>amplitude extrapolation; no arm<br/>generalizes across frequency content"]:::done
     HL["HL: high-lift wave (HiLiftAeroML)<br/>RUNNING - ~epoch 260/500;<br/>lr-parity amendment preregistered"]:::running
     HLGEN["HLGEN: HiLift generalization ladder<br/>PLANNED - gated on HL readout"]:::planned
     MT3["MT3: MT3 preregistration<br/>PLANNED - gated on HL readout"]:::planned
@@ -511,7 +511,7 @@ flowchart TB
 ```
 
 The refutation wave of 2026-08-20/21 resolved every mechanism candidate
-then on the table. What survives as the candidate explanation of the G2
+then on the table. What remains as the candidate explanation of the G2
 transfer gap: GeoTransolver's **pointwise raw coordinate features** and
 its **non-equivariant global encoder** — the hypothesis that transfer on
 this instrument is carried by representations that exact similarity
@@ -522,16 +522,16 @@ next, the HiLift generalization ladder (HLGEN).
 | ID | Status | Question and why it matters | Depends on | Acceptance criterion | Evidence |
 |---|---|--------|---|------|---|
 | NSTAR | DONE | Reframe the program's goal: multi-family transfer was a coverage demonstration, not generalization; measure generalization as curves (error vs training-set size, error beyond the training hull), not points. Sets the ledger G1–G4. | — | Preregistered framing adopted (sha 02ca9432) with a declared ladder design. | @sec-nb-generalization-northstar |
-| G1G2 | DONE | Do MT2's contracts buy performance-per-sample (G1) and does either architecture's zero-shot transfer improve with in-family data (G2)? The G2 slope is the program's first measured architecture-carried generalization. | NSTAR | 22-lane nested ladder, n ∈ {14…435}, 2 seeds per rung; preregistered predictions scored. | @sec-nb-g1g2-verdict |
+| G1G2 | DONE | Do MT2's contracts improve performance per sample (G1), and does either architecture's zero-shot transfer improve with in-family data (G2)? The G2 slope is the program's first measured architecture-carried generalization. | NSTAR | 22-lane nested ladder, n ∈ {14…435}, 2 seeds per rung; preregistered predictions scored. | @sec-nb-g1g2-verdict |
 | LOC | DONE — refuted | Is GeoTransolver's data-compounding transfer carried by *local* features? If yes, MT2's flag-gated local patch-integral channel should bend MT2's G2 curve downward. | G1G2 | Preregistered (p ~ 0.45): monotone zero-shot decrease across n ∈ {27, 109, 218}; a flat curve refutes locality as sufficient. Verdict: refuted — the local channel is a constant 3–5% in-family offset with no G2 slope change, and destabilizes transfer at n=218 (seed spread 0.12). | @sec-nb-locality-verdict |
 | M1 | DONE — refuted | Is MT2's exact scale equivariance an over-symmetrization (aerodynamics depends on Reynolds number, hence absolute size)? Literature wave arm, prereg 69a81e2a. | G1G2 | Preregistered: >5% in-family gain at n=218 from scale conditioning; falsifier: within the ±3% seed band. Verdict: refuted — 1.3–2.0% gains, plus a zero-shot transfer *penalty*. | @sec-nb-m1-verdict-wave-close |
 | M2 | DONE — closed | Does AB-UPT-style anchor-conditioned decoding (fixed 2,560-token interacting core, all queries passive) recover the accuracy the fully passive v5a3 decode lost? | G1G2 | Preregistered pilot gate: 50-epoch validation loss ≤ v5a3 pilot × 1.15 (= 0.01500). Verdict: fail at 0.01517 (1.2% over); arm closed per prereg, no seeds promoted. | @sec-nb-v5a4-gate |
 | M3 | DONE — partial | Does MT2's invariant-only feature set have a provable expressivity ceiling (geometry pairs it cannot separate)? | G1G2 | Analytic fp64 probe: constructed pairs separate at roundoff vs controls. Verdict: ceiling real (rotationally symmetric geometries, separations 5e-16–2e-15) but not DrivAerML-relevant; by-product: a reflection-equivariance defect in the vector head found and fixed (`parity_fix`). | @sec-nb-m3-verdict |
 | M4 | DONE — closed by derivation | Does MT2 miss a measure-weighted (NEO-style) normalization somewhere, explaining the P3 density floor? | G1G2 | Code audit: every point-population normalization carries measure weights. Verdict: MT2 is already measure-complete; the P3 floor is information-limited, not a bug — no retrain arm warranted. | @sec-nb-lit-wave-prereg |
-| G3 | DONE | Which boundary-condition generalization axes can architecture or contract buy? Exact-label 2D conformal-Laplace suite; three arms (MT2+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Verdict: the linearity contract buys *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×); no arm generalizes across BC frequency content (rel-L2 ≈ 1.0 on unseen modes); MT2+BC-scalar wins absolute error on every axis but has the worst amplitude degradation ratio. | @sec-nb-g3-verdict |
+| G3 | DONE | Which boundary-condition generalization axes can architecture or contracts improve? Exact-label 2D conformal-Laplace suite; three arms (MT2+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Verdict: the linearity contract guarantees *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×); no arm generalizes across BC frequency content (rel-L2 ≈ 1.0 on unseen modes); MT2+BC-scalar wins absolute error on every axis but has the worst amplitude degradation ratio. | @sec-nb-g3-verdict |
 | HL | RUNNING | Does the DrivAerML frontier (MT2 within 1.10× of GeoTransolver, exactly pose-robust) extend to harder, Reynolds-varying physics? GeoTransolver vs MT2-v3c on the HiLiftAeroML curated full split, 2 seeds each. | G1G2, LOC, M1 | Preregistered H1/H2 readouts (prereg 2026-08-17); lr-parity amendment preregistered mid-flight after GeoTransolver destabilized at the frozen lr 3e-3 — symmetric 1e-3 lanes added, each architecture reports its best lane over {3e-3, 1e-3}. ~Epoch 260/500. | @sec-nb-hl-lr-amendment |
-| HLGEN | PLANNED | The HiLift analogue of the G1/G2 ladder: does GeoTransolver's transfer compounding — the surviving G2-gap discriminator — reproduce on Reynolds-varying physics with curated OOD splits? | HL | Gated on the high-lift full-split readout; to be preregistered with scaling rungs and falsifiers before any run. | @sec-nb-hl-lr-amendment |
-| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation, keep the parity gate and a local channel (cheap in-family offset), treat scale/Reynolds as explicit conditioning only where data varies it — and address whatever the high-lift readout says about the surviving G2-gap candidates. | HL, M3, G3 | Gated on the high-lift readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-m1-verdict-wave-close |
+| HLGEN | PLANNED | The HiLift analogue of the G1/G2 ladder: does GeoTransolver's transfer compounding — the remaining G2-gap discriminator — reproduce on Reynolds-varying physics with curated OOD splits? | HL | Gated on the high-lift full-split readout; to be preregistered with scaling rungs and falsifiers before any run. | @sec-nb-hl-lr-amendment |
+| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation, keep the parity gate and a local channel (cheap in-family offset), treat scale/Reynolds as explicit conditioning only where data varies it — and address whatever the high-lift readout says about the remaining G2-gap candidates. | HL, M3, G3 | Gated on the high-lift readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-m1-verdict-wave-close |
 
 : The tech-tree ledger. Every status is as of 2026-08-24; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. {#tbl-tech-tree}
 
@@ -588,8 +588,8 @@ measured and reported; solver-labeled RANS remains the next ledge;
 several early
 ablations are seed-17-only where noted; the early external baselines
 (GLOBE, and radius-free GeoTransolver — an in-tree geometry-conditioned
-Transolver variant) were deliberately under-optimized
-controls, since superseded as evidence by the steel-manned Transolver
+Transolver variant) were limited to 1,000-update controls and have since
+been superseded as evidence by the steel-manned Transolver
 comparison in both training regimes; and the complete, current caveat
 ledger is the standing-caveats section of @sec-future, which is kept
-up to date as results land.
+up to date as results become available.

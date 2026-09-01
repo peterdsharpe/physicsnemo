@@ -17,7 +17,7 @@ screening, high drift, unseen geometry, near-boundary queries, and boundary
 refinement. The exact gauge-transformed kernel supplies both an oracle field
 and an independent trace residual.
 
-The fixed arm earns the principal-part claim only if:
+The fixed arm supports the principal-part claim only if:
 
 - its in-distribution field error is no more than 1.2 times the better
   flexible arm;

@@ -170,7 +170,7 @@ capacity** — mechanisms scale individually, and this one grew.
 
 ### The capacity ladder, post-trace (T2)
 
-With the trace floor removed, does capacity buy accuracy again?
+With the trace floor removed, does added capacity improve accuracy again?
 Matched 1-node protocol on GB300 (single seed per rung — the
 pre-registered ladder design; provenance `output/drivaer_t2/*.log`,
 AGA):
@@ -599,7 +599,7 @@ Two findings, both structural:
    ranking at flagship now reads: trace 3.8× ≫ capacity (the
    frontier's 2.4× from 0.6M→9.6M) ≫ member dictionary (0–8%).
 2. **The two trace sub-mechanisms are near-perfect substitutes.**
-   Correction-only and readouts-only land within 0.1% of each other,
+   Correction-only and readouts-only finish within 0.1% of each other,
    each recovering ~96% of the log-gap; enabling both adds a final
    ~6%. The mechanistic reading: the essential information is
    *boundary self-identification* — a channel telling the decoder
@@ -865,7 +865,7 @@ A single-checkpoint scan confirms it, cleanly and monotonically:
 #|   physical range by 5-16 orders of magnitude; GeoTransolver stays
 #|   structured at 0.677. The shaded band is the models' own-family
 #|   in-distribution error, i.e. where a transferring model would
-#|   land. Right: the gauge dose-response on ONE checkpoint (flagship
+#|   reach. Right: the gauge dose-response on ONE checkpoint (flagship
 #|   s42) with only the declared reference length varied. It is clean
 #|   and monotone, which localizes the failure to the fixed gauge --
 #|   but it is a test-set-touching scan and is therefore EXPLORATORY
@@ -895,7 +895,7 @@ keys = ["geotransolver_anchor", "mt_flagship_seed42", "mt_flagship_seed43",
 values = [v1[k]["shift_pressure_l2"] for k in keys]
 colors = ["#1baf7a"] + ["#e34948"] * 4
 
-### The band a transferring model would land in: own-family ID errors.
+### The expected band for a transferring model: own-family ID errors.
 id_lo = min(v1[k]["own_family_id_pressure_l2"] for k in keys)
 id_hi = max(v1[k]["own_family_id_pressure_l2"] for k in keys)
 ax_l.axhspan(id_lo, id_hi, color="#2a78d6", alpha=0.13, lw=0, zorder=0)
@@ -921,7 +921,7 @@ for i, (value, color) in enumerate(zip(values, colors)):
 ax_l.axhline(1.0, color="#0b0b0b", lw=1.1, ls="--", zorder=3)
 ax_l.text(2.5, 2.2, "physical range", fontsize=7.5, color="#0b0b0b", ha="center")
 ### Label the band in the one column with no bar (x2L8 is the NaN row).
-ax_l.annotate("own-family ID error\n(where a transferring model lands)",
+ax_l.annotate("own-family ID error\n(expected under transfer)",
               xy=(4.35, id_hi), xytext=(4.45, 60),
               fontsize=7.5, color="#2a5fa8", ha="right", va="center",
               arrowprops=dict(arrowstyle="-", color="#2a5fa8", lw=0.8,

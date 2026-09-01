@@ -201,7 +201,7 @@ The wrapper requests one whole AGA node on `batch/short` for two hours:
 `/scratch/.../.venv-recipe/bin/python -m torch.distributed.run --standalone
 --nproc_per_node=1` processes bind to GPU IDs 0–3 via
 `CUDA_VISIBLE_DEVICES`, with eight CPU threads per lane. Invoking the module
-through the physical interpreter is deliberate: the venv's `torchrun` console
+through the physical interpreter is required here: the venv's `torchrun` console
 script has a logical `/home/...` shebang, which is not safe for AGA native
 extensions. Each lane has a 95-minute hard timeout and its own immutable log.
 

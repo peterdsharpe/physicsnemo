@@ -3,7 +3,7 @@
 ## Scientific question
 
 Does one unconditioned, residual-controlled second-kind density processor span
-screening variation and smooth geometry deformation, or does geometry earn a
+screening variation and smooth geometry deformation, or does geometry require a
 conditioned preconditioner?
 
 Exact modified-Bessel fields provide labels on Fourier-deformed domains. The

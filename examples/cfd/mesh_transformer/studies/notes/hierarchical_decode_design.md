@@ -164,7 +164,7 @@ independence contract:
   the criterion `dist(x, node AABB)·θ ≥ D_S` — each query's interaction
   list is a function of **its own position and the source tree alone**.
   With per-query reductions in tree order, **bitwise query-set
-  independence survives exactly**. This is a structural win over GLOBE's
+  independence remains exact**. This is a structural advantage over GLOBE's
   scheme and keeps the program's oldest decode contract intact under
   approximation.
 - Cost: O(Q·log S) classification instead of dual-tree O(Q+S); at
@@ -233,7 +233,7 @@ combined-backend picture:
 | singpair (linear suites) | O(QS) | **O(Q log S)** | — |
 | + smooth members (RANS arms) | O(QS) | O(QS) (members dominate) | **O(Q log S + (Q+S)r)** |
 
-A members-carrying arm gets sublinear only when BOTH land. If FLARE's
+A members-carrying arm gets sublinear only when BOTH succeed. If FLARE's
 separable members fail their accuracy bar, the fallback is
 near-field-restricted smooth members (compactly supported by
 construction), which BH's near list serves naturally — noted here as the

@@ -26,7 +26,7 @@ and form a separate boundary-spectrum test. The common evaluation also covers
 interpolation, unseen geometry, near-boundary queries, boundary refinement,
 low/high screening, and stronger drift.
 
-An aligned arm earns the claim only if it remains within `1.2x` of pointwise
+An aligned arm supports the claim only if it remains within `1.2x` of pointwise
 training on interpolation, held-out boundary spectra, near-boundary fields,
 and the 256-panel field endpoint, while reducing both field and exact-trace
 error to at most `0.7x` on at least two of the three operator-parameter

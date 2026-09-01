@@ -61,7 +61,7 @@ kernel row was a session artifact under `/tmp/kernel_decoder_bench`.
 
 : The decoder gate: seed 17, 1,000 updates, early bank — single seed,
 preliminary; superseded by @tbl-kernel-refbank. Kept here because the
-1,000-update freq-OOD value (0.12) becomes load-bearing in the
+1,000-update freq-OOD value (0.12) becomes essential in the
 dictionary-selection finding below. {#tbl-kernel-gate}
 
 That read as 12.7$\times$ over the moment decoder, 3.5$\times$ over the
@@ -153,9 +153,9 @@ freq-OOD had slid 0.12 $\to$ 0.487, statistically indistinguishable from
 the free-form pair kernel. The near-zero-initialized smooth MLP members
 had grown to absorb ID error: **training trades structure for
 interpolation**. Ablating them (`kernel_mlp_members=0`) restored freq-OOD
-0.0713 at identical ID. First honest caveat, recorded then: the singular
+0.0713 at identical ID. First caveat, recorded then: the singular
 member *is* Laplace-family structure, so on other PDE families the smooth
-members "may well earn their place" — queued as the off-family tests
+members "may still be warranted" — queued as the off-family tests
 below. *(Current tables: @tbl-kernel-refbank in @sec-kernel-decoder.)*
 
 ## Iteration 8 — Liouville: the drive-linearity wall breaks {#sec-nb-iter8}
@@ -166,7 +166,7 @@ Question: every drive-linear model ties at $\approx$0.79 ID on the
 nonlinear Liouville suite (the superposition wall; parameter-free floor
 1.06). The kernel decoder in `zero_preserving_nonlinear` mode reads drive
 invariants, so it is not drive-linear. Does it break the wall, and do the
-MLP members earn their place on a nonlinear PDE?
+MLP members justify their complexity on a nonlinear PDE?
 
 Result (1,500 steps, seeds 17/18/19, fixed-compute protocol identical to
 the baselines): **wall broken and replicated** — linear control mean
@@ -218,10 +218,10 @@ Liouville — neutral. *(Current tables: @tbl-screened-arms,
 Dimensional genericity held end-to-end (bitwise-identical parameter
 count, zero core changes; six seeds), and both arms beat the double-layer
 oracle on the declared-unsolved shell tier (medians 0.380/0.458 vs
-0.753) with honestly large seed variance (sd 0.20–0.33, one 1.17
+0.753) with large seed variance (sd 0.20–0.33, one 1.17
 dictionary-only seed).
 
-**The reading that did not survive:** the MLP-member effect appeared to
+**Later data overturned the initial reading:** the MLP-member effect appeared to
 *flip* in 3D — equal-or-better on star 6/6 seeds and modes 5/6 — and the
 ledger was revised to a *span-dependent* rule: smooth members hurt where
 the structured dictionary already spans the smooth corrections (the 2D
@@ -246,10 +246,10 @@ Outcome: **(a) half-right** — nopoly recovered ID (0.042) and freq-OOD
 was destroyed relative to the structured arms (0.213) but *less* than
 the full arm's 0.487: polynomial members **amplify** MLP harm, an
 unpredicted interaction that remains unexplained (checked-in caveat).
-**(b) refuted outright, favorably** — singular-only lost *nothing*: best
+**(b) refuted directly, favorably** — singular-only lost *nothing*: best
 ID of the matrix (0.0375), best stronger-deformation (0.0774), freq-OOD
 statistically identical to sing+poly (0.0748 vs 0.0713, tightest seed
-spread 0.073–0.076). The span hypothesis died by its own test, and the
+spread 0.073–0.076). The span hypothesis was refuted by its own test, and the
 takeaway was revised to: conditioning carries the smoothness; the
 dictionary carries the singularity. The 3D disentangler (p3b) was
 launched the same day. *(Current tables: @tbl-dictionary-matrix,
@@ -269,10 +269,10 @@ polynomial harm, and once the polynomials were gone the MLP advantage
 evaporated.
 
 The universality checks (p3cd): screened singular-only **best-in-class**
-(ID 0.0099, low-$\tilde\kappa$ 0.0345 — the conditioning survives a
+(ID 0.0099, low-$\tilde\kappa$ 0.0345 — the conditioning remains a
 one-member dictionary); nonlinear Liouville singular-only **failed
 catastrophically** (ID 0.9583/36.5348/2.30, seed 18 diverged) — in
-nonlinear field mode the polynomial members are load-bearing. The
+nonlinear field mode the polynomial members are essential. The
 dictionary program closed on the rule that now heads
 @sec-decoder-role: *the dictionary carries the singularity; conditioning
 carries the smoothness; nonlinearity needs a smooth basis.* One
@@ -287,7 +287,7 @@ logged here. *(Current tables: @tbl-dictionary-3d in @sec-dictionary-3d;
 *(2026-07-04; key `iteration_14_scalar_only_2d` +
 `wide_scalar_capacity_control`.)*
 
-Do the vector channels earn their complexity? On 2D Laplace, no: scalar
+Do the vector channels justify their complexity? On 2D Laplace, no: scalar
 singular-only (41,941 params, −60%) matched vector-ful within
 $\sim$5–15% on every split, equivariance still at machine precision. Off
 plain 2D, yes: screened ID degraded 2.9$\times$, 3D sphere 3.4$\times$,
@@ -297,7 +297,7 @@ was representational, which seeded iteration 16). The open confound —
 42k vs 104k parameters — was stated in the entry and closed the same
 day by the capacity-matched wide-scalar control (105,301 params): it did
 **not** recover the gap (3.3$\times$ / 2.5$\times$). It was not width;
-oriented inter-cell transport is genuine physics capacity; the vector
+oriented inter-cell transport is physics capacity; the vector
 channels stay. *(Current tables: @tbl-scalar-2d, @tbl-scalar-off2d in
 @sec-scalar-only.)*
 
@@ -345,10 +345,10 @@ determine them.
 
 An intermediate hypothesis was recorded at the first-seed multi-body read
 (`multi_body_head_to_head_partial`): a topology-*gated* (Betti-gated)
-dictionary. It did not survive the full head-to-head — deep-cavity is
+dictionary. It did not hold in the full head-to-head — deep-cavity is
 simply connected and the member helps there too. The refined rule that
 replaced both: **two exact singular members are the default for hard
-geometry; the honest cost is extrapolation on easy geometry.**
+geometry; the measured cost is worse extrapolation on easy geometry.**
 
 A failure was flagged at two seeds — both arms losing to the
 19k-parameter pair kernel on deep-slot OOD — and **downgraded at the
@@ -392,7 +392,7 @@ Pre-registered: encoder depth should matter on mixed BCs where it did not
 on Dirichlet. Confirmed in direction with a parsimony twist: enc0
 degrades on the mixed shell — as *unreliability*, not uniform
 degradation (catastrophic seed 18: 0.112/0.182) — while enc1 matches
-enc2 (0.051 vs 0.049). Attention earns its keep exactly where the
+enc2 (0.051 vs 0.049). Attention matters exactly where the
 Fredholm structure is nonlocal, and one layer suffices. Physics note:
 shell_mixed at 0.049 is 7$\times$ easier than the all-Dirichlet shell —
 the explicit outer flux removes the winding-inference difficulty.
@@ -450,7 +450,7 @@ polar vectors, and any function of dot invariants equals its mirror
 image — a *true* scalar. No dot-only model can manufacture handedness
 from unhanded inputs. The architecture was not failing to train; it was
 **enforcing its own type contract** against a benchmark target that
-violates it — the mirror-test refusal of @sec-typed-channels, measured
+violates it — the mirror-test exclusion of @sec-typed-channels, measured
 in the wild for the first time. The controls escape because the
 pseudoscalar-ness arrives baked into their per-cell trace scalars.
 (Circulation is itself a pseudoscalar; the benchmark is restricted to
@@ -492,10 +492,10 @@ noise; that is a constraint. The decomposition insight came from writing
 the vortex term down: the circulation component of velocity is
 $\Gamma\, x^{\perp} / (2\pi |x|^2)$, and with $\Gamma$ declared a
 *true* scalar in the field schema, scalar $\times$ (rotated position)
-is an **axial vector** — the same mirror-test refusal as iteration 21,
+is an **axial vector** — the same mirror-test exclusion as iteration 21,
 one type deeper. The residual decomposes *exactly*: representable
-potential flow, learned; unrepresentable vortex flow, refused; the
-pinned 0.647 is the norm of the refused part.
+potential flow, learned; unrepresentable vortex flow, excluded; the
+pinned 0.647 is the norm of the excluded part.
 
 **Armijo trigger.** Direction 6's pre-registered criterion — build the
 $0o$ extension only if the velocity reformulation measurably fails — is
@@ -504,7 +504,7 @@ Iteration 23 launched: 2D pseudoscalar ($0o$) channels with the wedge
 product as a typed operation, $\Gamma$ declared pseudoscalar in the
 schema. Prediction registered before the runs: **circulation-OOD joins
 ID** (the other splits should not move, since they never touched the
-refused subspace).
+excluded subspace).
 
 One new stress axis, logged for the roadmap: far-field queries degrade
 for every arm (0.43–0.88; control 1.69) — radius extrapolation beyond
@@ -522,7 +522,7 @@ annotations to this log, verbatim, so the chapters read timelessly:
   program that led that list ran to completion and closed (iterations
   7–13), and the program was redirected the same day." The redirected
   agenda itself was dated *(2026-07-04.)*.
-- The "honestly incomplete" ledger in 07 carried *(Now closed — iterations
+- The "incomplete" ledger in 07 carried *(Now closed — iterations
   15 and 17)*, *(Now measured — iteration 20)*, *(Now settled in both
   directions)*, and *(Now measured and closed — iteration 14)*
   parentheticals on items whose resolution postdated the first draft;
@@ -541,7 +541,7 @@ annotations to this log, verbatim, so the chapters read timelessly:
   mixed-trace learned solve of iteration 6" (that solve is parked, per
   07's parked list, and the mixed-BC generalist results are iteration 19).
 
-## Iteration 23 — the pseudoscalar extension lands {#sec-nb-iter23}
+## Iteration 23 — the pseudoscalar extension is complete {#sec-nb-iter23}
 
 *(2026-07-05; key `iteration_23_pseudoscalar_extension`.)*
 
@@ -549,9 +549,9 @@ The program's first type-system extension, built against the iteration-22
 Armijo trigger. Design: 2D pseudoscalar channels behind a new rank token
 `"0o"`, with the **closed product set** — wedge $v \wedge w \to 0o$;
 rotation $p \cdot v^{\perp} \to$ polar vector (exactly the
-$\Gamma\,x^{\perp}$ product the velocity arms refused);
+$\Gamma\,x^{\perp}$ product the velocity arms could not represent);
 $p \cdot q \to 0e$; $s \cdot p \to 0o$ — pseudos riding the existing
-scalar moment machinery. Circulation declared `"0o"` in the field
+scalar moment implementation. Circulation declared `"0o"` in the field
 schema. Bitwise-default preserved (zero parameters and zero RNG draws at
 pseudo width 0); 553 tests, including reflection equivariance of every
 product and end-to-end model reflection tests. Arms: `kernel_pseudo`
@@ -594,7 +594,7 @@ always felt like the "hacky" corner of an otherwise
 everything-by-construction architecture — the one input the model
 *trusts* rather than derives. The gauge analysis made the discomfort
 precise: any $L$ that is degree-1 homogeneous in the geometry preserves
-similarity covariance, so the caller's number was never load-bearing —
+similarity covariance, so the caller's number was never essential —
 only its *consistency* between training and evaluation was, and
 consistency by convention is exactly the kind of contract this program
 does not accept. Decision: derive $L$ intrinsically as the
@@ -643,9 +643,9 @@ The 200-step smoke produced the iteration's anomaly: a catastrophic
 circulation-OOD blowup (37–147) in the nonlinear arms — the
 drive-amplitude extrapolation exploding early in training. It largely
 resolved by 3,000 steps (best-arm circ-OOD 0.35): an early-training
-transient, not a structural refusal, but drive-amplitude extrapolation
+transient, not a structural exclusion, but drive-amplitude extrapolation
 stays the worst split and is logged as an open stress axis. The
-headline landed at five seeds: **the parity and nonlinearity mechanisms
+five-seed result: **the parity and nonlinearity mechanisms
 compose** — nonlinear alone reaches pressure 0.210; nonlinear + $0o$
 reaches velocity 0.031 / pressure 0.063 and dominates every split.
 
@@ -653,7 +653,7 @@ The pre-registered degree-grading hypothesis (grade the drive stream by
 polynomial degree to target drive-quadratic fields directly) is
 **demoted** to a moderate-priority open item on Armijo reasoning: the
 composition result leaves it a one-split gain (circ-OOD), and one split
-does not buy a mechanism. *(Current table: @tbl-euler-bernoulli in
+does not establish a mechanism. *(Current table: @tbl-euler-bernoulli in
 @sec-euler-bernoulli.)*
 
 ## Iteration 26 — the stream factorization measured {#sec-nb-iter26}
@@ -678,7 +678,7 @@ column read 0.179 for the *control* and 0.211 for the two-stream arm —
 the free model slightly better, and more seed-stable. The belief that
 the linearity contract was buying spectrum extrapolation had been
 carried since the ladder days without ever being isolated; isolated, it
-is false. What buys frequency extrapolation is the dictionary and its
+is false. What provides frequency extrapolation is the dictionary and its
 conditioning — the same answer the dictionary ablations gave from the
 other side. H3 quantified the gap between learned and structural
 physics: the control learns *approximate* linearity (zero-drive 0.038,
@@ -738,7 +738,7 @@ The fix worked. The model got worse. Compactified gate inputs
 ($v \to v/\sqrt{1+|v|^2}$) removed the saturation regime exactly as
 designed (gate trace smooth and nonzero) — and far-field went 0.694
 $\to$ **2.98**, 4.3$\times$ worse. The surprise that redirected the
-ladder: **the collapse was load-bearing.** The saturating gate had been
+ladder: **the collapse was essential.** The saturating gate had been
 *suppressing* polynomially growing query-side direct-drive linear
 branches (a `vector_from_scalar` branch grows 0.026 at $r$ = 1.1 to
 1.45 at $r$ = 12; lifted drive norms grow like $r$–$r^2$). Root cause
@@ -758,14 +758,14 @@ The injected query position compactified
 verified **bitwise-pinned** to raw positions — the physics path exact,
 the learned path bounded. It did exactly what it claims: coefficient
 traces flat to $r$ = 12 (far/near ratio 1.03) — **M3 excluded by
-construction**, the first outright exclusion of the ladder's lead
+construction**, the first direct exclusion of the ladder's lead
 suspect. Far-field: 0.452 — between the pre-registered bars, partial.
 The residual is thereby *isolated* as representational (M2's territory
 after all, one level up from member tails): **bounded is not decaying**
 — the direct-drive part converges to a direction-dependent constant
 ($\approx$0.24, exponent $\approx$0) where the exact field decays
 $r^{-2}$, and the single-layer $\log r$ tail (state norm 2.4 at
-$r$ = 12) is fit only by near-cancellation in-annulus. Honest
+$r$ = 12) is fit only by near-cancellation in-annulus. One caveat:
 decomposition logged: far-field error = coefficient extrapolation
 (fixed by construction) + missing decay structure (coverage or explicit
 structure).
@@ -789,8 +789,8 @@ launched (p19b).
 
 **Five-seed close: far-field 0.090 $\pm$ 0.048** — the fully-fixed bar
 crossed at the mean (per-seed 0.036/0.061/0.074/0.133/0.147; two seeds
-above 0.10, stated plainly), 7.7$\times$ at an *unchanged* training
-annulus, beating the coverage lever (0.179), with every other split at
+above 0.10), 7.7$\times$ at an *unchanged* training annulus,
+outperforming the coverage change (0.179), with every other split at
 family-best (ID 0.0174, circulation-OOD 0.0168, geometry 0.0303). The
 four physics-licensed knobs — bounded gate, bounded query source,
 $r^{-2}$ envelope, monopole-free single layer — compose into a strictly
@@ -834,8 +834,8 @@ better on all four splits, most seed-stable (geometry sd 0.0018 vs
 the score class is matched by construction, the gain prices exactly the
 head-blocking of the value/output maps: one full-width head (48/12
 value channels) beats four aligned blocks. The pre-registered
-"heads are bookkeeping" verdict is therefore **refused** in the
-direction nobody worried about — the restriction is the heads
+"heads are bookkeeping" hypothesis is therefore **rejected** in an
+unexpected direction — the restriction is the heads
 themselves, mildly. Logged for the roadmap rather than acted on: one
 PDE, one capacity point, three seeds; flipping the reference config
 wants at least the screened/3D suites first. *(Current table:
@@ -869,7 +869,7 @@ pass (3/3 suites), so the verdict is
 `flip_default_to_one_head`: the documented reference configuration now
 carries one full-width head (81,961 $\to$ 81,547 parameters; the frozen
 benchmark capacity configs and every archived arm stay bitwise). But
-the honest half of the entry is the direction: one head is worse on 11
+the relevant caveat is the direction: one head is worse on 11
 of 13 cells — screened ID 0.0205 vs 0.0099 ($+0.0107$ against a 0.0135
 tolerance, 1.6$\times$ the larger sd, the closest call of the study),
 pf-velocity ID 0.0321 vs 0.0278, 3D sphere 0.0093 vs 0.0064 — with the
@@ -878,7 +878,7 @@ modes $-0.0006$, 3D star unseen modes $-0.0101$). The iteration-31 15%
 ID gain is hereby recorded as **Laplace-specific**; what traveled is
 non-inferiority. Also named: the tolerance keys to the *larger* sd of
 the two arms, so the one-head arm's own seed spread (2.3$\times$ the
-archived on screened ID) buys it slack — a rule bias to fix if this
+archived on screened ID) provides it slack — a rule bias to fix if this
 recurs. Composition check passed en route: `drive_pseudo_dim=8` rides
 the one-head trade unchanged (per-head pseudo split $2 \to 8$),
 circulation-OOD staying at the typed level (0.0476 vs 0.0371, within
@@ -893,13 +893,13 @@ configuration: @sec-reference-config.)*
 `problems/euler_rotational.py`; session artifacts
 `scratch/brev/results/p22_euler_rotational`, jobs `p22_er_*`.)*
 
-The first genuinely **rotational** steady Euler benchmark — every fluid
+The first **rotational** steady Euler benchmark — every fluid
 suite so far was irrotational. The construction: steady 2D Euler admits
 solutions with vorticity constant along streamlines,
 $\omega = F(\psi)$; the linear choice $F(\psi) = c^2\psi$ turns the
 streamfunction equation into Helmholtz, $\Delta\psi + c^2\psi = 0$ —
 Bessel $J_m$ series on disks, the oscillatory sibling of screened's
-$I_m/K_m$ machinery, with $u = (\psi_y, -\psi_x)$ carrying the exact
+$I_m/K_m$ implementation, with $u = (\psi_y, -\psi_x)$ carrying the exact
 iteration-21/23 typing ($\psi$ pseudoscalar, $u$ polar). Pressure from
 the rotational Bernoulli relation, derived and then **certified before
 anything trained**: $\nabla(p + |u|^2/2) = -F(\psi)\nabla\psi$ gives
@@ -908,7 +908,7 @@ steady-momentum residual $\|(u\cdot\nabla)u + \nabla p\| /
 \|(u\cdot\nabla)u\|$ at $2.2$–$7.9\times10^{-16}$ across all four
 splits (threshold $10^{-10}$), incompressibility $\sim\!10^{-16}$,
 Helmholtz $<5\times10^{-15}$ — rotational Euler with no CFD solver in
-the label chain. Well-posedness stated honestly: the family poses the
+the label chain. Scope of well-posedness: the family poses the
 learning problem $\{$boundary velocity, $\tilde c\} \to$ interior
 fields on certified exact solutions, with every split strictly below
 the first disk Dirichlet eigenvalue $j_{0,1} = 2.4048$ (at eigenvalues
@@ -928,8 +928,8 @@ the flipped one-head reference (first new family after iteration 32).
 deviation $7\times10^{-4}$. Nonlinear breaks it (pressure ID 0.181);
 the $0o$ arm nearly halves it again (0.103) and is the most
 Euler-consistent arm (momentum-consistency 0.23 vs 0.41 vs the linear
-control's 0.98 — the wall read through the physics column). The honest
-half-miss: the pre-registration said the linear arm's velocity would
+control's 0.98 — the wall read through the physics column). The
+pre-registration was partly wrong: it said the linear arm's velocity would
 *match* the nonlinear arms'; it **beat** them 2.3$\times$ (0.026 vs
 0.061) and degraded gracefully on every axis (worst split 0.26).
 
@@ -938,7 +938,7 @@ the nonlinear arms did not degrade — they **detonated**: relative
 errors $10^{6}$–$10^{13}$ (nonlinear) and $10^{6}$–$10^{10}$ ($0o$) on
 cases the linear arm handles at 0.2, with milder echoes on the other
 OOD axes (seed-29 unseen-modes 352; one $0o$ seed at 9.9/22). Because
-the velocity map is genuinely drive-linear, the discriminator is clean:
+the velocity map is drive-linear, the discriminator is clean:
 same cases, same physics, representable in both modes — the blowup
 prices the **zero-preserving nonlinear read-in's operator-parameter
 extrapolation**, not the problem. This sharpens iteration 25's
@@ -1010,7 +1010,7 @@ follows as iteration 35. *(Current section: @sec-nonlinear-fragility.)*
 
 If the engine is implicit degree, the principled fix mirrors how the
 architecture declares linearity: **declare the degree**. New field mode
-`field_mode="quadratic"` — the drive path is the *linear* machinery end
+`field_mode="quadratic"` — the drive path is the *linear* implementation end
 to end (drive lift, `LinearMeshFieldBlock` stack, linear kernel decode;
 reusing it is what makes the contract provable) plus **exactly one**
 bilinear, operator-conditioned typed composition at the query read-in,
@@ -1019,7 +1019,7 @@ closed $\{0e, 0o, 1o\}$ product set (`QuadraticFieldReadIn`, a third
 class per the one-class-per-contract discipline — not a flag on the
 nonlinear block). Output: an exact degree-$\le 2$ polynomial in the
 drive *for any weights*. Zero-preservation inherited; placement at the
-read-in rather than in a stackable block is load-bearing (residual
+read-in rather than in a stackable block is essential (residual
 bilinear updates would compose to $2^k$ — the escalation being
 forbidden); a query-side composition spans products of boundary
 integrals ($|u(x)|^2$), which boundary-local products cannot. Design
@@ -1050,7 +1050,7 @@ per suite, arms otherwise identical to the archived nl configs):
   degree 2). Unseen-modes 160 ± 178 $\to$ 0.144 ± 0.013; ID *better*
   than nl (0.072 vs 0.112 combined) at 122k vs 173k parameters.
 - **EB circulation-OOD — the parity lesson recurs, composed.** The
-  untyped q2 lands at 0.682 ± 0.003 — exactly the iteration-23 parity
+  untyped q2 reaches 0.682 ± 0.003 — exactly the iteration-23 parity
   floor (velocity 0.6485 vs 0.647): the split's residual for untyped
   arms is parity, not degree, so the pre-registered 0.35 comparator
   (the *typed* nl arm) demands the matched-typing subject. Launched
@@ -1125,7 +1125,7 @@ crosses at $h \approx 0.01$, where one solve costs 359 s
 the cost curve and logged here: **production runs at $h = 0.02$**,
 where the *label-noise floor* (production vs 1.5× finer, the bar that
 matters against ~1e-2 model errors) is measured per generated subset
-and must land ≤ 1e-3; the 1e-6 MMS accuracy is demonstrated at
+and must be ≤ 1e-3; the 1e-6 MMS accuracy is demonstrated at
 $h = 0.01$ on the same geometry rather than paid for on every one of
 ~1400 cases (3× generation cost for label improvements two orders
 below model error). Discrete certificates per solve: momentum-balance
@@ -1142,9 +1142,9 @@ revised.** The first full catalog (1,400 cases, 19.6 minutes wall on
 noise floors at $1.5$–$4.1\times10^{-4}$ as predicted, but pressure
 floors at $2.6$–$3.2\times10^{-3}$ across every split: the
 $8\times10^{-4}$ extrapolation from the single $h = 0.03$ probe case
-(Re 156) did not survive contact with the full Re band. The
+(Re 156) did not hold across the full Re band. The
 $O(h^2)$ pressure is the binding field, the target is $10^{-3}$, and
-the measured generation cost made the honest fix cheap: the catalog
+the measured generation cost made the correction inexpensive: the catalog
 was **regenerated at $h = 0.0105$** (predicted pressure floor
 $\approx 0.9\times10^{-3}$; measured: velocity $\le 5.8\times10^{-5}$
 everywhere, pressure $\le 8.7\times10^{-4}$ on four of five splits
@@ -1209,7 +1209,7 @@ splits with the unseen-drive split's worst sampled case at
 bar, the bar that matters under ~$10^{-1}$ model errors. Ops note: the
 generator now writes cases incrementally (imap_unordered +
 write-on-arrival) after this run's invisible-progress lesson; the
-change is write-plumbing only, round-trip-tested, and landed after v1
+change is write-plumbing only, round-trip-tested, and merged after v1
 was produced.
 
 **Pre-registered versus measured** (rules as written above, untouched;
@@ -1226,21 +1226,21 @@ eval_id combined rel-L2, mean ± sd over seeds 17/29/43):
   not Stokes, and/or part of the velocity gap is a linear-read-in
   representation deficit rather than the nonlinearity wall. The
   falsifier (flat or decreasing profile) fired for one field and not
-  the other; the discriminating follow-up is a genuinely Stokes band
+  the other; the discriminating follow-up is a Stokes band
   (Re $\le 1$), logged in @sec-future.
 - **P2, declared degree 2 as an approximation — the truncation
   suffices at these Re.** eval_id combined: q2_pseudo
   **0.278 ± 0.060**, nl_pseudo **0.231 ± 0.005**, difference 0.047
-  within the registered 2× seed sd. Honest texture: q2's seed spread
+  within the registered 2× seed sd. Seed detail: q2's seed spread
   is 12× the nl arm's here (seed 29 at 0.347) — the *reverse* of the
   exact-Euler suites where the declared degree was the more stable
-  arm. On a map with all drive orders present, the contract buys no
+  arm. On a map with all drive orders present, the contract provides no
   stability premium; it merely keeps pace.
 - **P3, floors — exact.** `boundary_mean` pressure rel-L2 **1.000000**
   on every seed and split (combined 1.193 ± 0.000 on eval_id); the
   drive plumbing leaks nothing.
 
-The Transolver baseline lands at **0.953 ± 0.080** eval_id combined —
+The Transolver baseline reaches **0.953 ± 0.080** eval_id combined —
 above every transformer arm (0.231–0.437) and barely under the 1.19
 floor; first mainstream measurement on a solver-labeled nonlinear
 suite at the shared protocol, with the stated caveat that 15 epochs
@@ -1258,7 +1258,7 @@ contracts changed character on the way up: linearity and degree were
 offered as provable properties of exact families — on Navier–Stokes
 the same declarations return as *hypotheses* with measurable adequacy
 and Re-dependent profiles, which is exactly the form in which they can
-earn their way onto real physics. *(Current section: @sec-ns-cavity,
+warrant use on real physics. *(Current section: @sec-ns-cavity,
 @fig-ns-wall, @tbl-ns-arms, @tbl-ns-ledger.)*
 
 ## Iteration 37 — the Re $\le$ 1 band and the N-S fidelity block {#sec-nb-iter37}
@@ -1269,7 +1269,7 @@ earn their way onto real physics. *(Current section: @sec-ns-cavity,
 `mesh-xform-a100`.)*
 
 Two small closers for iteration 36's logged gaps — no new architecture,
-no new family, just the two measurements that iteration honestly
+no new family, just the two measurements that iteration explicitly
 declared missing.
 
 **Why the velocity leg needed its own band.** P1 predicted the linear
@@ -1333,7 +1333,7 @@ the metric does. Instrument certification, in-tree
 Kovasznay solution — whose $\lambda$ depends on $\nu$ — scores
 $< 10^{-8}$ *only* if the metric uses the case viscosity, and a rigid
 rotation with dropped pressure scores exactly 1.0 (the residual *is*
-the advection term). One honest limitation recorded in the driver
+the advection term). One limitation recorded in the driver
 docstring: a constant velocity with zero pressure zeroes the interior
 strong form (it fails the boundary conditions, not the PDE), so the
 block complements, never replaces, the $L^2$ columns. The
@@ -1363,9 +1363,9 @@ velocity gap (linear $-$ nl_pseudo, per log-Re bin, Re 0.5 $\to$ 300):
 - **P1v-a (Stokes approach): FAILED.** Bottom-bin velocity gap 0.184
   against the 0.05 bar; ratio top/bottom 1.10 against 3$\times$. The
   registered falsifier (bottom gap $\ge 0.1$) fired: even where the
-  velocity map is genuinely near-Stokes-linear, the linear arm trails
+  velocity map is near-Stokes-linear, the linear arm trails
   by the same $\approx 0.18$ as at Re 300. **Reading (b) of the
-  iteration-36 anomaly survives strong inference:** the flat velocity
+  iteration-36 anomaly remains strong inference:** the flat velocity
   gap is a linear-read-in representation/optimization deficit on this
   family (entangled with the pseudo sector and the 233k-vs-106k
   parameter difference between the arms), not the nonlinearity wall.
@@ -1412,7 +1412,7 @@ One small closer, run exactly as iteration 37 logged it. Iteration
 37's velocity verdict — the flat Stokes-band gap is a linear-read-in
 representation deficit — rested on an arm pair that differed in
 **three** things: read-in class (linear vs zero-preserving nonlinear),
-parity machinery (no pseudo sector vs `drive_pseudo_dim=8`), and
+parity implementation (no pseudo sector vs `drive_pseudo_dim=8`), and
 capacity (106,408 vs 233,108 params). The fair control isolates the
 read-in class: `mt_singpair_linear_pseudo`, the identical linear
 field mode (exact drive superposition; the new in-tree structural
@@ -1434,7 +1434,7 @@ seeds pooled, eval_id + eval_unseen_Re, iteration-37 binning):
   iteration 37's velocity reading is revised (the linear read-in
   class is fine where the physics is linear).
 - **STANDS** (falsifier of the revision): bottom-bin gap $\ge 0.1$ —
-  the read-in-class reading survives, now unconfounded.
+  the read-in-class reading remains, now unconfounded.
 
 Protocol: the new arm trained on BOTH catalogs (v1-lowre, 108-case
 train split; v1, 840-case), 15 epochs, seeds 17/29/43 — the exact
@@ -1461,8 +1461,7 @@ bin-identical). {#tbl-nb-iter38-gaps}
   pseudo/parity sector, not the linear read-in class.
 - With the confound removed, the velocity gap has the graded,
   Re-tracking shape the original P1 predicted: $\approx 0$ at
-  Re $\le 7$, rising to 0.10–0.12 at Re 100–213. The genuine
-  velocity nonlinearity wall exists — it is just $\sim$0.1 at the top
+  Re $\le 7$, rising to 0.10–0.12 at Re 100–213. The   velocity nonlinearity wall exists — it is just $\sim$0.1 at the top
   of the band, half the parity artifact that sat on top of it.
 - The pressure gap is bin-for-bin the plain linear arm's (0.016
   bottom, 0.45–0.54 top; v1 eval_id pressure 0.684 vs nl's 0.356):
@@ -1573,7 +1572,7 @@ preprocessing rides a batch node's Grace cores with its own venv
 (`mesh-extras` for pyvista) so it can't disturb a concurrent
 measurement in the default venv.
 
-## 2026-07-05 (later still) — the in-tree mesher landed, better than the gate {#sec-nb-delaunay-mesher}
+## 2026-07-05 (later still) — the in-tree mesher passes the gate {#sec-nb-delaunay-mesher}
 
 `physicsnemo.mesh.tessellation.delaunay` is in: clean-room planar
 quality meshing (Bowyer–Watson insertion, Sloan constrained-edge
@@ -1613,7 +1612,7 @@ seed 17 (seed 18 for `mt_nl` within ~10% on all volume fields):
 Two reads, both provisional (single seed, untuned schedule):
 
 - **Volume pressure beats every Bonnet baseline and Transolver at
-  first shot.** The kernel dictionary's pressure story survives its
+  first shot.** The kernel dictionary's pressure story remains its
   first industrial contact.
 - **Velocity and surface pressure lag ~9×** — and the signature
   (good in the volume, bad at the wall; `mt_nl_decay` ≈ `mt_nl`, so
@@ -1677,7 +1676,7 @@ velocity MSE vs `mt_nl` at 3 seeds under protocol-v1, no regression in
 outer bands. The protocol-v1 3-seed campaign (11 runs, GLOBE-endpoint
 cosine) is training concurrently.
 
-## 2026-07-05 — the paired measurement lands: the memory wall is closed {#sec-nb-scale-ckpt}
+## 2026-07-05 — paired measurement: the memory wall is closed {#sec-nb-scale-ckpt}
 
 The dense-vs-checkpointed scale measurement completed (dense arm from
 job 4069123; checkpointed arm rerun largest-corner-first on
@@ -1698,7 +1697,7 @@ corner trains inside a single 80 GiB-class device. Step-time cost is a
 consistent ~1.9× (the recomputed decode inside backward); outputs and
 gradients bitwise unchanged (asserted in the core suite). Agenda item
 2 is closed; the hierarchical backend demotes from memory-necessity to
-speed lever (dense product-scope forward ≈ 978 s — that is now the
+speed factor (dense product-scope forward ≈ 978 s — that is now the
 binding constraint at scale, and it is a wall-clock one).
 
 Archive: `results/scale_checkpoint_paired_2026-07-05.json` (both arms
@@ -1721,7 +1720,7 @@ The 11-run protocol-v1 matrix completed (GLOBE-endpoint cosine,
   `mt_nl` on every volume field at every seed; the $u_x$ seed ranges
   do not overlap (0.097–0.108 vs 0.115–0.128); pressure ~19% better;
   surface pressure crosses below 1.0 on 3 of 4 seeds. The 2D
-  pseudoscalar sector earns its fourth wall-break, now on
+  pseudoscalar sector produces its fourth wall-break, now on
   solver-labeled industrial RANS.
 - **H3 REFUTED — instructively.** `mt_nl_decay` is ~20% *worse* on
   velocity (3/3 seeds), and the banded eval had already shown its far
@@ -1778,7 +1777,7 @@ default 500 epochs, `sampling_resolution=10000` (wall-clock-bound
 dense decode; identical across arms so H-ground is unaffected;
 absolute cross-model numbers carry the resolution caveat), ~29 h
 each. The H-ground verdict — do the four labeled tunnel boundaries
-beat shape-only? — lands when they do.
+beat shape-only? — follows when they finish.
 
 ## 2026-07-06 — a convention audit, and the scale-completeness insight {#sec-nb-convention-scales}
 
@@ -1832,7 +1831,7 @@ ported from GLOBE's benchmark with a hand-built-literal test and the
 exact (N−1)/N floor identity). Result: the pooled-vs-per-sample and
 physical-vs-nondimensional differences **largely canceled for
 velocity** and improved surface pressure ~2×; every qualitative
-conclusion survives. Best arm (`mt_nl_pseudo`, 4 seeds), now
+conclusion remains. Best arm (`mt_nl_pseudo`, 4 seeds), now
 directly comparable to the published table:
 
 | field | mt_nl_pseudo | best Bonnet baseline | Transolver | MARIO | GLOBE |
@@ -1880,7 +1879,7 @@ convention, scarce test (reference-convention re-score in flight):
   with the members carrying near-wall radial structure.
 - **One anomaly, logged**: `mt_nl_members` seed 20 blew up (u_x 0.287)
   — the arm has a seed-instability tail; seed 21 queued, 5-seed rule
-  applies before any load-bearing claim.
+  applies before any essential claim.
 - **The dictionary story extends coherently**: exact-members-only was
   best-in-class on *linear* problems (the closed dictionary question);
   nonlinear problems measurably need learned smooth members — first
@@ -1927,7 +1926,7 @@ Standing after three mechanism rungs (schedule → parity → members):
 
 Awaiting: `mt_nl_members_pseudo` composition (3 seeds), members seed
 21, full-split chains. The chapter's results section gets its first
-full write-up when those land.
+full write-up when those runs finish.
 
 ## 2026-07-07 — DrivAerML pilot verdict: H-ground's falsifier fires {#sec-nb-hground-pilot}
 
@@ -1982,14 +1981,14 @@ assumption we had never tested:
 - But attention moments are quadrature-weighted with **raw cell
   areas** (`weighted_score = score × cell_areas`), and the gauge
   divides all areas uniformly — the ~10⁶ tunnel-to-vehicle panel-area
-  ratio survives into every moment integral. At init the tunnel
-  dominates by 10⁶; the optimizer must earn a type-conditioned
+  ratio remains into every moment integral. At init the tunnel
+  dominates by 10⁶; the optimizer must learn a type-conditioned
   suppression of that size before vehicle information flows. The
   allbc arm's *underfitting* (train 0.098 vs vehicle-only's 0.067)
   is the signature of that fight, partially won at 500 epochs.
 - Pattern-level lesson (second instance in a week): the architecture's
-  deliberately norm-free pathways — the drive stream (zero-preservation
-  forbids normalization) and the moment quadrature (honest measure
+  norm-free pathways — the drive stream (zero-preservation
+  forbids normalization) and the moment quadrature (physical measure
   forbids per-cell renormalization) — put their operating point in the
   *input statistics*. Every prior suite was quasi-uniformly panelized
   (measure ratios ≲10²); DrivAerML's mm-car-in-m-tunnel is the first
@@ -2035,7 +2034,7 @@ learn log-scale gains across — one optimizer step then moves a
 boundary's weight a decade instead of grinding through feature
 magnitudes) is greenlit with full contract tests; the clean three-arm
 comparison (vehicle-only / allbc-fixed / allbc-pooled) reruns once
-both land. The H-ground verdict is hereby demoted from "falsifier
+both finish. The H-ground verdict is hereby demoted from "falsifier
 fired" to "pending clean rerun" — the earlier entry stands as the
 record of why.
 
@@ -2069,7 +2068,7 @@ all launched in parallel (registered here BEFORE launch):
   plain members. *Falsifier: no improvement — plain invariants + ln Re
   conditioning already span the needed scales, and H4-L's generality
   argument rests on other PDEs, not AirFRANS.* (Implementation
-  dispatched; runs join the sweep when it lands.)
+  dispatched; runs join the sweep when it finishes.)
 
 Also to 5-seed discipline: members seeds 22–26, members_pseudo seeds
 20–24. DrivAerML: the clean three-arm rerun (vehicle-only reference /
@@ -2078,7 +2077,7 @@ Selection gates: all comparisons on the reference-persample convention,
 median-of-seeds with full ranges reported, blowups included in the
 record.
 
-## 2026-07-07 — composition confirmed; the GeoTransolver anchor lands hard {#sec-nb-compose-geot}
+## 2026-07-07 — composition confirmed; the GeoTransolver anchor is strong {#sec-nb-compose-geot}
 
 Harvest from the overnight batch (queue congestion is holding the
 sweep and DrivAerML v2 arms — Monday; they run as slots free):
@@ -2109,7 +2108,7 @@ sweep and DrivAerML v2 arms — Monday; they run as slots free):
   hypothesis: the DrivAerML arms run singpair-only (NO learned smooth
   members) — the exact configuration AirFRANS just showed to be
   capacity-starved for nonlinear problems. A members-carrying DrivAerML
-  arm is the obvious next rung once the v2 protocol arms land.
+  arm is the obvious next rung once the v2 protocol arms finish.
 
 ## 2026-07-07 (evening) — sweep addendum: V5 width, composed-log, and the transfer arms {#sec-nb-sweep-addendum}
 
@@ -2155,14 +2154,14 @@ before dispatching: our *encoder* attention is already O(N) separable
 moments — FLARE has nothing to accelerate there. The dense cost is the
 *kernel decode*, which splits along the dictionary's own boundary:
 
-- **Smooth members** (the pair-MLP, load-bearing since the H4 verdict,
+- **Smooth members** (the pair-MLP, essential since the H4 verdict,
   and the likely FLOP-dominant decode term) are FLARE-shaped: smooth
   kernels admit low-rank factorized features φ(x)·ψ(y) → O(Q+S). The
   open tension, flagged for the design study: exact O(D) equivariance
   vs separability vs expressivity — random-feature routes are
   equivariant only in expectation, and the program's standard is exact
   contracts. (Task #43, fork dispatched: analysis + measured cost
-  split + prototype if the contracts survive.)
+  split + prototype if the contracts hold.)
 - **Exact singular members** must stay exact — their sublinear path is
   the Barnes–Hut/multipole thread (task #41, design-only fork
   dispatched: coefficient-weighted multipoles of the panel integrals,
@@ -2170,7 +2169,7 @@ moments — FLARE has nothing to accelerate there. The dense cost is the
   pre-registered acceptance <1e-3 deviation from the dense oracle at
   θ=0.5 and <60 s at the 82k×10⁶ corner vs 978 s dense).
 
-Per Peter: neither needs to ship now — registered as standing threads
+Per Peter: neither needs implementation now — registered as standing threads
 with their falsifiers; implementation follows the sweep verdicts (the
 kernel feature set is still moving; an FMM built against last week's
 dictionary would chase a moving target).
@@ -2199,8 +2198,8 @@ exact panel integrals are the residual ~3%. Consequences:
   of r break exact O(D) equivariance at finite rank). The supported
   design — the "in-house FLARE" — is a **hybrid decoder**: exact
   singular members stay dense; smooth content routes through the
-  existing typed-moment machinery (exact contracts by construction,
-  rank = moment channels). The honest pre-registered risk closes a
+  existing typed-moment implementation (exact contracts by construction,
+  rank = moment channels). The pre-registered risk closes a
   loop: the moment decoder was originally replaced because of its
   proved m≤2 angular ceiling — the hybrid bets that the *smooth*
   stream doesn't need the angular orders (the exact members carry the
@@ -2242,9 +2241,9 @@ the top band may substantially fail the convergence/noise gates at
 h=0.0105 — which would itself be a reportable steady-solver limit,
 not a failure of the experiment. Training arms per band follow
 generation; the chapter's headline variation is the accuracy-vs-Re
-curve with the noise floor drawn honestly beside it.
+curve shown alongside the noise floor.
 
-## 2026-07-07 (night) — extrapolation harvest: the pre-registered stretch lands {#sec-nb-extrapolation}
+## 2026-07-07 (night) — extrapolation harvest: pre-registered stretch results {#sec-nb-extrapolation}
 
 Reference-convention evals of the full-trained arms on the official
 extrapolation tasks (zero-shot, exactly the published protocol), plus
@@ -2253,14 +2252,14 @@ surprise:
 
 1. **The H2-stretch prediction is CONFIRMED — and it beats GLOBE.**
    Pre-registered in @sec-airfrans: "parity typing helps AoA asymmetry
-   — a genuine coin-flip." Measured, AoA-extrapolation volume
+   — a coin-flip." Measured, AoA-extrapolation volume
    pressure (3 seeds): `mt_nl_pseudo` **0.0134–0.0214** vs GLOBE's
    published **0.1138** (its one weakness — it ties the Bonnet
    baselines there, GraphSAGE 0.1091). The parity-typed arm is
    **5–8× better than every published model** on exactly the metric
    where the flow's handedness shifts hardest. Mechanism-consistent:
    an AoA shift is a parity-asymmetric perturbation, and the 0o
-   sector is the machinery for handed content. Within-program
+   sector is the implementation for handed content. Within-program
    control: `mt_nl` (no parity) reads 0.024–0.048 — the sector, not
    the architecture, carries it.
 2. **Reynolds extrapolation, volume pressure**: 0.0125–0.0154 — ~10×
@@ -2273,11 +2272,11 @@ surprise:
    baselines, 1.6× behind MARIO); c_p_surface 0.0063–0.0087 —
    **3–4× better than MARIO**, second only to GLOBE.
 
-Honest caveats attached to (1)-(2): the extrapolation arms are
+Caveats attached to (1)-(2): the extrapolation arms are
 singpair-class (the full-split members/composed runs are still
 training) — their surface pressure on extrapolation is accordingly
 weak (0.48–0.56); members-class extrapolation evals queue when the
-full chains land, and the composed arm should be strictly stronger.
+full chains finish, and the composed arm should be strictly stronger.
 The velocity front remains the gap everywhere; the sweep verdicts
 (V1–V5) are the next signal.
 
@@ -2307,7 +2306,7 @@ section itself updated into its live-gap-tracker form:
 - **Three "dead/orphaned code" findings: closed as stale** — the code
   evolved past the review (the dead assignment is gone;
   `_STAR_MODES_OOD` and `solid_angle_influence` gained their consumer
-  when `laplace3d_study.py` landed, with test coverage). Verified
+  when `laplace3d_study.py` was added, with test coverage). Verified
   in-source.
 - **Deferred with reasons, still open:** the ×4 panel-influence
   consolidation (the review's own condition — a stable research
@@ -2337,7 +2336,7 @@ per-boundary moment pool (which measurably relocates the 10⁷
 optimization fight) unlocks nothing further — consistent with the
 coarse-quadrature reading: at 722 panels for a whole ground plane,
 the tunnel boundaries carry little exploitable signal regardless of
-weighting. H-ground is honestly answered at this resolution:
+weighting. H-ground is answered at this resolution:
 **the boundary-value problem's far boundaries are adequately encoded
 in the freestream vector for surface-field prediction.** (Caveat:
 1 seed/arm; ground-effect-sensitive fields like underbody pressure
@@ -2495,8 +2494,8 @@ for surface tasks, exact structure not a hack:
   data IS the trace on Dirichlet patches; this is the information
   flow the interior contract rightly denies bare interior points but
   a declared trace query legitimately owns). Query independence
-  survives: the cell identity is declared input, not inferred from
-  the query set; equivariance survives: the read-out is a typed
+  remains: the cell identity is declared input, not inferred from
+  the query set; equivariance remains: the read-out is a typed
   projection of typed state.
 - *Surface shape*: `trace_of: <boundary>` declared in the recipe
   template / decode call; interior decode unchanged; default off,
@@ -2512,7 +2511,7 @@ Artifacts: `output/gap_overfit/*` (k8hsg), trajectory parse
 probe protocol in `mt_gap_overfit.sbatch` +
 `datasets/drivaer_ml_surface_1case.yaml`.
 
-## 2026-07-09 — trace mode lands; the acceptance experiment launches {#sec-nb-trace-mode}
+## 2026-07-09 — trace mode implemented; the acceptance experiment launches {#sec-nb-trace-mode}
 
 The boundary-trace mode is implemented to full standard (457 core +
 165 recipe tests), and the physics came out *cleaner than the memo's
@@ -2520,7 +2519,7 @@ sketch*: for a query declared on its own flat panel, the double
 layer's principal value is exactly **zero** (n·(x−y) ≡ 0 in the panel
 plane), so the exterior-trace correction is the pure constant **+½**
 — dimension-independent, shape-independent, no geometry gradient.
-Measured before the fix: the closed form's on-centroid diagonal lands
+Measured before the fix: the closed form's on-centroid diagonal reaches
 on *both* signed-zero atan2 branches across panels of the same mesh
 (−½ and +½ mixed) — worse than the investigation's single-branch
 finding; the replacement fixes both. The single layer was verified
@@ -2542,7 +2541,7 @@ larger shapes (flagged, not fixed — out of the build's scope).
 
 ## 2026-07-09 — main merged; the mesher comes home upstream {#sec-nb-main-merge}
 
-Peter upstreamed the in-tree quality mesher (PR #1800, landed in
+Peter upstreamed the in-tree quality mesher (PR #1800, merged in
 NVIDIA/physicsnemo main as `tessellation.fill_interior`); the branch
 is now synced (merge commit `0aea56d4`, working tree stash-protected,
 five conflicts all resolved toward upstream) and
@@ -2584,7 +2583,7 @@ half-life is 3d6h, so organic recovery ≈ 3–7 more days of running
 nothing. This is the bill for the heavy week — the sweep fleet worked
 exactly as intended and spent exactly the currency it runs on.
 
-**The lever: QOS `short`.** `PriorityWeightQOS = 10⁶` and QOS `short`
+**The factor: QOS `short`.** `PriorityWeightQOS = 10⁶` and QOS `short`
 has priority 200 vs `normal`'s 100 → +80,000 instead of +40,000. Cost:
 2h MaxWall, 2 running jobs, 20 queued, ≤64 nodes. Every run in the
 program is checkpoint/resume-safe by construction (the batch_long
@@ -2623,7 +2622,7 @@ on `batch,batch_long` (sw1–sw8 + sw11 at 4×4h; af_full at 3×4h;
 dv2_members at 6×4h under the `>>`-fixed DDP script; sw9/sw10
 short-QOS lanes extended with 2×4h normal tails to their 16h
 budgets), cancelling the 8–24h originals and the held duplicates.
-The one deliberate exception: the E1 generation bands stay at 12h —
+The one exception by design: the E1 generation bands stay at 12h —
 the generator is atomic by design (manifest-or-regenerate; measured
 >4h per band from the failed 4h attempts on 2026-06-30), exactly the
 non-splittable case. Startup overhead per chunk is ~1 min node +
@@ -2639,7 +2638,7 @@ the same 0.099–0.103 band; the trace arm is through that band by
 1.85× at one-fifth of the budget, and has just crossed below
 GeoTransolver's 1-epoch value (0.061). Mechanistically this is what
 H-D predicted: the −½ vs +½ trace defect was a *representational
-floor* no capacity could buy through. The pre-registered acceptance
+floor* no capacity could overcome. The pre-registered acceptance
 (≥5× vs plain: ≤0.0204 at protocol end) remains open — cosine decay
 does its work late, and the verdict is read at ep500, not
 extrapolated from ep100. GeoTransolver's final anchor (0.00253) is
@@ -2677,7 +2676,7 @@ we get it for free in the existing per-field metrics.
 **T2 — post-trace capacity ladder (DrivAerML).** *Hypothesis:* the
 pre-trace refutation of capacity (members/wide/pooled all stuck at
 0.099–0.103) was conditional on the trace floor; with the floor
-removed, capacity buys accuracy again. *Design:* trace × {reference,
+removed, capacity provides accuracy again. *Design:* trace × {reference,
 members, members_wide, rank-up, operator_layers=2} at the standard
 4-node/500-epoch protocol on AGA, single seed for the ladder shape,
 then 3 seeds on the winner. *Prediction:* monotone (or at least
@@ -2692,11 +2691,11 @@ epoch-efficient?).** GeoTransolver reaches val 0.061 after ONE epoch
 where our plain arm needs 500 for 0.102. Probes, each isolating one
 candidate mechanism, metric = val at epochs {1, 5, 25} (an
 "efficiency curve", cheap by construction): **P1 optimizer** — swap
-our AdamW schedule for the GeoT-style setup (main now ships fused
+our AdamW schedule for the GeoT-style setup (main now includes fused
 Muon) holding all else; **P3 supervision density** — queries/step
 2k→50k (GB300 HBM allows it) holding steps constant. **P2
 local-geometry diagnostic** — concatenate local query-geometry
-features into the decode; this deliberately BREAKS the pure
+features into the decode; this BREAKS the pure
 boundary-operator contract and is labeled a diagnostic, never a
 keeper: if P2 alone recovers most of the efficiency, the principled
 response is a declared local corrector (classical BIE + singular
@@ -2743,9 +2742,9 @@ chain, five clean checkpoint boundaries). Final Val Loss ≈ 0.0503
 (ep499; plain singpair anchor 0.1019 at matched protocol).
 **Pre-registered ≥5× acceptance: REFUTED** — the improvement is
 2.03×, not ≥5×. But the outcome fits neither pre-registered branch
-cleanly, and the honest reading is three-part:
+cleanly, and the interpretation is three-part:
 
-1. **The trace mechanism is real and load-bearing.** Every prior
+1. **The trace mechanism is real and essential.** Every prior
    DrivAerML arm at every capacity (plain 0.1019, members 0.0999,
    wide 0.0990, allbc/pooled 0.102–0.104) crowded into one band;
    trace broke it by 2× — the only intervention that ever moved the
@@ -2808,7 +2807,7 @@ models share `base.yaml`'s optimizer (AdamW-class, wd 1e-4, betas
 ~100× 1-epoch efficiency difference (their 0.061 vs our 500-epoch
 0.102) is architectural, not optimization. Cheapest verdict of the
 program: one config read. (GLOBE's `combined_optimizer.py` is
-Peter's AirFRANS-side machinery — a separate lane, irrelevant to the
+Peter's AirFRANS-side implementation — a separate lane, irrelevant to the
 DrivAerML anchor.)
 
 **P3 launched** (supervision density): trace config,
@@ -2838,7 +2837,7 @@ early-efficiency direction AND the instability — a bounded rerun that
 keeps the speed without the blowup is required before P2 counts as
 evidence. (2) T2 1-node ladder at matched ep50: **deep2 0.0348 <
 trace 0.0453 ≈ rank96 0.0461** — the first post-trace signal that
-capacity buys accuracy, and specifically encoder DEPTH, not attention
+capacity provides accuracy, and specifically encoder DEPTH, not attention
 rank. Verdict at ep500.
 
 ## 2026-07-11 — T1 verdict: directionally consistent, modest, not decisive {#sec-nb-t1-verdict}
@@ -2903,7 +2902,7 @@ Ops lesson re-learned in numbers: save_interval must be ≪
 epochs-per-chunk, always derived from measured epoch time, never
 inherited.
 
-## 2026-07-11 — V-verdicts land: log-radial confirmed 1.66×; the tail anomaly gets a mechanism candidate {#sec-nb-v-verdicts}
+## 2026-07-11 — V-verdicts: log-radial confirmed 1.66×; the tail anomaly gets a mechanism candidate {#sec-nb-v-verdicts}
 
 The stalled sweep lanes completed overnight (HSG backfill + the 4h
 re-sizing). Test-split headline, pooled convention, u_x, clean seeds
@@ -2957,7 +2956,7 @@ link reaching its wall during the (slow, full-test-split) final
 evaluation: no headline, no successor to retry. Ops rule, not code
 fix: chains must be provisioned with one spare link beyond expected
 training completion, and a log ending at "resumed_from" with no
-headline means "died mid-eval — queue an offline evalx."
+headline means "evaluation failed — queue an offline evalx."
 
 **DCGM reap loop on mtrace (2026-07-11 midday) — escalated from
 one-off, countered, and instrumented as an experiment.** After 6
@@ -3017,7 +3016,7 @@ not with anything we changed). Chains keep save-2 and the samplers;
 #43 fusion work continues regardless — the silicon-efficiency finding
 stands on its own measurement.
 
-## 2026-07-11 — the decode profile lands: a dispatch storm shared by every arm {#sec-nb-decode-profile}
+## 2026-07-11 — decode profile: a dispatch storm shared by every arm {#sec-nb-decode-profile}
 
 One profiled fwd+bwd step (GB300, 20,480-cell trace domain,
 reference dims; artifact = profile job 229336's kernel table):
@@ -3044,7 +3043,7 @@ for EVERY arm, singpair included); (b) stack member-MLP first layers
 into one block-diagonal GEMM + regionally compile the decode-chunk
 feature fusion (members' 30 s of streams → few passes).
 
-**Contract amendment (pre-code, honest):** the original "bitwise-
+**Contract amendment (pre-code):** the original "bitwise-
 identical math" pledge is unattainable — changing cuBLAS kernel
 selection changes fp accumulation order even for identical algebra.
 Amended acceptance: *algebraically identical transformations only*
@@ -3066,8 +3065,8 @@ per the pre-registered ladder design):
 | **trace_deep2 (operator_layers 2)** | **0.0228** | **+26%** |
 
 **Verdict vs pre-registration:** neither branch cleanly — the ladder
-is *selectively* ordered. Encoder DEPTH buys a solid 26%; attention
-RANK buys nothing. Reading: the post-trace floor is limited by the
+is *selectively* ordered. Encoder DEPTH provides a solid 26%; attention
+RANK provides nothing. Reading: the post-trace floor is limited by the
 nonlinearity/compositional depth of boundary processing, not by the
 width of the attention bottleneck. 3-seed confirmation of deep2
 launched per the pre-registered follow-up (seeds 43/44 chained; rung
@@ -3098,7 +3097,7 @@ pathological bmm with batch = queries×sources = 4.2×10⁷ — present in
 every arm, ~7.4 s/step. Fixed with the file's own sanctioned
 per-row-stable idiom `(a*b).sum(-1)` (two dense kernels; validation
 job running). Second finding: the members-arm sink (~26 of 44 s) is
-`_RowStableLinear` — the *deliberate* one-output-at-a-time loop that
+`_RowStableLinear` — the one-output-at-a-time loop that
 makes query-chunk independence bitwise exact.
 
 **Decision (coordinator's call, Peter may veto): split the
@@ -3134,19 +3133,19 @@ wide margin. Validation: 474/474 (incl. 3 new split-contract tests);
 measured GEMM-vs-loop deviation 2.8–3.6e-7 rel at fp32/4.2M-row
 scale (pure fp-reorder; tolerance test bounds at 10× observed);
 closed forms asserted bitwise; `exact_chunk_independence` reference
-mode preserved and tested. Shipped to both cluster repos; running
+mode preserved and tested. Deployed to both cluster repos; running
 chains pick it up at their next link (mid-chain numerics step is at
-reorder scale — noted, not material). Ship-verification GPU suite
+reorder scale — noted, not material). Release-verification GPU suite
 queued on AGA (235763). Every arm the program runs from here is
 5–14× cheaper — the 978-second inference complaint and the
 Barnes–Hut urgency both get repriced; #41 remains open as the
-asymptotic (O(N log N)) lever, no longer the constant-factor one.
+asymptotic (O(N log N)) factor, no longer the constant-factor one.
 
 **GeoT 1-node control, interim (ep224/500): val 0.00250 — already at
 its 16-GPU anchor (0.00253).** Two consequences, worth logging before
 its final: (1) the effective-batch windfall is OURS, not universal —
 GeoTransolver holds its floor at matched 1-node protocol, so the
-honest gap after our ledger stands at ~9× (deep2 0.0228 vs ~0.0025);
+gap after our ledger stands at ~9× (deep2 0.0228 vs ~0.0025);
 (2) GeoT's per-epoch wall-clock on 1 node is comparable to our trace
 arm's — its advantage is *purely representational efficiency*, not
 compute. H-C is now unambiguously the program's central open
@@ -3154,7 +3153,7 @@ question, and the P2 signature (local-geometry features buying
 persistent epoch-efficiency) is the strongest mechanistic lead: the
 principled counter is a declared local corrector (BIE + singular
 correction), not feature soup — design work for that arm should
-start once the localgeom2 final lands.
+start once the localgeom2 final completes.
 
 **P2 verdict (localgeom2 final, ep499, matched 1-node protocol):**
 final val 0.0269 vs trace 0.0288 (rank96 0.0284, deep2 0.0228). The
@@ -3162,9 +3161,9 @@ pre-registered prediction ("P2 large" on the efficiency curve) is
 CONFIRMED for efficiency — the diagnostic ran ~90–100 epochs ahead of
 trace at equal quality for most of training — but the *final* gain is
 a modest 7%: trace mostly catches up by the cosine floor. Combined
-reading for H-C: local-geometry features buy exactly what
+reading for H-C: local-geometry features provide exactly what
 GeoTransolver has (early representational speed) but by themselves
-they do not much move the converged floor — the floor's lever is
+they do not much move the converged floor — the floor's factor is
 DEPTH (+26%). This shapes the local-corrector design question: the
 value of declared local structure is epoch-efficiency (time-to-
 quality), while capacity-composition (depth) owns the asymptote. Both
@@ -3180,7 +3179,7 @@ peak = base·√(qps/2048)). The runs were therefore exact protocol
 replications — and they replicated to 4 significant digits per seed,
 INCLUDING the s21 u_x anomaly (0.10048 vs 0.10049; residual
 difference consistent with the mid-run fp-reorder from the #43 GEMM
-ship). **Replication finding: the tail anomaly is deterministic given
+release). **Replication finding: the tail anomaly is deterministic given
 seed** — not a transient, not hardware, not sampling noise; it is
 baked into the (init, data-order) draw. H-tail-1's LR-gating
 hypothesis remains UNTESTED; relaunched correctly at base 7.07e-4
@@ -3200,8 +3199,8 @@ the pre-registered ≤15% bound. Combined verdict: the tail anomaly IS
 an LR-gated edge-of-stability event (deterministic given seed, cured
 by 0.71× LR), but the edge is partly where the performance lives —
 the falsifier's trade-off branch. Practical recommendation for the
-chapter: run at protocol LR with ≥5 seeds and report the census
-honestly (anomalies are single-field, detectable, and seed-pinned),
+chapter: run at protocol LR with ≥5 seeds and report the full census
+(anomalies are single-field, detectable, and seed-pinned),
 rather than paying 22% median across the board. Census addendum:
 members_wide shows 0/5 anomalies at protocol LR (evalx-recovered
 s17–19: per-sample u_x 0.0142–0.0195, plus clean s20–21) while the
@@ -3216,7 +3215,7 @@ GeoT 0.00249 = **9.2×**, all at matched 1-node protocol. H-C owns it.
 chains were killed in a loop by MY OWN idle-GPU watchdog — the
 seed-variant script redirects the model log to `*_seed${SEED}.log`
 but the injected watchdog still stat'ed the seedless path, so
-staleness grew without bound and every link died at ~25 min. Fixed
+staleness grew without bound and every link failed at ~25 min. Fixed
 (watchdog now stats the actual log), chains relaunched and running.
 Lesson recorded: a guard that kills on a *derived* signal must have
 its signal path updated by every script variant — guards need the
@@ -3224,7 +3223,7 @@ same review discipline as payloads. HSG factorial chains had simply
 exhausted their links (no fault) — rechained; with the 14× code the
 remaining ~300 epochs are a few links.
 
-## 2026-07-13 — program check-in: the whole picture, restated plainly {#sec-nb-checkin-1}
+## 2026-07-13 — program check-in: the whole picture {#sec-nb-checkin-1}
 
 *(Written at Peter's request as a periodic step-back — a
 self-contained statement of where the program stands, readable
@@ -3237,7 +3236,7 @@ surrogate that maps boundary conditions on a mesh to PDE solutions,
 built around boundary-integral-equation structure — exact singular
 kernels, declared equivariances, typed boundary conditions — rather
 than generic learned attention. The bet is that physics structure
-buys generalization that pure ML approaches cannot match.
+provides generalization that pure ML approaches cannot match.
 
 **Where we stand on the two industrial benchmarks.**
 On *AirFRANS* (2D airfoil RANS), we are competitive-to-ahead of the
@@ -3261,11 +3260,11 @@ reproduces the fast-early-learning signature but barely moves the
 converged floor — while depth moves the floor and not the speed.
 Speed itself is no longer a weakness: a profiling campaign (forced
 by cluster idle-GPU alerts) found and fixed a kernel-launch storm
-and a deliberately-sequential inner loop, making every training step
+and a sequential inner loop, making every training step
 7–14× faster.
 
 **What is working.** The falsification discipline — pre-registered
-predictions, deciding experiments, honest verdicts — has produced
+predictions, deciding experiments, and documented verdicts — has produced
 ~12 verdicts in four days, several of them refutations of our own
 designs, and every accuracy gain on the ledger is a named, tested
 mechanism rather than a tuning outcome. The anomaly-chasing habit
@@ -3321,17 +3320,17 @@ lists and leakage metrics, provenance).
   of ride height (98/385) — single-factor extrapolation in both
   directions on ground-effect physics, directly probative for the
   BC-encoding story.
-- S3 (neighborhood carve) honestly downgraded: in a space-filling
+- S3 (neighborhood carve) downgraded: in a space-filling
   16-D DoE, small carves leave no hole (NN ratio 0.98×) — kept only
-  as an easy control. Deliberately-reported non-finding: full-16D NN
+  as an easy control. Reported non-finding: full-16D NN
   ratios ≈ 1.0 for all splits, which is *desirable* here — held-out
   cars are otherwise-typical, keeping the claims single-factor clean.
 
 **Plan:** generate manifest variants for S2/S1, evaluate the
 flagship-class arms zero-shot on the held-out sets first (no
-retraining — the cheapest honest read), then decide whether
+retraining — the cheapest direct measurement), then decide whether
 OOD-trained protocols are needed. Also adopt the fork's observation:
-the upstream ships per-run force/moment coefficients (~83 bytes
+the upstream dataset includes per-run force/moment coefficients (~83 bytes
 each) — fetch them and add drag-coefficient-level OOD metrics, the
 number industry actually cares about.
 
@@ -3345,19 +3344,19 @@ are measured against a **matched within-wave control**
 (`trace_deep2_members`, launched alongside; probe arms parameter-
 matched at 182,860 vs control 182,620). The θ criterion is
 dimension-generic per Peter's requirement (h = measure^(1/m); scale-
-invariance unit-tested in 2D and 3D). D1 demotion shipped in the same
+invariance unit-tested in 2D and 3D). D1 demotion was included in the same
 change set: the GEMM is the only runtime path; the row-stable loop
-survives solely as the tests' reference-order arbiter.
+remains solely as the tests' reference-order arbiter.
 
 **Pre-registered predictions and falsifiers (2 seeds each, sharp
 comparisons are A-vs-control, B-vs-A, C-vs-A):**
 - **A (lgkernel, entry point):** kernel-side local scalars match
   P2's efficiency gain and exceed its floor relative to the control.
-  Falsifier: floor ≈ control ⇒ kernel-side entry buys nothing.
+  Falsifier: floor ≈ control ⇒ kernel-side entry provides nothing.
   *Logged caveat:* A carries source-side scalars P2's query-side arm
   lacked, so A-vs-P2 conflates entry point with information content —
   only the within-wave comparisons are clean.
-- **B (lgnear, locality):** ≥80% of A's gain survives with support
+- **B (lgnear, locality):** ≥80% of A's gain remains with support
   restricted to θ > θ_c (smoothstep window, θ_c = 0.1, analytic
   ~12.6% near-fraction estimate). Falsifier: the gain needs far
   pairs ⇒ the mechanism is not local and the corrector framing dies.
@@ -3380,7 +3379,7 @@ Also launched: extrapolation evalx on HSG (members_log + wide,
 reynolds + aoa — the generalization table's next rows); OOD S2/S1
 manifest work queued next session (@sec-nb-ood-protocol).
 
-## 2026-07-13 (night) — factorial verdict (early, via a defunct-chain alert); chain self-termination guard {#sec-nb-factorial-verdict}
+## 2026-07-13 (night) — early factorial verdict and chain self-termination guard {#sec-nb-factorial-verdict}
 
 The cluster's defunct-sequence detector flagged mt_dv2_mtrace: five
 consecutive links exiting cleanly in 5–10 min. Diagnosis: **the arm
@@ -3433,7 +3432,7 @@ completion), StdOut-existence sweep (never-started scripts). The
 near-fraction calibration also needs its data wiring (deferred to the
 morning session; probe B is not read before it).
 
-## 2026-07-14 — verdict session: probes triple-null (corrector NO-GO), depth 3-seed, flagship on course, and the extrapolation table {#sec-nb-probes-verdict}
+## 2026-07-14 — probe nulls, depth, flagship, and extrapolation {#sec-nb-probes-verdict}
 
 **Probes A/B/C: ALL NULL — the falsifier branches, cleanly.** Val at
 ep25/50/100 (seed 43; seed 42 concurs), control = trace_deep2_members:
@@ -3448,12 +3447,12 @@ ep25/50/100 (seed 43; seed 42 concurs), control = trace_deep2_members:
 No efficiency lead, no floor gain, anywhere — A's falsifier fires,
 making B and C moot (consistent nulls). Combined with P2's original
 result (a large efficiency lead for the SAME features on the weaker
-singpair-trace base), the honest synthesis: **local-geometry
+singpair-trace base), the synthesis is that **local-geometry
 information is subsumed by depth+members capacity** — the strong base
 learns whatever those features encode, quickly, on its own (the V5
 subsumption pattern again, one level up). Consequences: (1) the
 **declared local corrector is a NO-GO** — its premise (local
-structure buys epoch-efficiency on our best models) is refuted before
+structure provides epoch-efficiency on our best models) is refuted before
 a line of it was designed; the probes did exactly their job, killing
 a ~days-scale build for ~2 GPU-days. (2) H-C's mechanism question
 REOPENS: GeoTransolver still reaches in one epoch what our best base
@@ -3491,7 +3490,7 @@ parity-mechanism result); this is the north-star axis filling in.
 **Flagship finals (trace × members × wide × deep2, 1-node protocol,
 ep499): 0.0138 / 0.0140 / 0.0156 — the ≤0.020 pre-registration is
 met by every seed.** Against the 3-seed deep2 median (0.0224) the
-full composition buys another 1.6×; the mechanisms stack rather than
+full composition provides another 1.6×; the mechanisms stack rather than
 substitute (the trace×width super-multiplicativity carrying the
 load, exactly as the factorial predicted). The DrivAerML ledger:
 
@@ -3510,9 +3509,9 @@ and the H-C round-2 probe design (parameterization / latent-attention
 Generation bands: re10+re100 complete, re1/re1000 running (E1
 resuming); GLOBE DrivAerML baseline chain (v2) progressing on HSG.
 
-## 2026-07-14 (evening) — zero-shot OOD verdict: no cliff at the boundary; the OOD-trained protocol launches {#sec-nb-ood-zeroshot}
+## 2026-07-14 (evening) — zero-shot OOD verdict and OOD-trained launch {#sec-nb-ood-zeroshot}
 
-**Prediction CONFIRMED, overwhelmingly — but on an honestly-shrunken
+**Prediction CONFIRMED, overwhelmingly — but on a much smaller
 test.** The train-overlap accounting (the eval's core discipline):
 the flagship trained on the standard 435-car split, which already
 contains 88/98 of S1 and 45/49 of S2 — so the valid zero-shot sets
@@ -3585,7 +3584,7 @@ read = val @ ep1/5/25 + final floor):**
   itself, an architectural commitment, not a knob).
 
 All 8 lanes boot-verified (StdOut present). Also noted from the
-design pass: GeoT ships an embedded OODGuard (geometry-latent bounds
+design pass: GeoT includes an embedded OODGuard (geometry-latent bounds
 collected in training) — a comparison point for our OOD-protocol
 story, filed for the chapter.
 
@@ -3606,14 +3605,14 @@ seed 43):
 | E1 L8 matched | 1× | 0.0198 | worse |
 
 **E1 verdict: the iterate-refine hypothesis is FALSIFIED at matched
-parameters** — exchange-round count buys nothing by itself (L4m flat,
+parameters** — exchange-round count provides nothing by itself (L4m flat,
 L8m harmful); natural-depth gains are parameter gains. **E3 verdict:
 scale carries** — the outcome map's "gap was mostly parameters"
 branch. Ledger: 0.1019 → **0.0093** (11×), now **3.7× from
 GeoTransolver's matched anchor** — and GeoT's epoch-efficiency edge
 persists (its ep-1 0.061 vs ×2's 0.096) but no longer implies a floor
 disadvantage. Follow-ups launched, boot-verified: ×4 reruns at
-LR/2 and LR/4 (μP intuition: LR ∝ 1/width; the honest ×16-param
+LR/2 and LR/4 (μP intuition: LR ∝ 1/width; the ×16-parameter
 read), ×2 seed 44 (3-seed the winner), and ×2L4 (~×8 params, next
 rung along both confirmed axes). E2 (per-query residual token)
 remains gated and now likely moot if scale closes the floor.
@@ -3697,7 +3696,7 @@ past GeoT's budget) gets registered next — gated additionally on
 BH/no-chunk making its step cost sane. Falsifier: penalty persists ⇒
 multi-node stays reserved for inference and production retrains.
 
-## 2026-07-17 — the chunking dividend (~10×), ladder restarts, and BH's honest reframe {#sec-nb-nochunk}
+## 2026-07-17 — the chunking dividend (~10×), ladder restarts, and BH reframe {#sec-nb-nochunk}
 
 **The B300 VRAM dividend is ~10×, not the predicted 1.9×:** the ×2
 rung without kernel_checkpoint_query_chunks runs 0.59–0.66 s/step at
@@ -3721,17 +3720,17 @@ reserved for inference/production, not ladder rungs.
 **BH interim (acceptances A/B in):** fidelity is dial-able —
 error ~θ^2.3, passing ≤1e-3 at θ≤0.125 — but **acceptance B FAILED:
 6.2× SLOWER than dense at 50k** (near-field gather constants swamp
-the asymptotic win; no crossover through 100k). Honest reframe
-pending C: BH is a **memory lever** (dense OOMs at 100k; BH bounded)
+the asymptotic win; no crossover through 100k). Revised interpretation,
+pending C: BH is a **memory factor** (dense OOMs at 100k; BH bounded)
 — i.e., the enabler for full-resolution true-CD inference, not a
-training-speed lever. C (training neutrality, 100 epochs) running.
+training-speed factor. C (training neutrality, 100 epochs) running.
 
 **BH post-mortem adopted; two consequences launched (2026-07-17).**
 The mechanism behind acceptance B's failure: BH-v1's near-field pairs
 cost ~35× dense's per-pair constant (indexed gathers vs coalesced
 GEMMs), and at the fidelity-required θ≤0.125 the near fraction is
 30–50% — so even ideal leaf-tile engineering (~3× overhead) yields no
-win below ~150–300k sources. Verdict: **classic BH does not earn its
+win below ~150–300k sources. Verdict: **classic BH does not justify its
 place at training resolutions**; v1 is kept as a memory-bounded
 fallback and calibrated harness. The re-ordered plan (adopted):
 (1) **resolution-scaling probe launched** (flagship @ sr20k nochunk +
@@ -3749,7 +3748,7 @@ pseudo numbers; falsifier ≥3× ⇒ subsample integration hid real force
 error. (3) Triton fusion of the member pipeline noted as 2–3× dense
 headroom — queued behind the probe verdicts.
 
-## 2026-07-16 (23:23 session) — resolution axis CONFIRMED at ep100; sweeps earn their keep {#sec-nb-sr-verdict}
+## 2026-07-16 (23:23 session) — resolution axis CONFIRMED at ep100; sweeps resolve the question {#sec-nb-sr-verdict}
 
 **Resolution probe crosses its pre-registered bar decisively:**
 flagship at sampling_resolution 20k reads val 0.0159 at ep100 vs
@@ -3769,7 +3768,7 @@ relaunched with 16k chunks (flagship_hires).
 trending ~2×). The batch penalty does NOT shrink with scale —
 falsifier branch essentially confirmed; multi-node is for inference
 and production retrains, not ladder rungs. Full verdict when the
-1-node ×4 lands.
+1-node ×4 completes.
 
 **Ops:** three zombie-booted links caught and killed by the sweep
 (the no-chunk lanes had silently stalled — finals slipped ~half a
@@ -3784,7 +3783,7 @@ state).
 **Multi-node track: falsifier branch CONFIRMED.** Final penalties vs
 1-node twins at matched LR: ×1 → 1.58× (0.0221 vs 0.0140), ×2 →
 1.56× (0.0145 vs 0.0093), ×4 → ~2.2× (0.0270 vs the 1-node rung's
-trajectory; exact ratio when its final lands). The effective-batch
+trajectory; exact ratio when its final completes). The effective-batch
 penalty does NOT shrink with model scale at a 500-epoch budget —
 **multi-node DDP is for inference and production retrains, not
 ladder rungs.** (Peter's fabric fix stands as the enabler for those
@@ -3868,8 +3867,8 @@ Placing GeoT parity (0.00249, ~9.5M params) on the curve:
   Feasible in absolute compute (nochunk x2L4 = ~1 day/500ep; a
   ~40M rung ≈ 3–4 days) but NOT parameter-efficient parity.
 
-**Honest reading:** scaling works and hasn't bent, but GeoT holds a
-genuine ~2.5× per-parameter advantage in-distribution. Our
+**Interpretation:** scaling works and hasn't bent, but GeoT holds a
+~2.5× per-parameter advantage in-distribution. Our
 compensating assets are exactly the pre-registered program bets:
 OOD degradation 1.01–1.04× (@sec-nb-ood-deep-verdict), exact
 contracts, similarity equivariance, zero-shot BC handling. Which
@@ -3885,7 +3884,7 @@ case the OOD-adjusted comparison at matched params roughly closes
 (GeoT 0.00249×1.5+ ≈ 0.0037+ vs our x2L8-projected ×1.04 ≈
 0.0052–0.0064) and the "generalization premium" gets its first
 differential number. *Falsifier:* GeoT also holds ≤1.1× — its
-advantage survives OOD and our generalization story loses its
+advantage remains OOD and our generalization story loses its
 comparative teeth (still absolute, no longer differential).
 Decision-4 note: this, not ID parity, is the industrially-relevant
 comparison.
@@ -3901,7 +3900,7 @@ trend immediately (e.g. 0.0156→0.0183→0.0157) — early-training
 noise, not split-change regime shifts. **Fit lanes clean.** The race
 itself is now retired, on the second attempt: a `train_datadir=`
 hydra CLI override does NOT reach the dataset config (the recipe
-code-loads `datasets/<name>.yaml` outside hydra — the override died
+code-loads `datasets/<name>.yaml` outside hydra — the override failed
 with "not in struct", and the GeoT eval's first submission crashed
 on it, all three splits). The working mechanism: `datasets.py` joins
 `recipe_root / "datasets" / f"{name}.yaml"` with pathlib, and a
@@ -3913,7 +3912,7 @@ builds a `mktemp -d` config dir; the shared-file sed is deleted from
 all three eval scripts. (GeoT differential eval resubmitted under
 the fixed scheme.)
 
-## 2026-07-17 — GeoT zero-shot OOD verdict: the FALSIFIER lands {#sec-nb-geot-ood-zeroshot}
+## 2026-07-17 — GeoT zero-shot OOD verdict: the falsifier fires {#sec-nb-geot-ood-zeroshot}
 
 **My pre-registered prediction was WRONG.** GeoT on the identical
 zero-shot splits (job 253903, same harness/resolution/splits as
@@ -3935,7 +3934,7 @@ generalize essentially unimpaired; there is no differential.** The
 generalization result of @sec-nb-ood-deep-verdict stays absolute,
 not comparative.
 
-Two honest outs, one cheap and one structural:
+Two remaining explanations, one cheap to test and one structural:
 
 1. **Depth.** The zero-shot sets are boundary-of-OOD by
    construction (the deep extremes were in both models' training
@@ -3950,7 +3949,7 @@ Two honest outs, one cheap and one structural:
    separate architectures. *Falsifier of the recalibration:* GeoT
    ≥2× deep where MT held 1.01–1.04× — the differential lives at
    depth. Either way the comparison chapter gets its number.
-2. **Family.** If GeoT holds deep too, the honest conclusion is
+2. **Family.** If GeoT holds deep too, the conclusion is
    that DrivAerML's 16-parameter DoE cannot measure cross-family
    generalization at all — the differential question moves to
    cross-geometry transfer (train DrivAerML → eval a different
@@ -3976,7 +3975,7 @@ claim before acting; the reviewer went 3-for-3.
    direction scores 0. Confirmed on the reviewer's adversarial case
    ((1,0,0) vs (0,1,0): old aggregate 0, true vector L2 √2). Fixed:
    `wss_l2` is now the true joint-component (Frobenius) relative L2;
-   the magnitude comparison survives as `wss_mag_l2`, explicitly
+   the magnitude comparison remains as `wss_mag_l2`, explicitly
    never-the-headline. The per-component columns (wss_x/y/z) were
    always direction-sensitive and stand. **Every OOD eval is being
    recomputed under the fixed metric** (10 eval jobs relaunched:
@@ -4051,8 +4050,7 @@ manifest overwrite bug (datasets.py — reject or fix before any
 multi-dataset run); fixed reference_length=8.0 vs the intrinsic gauge
 (scaling equivariance is NOT currently guaranteed for the flagship —
 scope the chapter claim). Adopted as-is: BH stays a memory fallback
-(matches the notebook's BH verdicts; the reviewer adds a genuine
-prefix-sum cancellation finding to fold into #55's design). Per
+(matches the notebook's BH verdicts; the reviewer adds a prefix-sum cancellation finding to fold into #55's design). Per
 Peter: x2L8 and the GeoT deep arms run to completion.
 
 ## 2026-07-17 (night) — GeoT exclusion finals in; two integration failures owned; canaried relaunch {#sec-nb-night17}
@@ -4075,11 +4073,11 @@ canary-before-fleet rule written this same afternoon:**
    was not extended with the new `wss_mag_*` family. My local test
    validated MetricCalculator's output but not the one consumer that
    enumerates keys ahead of data. ~7 GPU·h.
-2. The kernel-factorial wave (6 lanes × 5 links) died at boot and
+2. The kernel-factorial wave (6 lanes × 5 links) failed at boot and
    burned ALL 30 chain links on rendezvous noise masking the real
    error: my config generator prepended its header comment ABOVE the
    `# @package _global_` directive, which hydra honors only on line
-   1 — the whole config silently landed under the wrong namespace
+   1 — the whole config was placed under the wrong namespace
    and `input_type` vanished. ~20 GPU·h.
 
 Both fixed (expected_keys extended and asserted equal to produced
@@ -4094,7 +4092,7 @@ pace — v2-re1 at 266/500+ entries within the first hour (vs zero in
 ten days of aarch64-SuperLU cluster attempts, @sec-nb-review context;
 full root-cause in the hpc-resources skill, infra-side).
 
-## 2026-07-18 (early) — corrected-metric zero-shot verdict: both models lose WSS direction OOD, equally {#sec-nb-corrected-zeroshot}
+## 2026-07-18 (early) — corrected zero-shot verdict: equal WSS-direction loss {#sec-nb-corrected-zeroshot}
 
 Recomputed zero-shot tables under the true joint-component vector
 metric (canaried, then fleet; supersedes the wss_l2 columns of
@@ -4109,7 +4107,7 @@ metric (canaried, then fleet; supersedes the wss_l2 columns of
 | GeoT anchor | s1 | 0.065 | 0.323 | 0.100 |
 | GeoT anchor | s2 | 0.062 | 0.314 | 0.094 |
 
-Three honest findings:
+Three findings:
 
 1. **WSS direction error dominates magnitude error for BOTH
    architectures** (~3× the magnitude-only number: MT 0.72 vs 0.21,
@@ -4121,13 +4119,13 @@ Three honest findings:
    metric would open a WSS-direction differential for MT: REFUTED —
    the penalty is architecture-independent at this depth. Pressure
    ratios stand at ≤1.03 (MT) / ≤1.07 (GeoT).
-3. **The north-star OOD result survives with revised wording:** the
+3. **The north-star OOD result remains with revised wording:** the
    pre-registered bars (≤2×/≤3×) hold with large margin on every
    field, but "1.00–1.05× on every field, smaller than seed spread"
    is dead — the corrected vector-WSS ratio is ~1.12×, clearly
    resolvable above seed spread. Chapter 16's OOD section gets the
    corrected table once the deep-eval recomputes (both models'
-   exclusion arms, in flight) land tonight.
+   exclusion arms, in flight) finish tonight.
 
 Also banked: the ID gap in L2 space at 10k sampling — MT flagship
 vs GeoT ≈ 2.7× (pressure), 2.6× (vector WSS) — consistent with the
@@ -4140,7 +4138,7 @@ holds; falsifier (≥0.0070) refuted.** The frontier's
 GeoT-budget-matched point is now measured, not extrapolated:
 **2.34× gap at matched 9.6M params** (predicted 2.5×). Updated fit
 over all six rungs: val ≈ 0.0125·P^−0.33 (rms log-resid 0.052).
-Honest wrinkle: the newest doubling's local slope FLATTENED to 0.27
+One qualification: the newest doubling's local slope FLATTENED to 0.27
 (x2→x2L4 was 0.42) — a mild bend at the top of the frontier. If that
 local slope persists, parity-by-scaling recedes to ~230M params
 (global-slope projection: ~134M). **Decision: the pure-scaling
@@ -4150,7 +4148,7 @@ architecture (per-parameter efficiency, #55 separable far-field,
 kernel structure), not another rung. x2L8 becomes the program's
 working scale reference.
 
-## 2026-07-18 (morning) — deep-OOD corrected-metric verdict: a REAL differential on S1, modest and consistent {#sec-nb-deep-differential}
+## 2026-07-18 (morning) — deep-OOD verdict: a modest S1 differential {#sec-nb-deep-differential}
 
 The recomputed deep evals (exclusion-trained arms, full held-out
 extremes, corrected vector metric, 3 seeds per model per split):
@@ -4172,7 +4170,7 @@ extremes, corrected vector metric, 3 seeds per model per split):
   the corrected metric plus depth resolves a differential.
 - **S2 (wake-topology corner) is benign for both** — no degradation,
   even slightly inverted on WSS. The S2 axis does not discriminate.
-- **Scope honestly:** the differential is in generalization RATIOS;
+- **Scope:** the differential is in generalization RATIOS;
   absolute errors still favor GeoT ~2.5–2.7× everywhere (its
   capacity advantage). Both models remain far inside the ≤2×/≤3×
   engineering bars. And per the ≥5-seed rule this is a 3v3 claim:
@@ -4188,9 +4186,9 @@ flagship control band per @sec-nb-review.
 
 **E1 bands (local, PARDISO):** v2-re1 DONE (501 entries, 3.9h),
 v2-re10 DONE (501, 6.2h — higher Re, slower Newton, as expected);
-re100 running, re1000 queued. Rsync to clusters once all four land.
+re100 running, re1000 queued. Rsync to clusters once all four finish.
 
-## 2026-07-18 (night) — KERNEL FACTORIAL VERDICT: the falsifier fires; the industrial causal claim is demoted {#sec-nb-factorial-verdict-industrial}
+## 2026-07-18 (night) — kernel-factorial verdict: industrial causal claim demoted {#sec-nb-factorial-verdict-industrial}
 
 > **EDIT (2026-07-27 audit):** `exactonly` is not a pure two-member layer
 > potential. Removing learned kernel members leaves the nonlinear
@@ -4216,12 +4214,12 @@ flagship s44 0.0156). Per the pre-registered consequence, the
 industrial causal claim is DEMOTED: at the flagship rung the
 in-distribution gains are carried by the rest of the architecture
 (trace mode, typed attention/moments, capacity), and the model is
-honestly described as *boundary-integral-inspired*. Exact-kernel
+best described as *boundary-integral-inspired*. Exact-kernel
 causation stands only where it was proven — the synthetic program.
 The external reviewer's skepticism on this point was substantially
 correct.
 
-**What survives, precisely:** (a) exactonly beats mlponly on every
+**What remains, precisely:** (a) exactonly beats mlponly on every
 paired seed (~7% each; means 0.01458 vs 0.01568) — at equal
 non-member parameters, two closed-form ZERO-parameter members
 outperform eight learned ones; and (b) exactonly ≈ flagship
@@ -4233,14 +4231,14 @@ corollary worth acting on: the flagship's MLP members are now
 evidence-orphaned at this rung; exactonly is the simpler
 equal-performance config.
 
-**The surviving branch of the thesis, pre-registered as a rider
+**The remaining branch of the thesis, pre-registered as a rider
 (launching now):** the exact-kernel bet was always double-barreled —
 accuracy AND generalization. Zero-shot OOD evals of all six
 factorial checkpoints on the S1/S2 never-seen splits (eval-only,
 corrected metric). *Prediction:* mlponly's WSS OOD ratio exceeds
 exactonly's by a resolvable margin (exact far-field structure should
 matter more off-distribution than on). *Falsifier:* equal ratios ⇒
-exact structure buys neither ID accuracy nor OOD robustness at
+exact structure provides neither ID accuracy nor OOD robustness at
 industrial scale ⇒ the demotion is total, and #55's far-field design
 should not assume exact-kernel primacy.
 
@@ -4255,7 +4253,7 @@ demotes) at the morning session.
 the falsifier fires here too.** Zero-shot corrected-metric WSS ratios,
 3 seeds each: mlponly S1 1.11–1.12× / S2 1.11–1.14×; exactonly S1
 1.11–1.12× / S2 1.12–1.13× — indistinguishable. Exact singular
-structure buys neither in-distribution accuracy nor zero-shot OOD
+structure provides neither in-distribution accuracy nor zero-shot OOD
 robustness at the industrial rung; per pre-registration the
 exact-kernel demotion is TOTAL there. What remains is exactly two
 things, both real and both modest: parameter-efficiency (two
@@ -4271,13 +4269,13 @@ above the pre-registered 1.11 line. MT-side s45/s46 evals initially
 crashed on a run-id naming mismatch (extension lanes wrote
 single-tag run ids; the deep-eval script expected the original
 wave's doubled tag — fixed script `mt_ood_deepeval_ext.sbatch`,
-relaunched); MT seal closes when they land. The five MT training
+relaunched); MT seal closes when they finish. The five MT training
 finals are in (own-val 0.0149–0.0156 incl. extensions).
 
 **E1 anomaly — the practical steady ceiling is far below my Re-5000
 estimate.** v2-re100 ([100,1000]) produced ZERO cases in 26h locally
 under PARDISO (re10 [10,100]: 501 cases in 6.2h): workers computed
-15h+ CPU each without completing one case; generation 1 died
+15h+ CPU each without completing one case; generation 1 failed
 silently at ~11h. The v1 family never exceeded Re 200 — the upper
 v2 bands are extrapolations beyond any generated regime, and
 Newton + viscosity-continuation apparently grinds (shrinking basin,
@@ -4298,22 +4296,22 @@ surrogate that maps boundary conditions on a mesh directly to PDE
 solutions. The design bet was boundary-integral structure — exact
 singular kernels, declared equivariances, typed boundary conditions,
 an exact trace/jump treatment — with two goals: (i) competitive
-accuracy on standard benchmarks, and (ii) genuine geometric
+accuracy on standard benchmarks, and (ii) geometric
 generalization, which is the industrially decisive axis and the
 program's stated priority.
 
 **Where each thread stands, with numbers.**
 
 1. *Synthetic suites (Laplace, screened Laplace, steady N-S on
-   generated geometries).* Mature and honest; this is where the
+   generated geometries).* Mature; this is where the
    exact-kernel mechanisms were proven, with controlled ablations
    and exact contracts. Unchanged and solid.
 2. *DrivAerML (3D automotive, the hard industrial benchmark).*
    Eleven days took validation error 0.1019 → 0.00583 (17.5×), with
    a measured parameter frontier (error ≈ 0.0125·P^−0.33 over six
-   rungs) that we deliberately stopped at 9.6M parameters after it
+   rungs) that we stopped at 9.6M parameters after it
    bent. Gap to the strongest baseline (GeoTransolver) at matched
-   parameters: **2.34×, measured**. Attribution is now honest: the
+   parameters: **2.34×, measured**. The attribution is now specific: the
    gains came from the trace treatment (2.03× at introduction),
    capacity scaling, and training protocol — **NOT from the exact
    kernels**. The pre-registered factorial refuted exact-kernel
@@ -4341,23 +4339,22 @@ program's stated priority.
    chunk-free decode validated accuracy-neutral; Barnes–Hut demoted
    to a memory fallback by measurement; full-resolution inference
    ~20 min/sample dense. The O(N) separable far-field (#55) is the
-   open lever, but its exact-kernel rationale weakened with the
+   open factor, but its exact-kernel rationale weakened with the
    factorial — its case now rests on cost alone.
 6. *Process.* One week of external review + enforced hygiene found
    and fixed: the metric bug, the AirFRANS protocol defect, two
    silent zero-output compute pathologies (a clear-and-restart wall
    loop; an OOM respawn loop), an aarch64 solver fallback worth
    ~70× per case, and an ssh-triggered semaphore purge. Every one
-   is now a codified rule. The E1 Reynolds-band suite hit a genuine
-   science wall: the steady-cavity family stops producing solutions
+   is now a codified rule. The E1 Reynolds-band suite hit a    science wall: the steady-cavity family stops producing solutions
    in practical time somewhere in Re 200–1000 (bracket probes
    running); the upper bands need redesign around the measured
    ceiling.
 
-**Odds, honestly assigned.**
+**Estimated odds.**
 
 - ID parity with GeoT-class at ≤10M params on DrivAerML: **~15%**
-  (frontier bent; member structure refuted as the lever; would need
+  (frontier bent; member structure refuted as the factor; would need
   an attention/moment-level architectural find).
 - Within 1.5× of GeoT at ≤2× its params: **~40%**.
 - Demonstrable within-family generalization advantage (5-seed,
@@ -4365,7 +4362,7 @@ program's stated priority.
 - Cross-family transfer advantage (the industrially persuasive
   version): **~35%** — untested; the deep-S1 signal and typed-BC
   design are the only evidence either way.
-- AirFRANS headline claims surviving the clean protocol: **~60%**
+- AirFRANS headline claims remaining the clean protocol: **~60%**
   (the AoA/parity mechanism was ablation-proven; magnitudes will
   likely shrink).
 
@@ -4387,7 +4384,7 @@ Bracket probes: single cases complete cleanly at Re≈150 (9 min),
 ≈350 (6 min), ≈800 (24 min), and — the decisive one — Re∈[1000,1500]
 in 27 min with Newton converging in 4 iterations and zero rejected
 attempts. The steady family is healthy through at least Re 1500; my
-shrinking-basin story was wrong. The band failure's surviving
+shrinking-basin story was wrong. The band failure's remaining
 explanation is a **memory-throttle crawl**: the mid-Re solves carry
 ~2× the workspace of the low-Re bands, eight workers pinned the
 sandbox exactly at its MemoryHigh=28G reclaim threshold (observed
@@ -4449,13 +4446,13 @@ harvest at the next connected session.
 > `results/aga_artifact_preservation_2026-07-27/s1_wss_metric_reconstruction_2026-07-27_0ba01541f67d34f6.json`
 > (SHA-256 `0ba01541f67d34f64a1588cd09c3ee3af94c9e84b3cbb30ce9de1b2f43444c27`).
 
-MT s45/s46 deep evals landed (corrected metric, same harness). The
+MT s45/s46 deep evals completed (corrected metric, same harness). The
 full 5-versus-5 picture on the deep S1 extremes:
 
 - **Vector WSS ratios: MT {1.072, 1.085, 1.085, 1.104, 1.113} vs
   GeoT {1.126, 1.131, 1.133, 1.126, 1.131} — DISJOINT at 5v5**
   (exact rank-sum p ≈ 0.008). **The WSS generalization differential
-  seals.** Honest amendments to the 3-seed read: my pre-registered
+  seals.** Amendments to the 3-seed read: my pre-registered
   "MT ≤ 1.10" bound broke (s45 = 1.113, s46 = 1.104) — the effect
   is real but thinner than first estimated: mean excess degradation
   0.092 (MT) vs 0.131 (GeoT), i.e. GeoT degrades ~1.4× more, not
@@ -4477,7 +4474,7 @@ suggestive.* The decisive upgrade remains cross-family transfer
 
 Also this harvest: AirFRANS clean-protocol seed-17 arms completed
 with zero errors (single-shot test headlines written; 3-seed verdict
-when the fleet lands); trace factorial ~ep280 (finals tonight); b22
+when the fleet completes); trace factorial ~ep280 (finals tonight); b22
 at ep~1020/2000; x2L8-exactonly ep326 val 0.00632, tracking the
 with-members x2L8 trajectory — member redundancy holding at 9.6M so
 far; local re100 at 258/501 at the confirmed ~40/h pace.
@@ -4510,7 +4507,7 @@ structure + typed BC encoding carries further from the training
 hull than learned geometric tokens.
 **Falsifier.** GeoT's transfer ratio ≤ 1.05× MT's (equal or
 better): the generalization identity fails its decisive test; the
-program's honest claim reverts to within-family robustness plus the
+program's claim reverts to within-family robustness plus the
 OOD protocol contribution itself, and the strategic fork re-opens
 with that verdict on record.
 
@@ -4528,7 +4525,7 @@ chunking: at 17.7M query cells / 50k sources, flagship rel-L2 is
 10k-source operating point. Full-mesh physical CD is therefore
 CONTINGENT on the resolution/source-count transfer problem (the sr
 thread's axis; #55's domain), not launchable as an eval wave. The
-book's pseudo-coefficient caveat stays until that thread lands.
+book's pseudo-coefficient caveat stays until that thread completes.
 
 ## 2026-07-19 (afternoon) — factorial gap found + filled; exactonly-at-scale reading; b22 trend {#sec-nb-afternoon19}
 
@@ -4544,7 +4541,7 @@ the full 2×2 rather than anchoring on a stale total.
 Interim (no verdicts): tracecorr s42/s43 finals 0.01498/0.01506 —
 correction-only ~3.5% above full trace; tracereadouts ~ep460.
 **exactonly-at-scale: x2L8 without members 0.006354 vs 0.005828
-with — members appear to earn ~9% at 9.6M (vs +0.8% at flagship) —
+with — members appear to provide ~9% at 9.6M (vs +0.8% at flagship) —
 but 1-seed-vs-1-seed against ±12% known rung spread: EXPLORATORY,
 leaning members-help-at-scale; not funding more x2L8 seeds with the
 ladder stopped. Default config stays members-on.** b22 at
@@ -4566,12 +4563,12 @@ pseudo (the AoA windfall) — seed 17 complete (all four, zero errors,
 protocol fingerprint verified in result JSONs), seeds 18/19 booted.
 The chapter-15 comparative claims get their clean verdict when the
 three-seed set closes: pre-registered expectation from the check-in
-(~60% the claims survive with shrunken magnitudes); falsifier for
+(~60% the claims remain with smaller magnitudes); falsifier for
 any given claim: the clean single-shot test flips its ranking. The
 stall root-cause was ops, not science (the fork's acceptance watcher
 was killed mid-wait; canary itself had passed).
 
-## 2026-07-19 (night) — b22 VERDICT: it's gradient noise, not update count; given-trace decomposition; AirFRANS clean first-read {#sec-nb-b22-verdict}
+## 2026-07-19 (night) — b22 verdict, given-trace decomposition, and AirFRANS first read {#sec-nb-b22-verdict}
 
 **Batch 2×2 verdict (pre-registered @sec-nb-review item 4).** The
 16-GPU × 2000-epoch arm (update count matched to 1-node × 500)
@@ -4596,8 +4593,8 @@ and multi-node training remains for inference/production only.
 finals):** correction-only mean 0.01539 {0.01476, 0.01533, 0.01607};
 readouts-only mean 0.01540 {0.01494, 0.01505, 0.01622}; both-on
 (flagship) mean 0.01447. The two trace mechanisms are near-perfect
-SUBSTITUTES — either alone lands within 0.1% of the other — and
-combining them buys a further ~6%. Total trace effect at flagship
+SUBSTITUTES — either alone finishes within 0.1% of the other — and
+combining them provides a further ~6%. Total trace effect at flagship
 capacity = tomorrow's notrace finals.
 
 **AirFRANS clean-protocol first-read (12/12 lanes complete, frozen
@@ -4622,7 +4619,7 @@ sweep gains an array exemption. The allbc canary was SIGTERM'd at
 short for the 5-boundary arm's first step; relaunching with
 extended grace via the fork.
 
-## 2026-07-20 — TRACE FACTORIAL VERDICT: the dominant mechanism, and its two halves are substitutes {#sec-nb-trace-factorial-verdict}
+## 2026-07-20 — trace-factorial verdict: dominant, substitutable mechanisms {#sec-nb-trace-factorial-verdict}
 
 > **EDIT (2026-07-27 audit):** The reported 3.8× factorial effect is a
 > strong observation, but correction/readout substitution does not uniquely
@@ -4645,11 +4642,11 @@ The full 2×2 at flagship capacity (1-node 500ep, 3 seeds/arm):
    capacity** — it GREW from the 2.03× measured pre-ladder. My
    stated worry that it would compress at scale like the kernel
    members was wrong in the opposite direction: mechanisms scale
-   individually, not uniformly. The honest mechanism ranking at
+   individually, not uniformly. The mechanism ranking at
    flagship now reads: trace 3.8× ≫ capacity (the frontier) ≫
    members ≈ 0–8% ≈ nothing.
 2. **The two trace sub-mechanisms are near-perfect substitutes**:
-   correction-only and readouts-only land within 0.1% of each other,
+   correction-only and readouts-only finish within 0.1% of each other,
    each recovering ~96% of the log-gap; both together add ~6%.
    Mechanistic reading: what the model fundamentally needs is a
    channel carrying boundary self-identification ("this query IS the
@@ -4669,7 +4666,7 @@ point — zero-init pooling gains reproduce raw measure dominance —
 is now empirically tied to a hard failure mode, not just a
 weighting concern. Science verdict at finals.
 
-## 2026-07-20 (evening) — balanced pooling stabilizes the all-boundary arm; fleet pre-registration; record corrections {#sec-nb-allbc-launch}
+## 2026-07-20 (evening) — balanced pooling stabilizes the all-boundary arm {#sec-nb-allbc-launch}
 
 **A science observation arrived before the experiment proper:**
 the all-boundary arm at flagship capacity DIVERGES at epoch 44
@@ -4700,7 +4697,7 @@ The watchdog is exonerated; the killer was the instability above.
 -only flagship 3-seed as control — with the LR covariate stated
 up front: the control ran the default schedule, so NO arm is
 perfectly LR-matched to it; the within-allbc balanced-vs-raw
-contrast is the clean pair. *Predictions:* (1) balanced-allbc lands
+contrast is the clean pair. *Predictions:* (1) balanced-allbc finishes
 at or below the vehicle-only control globally (extra boundary
 context neutral-to-helpful); (2) the H-ground effect, if real,
 appears as band-localized improvement (underbody / near-ground /
@@ -4713,11 +4710,11 @@ this protocol — a real null this time, not an underpowered one.
 rejection (NotImplementedError on manifest mode with >1 dataset;
 mis-alignment affects even manifest+directory mixes; single-dataset
 path verified inert; 29 regression tests). Commits 0520f294,
-ac19c76a. Upstream merge landed separately (f9bea495) and brings
+ac19c76a. Upstream merge completed separately (f9bea495) and brings
 #1746's relative-L2 loss — candidate resolution for the misnamed
 rmse (#61b).
 
-## 2026-07-20 (night) — allbc mid-training instability: the balance is a partial cure; cross-family first number {#sec-nb-allbc-instability}
+## 2026-07-20 (night) — all-boundary instability and first cross-family result {#sec-nb-allbc-instability}
 
 **The all-boundary stability story sharpened overnight, against my
 morning read.** Four of six fleet lanes — balanced AND raw, at
@@ -4748,14 +4745,14 @@ not interpreted**: a scale that far off suggests the frozen
 DrivAerML WSS normalization (std 0.00313) or a units convention
 (dynamic vs kinematic stress) may not carry to SHIFT's fields — the
 fork was tasked to surface exactly such fairness-of-conversion
-calls, and NO verdict is read until the MT tables land and the
+calls, and NO verdict is read until the MT tables complete and the
 shared-vs-model-specific nature of the distortion is established.
 The pre-registered analysis compares models under the SAME frozen
 pipeline either way, but a conversion artifact that interacts with
 each model's normalization differently would void fairness — check
 first.
 
-## 2026-07-21 (morning) — allbc s42 finals; my wrong-dataset relaunch owned; MT cross-family fleet finally running {#sec-nb-morning21}
+## 2026-07-21 (morning) — all-boundary finals and corrected dataset relaunch {#sec-nb-morning21}
 
 **allbc single-seed finals (s42):** balanced @3.0e-3 → **0.01473**,
 inside the vehicle-only flagship band (0.0138–0.0156) — the
@@ -4763,7 +4760,7 @@ balanced all-boundary arm matches the vehicle-only control at this
 seed. Raw @1.5e-3 → 0.0338 (imbalance + halved LR). The 3-seed
 verdict still needs s43/s44 — whose overnight relaunch I broke
 myself: I passed the vehicle-only dataset to the 5-boundary model
-(schema check refused: missing inlet/no_slip/outlet/slip), and all
+(schema check rejected it: missing inlet/no_slip/outlet/slip), and all
 28 chain links burned in ~40 min of instant crashes. The
 divergence-guard patch was exonerated (script fine; argument
 wrong); the schema validation did exactly its job — loudly. Relaunched
@@ -4771,12 +4768,12 @@ with `drivaer_ml_surface_allbc`; acceptance check armed. Cost: ~2
 node-hours and 8 hours of calendar.
 
 **Cross-family: the MT fleet is running at last** (the fork's
-post-canary waiter died again with GeoT's numbers on disk for 14h —
+post-canary waiter failed again with GeoT's numbers on disk for 14h —
 fleet taken over directly: flagship ×3 + x2L8 in one packed 4-GPU
-eval job). The pre-registered analysis runs when its tables land,
+eval job). The pre-registered analysis runs when its tables complete,
 WSS-conversion fairness question first.
 
-## 2026-07-21 (evening) — the steady ceiling MEASURED: Re ≈ 5000; re1000 band redesigned per pre-registration {#sec-nb-re-ceiling-final}
+## 2026-07-21 (evening) — steady ceiling measured near Re ≈ 5000 {#sec-nb-re-ceiling-final}
 
 The v2-re1000 band failed exactly as the E1 pre-registration
 anticipated ("the top band may substantially fail the convergence
@@ -4797,13 +4794,13 @@ partial-deletion behavior did its job (no silent selection bias).
 **Redesign (within the pre-registration's contingency):** re1000
 regenerates as train [1000,4000], unseen (4000,5000] — the same
 regime axis, capped under the measured wall. Relaunched locally.
-The chapter's accuracy-vs-Re curve gains its honest endpoint
+The chapter's accuracy-vs-Re curve gains its measured endpoint
 annotation: "steady labels end here."
 
 ## 2026-07-22 — CROSS-FAMILY VERDICT: the falsifier fires maximally — MT does not transfer zero-shot {#sec-nb-crossfam-verdict}
 
 > **EDIT (2026-07-27 audit):** This first 20-case read remains a valid
-> untouched falsifier of the shipped model. From this point onward the same
+> untouched falsifier of the released model. From this point onward the same
 > SHIFT-SUV cases were a development set: the gauge scan, transfer-v2,
 > architecture wave, seed extension, and pattern analysis are not
 > independent confirmations. The dose-response below also did not identify
@@ -4863,11 +4860,11 @@ protocol's divergence); 16 → 5.12 (finite, structured); 48 → 1.71
 FIXED declared gauge overflowing the norm-free drive stream on
 out-of-family geometry statistics — the exact flaw the external
 review flagged ("physical scaling equivariance is not presently
-guaranteed"), now with its cross-family cost measured. Three honest
-framings, all true at once:
+guaranteed"), now with its cross-family cost measured. Three
+interpretations, all supported by the data:
 
 1. **The frozen-protocol verdict stands as measured** — the model
-   as shipped (fixed gauge 8.0) does not transfer; the falsifier
+   with the released fixed gauge of 8.0 does not transfer; the falsifier
    fired legitimately against the deployed protocol.
 2. **The mechanism is a repairable protocol flaw, not deep
    architectural brittleness** — with a sane gauge the same weights
@@ -4887,7 +4884,7 @@ framings, all true at once:
 
 ## 2026-07-22 — E1 first curve: accuracy vs Re is U-SHAPED, not monotone; noise floor negligible {#sec-nb-e1-curve}
 
-All 12 band-training reports landed (mt_singpair_nl_pseudo, v1
+All 12 band-training reports completed (mt_singpair_nl_pseudo, v1
 protocol frozen, 3 seeds/band; artifacts output/e1_bands/ on HSG).
 Combined relative-L2:
 
@@ -4902,7 +4899,7 @@ Combined relative-L2:
 
 1. "The label-noise floor rises with Re" — CONFIRMED (2× from re1
    to re100) **and irrelevant**: it sits three orders below model
-   error everywhere. The labels are not the limiter; the honest
+   error everywhere. The labels are not the limiter; the
    curve annotation is "floor drawn, nowhere binding."
 2. "Accuracy degrades with Re" — **REFUTED as stated: the curve is
    U-shaped.** The middle decades (re10/v1, ~0.23–0.26) are easiest;
@@ -4971,9 +4968,9 @@ rear face is the worst region on both fields (p 0.325, wss 0.964 vs
 global 0.167/0.705) — exactly where the H-ground hypothesis says
 boundary context should help. Staged eval job runs all six allbc
 arms + three vehicle-only controls; SUBMITS ONLY after the ab3
-finals land (the script takes latest checkpoints).
+finals complete (the script takes latest checkpoints).
 
-## 2026-07-22 (afternoon) — intrinsic gauge calibrated on TRAIN: C = 26.4766; acceptance gates pre-registered {#sec-nb-gauge-calib}
+## 2026-07-22 (afternoon) — intrinsic gauge calibrated on training data {#sec-nb-gauge-calib}
 
 > **EDIT (2026-07-27 audit):** The calibration was **not train-only**.
 > `calibrate_intrinsic_gauge.py` iterated all 484 entries in
@@ -4997,13 +4994,13 @@ similarity-COVARIANT, Horvitz-Thompson subsample-robust; transform +
 tests in commit 17381332, module `src/intrinsic_gauge.py`). C is
 calibrated ONCE on the DrivAerML TRAIN split — never re-fit per
 evaluation set — as C = 8.0/mean(r_RMS), so DrivAerML reproduces its
-historical operating point and other families land at the same
+historical operating point and other families map to the same
 *relative* one.
 
 **Calibration record (AGA job 285486, 484 train samples, resolution
 10k, artifact `studies/intrinsic_gauge_calibration.json`):** r_RMS =
 0.30215 ± 0.0089 (min 0.2798, max 0.3265), giving **C = 26.476593**.
-Per-sample DrivAerML gauges land in [7.41, 8.64] — a ±3.5% spread
+Per-sample DrivAerML gauges fall in [7.41, 8.64] — a ±3.5% spread
 around 8.0, entirely inside the measured stable zone (≥ 6).
 
 **Acceptance gates, declared before any acceptance number exists
@@ -5011,7 +5008,7 @@ around 8.0, entirely inside the measured stable zone (≥ 6).
 node):**
 
 1. *DrivAer preservation:* flagship-s42 with the intrinsic gauge
-   must land within **2% relative** of flagship-s42 with the fixed
+   must remain within **2% relative** of flagship-s42 with the fixed
    gauge on `pressure_l2` and `wss_l2` (paired fixed-gauge control
    re-run in the same job — the Jul-14 baseline predates the metric
    correction). Prediction: passes; the checkpoint has only ever
@@ -5030,7 +5027,7 @@ Both gates pass → pre-register transfer-v2 (zero-shot SHIFT-SUV with
 the intrinsic gauge; realistic goal is "MT transfers comparably to
 GeoT," not "MT wins") before any SHIFT number is computed.
 
-## 2026-07-22 (afternoon) — acceptance VERDICT: inertness passes, drop-in FAILS the 2% gate; retraining path taken {#sec-nb-gauge-accept-verdict}
+## 2026-07-22 (afternoon) — acceptance verdict: inertness passes, drop-in fails {#sec-nb-gauge-accept-verdict}
 
 The pre-registered acceptance evals (@sec-nb-gauge-calib, job
 285531, paired 4-lane on id_reference, current code) returned:
@@ -5049,7 +5046,7 @@ both past the 2% bar. Since mean(C·r_RMS) = 8.0 on train by
 construction, the drift is driven by the ±3.5% per-sample gauge
 *spread*, not an offset — the fixed-gauge checkpoint is more
 sensitive to gauge perturbation than the coarse dose-response
-(healthy ≥ 6) implied. Honest note: 6.9% is sensitivity, not
+(healthy ≥ 6) implied. Note: 6.9% is sensitivity, not
 catastrophe; but the falsifier was written in advance and it fired.
 
 Consequence (also pre-declared): the intrinsic gauge is **not a
@@ -5109,7 +5106,7 @@ summaries recorded but secondary.
    becomes the object of study. Prediction: pass, p ≈ 0.75 — the
    dose-response was clean and monotone, but it was measured on a
    fixed-gauge checkpoint and eval-time-only; training-time
-   behavior is genuinely untested.
+   behavior is untested.
 2. *Comparable transfer (the program question):* seed-median
    pressure_l2 ≤ 2× GeoT (≤ 1.354) = transfers comparably;
    ≤ 0.677 = at par or better. Prediction: comparable p ≈ 0.45,
@@ -5126,14 +5123,14 @@ re-picking the comparison seed, swapping the metric for a variant
 that flatters, or promoting WSS to a headline if it happens to look
 good. Deviations get logged as exploratory.
 
-Eval configs are committed before finals land; the eval job reuses
+Eval configs are committed before finals complete; the eval job reuses
 `mt_crossfam_eval.sbatch` with the intrinsic dataset and the three
 retrained run_ids.
 
 ## 2026-07-24 — SESSION HANDOFF (context-transfer to a fresh agent) {#sec-nb-handoff-0724}
 
 This entry is written for an agent who is picking up this program with
-**none of my working context**. It is deliberately plain and
+**none of my working context**. It is intentionally direct and
 self-contained — no private shorthand. Read it top to bottom before
 touching anything. Paths are on the **AGA cluster** (`ssh aga1`)
 unless stated; the repo root there is
@@ -5178,7 +5175,7 @@ per-sample gauge: `reference_length = C · r_RMS(sample)`, where
 size measure that is translation/rotation invariant and scales
 correctly with the geometry), and `C` is a single constant calibrated
 **once on the DrivAerML training split** so DrivAerML reproduces its
-historical operating point (~8.0) and any other family lands at the
+historical operating point (~8.0) and any other family maps to the
 same *relative* point. Code: `$RECIPE/src/intrinsic_gauge.py`
 (transform `ComputeIntrinsicReferenceLength`, committed 17381332 by
 Peter; has unit tests). **Calibrated value: C = 26.476592786355283**
@@ -5243,7 +5240,7 @@ lr 1.5e-3 and see if it rejoins the band.
   `run_id=t2_mesh_transformer_surface_flagship_intrinsic_seed{42,43,44}_lr3.0e-3`,
   and `dataset=drivaer_ml_surface_intrinsic`, on `infer_split=id_reference`
   against the `drivaerml_ood_shadow` dataset path. Pre-registered read:
-  s42/s43 should land in-band; **s44 may be out-of-band because of the
+  s42/s43 should fall in-band; **s44 may be out-of-band because of the
   training anomaly above** — if so, report it, do not hide it, and
   decide whether s44 needs a lr-lowered retrain before it can join the
   transfer panel.
@@ -5260,7 +5257,7 @@ lr 1.5e-3 and see if it rejoins the band.
   WSS is descriptive only (GeoT's own zero-shot WSS is 123.5 — junk
   for everyone on this split).
 
-### THREAD 2: all-boundary "H-ground" redo — finals landed, band verdict is the next click
+### THREAD 2: all-boundary "H-ground" redo — finals complete, band verdict is the next click
 
 The hypothesis (task #63): giving the model the *ground plane and
 tunnel walls* as extra boundary inputs (not just the vehicle) should
@@ -5274,7 +5271,7 @@ the verdict**.) The verdict instrument is already written and staged:
 arms plus three vehicle-only controls on a **pre-registered 5-region
 surface partition** (underbody front/mid/rear, rear-face, upper-body;
 tooling validated digit-for-digit against fleet tables, reconciliation
-asserted to rtol 1e-5). **Submit it now** (finals have landed; the
+asserted to rtol 1e-5). **Submit it now** (finals have completed; the
 script loads latest checkpoints and does not gate on ep500). The
 pre-registered decision: the H-ground hypothesis lives only if the
 improvement is **band-localized** to the wake regions where boundary
@@ -5323,7 +5320,7 @@ hard wall.
 - **Scale-law fit (#56 area):** the no-chunk capacity ladder was meant
   to close with a val-vs-parameters power-law fit placing GeoT's
   parity point (0.00249) on the curve. Check whether the final rungs
-  (x4nc/x2L4nc/x2nc) landed; if so, the fit + figure is a clean
+  (x4nc/x2L4nc/x2nc) completed; if so, the fit + figure is a clean
   chapter close.
 - **Per-dataset chapters (#44), domain_transforms slimming (#46),
   separable far-field (#55):** untouched; see the task list.
@@ -5394,7 +5391,7 @@ running (verified empty queues on AGA and DFW at handoff time).
 Written before either diagnostic runs. Two threads open together
 because they share one suspected root: **the model's activation
 magnitudes are set entirely by input scale**, since the drive stream is
-deliberately norm-free (zero-preservation forbids the normalization
+norm-free by design (zero-preservation forbids the normalization
 that would otherwise tame it). The cross-family divergence
 (@sec-nb-crossfam-verdict) is that mechanism firing on out-of-family
 geometry. Both hypotheses below ask whether the same mechanism is
@@ -5427,7 +5424,7 @@ production.
   discards would have been **non-uniform across the merged boundary**,
   and the model is currently integrating a mis-weighted mixture of
   vehicle and tunnel. *Prediction: ratios differ by ≥2× at production
-  resolution.* Falsifier: all boundaries land at the same ratio, in
+  resolution.* Falsifier: all boundaries reach the same ratio, in
   which case H-MW is a latent correctness issue with no live instance
   and drops to low priority.
 - **H-MW-3 (the connection worth having).** The all-BC arm is exactly
@@ -5500,7 +5497,7 @@ sensitivity is the architectural question behind all of this, and it is
 not yet a hypothesis — it is the reason these two are worth measuring
 first.
 
-## 2026-07-24 — VERDICTS: H-GC refuted by sign flip; H-MW confirmed but nearly inert; a real discretization-invariance gap found {#sec-nb-verdict-0724}
+## 2026-07-24 — H-GC and H-MW verdicts; discretization gap found {#sec-nb-verdict-0724}
 
 Both pre-registered hypotheses (@sec-nb-prereg-0724) fell to cheap
 local diagnostics, in one case against my own framing. Recorded in the
@@ -5536,11 +5533,11 @@ explain seed 44's 2.3× basin through added input variance, and the
 pre-registered "spread ×2" arm is withdrawn as unmotivated rather than
 run — its premise is refuted.
 
-**Consequence for priorities (stated plainly because it reverses a
-decision).** I argued to Peter that the s44 anomaly was "the more
+**Consequence for priorities (this reverses a decision).** I argued to
+Peter that the s44 anomaly was "the more
 interesting object" than the transfer result, on the theory that it
 was a statement about architectural conditioning. That theory is dead:
-the gauge conditions *better*. The surviving explanations for s44 are
+the gauge conditions *better*. The remaining explanations for s44 are
 ordinary optimization variance, learning-rate marginality, or loss of
 absolute-size information (the intrinsic gauge normalizes size away,
 and on a single-vehicle morph family size correlates with the design
@@ -5554,7 +5551,7 @@ earned priority.
 - **H-MW-1 CONFIRMED.** Vehicle-only pipeline applies one uniform cap;
   the HT factor is a single constant.
 - **H-MW-2 CONFIRMED.** The all-boundary pipeline caps per boundary,
-  and the recorded weights are genuinely non-uniform — at test
+  and the recorded weights are non-uniform — at test
   resolution 3000: vehicle **20×**, all four auxiliaries **1×** (at
   production ratios, 8.8M → 10k, the vehicle factor is ~880×). The
   model discards all of them at
@@ -5571,13 +5568,13 @@ earned priority.
   the all-BC arm alone; and even there the corrected vehicle share
   (0.0027% of total quadrature measure) remains dominated by the
   tunnel (slip 64%, ground 24%), so HT correction is *not* the cure for
-  the all-BC imbalance that balanced pooling addresses. Honest scope
+  the all-BC imbalance that balanced pooling addresses. Scope
   correction: I raised this to Peter as "the all-BC arm's quadrature
   has been wrong in a way #1770 was designed to catch." True, and it
   should be fixed — but its blast radius is far smaller than that
   framing implied.
 
-### The finding that actually survived: subsampling breaks discretization invariance
+### The finding that actually remained: subsampling breaks discretization invariance
 
 Chasing H-MW turned up a cleaner and more important gap. On **one
 fixed sphere** sampled at increasing source counts (the geometry never
@@ -5599,7 +5596,7 @@ Because the model is exactly invariant to uniform measure rescaling
 (above), this drift is **not** a weighting bug. It is
 quadrature *coverage*: a random subset of panels covers a random subset
 of the surface, and the layer-potential integral over that subset is a
-genuinely different (noisier, biased-low-coverage) approximation of the
+different (noisier, biased-low-coverage) approximation of the
 boundary integral. That is a real violation of the discretization
 invariance the program claims as a required property, it is measured
 here for the first time, and it is the most plausible mechanism yet for
@@ -5616,7 +5613,7 @@ needed is the non-uniform version, or a coverage-consistent
 quadrature). Falsifier: drift persists at matched coverage under
 different panel subsets.
 
-## 2026-07-24 (later) — H-DI VERDICT: the contract HOLDS under refinement; subsampling is a biased operator, and the bias is a FAR-field effect {#sec-nb-hdi-verdict}
+## 2026-07-24 (later) — H-DI verdict: refinement holds; subsampling is biased {#sec-nb-hdi-verdict}
 
 > **EDIT (2026-07-27 audit):** The refinement ladder is a durable,
 > rerunnable small-probe observation. The sampling interpretation is much
@@ -5704,7 +5701,7 @@ interior every panel contributes comparably and the value is a global
 accumulation — exactly the quantity that needs the whole surface (the
 closed-surface solid angle summing to $-1$ is the canonical case). Near
 a wall the value is dominated by whichever panels are locally retained,
-so it survives sparse sampling. This also explains why the uniform
+so it remains sparse sampling. This also explains why the uniform
 Horvitz--Thompson factor is inert here (@sec-nb-verdict-0724): the bias
 is in *which* panels are present, not in how they are scaled, and no
 reweighting reconstructs a missing global integral.
@@ -5730,15 +5727,15 @@ reweighting reconstructs a missing global integral.
    is more globally-coupled, than I keep assuming. Recorded as a
    calibration note, not a result.
 
-**Registered next (not run):** coverage is a *protocol* variable nobody
-has swept. The experiment is a coverage ladder at fixed source count —
+**Registered next (not run):** coverage is a *protocol* variable that
+has not been swept. The experiment is a coverage ladder at fixed source count —
 train at 10k sources drawn from meshes decimated to different coverages,
 evaluate across coverages — to separate "the model needs more sources"
 from "the model needs a consistent coverage". Cheap, and it bears
 directly on whether full-resolution inference is reachable without
 retraining.
 
-## 2026-07-24 — GATE 0 VERDICT: 2 of 3 intrinsic seeds pass; s44 fails hard; the gauge itself is exonerated {#sec-nb-gate0-verdict}
+## 2026-07-24 — gate 0 verdict: two intrinsic seeds pass; s44 fails {#sec-nb-gate0-verdict}
 
 Transfer-v2's gating question (@sec-nb-transfer-v2-prereg), run before
 any SHIFT-SUV number was computed. AGA job 293356, four lanes on one
@@ -5760,7 +5757,7 @@ clean and the band is the right yardstick.
 
 **Reading, and it is not the obvious one.** Gate 0 asked whether the
 intrinsic gauge *costs in-family accuracy*. On the evidence it does
-**not**: two of three seeds land inside a band built from
+**not**: two of three seeds fall inside a band built from
 fixed-gauge runs, and the one that fails does not fail a little — it
 fails by 70%, in a way no smooth "accuracy cost" would produce. The
 gauge is exonerated; what is indicted is **training stability under
@@ -5774,10 +5771,10 @@ Note also that s44's eval numbers (0.3046 / 1.2160) track its training
 log's own final validation (wss_l2 1.2249) — the failure is in the
 trained weights, not the evaluation.
 
-**SHIFT-SUV remains untouched, deliberately.** Running gates 1--2 now on
+**SHIFT-SUV remains untouched.** Running gates 1--2 now on
 the two good seeds would mean looking at the held-out family with an
 incomplete panel and then adding a seed afterwards — the seed-median
-gate cannot be honestly computed from two seeds, and repairing the
+gate cannot be computed from two seeds, and repairing the
 panel after seeing test numbers is precisely the post-hoc move the
 pre-registration forbids. The panel gets fixed first.
 
@@ -5785,7 +5782,7 @@ pre-registration forbids. The panel gets fixed first.
 
 | arm | tests |
 |---|---|
-| seed 44 @ lr 1.5e-3 | panel repair **and** the LR-marginality discriminator that survived H-GC's refutation |
+| seed 44 @ lr 1.5e-3 | panel repair **and** the LR-marginality discriminator that remained H-GC's refutation |
 | seed 45 @ lr 3.0e-3 | base rate — does a fresh seed also fail? |
 | seed 46 @ lr 3.0e-3 | base rate |
 
@@ -5794,7 +5791,7 @@ The base-rate arms are the ones that matter beyond this experiment. If
 the gauge worth knowing before it becomes the default everywhere, and
 it would not have been visible from the transfer number at all.
 
-## 2026-07-24 (night) — H-SAT: the industrial boundary integral is NOISE-DOMINATED at production coverage, and singularity subtraction is the fix {#sec-nb-hsat}
+## 2026-07-24 (night) — H-SAT: industrial boundary integral is noise-dominated {#sec-nb-hsat}
 
 This is the largest single finding of the program since the trace
 mechanism, and it reframes the industrial attribution rather than adding
@@ -5898,10 +5895,10 @@ i.e. the accuracy of ~4.5% coverage obtained at 0.11% — and it crosses
 the estimator from noise-dominated (0.65) to signal-dominated (4.16).
 Zero parameters. It needs exactly one input: $\sigma(x)$, the query's own
 coefficient — **which trace mode already computes as the own-cell
-readout.** The mechanism the factorial found load-bearing is precisely
+readout.** The mechanism the factorial found essential is precisely
 the ingredient the fix requires.
 
-### The honest falsifier, run
+### The falsifier, run
 
 The gain depends on $(\sigma_j - \sigma(x))$ decaying near the query,
 i.e. on the density being smooth. A *learned* coefficient field need not
@@ -5952,7 +5949,7 @@ the general form with the computed total). The single-layer member has a
 different, non-zero analytic total and needs its own subtraction constant
 — that is derivable, not free.
 
-## 2026-07-24 (evening) — CORRECTION + H-MS pre-registration: the model is NOT measure-scale invariant, and that may be one mechanism behind three separate failures {#sec-nb-hms-prereg}
+## 2026-07-24 (evening) — correction and H-MS pre-registration {#sec-nb-hms-prereg}
 
 ### Correction to @sec-nb-verdict-0724 (my error, material)
 
@@ -6008,7 +6005,7 @@ to three failures currently filed as unrelated:
    as "the gauge is wrong".
 3. **Subsampling bias / resolution transfer** (@sec-nb-hdi-verdict).
    The mathematically correct estimator is HT, and HT is exactly the
-   $k$ multiplication the model cannot survive.
+   $k$ multiplication the model cannot tolerate.
 
 **The proposed repair, stated before it is tested.** Split the
 quadrature into a *shape* and a *magnitude*:
@@ -6045,7 +6042,7 @@ bitwise query independence.
   in measure handling", and the cross-family and resolution threads
   stay independent.
 
-## 2026-07-24 (evening) — H-MS VERDICT: a missing required invariance, found and fixed exactly; the unification is DEMOTED by its own falsifier {#sec-nb-hms-verdict}
+## 2026-07-24 (evening) — H-MS verdict: missing invariance fixed; unification demoted {#sec-nb-hms-verdict}
 
 > **EDIT (2026-07-27 audit):** P1 tests an internal rescaling of
 > reconstructed geometric cell areas, not the public represented-measure
@@ -6053,7 +6050,7 @@ bitwise query independence.
 > `MEASURE_WEIGHTS_KEY`, before constructing `source_mesh`; the promised
 > total-measure scalar is also computed and then unused. The test therefore
 > establishes a bare-area normalization identity only. It does **not** show
-> that upstream Horvitz--Thompson weights survive or that the production
+> that upstream Horvitz--Thompson weights remain intact or that the production
 > represented measure was fixed.
 
 Both pre-registered predictions returned, and they split cleanly.
@@ -6097,13 +6094,13 @@ demoted.** H-MS is not one mechanism behind three failures.
 
 What it is instead, stated precisely:
 
-- **Claims 1 and 2 survive and are strengthened.** Cross-family
+- **Claims 1 and 2 remain and are strengthened.** Cross-family
   divergence and the gauge dose-response are both *measure-magnitude*
   phenomena, and the $k$-ladder gives them a mechanism they did not
   have. Nondimensional area scales as $L^{-2}$, so the measured
   recovery 8 → 16 → 48 is a 4× then 36× reduction in total measure —
   exactly the direction and rough magnitude the ladder predicts. The
-  gauge was never the cause; it was the *lever* that happened to move
+  gauge was never the cause; it was the *factor* that happened to move
   the measure.
 - **Claim 3 is refuted.** The subsampling bias is untouched by
   weighting, which independently confirms @sec-nb-hdi-verdict's
@@ -6118,7 +6115,7 @@ The negative half is as useful as the positive: it stops a plausible
 and wrong unification before it reached a chapter, and it retires
 reweighting as a candidate repair for resolution transfer.
 
-The positive half is a genuine architectural finding. A missing
+The positive half is a architectural finding. A missing
 invariance, measured; an exact repair that is a one-line reweighting;
 and — the part that matters most — the repair makes Horvitz--Thompson
 weights **usable**. Today they are catastrophic ($k=880 \Rightarrow
@@ -6132,18 +6129,18 @@ detonating it, even though they do not by themselves fix coverage.
    (`measure_normalization=True`), with the total measure re-entering as
    one dimensionless global scalar $A/L^{d-1}$ so no information is
    destroyed. Contract tests first: zero-drive, exact drive linearity,
-   equivariance, bitwise query independence — all four should survive
+   equivariance, bitwise query independence — all four should hold
    *by construction*, and a test that says otherwise is the finding.
 2. Pre-register the training test that matters: does an
    arm trained with normalised measures transfer cross-family better
    than the intrinsic-gauge arm? H-MS claims 1--2 predict yes; the
-   honest prior is that it removes a divergence mode rather than buying
+   prior is that it removes a divergence mode rather than improving
    accuracy, so the bar should be *structural* (finite, $<1.0$) rather
    than a win against GeoTransolver.
 3. Only then revisit coverage, which is now cleanly isolated as its own
    problem with no weighting-shaped solutions left.
 
-## 2026-07-24 (night) — REPLICATION of the forked branch's singularity-subtraction result: mechanism CONFIRMED, magnitudes CORRECTED ~4-10x down {#sec-nb-subtraction-replication}
+## 2026-07-24 (night) — replicated singularity-subtraction result {#sec-nb-subtraction-replication}
 
 A forked research branch proposed that the trace-query boundary integral
 is *noise-dominated* at the coverage the protocol trains at, and that
@@ -6166,7 +6163,7 @@ $-6.2832 = -2\pi$; principal value over all other panels
 $+6.2832 = +2\pi$; total $\sim 10^{-6}$ of either. The physical answer
 really is a small residual of two large, nearly-cancelling terms —
 second-kind Fredholm structure, exactly as the theory chapter says, and
-a genuine numerical trap under sampling.
+a numerical trap under sampling.
 
 **The falsifier behaves as theory demands.** Variance reduction is
 monotone in density smoothness and disappears for white noise — which
@@ -6203,18 +6200,18 @@ physical answer is 0.0905 against my 2.304 for a generic smooth
 density, and SNR is linear in that. A near-cancelling query/density
 choice makes the estimator look ~25× worse than a typical one.
 
-### What survives, and it is still worth having
+### What remains, and it is still worth having
 
 - **The estimator really is bad at production coverage: 42% relative
   error from sampling alone**, before any learning. That is a serious
   and independently-confirmed finding, and it agrees with
   @sec-nb-hdi-verdict from a completely different direction.
-- **Subtraction is a genuine, zero-parameter improvement** — SNR
+- **Subtraction is a zero-parameter improvement** — SNR
   2.36 → 3.63 at 0.11% coverage, consistently, with the correct
   falsifier behaviour. It is free, it composes with everything, and it
   needs only $\sigma(x)$, which trace mode already computes.
 - **But it is a ~1.6× improvement, not a transformation.** The fork's
-  "accuracy of 4.5% coverage obtained at 0.11%" does not survive:
+  "accuracy of 4.5% coverage obtained at 0.11%" does not hold:
   2.6× variance is ~2.6× effective sample count, i.e. 0.11% → ~0.3%
   coverage-equivalent.
 - **The grand unification is weakened, not dead.** SNR 2.36 is
@@ -6237,7 +6234,7 @@ They are complementary, not competing: measure normalisation
 remains its own problem. **The highest-value experiment in the program
 is now a coverage ladder** — train and evaluate at 10k / 50k / 200k
 sources — because all three threads predict it moves, and it is the one
-variable nobody has swept.
+variable that has not been swept.
 
 ## 2026-07-25 — PRE-REGISTRATION H-CC: did the model learn a COVERAGE-SPECIFIC compensation? {#sec-nb-hcc-prereg}
 
@@ -6280,15 +6277,15 @@ evaluate it unchanged on `id_reference` at
   protocol variable* rather than a convenience knob.
 - **Convergence (H-CC false):** error decreases monotonically with
   resolution, converging toward a floor. The model would then be a
-  genuine operator whose remaining error is capacity, and the
+  operator whose remaining error is capacity, and the
   full-resolution failure (rel $L^2 \sim 100$ at 50k) would need a
   different explanation entirely.
 
 *Prediction: compensation, p ≈ 0.65.* The reasoning is the arithmetic
 above — 0.167 measured against a 42% pure-numerics floor is hard to
-explain without a fitted correction — but it is genuinely uncertain,
+explain without a fitted correction — but it is uncertain,
 because the learned coefficients are also free to implement real
-variance reduction that would survive a coverage change.
+variance reduction that would persist under a coverage change.
 
 **Falsifier for the whole estimation thread:** monotone improvement
 with resolution would mean sampling noise is not what limits this model,
@@ -6302,7 +6299,7 @@ points are scored, so this is a fair comparison of the same physical
 field at different sampling — but it is not a fixed-query-set
 comparison, and no claim will be made as if it were.
 
-## 2026-07-25 — H-CC VERDICT: CONFIRMED at maximum strength — a sharp minimum exactly at the training resolution, and catastrophe above it {#sec-nb-hcc-verdict}
+## 2026-07-25 — H-CC verdict: minimum at the training resolution {#sec-nb-hcc-verdict}
 
 > **EDIT (2026-07-27 audit):** The U-shaped resolution response is a
 > strong reported observation; “coverage-specific compensation” is not
@@ -6386,7 +6383,7 @@ value. If it does not, the divergence is about *which* panels are
 present and the coverage/completeness thread owns it instead.
 Pre-declared before running; falsifier is "no material collapse".
 
-## 2026-07-25 — MEASURE-MECHANISM TEST: falsifier FIRES; the gauge lever is confounded and the clean test is now an implementation task {#sec-nb-measmech-verdict}
+## 2026-07-25 — measure-mechanism test: falsifier fires {#sec-nb-measmech-verdict}
 
 Pre-declared at @sec-nb-hcc-verdict: restore the training total measure
 at resolution 40 000 via $L = 16$ (nondim area $\sim 1/L^2$, measure
@@ -6410,7 +6407,7 @@ was wrong, for the fourth time today.
 
 **But the test cannot settle the hypothesis, and the control is why.**
 At the *training* resolution, changing the gauge alone from 8 to 16
-costs 8× (0.167 → 1.376). The lever is not clean: $L$ rescales
+costs 8× (0.167 → 1.376). The factor is not clean: $L$ rescales
 coordinates as well as measures, and the coordinate half is by itself
 badly damaging. So this measures "measure-matching *via the gauge*
 does not fix the resolution catastrophe", which is weaker than
@@ -6434,7 +6431,7 @@ Two further observations, both worth more than the failed prediction:
 
 ### Consequence: the clean experiment is now an implementation, not a sweep
 
-There is no configuration lever that varies the quadrature measure
+There is no configuration factor that varies the quadrature measure
 while holding the nondimensional coordinates fixed — which is exactly
 what `measure_normalization` would provide, since normalising
 $\omega_j / \sum_i \omega_i$ touches the measure and nothing else. The
@@ -6445,18 +6442,18 @@ rather than confirmed.
 That also sharpens what the implementation is for. It was proposed as
 "a missing required invariance, fixed exactly" (@sec-nb-hms-verdict),
 which stands on its own contract-level evidence. Whether it *also*
-cures the resolution catastrophe is now a genuinely open, pre-registered
-question with a clean test attached — and the honest prior, after
+cures the resolution catastrophe is now an open, pre-registered
+question with a clean test attached — and the prior, after
 today, should be lower than I would have written this morning.
 
 **Next, in order:** (1) implement `measure_normalization` with the total
 measure re-entering as one dimensionless global scalar; (2) contract
 tests — zero-drive, exact drive linearity, equivariance, bitwise query
-independence — which should survive by construction; (3) re-run *this*
+independence — which should hold by construction; (3) re-run *this*
 resolution sweep under it, which is the clean test; (4) only then decide
 whether a training arm is warranted.
 
-## 2026-07-25 — `measure_normalization` implemented; all four contracts survive by construction {#sec-nb-measnorm-impl}
+## 2026-07-25 — `measure_normalization` implemented; all four contracts hold by construction {#sec-nb-measnorm-impl}
 
 > **EDIT (2026-07-27 audit):** The advertised end-to-end measure contract
 > is not implemented. `encode` strips the incoming effective weights, then
@@ -6468,19 +6465,19 @@ whether a training arm is warranted.
 
 The clean test of the measure-magnitude hypothesis required an
 implementation (@sec-nb-measmech-verdict), because no configuration
-lever varies the quadrature measure while holding nondimensional
+factor varies the quadrature measure while holding nondimensional
 coordinates fixed. It now exists.
 
 **Design.** Not a new parallel mechanism — the model records a single
 normalizing weight through the *existing* `compose_measure_weights`
-machinery from #1770, and every quadrature consumer switches from
+implementation from #1770, and every quadrature consumer switches from
 `source_mesh.cell_areas` to `cell_measures(source_mesh)` (5 sites in
 `attention.py`/`kernel_decoder.py`; `integrate_moment` already honoured
 effective measures, which is why the dense-oracle tests would have
 caught a partial conversion). Consequences worth stating:
 
 - the weight is *composed*, not assigned, so any Horvitz--Thompson
-  weight the pipeline recorded survives — and a uniform HT factor
+  weight the pipeline recorded remains — and a uniform HT factor
   cancels in the normalization, which is exactly what makes carrying
   subsample weights safe at all (they are catastrophic today,
   @sec-nb-hms-verdict);
@@ -6498,7 +6495,7 @@ caught a partial conversion). Consequences worth stating:
 | similarity equivariance (rotate+scale+translate) | 10⁻⁹ |
 | bitwise query independence | `torch.equal` |
 
-All survive *by construction*, as pre-registered: the reweighting is
+All hold *by construction*, as pre-registered: the reweighting is
 drive-independent, a fixed linear map, and a ratio of scalars.
 
 **What is now decidable, and what is not.** This adds a required
@@ -6528,7 +6525,7 @@ re-run the H-CC resolution sweep on it.
   `measure_normalization` reverts to "a required invariance, added" with
   no claim on resolution transfer.
 
-## 2026-07-25 (evening) — measure-normalization arm launched from an ISOLATED tree; sampling-side levers measured and found modest {#sec-nb-measnorm-launch}
+## 2026-07-25 (evening) — measure-normalization launch and sampling results {#sec-nb-measnorm-launch}
 
 ### Why the arm runs from its own checkout
 
@@ -6559,7 +6556,7 @@ numbers exactly.
 Both exact. The patch is inert when off and the platform is valid, so a
 difference in the treatment arm can be attributed to the knob and not
 to the tree. **Launched:** flagship + `measure_normalization`, fixed
-gauge, seed 42, lr 3.0e-3, 500 epochs, 6-link chain — deliberately the
+gauge, seed 42, lr 3.0e-3, 500 epochs, 6-link chain — specifically the
 *fixed-gauge* configuration, because the resolution catastrophe this
 tests was measured on exactly that control.
 
@@ -6585,7 +6582,7 @@ sampling-side interventions, both ~1.2–1.6×.
 recovers the missing coverage: 35% error at 0.11% is largely
 irreducible without more samples. Reweighting cannot fix it (measured
 twice), stratification barely dents it, subtraction barely dents it.
-That leaves exactly two honest options for the program, and they should
+That leaves exactly two options for the program, and they should
 be named as such rather than discovered later —
 
 1. **train at higher coverage**, accepting the cost, or
@@ -6595,7 +6592,7 @@ be named as such rather than discovered later —
 `measure_normalization` is orthogonal to both: it removes a *magnitude*
 failure that is catastrophic (148 000×) rather than a *coverage* failure
 that is ~35%. If P1 holds, option 2 stops being forced — the model
-would be evaluable at any resolution, with only the honest ~35%
+would be evaluable at any resolution, with only the measured ~35%
 coverage penalty rather than divergence.
 
 **A methodological note, recorded because it bit twice today.** Both
@@ -6608,7 +6605,7 @@ variance-reduction numbers. Any future estimator experiment on this
 suite should exclude the own panel and check monotonicity in coverage
 as a sanity gate.
 
-## 2026-07-25 — a caveat against my own P1: at random init, normalization changes subsampling behaviour barely at all {#sec-nb-measnorm-caveat}
+## 2026-07-25 — random-init caveat for P1 {#sec-nb-measnorm-caveat}
 
 Ran the operator-level version of the H-CC sweep locally, expecting it to
 foreshadow the training arm: same random-init weights, subsample one
@@ -6649,7 +6646,7 @@ weights, not in the architecture's quadrature.** The model has fitted
 coefficients that are hypersensitive to a sampling statistic that a
 random-init model barely notices.
 
-Consequences, stated plainly:
+Consequences:
 
 - **P1's prior drops.** I wrote $p \approx 0.55$ from an arithmetic
   argument that this measurement undercuts. Revised to $p \approx 0.35$:
@@ -6682,7 +6679,7 @@ for cells the reader did not deliver; the Horvitz--Thompson weight
 composes through `SubsampleMesh` automatically, so measure bookkeeping
 stays correct at every drawn resolution.
 
-**Deliberately run with `measure_normalization` OFF.** The two
+**Run with `measure_normalization` OFF by design.** The two
 interventions attack the same failure from different directions —
 architecture versus protocol — and confounding them would waste both
 arms. The current corner set against the existing t2 flagship s42
@@ -6706,7 +6703,7 @@ publishable-looking but meaningless arm.
    degradation would have been read as "augmentation hurts" when it
    actually measured "less coverage hurts". Fixed by giving the covaug
    arm its own script at `sampling_resolution=20000`, making the draw
-   genuinely $\{2500,5000,10000,20000\}$ with mean 9 375 ≈ the
+   $\{2500,5000,10000,20000\}$ with mean 9 375 ≈ the
    control's 10 000.
 
 **Provenance fix.** The base script hardcodes `_intrinsic_` into the
@@ -6780,7 +6777,7 @@ rather than against the failure being watched for.**
 
 **Cluster state is unaffected.** Slurm jobs are independent of my
 connection; all five chains continue. Only observation is blocked, and
-the honest position until the VPN returns is that the arms' state is
+the only supported position until the VPN returns is that the arms' state is
 *unknown*, not *finished*.
 
 ### Closed while blocked: the pooled path inherits the invariance
@@ -6794,12 +6791,12 @@ Horvitz--Thompson weights would arrive (vehicle ~880×, tunnel 1×), so
 it is the one that most needs pinning.
 
 Added a seventh contract test on a two-boundary pooled+balanced model
-with a deliberate measure imbalance (small sphere beside a 6× wall):
+with an imposed measure imbalance (small sphere beside a 6× wall):
 baseline drifts under a $k=880$ rescale, **normalised stays below
 10⁻⁹**. The whole pooled model is measure-scale invariant, not just the
 single-boundary path.
 
-## 2026-07-25 — intrinsic panel COMPLETE: the anomaly is one seed, and half the learning rate mostly (not fully) rescues it {#sec-nb-seedbaserate}
+## 2026-07-25 — intrinsic panel: one anomalous seed {#sec-nb-seedbaserate}
 
 All three follow-up arms reached epoch 499/500 with clean completion.
 Final training loss, against the two seeds that already passed gate 0
@@ -6816,7 +6813,7 @@ Final training loss, against the two seeds that already passed gate 0
 | 46 | 3.0e-3 | 0.01411 | healthy |
 
 **The base-rate question is answered: one seed in five.** Seeds 42, 43,
-45 and 46 all land in a tight band (0.0139–0.0145) at the standard
+45 and 46 all fall in a tight band (0.0139–0.0145) at the standard
 learning rate. Only seed 44 diverges from it, and it does so by 2.4×.
 This is the measurement the transfer number alone would never have
 produced, and it matters more than the transfer number: it says the
@@ -6828,7 +6825,7 @@ becomes a default anywhere.
 0.01830, recovering about three quarters of the log-gap — but does
 *not* restore it to the healthy band. So the LR-marginality hypothesis
 is **partially confirmed**: learning rate is implicated, but it is not
-the whole story, or lr/2 would have landed s44 at ~0.014 like everyone
+the whole story, or lr/2 would have brought s44 to ~0.014 like everyone
 else. Something about seed 44's initialization interacts with the
 per-sample gauge in a way that a uniform LR reduction only partly
 undoes.
@@ -6838,13 +6835,13 @@ Gate-0 evaluations for the three new checkpoints are running
 @sec-nb-gate0-verdict). The panel decision follows the pre-registration
 rather than convenience: seeds 42/43 are in band; whether the third
 panel slot is s44@lr1.5e-3 depends on whether it passes gate 0, and if
-it does not, that gets reported rather than quietly swapped for s45 —
+it does not, that gets reported rather than replaced with s45 —
 substituting a seed *after* seeing which ones behaved is exactly the
 post-hoc move the transfer-v2 pre-registration forbids.
 
 ## 2026-07-25 — a launch-acceptance failure of my own, and the bug it hid {#sec-nb-covaug-crash}
 
-The coverage-augmentation arm (@sec-nb-hca-launch) **died 27 seconds
+The coverage-augmentation arm (@sec-nb-hca-launch) **failed 27 seconds
 after launch** and I did not notice for two hours, because I checked
 that it was alive (`R=1`) and never that it was *productive*. That is
 precisely the default-deny rule this program already codified — alive ≠
@@ -6854,7 +6851,7 @@ The crash:
 
     RuntimeError: Expected a 'cpu' device type for generator but found 'cuda'
 
-The cause is mine and is a genuine integration trap worth recording.
+The cause is mine and is a integration trap worth recording.
 The recipe **injects a generator into every transform's `_generator`
 attribute** (the per-index RNG derivation). My `RandomCoverageSubsample`
 reused that injected generator for its own `torch.randint` count draw —
@@ -6874,7 +6871,7 @@ Its unit test passes; the integration is where the contract lives. Any
 future recipe-local transform should be smoke-tested through the actual
 dataset pipeline before a 14-hour arm is queued behind it.
 
-## 2026-07-25 — GATE 0b: four seeds in band, seed 44 out in BOTH variants; the panel rule, declared before any SHIFT number {#sec-nb-gate0b}
+## 2026-07-25 — gate 0b: four seeds pass; seed 44 fails {#sec-nb-gate0b}
 
 | arm | pressure_l2 | wss_l2 | verdict |
 |---|--:|--:|---|
@@ -6911,8 +6908,8 @@ what gate 0 was for:
 > gate 0.** On the evidence above that is {42, 43, 45, 46} — four
 > seeds, not three.
 
-Two honesty measures attach to it, because excluding a failing seed is
-exactly how a panel gets quietly flattered:
+Two safeguards attach to it, because excluding a failing seed can
+make a panel appear better than it is:
 
 1. **Seed 44 is evaluated on SHIFT-SUV anyway**, in both variants, and
    its numbers are reported beside the panel's. The exclusion is from
@@ -6935,7 +6932,7 @@ for seeds that train successfully.
 
 ## 2026-07-25 — TRANSFER-V2 VERDICT: gate 1 FAILS. The gauge was not the mechanism {#sec-nb-transferv2-verdict}
 
-> **EDIT (2026-07-27 audit):** The qualitative refutation survives: the
+> **EDIT (2026-07-27 audit):** The qualitative refutation remains: the
 > reported misses are far too large for the calibration leak plausibly to
 > reverse, and later pattern diagnostics find essentially unrelated fields.
 > The exact magnitudes are nevertheless non-auditable from this checkout:
@@ -6971,13 +6968,12 @@ brittleness". That reading is now **refuted by its own confirmatory
 test**. Retraining under a similarity-covariant, per-sample intrinsic
 gauge — the principled fix, calibrated once on train, never re-fit —
 leaves the model diverging on a different vehicle family. The gauge was
-a *lever that moved the magnitude*, not the cause. The honest
-restatement:
+a *factor that moved the magnitude*, not the cause. Revised statement:
 
 > The MeshTransformer does not transfer across vehicle family, and the
 > declared scale gauge is not why.
 
-The three framings recorded on 2026-07-22 survive unequally: (1) the
+The three interpretations recorded on 2026-07-22 hold to different degrees: (1) the
 frozen-protocol verdict stands, as always; (2) **"repairable protocol
 flaw" is dead**; (3) the insistence that the dose-response was
 exploratory and could not support a rehabilitated claim was exactly
@@ -6998,7 +6994,7 @@ in @sec-nb-gate0b was written to preserve: had seed 44 simply been
 dropped for failing gate 0, the single most suggestive datum in the
 experiment would have been discarded, and the discarding would have
 looked like good practice. **In-family fit and cross-family robustness
-may be in tension here** — which, if it survives a designed test, is a
+may be in tension here** — which, if it remains a designed test, is a
 more interesting finding than the transfer number was ever going to be.
 
 Registered, not commissioned: an in-family-vs-cross-family scatter
@@ -7024,7 +7020,7 @@ is a regressor fitted to a narrow operating point — one coverage, one
 gauge, one geometry family — and the exact-kernel structure does not
 protect it outside that point.** That is consistent with the industrial
 kernel factorial, which found the exact members contributing 0–8%
-(@sec-drivaerml-factorial): structure that is not load-bearing
+(@sec-drivaerml-factorial): structure that is not essential
 in-distribution cannot be expected to carry generalization either.
 
 > **EDIT (2026-07-27 artifact recovery):** “Survives untouched” is false.
@@ -7036,7 +7032,7 @@ in-distribution cannot be expected to carry generalization either.
 **Odds, revised on evidence.** "MT transfers at all, post-repair" was
 ~75% before this test; it is now **measured false at the structural
 gate**. Cross-family *advantage* over the incumbent: ~10–15% → **< 5%**.
-What survives untouched is the sealed within-family deep-S1 WSS
+What remains untouched is the sealed within-family deep-S1 WSS
 differential (@sec-nb-seal-verdict), which remains this architecture's
 strongest generalization claim — and, on today's evidence, is likely to
 remain so.
@@ -7049,7 +7045,7 @@ precisely what the two in-flight arms (`measure_normalization`,
 `RandomCoverageSubsample`) test on the resolution axis, where the
 failure is cheapest to measure.
 
-## 2026-07-25 — THEORY: why the incumbent degrades and we detonate, and a structural measurement of the amplifier (H-DEG) {#sec-nb-hdeg}
+## 2026-07-25 — H-DEG: structural amplifier measurement {#sec-nb-hdeg}
 
 > **EDIT (2026-07-27 audit):** Drive degree constrains
 > $g\mapsto\lambda g$; SHIFT-SUV changes the geometry distribution.
@@ -7131,7 +7127,7 @@ evidence for it:
   every nondimensional input, and that rescale is then raised to a
   power of 6–8. A 6× gauge change is $6^{7}\approx 3\times10^{5}$ of
   output movement — so the gauge *looked* like the cause because it
-  feeds an enormous exponent, while being only a lever.
+  feeds an enormous exponent, while being only a factor.
 - **Why retraining under the intrinsic gauge changed nothing.** The
   gauge repair removes an input-scale *offset*; it does nothing to the
   exponent that turns residual shift into divergence. A model with a
@@ -7158,8 +7154,8 @@ evidence for it:
 **Cost note.** The quadratic mode is not free: it is a strictly weaker
 hypothesis class, and on the industrial suite the declared-degree arm
 "keeps pace with the unbounded nonlinear arm without the stability
-premium it enjoyed on exact families" (@sec-ns-cavity). So the honest
-framing of the trade is *bounded extrapolation versus in-distribution
+premium it enjoyed on exact families" (@sec-ns-cavity). The trade is
+*bounded extrapolation versus in-distribution
 capacity*, and the experiment should report both.
 
 ## 2026-07-25 — P2 measured: norm-factored homogeneity gets every property at once, and it diagnoses GLOBE's arcsinh {#sec-nb-p2}
@@ -7215,7 +7211,7 @@ $$f(x)\;=\;\lVert x\rVert\; g\!\left(x/\lVert x\rVert\right)$$
   does**, so $g$ may be an unconstrained MLP *with biases*. LayerNorm
   and arcsinh cannot make that guarantee — in the table both fail
   $f(0)=0$ for exactly this reason, inheriting the MLP's bias.
-- **genuinely nonlinear**: additivity error 0.458, so it is not
+- **nonlinear**: additivity error 0.458, so it is not
   secretly a linear map. The nonlinearity lives in the drive's
   *direction*.
 
@@ -7226,7 +7222,7 @@ pessimistic: normalisation is forbidden only if you *discard* the norm.
 Factor it out, act nonlinearly on the direction, and multiply it back,
 and both properties hold simultaneously.
 
-### The honest limitation
+### The limitation
 
 Degree-1 homogeneity means $u(\lambda g)=\lambda u(g)$ — amplitude
 nonlinearity is given up. That is a real restriction for Liouville and
@@ -7252,7 +7248,7 @@ moves to the decode. The cheaper config-only test of the same
 hypothesis — `field_mode="quadratic"`, degree 0.97 measured — runs
 first and predicts the same direction.
 
-## 2026-07-25 — measnorm sweep: P1 REFUTED, but the test was confounded by a bug of mine, and the bug is the finding {#sec-nb-measnorm-sweep}
+## 2026-07-25 — measure-normalization sweep: P1 refuted; confounding bug found {#sec-nb-measnorm-sweep}
 
 Resolution sweep on the trained `measure_normalization` arm, against the
 plain flagship control:
@@ -7332,7 +7328,7 @@ look more promising anyway: the amplifier measured structurally at
 degree 7 (@sec-nb-hdeg) is a larger effect than anything the measure
 path can contribute, and `quadratic`/`homogeneous` attack it directly.
 
-## 2026-07-25 — quadratic arm launched; P2 validated on the real typed machinery {#sec-nb-quad-p2}
+## 2026-07-25 — quadratic arm launched; P2 validated on the real typed implementation {#sec-nb-quad-p2}
 
 > **EDIT (2026-07-27 audit):** “Exact degree one” again holds only for
 > the ordinary positive scales exercised here. The real implementation
@@ -7354,13 +7350,13 @@ from the smoke test itself, before any training:
 
 The quadratic mode is **280× better conditioned at initialisation** and
 carries 34% fewer parameters. The parameter gap is a stated confound —
-the declared-degree machinery is genuinely smaller, so this is not a
+the declared-degree implementation is smaller, so this is not a
 parameter-matched comparison and will not be presented as one.
 
 ### P2 validated on real typed states, not a toy
 
 The earlier P2 measurement (@sec-nb-p2) used a plain MLP. Re-run on the
-actual `ScalarVectorState` / `TypedProjection` machinery, with
+actual `ScalarVectorState` / `TypedProjection` implementation, with
 $f(F) = \lVert F\rVert\, g(F/\lVert F\rVert)$ and $\lVert F\rVert$ the
 O($D$)-invariant state magnitude:
 
@@ -7370,10 +7366,10 @@ O($D$)-invariant state magnitude:
 | degree-1 homogeneity | 2.25 × 10⁻¹⁶ | holds |
 | O($D$) equivariance, scalars | 2.05 × 10⁻¹⁶ | holds |
 | O($D$) equivariance, vectors | 2.30 × 10⁻¹⁶ | holds |
-| nonlinearity (additivity gap) | 0.451 | genuinely nonlinear |
+| nonlinearity (additivity gap) | 0.451 | nonlinear |
 
 **Zero preservation is exactly 0 with `scalar_bias=True`.** That is the
-load-bearing property: an unconstrained, *biased* typed projection cannot
+essential property: an unconstrained, *biased* typed projection cannot
 break the contract, because the norm multiplies back. Every other
 bounding scheme in the comparison (LayerNorm, radial arcsinh) fails
 $f(0)=0$ for precisely the reason this one does not.
@@ -7397,7 +7393,7 @@ $\lVert F\rVert\,g(F/\lVert F\rVert)$ with $g$ a typed projection.
 Degree closure: $\lVert F\rVert$ is degree 1, $F/\lVert F\rVert$ degree
 0, $g(\cdot)$ degree 0, product degree **exactly 1**.
 
-Contract tests to ship with it, **parametrized over the kernel
+Contract tests to include with it, **parametrized over the kernel
 dictionary** per the rule adopted this morning after the second
 member-blind test hole: zero-drive, degree-1 homogeneity, equivariance,
 bitwise query independence, and — the one that would have caught the
@@ -7417,7 +7413,7 @@ preference: the degree amplifier is a factor of $10^{7}$ at a 10× shift
 and the measure path a factor of ~45 at 16×, so the `field_mode` arms
 attack the larger term.
 
-## 2026-07-25 — six arms in parallel; the covaug failure was torch.compile, not hydra (my diagnosis was wrong) {#sec-nb-parallel-fanout}
+## 2026-07-25 — six parallel arms; covaug failure traced to `torch.compile` {#sec-nb-parallel-fanout}
 
 ### Correction: I misdiagnosed the covaug crash twice
 
@@ -7468,7 +7464,7 @@ Six chains now run concurrently:
 | `covaug` | protocol: per-sample coverage, uncompiled | 42 |
 
 Second seeds went out with the first, rather than after: the program's
-own standard is three seeds for a load-bearing claim, so launching one
+own standard is three seeds for a essential claim, so launching one
 and adding more later costs a full wall-clock cycle for nothing.
 
 **The real serializer is code, not compute.** `homogeneous` required its
@@ -7479,7 +7475,7 @@ waiting costs hours. A related hazard was caught in flight: symlinking
 the new tree's venv to the sibling's would have let its `uv sync` mutate
 the environment three running arms were importing.
 
-## 2026-07-25 — H-DEG trace: my stage prediction is WRONG; the amplifier is the member MLP and Gram-invariant formation {#sec-nb-hdeg-trace}
+## 2026-07-25 — H-DEG trace: amplifier localized {#sec-nb-hdeg-trace}
 
 The pre-registered trace prediction (@sec-nb-hdeg) said the magnitude
 ratio under a family shift "must show the ratio *compounding through the
@@ -7533,7 +7529,7 @@ multiplies back only the state's own scale. That is a stronger and more
 useful property than "degree exactly 1", because it bounds contributions
 from components the contract does not otherwise govern.
 
-**Scope, stated plainly.** Random init, synthetic geometry, a *mild*
+**Scope.** Random init, synthetic geometry, a *mild*
 shift (end-to-end 1.35, not $10^{13}$), and `drive_layers=1` so there is
 little for the drive blocks to compound through in the first place. All
 four limit the inference: at large shifts the degree amplifier engages
@@ -7569,7 +7565,7 @@ Three things are wrong here, and they are all the instrument:
 2. **The homogeneous mode looks worse than the nonlinear one**, reversing
    @sec-nb-hdeg-trace's 0.995 vs 1.349 — and it should not even be a
    fair comparison, because the read-in is zero-initialised, so at random
-   init "homogeneous" *is* the drive-linear machinery with an identity
+   init "homogeneous" *is* the drive-linear implementation with an identity
    read-in. The comparison is between two different architectures with
    the nonlinearity switched off in one of them.
 3. **The same nominal comparison moved from 1.349 to 1.006** purely by
@@ -7582,7 +7578,7 @@ Three things are wrong here, and they are all the instrument:
 claims of @sec-nb-hdeg-trace — that amplification "concentrates in the
 member MLP and Gram-invariant formation" — rest on a single
 configuration of this same unreliable probe and are **withdrawn**. The
-`scalar_from_vector_dots` observation survives as *arithmetic* (vector
+`scalar_from_vector_dots` observation remains as *arithmetic* (vector
 dots square a ratio; that is true by inspection, not by measurement),
 but its numerical weight relative to other stages does not.
 
@@ -7608,7 +7604,7 @@ checkpoints — six arms are in flight and will supply them. No further
 random-init geometry-shift probing; the remaining local work should be
 confined to properties that are provably weight-independent.
 
-## 2026-07-25 — PRE-REGISTRATION: how the six-arm wave will be judged, written before any final number exists {#sec-nb-wave-prereg}
+## 2026-07-25 — pre-registration for the six-arm wave {#sec-nb-wave-prereg}
 
 Six arms are in flight against one failure (out-of-distribution
 divergence) via four interventions. That is exactly the configuration in
@@ -7655,7 +7651,7 @@ that has now reproduced 0.167163 three times.
   may carry; an arm that is uniformly worse but flat would still be the
   interesting result.
 
-**Q3 — does it survive cross-family?** Zero-shot SHIFT-SUV,
+**Q3 — does it transfer cross-family?** Zero-shot SHIFT-SUV,
 `eval_pilot`, the frozen pipeline, corrected metric.
 
 - *Structural:* every seed finite with `pressure_l2 < 1.0`.
@@ -7704,10 +7700,10 @@ generalise across *geometry* families.
 `homog` seeds are tracking each other to 0.8% at matched epochs
 (0.024786 / 0.024595 at 78/77), against the intrinsic-gauge wave's 2.4×
 seed divergence. Seed tightness is one thing bounded internals ought to
-buy. It is 15% of the way through training and will not be cited as a
+reduce. It is 15% of the way through training and will not be cited as a
 result.
 
-## 2026-07-25 — FIRST HARVEST (`quad` s42): all three bars FAIL, and the effect size is four orders of magnitude {#sec-nb-harvest-quad-s42}
+## 2026-07-25 — first harvest: `quad` s42 fails all bars {#sec-nb-harvest-quad-s42}
 
 First arm of the six-arm wave, scored against the bars fixed at
 @sec-nb-wave-prereg before any of these numbers existed.
@@ -7756,7 +7752,7 @@ order-of-magnitude result, and it produced four of them.
 Q1 got **worse**: +14% in-family, past the 10% bar. The pre-registration
 required that any robustness gain be quoted with its Q1 price, and the
 price here is real. An arm that is 14% worse in-distribution and four
-orders better at 4× resolution is a genuine trade, not a free win, and
+orders better at 4× resolution is a trade, not a free win, and
 whether it is worth taking depends on whether deployment resolution is
 fixed — which, given @sec-drivaerml-coverage, it is not.
 
@@ -7772,10 +7768,10 @@ $10^{6}$ from a base of $10^{13}$ — i.e. barely, on a log scale.
 ### Standing
 
 `quad` s43 is at 477/500; `homog` s42/s43 at 482/464; `mn2` at 471.
-No conclusion until the paired seed lands, per the pre-registration's
+No conclusion until the paired seed completes, per the pre-registration's
 ban on treating one seed as decisive or dropping a disagreeing one.
 
-## 2026-07-25 — WAVE VERDICT: no arm passes Q2, the Q2 statistic itself is the finding, and Q3 favours `homogeneous` reproducibly {#sec-nb-wave-verdict}
+## 2026-07-25 — wave verdict: Q2 fails; `homogeneous` leads Q3 {#sec-nb-wave-verdict}
 
 Five of six arms harvested against the bars fixed at
 @sec-nb-wave-prereg. `covaug` still training.
@@ -7810,7 +7806,7 @@ skipped the pilot because the control's 148 000 was so far from any
 plausible bar that the *sign* of the effect seemed unambiguous. It was;
 the *magnitude* was not, and the bar was on the magnitude.
 
-**What the pre-registration did buy:** it stopped the conclusion. On
+**What the pre-registration provided:** it stopped the conclusion. On
 `homog` s42 alone I would have reported a breakthrough — degree-1
 contract passes the resolution bar — an hour before the paired seed
 refuted it. The mechanism worked. It simply protected a claim about a
@@ -7825,7 +7821,7 @@ Spread on cross-family, the *secondary* question:
 | `quad` | 7 814 806 | 42 527 | 184× |
 | `homog` | **711** | **580** | **1.23×** |
 
-`homogeneous` lands at ~600 on both seeds while every other arm scatters
+`homogeneous` reaches ~600 on both seeds while every other arm scatters
 across $10^{4}$–$10^{7}$ and the control across $10^{4}$–$10^{15}$.
 That is a **tight, reproducible four-to-ten order improvement** on the
 axis the program cares most about — and it fails the declared bar of
@@ -7841,7 +7837,7 @@ have been.
 
 The only Q1 pass in the wave — 0.169884, **+1.6%** against control,
 comfortably inside the 10% bar — and $\infty$ at 40k. Measure
-normalisation is genuinely almost free in-distribution and does nothing
+normalisation is almost free in-distribution and does nothing
 whatever for either robustness axis. Its contract-level value
 (@sec-four-properties) is unaffected; its *practical* value is now
 measured and is small.
@@ -7856,7 +7852,7 @@ measured and is small.
    whole design.
 3. **The `homogeneous` result deserves seeds, not a rewrite.** Its Q3
    consistency at n=2 is suggestive; the program's own standard is 3–5
-   for load-bearing claims, and this is the first candidate in the
+   for essential claims, and this is the first candidate in the
    campaign worth spending them on.
 
 ## 2026-07-26 — PRE-REGISTRATION: `homogeneous` seed extension, with Q3 primary this time {#sec-nb-homog-seeds-prereg}
@@ -7868,7 +7864,7 @@ applies all of them.
 **What is being tested.** `field_mode="homogeneous"` at three further
 seeds (44, 45, 46), protocol otherwise identical to the wave arms. With
 the existing s42/s43 this gives **five seeds**, the program's standard
-for a load-bearing claim.
+for a essential claim.
 
 **Primary question is now Q3, not Q2.** The wave put its hard bar on the
 noisier quantity: Q2's seed spread was 44.8× for this very arm, while
@@ -7878,18 +7874,18 @@ Correcting that inversion is the point of this run.
 - **Q3 (primary):** zero-shot SHIFT-SUV `pressure_l2`, five seeds.
   *Declared statistic: the seed median, and the min–max range.*
   - **Reproducibility bar (the real test):** all five seeds within a
-    **3× band**. s42/s43 spanned 1.23×; if that tightness survives to
+    **3× band**. s42/s43 spanned 1.23×; if that tightness remains to
     five seeds against `quad`'s 184× and the control's 11 orders, the
     effect is real regardless of its absolute value.
   - **Usability bar (stated, expected to fail):** median < 1.0. At ~600
-    this will not pass, and saying so now prevents it being quietly
-    dropped later.
+    this will not pass, and saying so now prevents it from being
+    dropped later without explanation.
 - **Q1 (secondary):** in-family `pressure_l2` ≤ 0.1839. s42/s43 gave
   0.1928/0.1887 — expect ~0.19, i.e. **fail at ~+14%**, and that price
   is part of the result.
 - **Q2 (descriptive only, no bar):** the 40k/10k ratio is reported per
   seed and *not gated*, because it has been measured to be too noisy to
-  threshold. Reporting it without a bar is the honest treatment of a
+  threshold. Reporting it without a bar is the appropriate treatment of a
   statistic that has already misled once.
 
 **Predictions.** Q3 five-seed band within 3×: $p \approx 0.55$ — two
@@ -7907,10 +7903,10 @@ would establish that declaring drive degree gives a *reproducible*
 four-to-ten order improvement in cross-family behaviour — the first such
 result in the program. It would **not** make the model usable
 cross-family; 600 is not a prediction. It would make the degree
-mechanism the established lever and shift the question to what closes
+mechanism the established factor and shift the question to what closes
 the remaining gap.
 
-## 2026-07-26 — The two fixes are complementary, not redundant: `measure_normalization` is free in-family and useless out, `homogeneous` is the reverse {#sec-nb-hboth-prereg}
+## 2026-07-26 — measure normalization and homogeneity are complementary {#sec-nb-hboth-prereg}
 
 > **EDIT (2026-07-27 audit):** H-BOTH is a valid prospective ablation of
 > homogeneous drive handling plus normalization of **bare geometric
@@ -7940,7 +7936,7 @@ The control in-family value is the frozen 0.167163.
 | `homog` s43 | 0.188710 | +12.9% | 245.7 | 579.7 |
 | `measnorm` s42 | **0.169884** | **+1.6%** | **inf** | 1.09e7 |
 
-**The in-family price is the `field_mode` change, not the machinery
+**The in-family price is the `field_mode` change, not the implementation
 around it.** Every arm that moved off `zero_preserving_nonlinear` pays
 +13–15%, and it does not matter which mode it moved to: `quadratic` and
 `homogeneous` are indistinguishable on this axis (+14.0/+14.6 vs
@@ -7951,14 +7947,14 @@ declaring *any* degree contract, not to the particular contract chosen.
 This corrects a reading I could easily have adopted: `measnorm`'s 0.1699
 is **not** a recovery of accuracy lost elsewhere. It never paid the
 field-mode price, because it never changed the field mode. A combined arm
-should therefore be expected to pay ~14% too — normalization does not buy
+should therefore be expected to pay ~14% too — normalization does not recover
 it back.
 
 **The two fixes act on disjoint axes.** `measure_normalization` is nearly
 free in-family and does nothing for extrapolation: its shift value
 (1.09e7) sits with `quad`'s worst, and it is the *only* arm that goes
 non-finite under refinement. `homogeneous` is the mirror image: it pays
-the full in-family price and buys ~7600× on the family shift relative to
+the full in-family price and provides ~7600× on the family shift relative to
 `quad`'s median, reproducibly (1.23× across two seeds against `quad`'s
 184×).
 
@@ -7977,7 +7973,7 @@ sizes. Zero drive maps to exactly zero, and degree one holds to
 5.09e-16 (members=0) and 2.38e-16 (members=8). Normalization does not
 disturb the homogeneity contract. This is now pinned as
 `test_composes_with_measure_normalization`, parametrized over the kernel
-dictionary — the conjunction is a shipped configuration, and shipping two
+dictionary — the conjunction is a supported configuration, and validating two
 separately-tested flags while assuming their conjunction works is the
 member-blind mistake this module has already made twice.
 
@@ -7991,8 +7987,7 @@ of its numbers is an `inf`.
 
 - **P2 (primary falsifier) — refinement.** `measnorm` s42 gave `inf` at
   40k. If the combined arm is non-finite at 40k in **≥2 of 3 seeds**,
-  then units normalization and discretization invariance are in genuine
-  conflict and the combined architecture is refuted as the four-property
+  then units normalization and discretization invariance are in   conflict and the combined architecture is refuted as the four-property
   candidate. Predict finite in ≥2/3: $p \approx 0.5$.
 - **P3 — shift.** Seed median within **3×** of the `homog` band
   (580–711), i.e. roughly 200–2100. Refuted if the median exceeds 1e4,
@@ -8021,7 +8016,7 @@ would still not be *usable* cross-family — 600 is not a prediction — but
 it would fix the architecture and move the question to closing the
 remaining gap.
 
-## 2026-07-26 — Auditing the cross-family metric before trusting a five-seed verdict on it: it survives {#sec-nb-metric-audit}
+## 2026-07-26 — Auditing the cross-family metric before trusting a five-seed verdict on it: it remains {#sec-nb-metric-audit}
 
 > **EDIT (2026-07-27 force-quadrature audit):** The conclusion below that a
 > 10k force integral covers only the retained area is false for the producing
@@ -8095,7 +8090,7 @@ the 20 shift samples:
 value rather than an average of one catastrophe and nineteen successes.
 `measnorm`'s is the opposite — a single sample supplies 83% of its mean,
 so its headline 1.09e7 describes one blow-up, not the arm. Its median,
-8.12e5, is the more honest summary and is still four orders above
+8.12e5, is the more representative summary and is still four orders above
 `homog`.
 
 I am **not** changing the declared statistic on the strength of this; the
@@ -8115,7 +8110,7 @@ the **evaluation protocol**, present in both families, not of the shift
 data. Force coefficients from any of these runs are unusable in absolute
 terms; `pressure_l2`, which is what every verdict uses, is unaffected.
 
-## 2026-07-26 — FIVE-SEED VERDICT: the reproducibility bar FAILS at 2491× against a 3× bar. The 1.23× was an n=2 mirage {#sec-nb-homog-seeds-verdict}
+## 2026-07-26 — five-seed verdict: reproducibility bar fails {#sec-nb-homog-seeds-verdict}
 
 The pre-registration (@sec-nb-homog-seeds-prereg) put the primary bar on
 Q3 reproducibility: all five seeds within a **3× band**. Result, all five
@@ -8147,21 +8142,21 @@ at 10k the predicted pressure RMS tracks the truth (ratio 0.99, 0.96,
 goes to zero scores $\approx 1.0$ on a relative $L_2$, because the
 numerator becomes $\lVert t \rVert$. So a 40k value near 1.0 is not "mild
 degradation" — it is **total loss of signal**, and it is a different
-pathology from s43's 46.37, which is genuine divergence. Four of five
+pathology from s43's 46.37, which is divergence. Four of five
 seeds collapse; one diverges. The Q2 ratio conflates them into a single
 axis, which is why its seed spread was 44.8× and why gating it was a
 mistake. **Q2 should be retired and replaced by the signed diagnostic
 `pred_rms / true_rms`**, which separates collapse (→ 0) from divergence
 (→ ∞); the ratio cannot.
 
-### What survives
+### What remains
 
-The *level* separation from `quad` does survive the seed extension, and
+The *level* separation from `quad` remains after the seed extension, and
 it is large: `homog`'s **worst** seed (5157) still beats `quad`'s
 **better** seed (42 527) by 8.25×, and the medians differ by ~6700×. So
 "declaring drive degree improves cross-family behaviour" stands. What
 does **not** stand is the claim I made in @sec-nb-wave-verdict that the
-effect is *reproducible* — that was the load-bearing word, it rested on
+effect is *reproducible* — that was the essential word, it rested on
 two seeds, and the five-seed test refutes it. `quad`'s own 184× band is
 now equally suspect for the same n=2 reason and should not be quoted as a
 contrast.
@@ -8190,7 +8185,7 @@ training objective, and the ~600 median would be a statement about the
 objective rather than the architecture.
 
 **It also explains s44 without special pleading.** s44 reaching 2.07 —
-within a factor of two of the "usability" bar nobody expected any seed to
+within a factor of two of the "usability" bar that no seed was expected to
 approach — is not a fluke to be explained away; it is the extreme point
 of a trend that includes s46 at 89.8. The architecture *can* transfer.
 Training does not reliably find the configuration that does.
@@ -8202,7 +8197,7 @@ declared as the primary statistic and a bar set before harvest. The
 configurations and will provide an out-of-sample test of the sign of
 $\rho$ — declared here, before those arms finish.
 
-## 2026-07-26 — The seed, not the architecture, ranks cross-family transfer: ρ=+0.70 across two unrelated models {#sec-nb-seed-transfer}
+## 2026-07-26 — seed ranks cross-family transfer across two models {#sec-nb-seed-transfer}
 
 The five-seed verdict (@sec-nb-homog-seeds-verdict) surfaced an
 in-family/cross-family anti-correlation at $\rho = -0.70$, which at n=5 is
@@ -8245,7 +8240,7 @@ different subsample sequences and therefore integrate different amounts
 of that bias over training.
 
 **Why this matters more than the architecture results.** Every
-architectural lever tried so far — the gauge, quadratic mode, homogeneous
+architectural factor tried so far — the gauge, quadratic mode, homogeneous
 mode, measure normalization — moves the *level* of cross-family error.
 None has controlled its *variance*, which spans 2491× within a single
 configuration. If transfer rank is set by something the seed controls and
@@ -8264,7 +8259,7 @@ architectures, using data that does not yet exist.
 
 - **Primary:** across the two new arms, Spearman $\rho$ of SHIFT transfer
   rank against the homogeneous arm's rank. **Bar: $\rho > 0$ in both.**
-  Predicted $p \approx 0.4$ — this is a genuine coin-flip and the honest
+  Predicted $p \approx 0.4$ — this is a coin-flip and the
   prior is low, because n=5 rank agreement between two experiments has a
   one-sided $p$ of 0.117 and could easily be the tail I happened to find.
 - **Sharp point prediction:** **s44 is the best-transferring seed in both
@@ -8281,7 +8276,7 @@ correlation without the permutation $p$; dropping `measnorm` if its
 divergence makes ranks awkward to compute (a non-finite value ranks last,
 by declaration, right now).
 
-**The decisive follow-up, if H-SEED survives.** `set_seed` currently pins
+**The decisive follow-up, if H-SEED remains.** `set_seed` currently pins
 every RNG at once, so init and data stream cannot be separated. The clean
 decomposition is a `training.data_seed` split out from the init seed and
 a 2×2 over (init 44/45) × (data 44/45): if transfer follows the *data*
@@ -8289,12 +8284,12 @@ seed, the mechanism is settled. That needs a code change and therefore a
 fresh tree — it is not being started before H-SEED reports, because
 unlike the arms above it is not free.
 
-## 2026-07-26 — Looking for disconfirmation of H-SEED, and finding it: a third experiment breaks the ranking {#sec-nb-seed-transfer-caveat}
+## 2026-07-26 — H-SEED disconfirmation: third experiment breaks ranking {#sec-nb-seed-transfer-caveat}
 
 H-SEED (@sec-nb-seed-transfer) rested on two experiments agreeing. Before
 its pre-registered test reports, I went looking for a *third* dataset
 specifically to try to break it, because a correlation found by placing
-two tables side by side is exactly the kind of thing that survives only
+two tables side by side is exactly the kind of thing that remains only
 until someone checks the third table.
 
 There is one: `tbl-crossfamily` in @sec-drivaerml-crossfamily — the
@@ -8320,7 +8315,7 @@ yesterday's entry implied, and I am recording that here rather than
 letting the pre-registered result arbitrate a claim I had already
 over-stated.
 
-Two honest qualifications, in both directions:
+Two qualifications, in both directions:
 
 *Against the disconfirmation:* at n=3 a Spearman ρ can only take the
 values ±0.5 and ±1, so none of these three numbers carries meaningful
@@ -8352,7 +8347,7 @@ unchanged. If the two new arms come back positive despite this, the
 result is considerably more interesting than it looked an hour ago; if
 they come back negative, this entry is why that should surprise no one.
 
-## 2026-07-26 — The model is overfit to its training RESOLUTION, and both failure axes end in an uncorrelated prediction {#sec-nb-resfit}
+## 2026-07-26 — resolution overfitting and independent failure axes {#sec-nb-resfit}
 
 > **EDIT (2026-07-27 audit):** The sharp train-resolution pattern minimum
 > is a strong reported observation, but sources and trace queries co-vary
@@ -8374,7 +8369,7 @@ retroactively to every arm ever harvested, with no re-run:
 - **shape error** $\sqrt{1-\cos^2\theta}$ — the error a perfect *gain*
   cannot fix;
 - **pattern error** — the same after removing each field's own mean: the
-  error that survives an arbitrary gain **and** offset.
+  error that remains an arbitrary gain **and** offset.
 
 ### Q2's retirement is confirmed: seeds of one configuration fail in opposite directions
 
@@ -8401,7 +8396,7 @@ correlation with the truth is 0.03–0.14.
 This deflates the `homog` s44 story from @sec-nb-homog-seeds-verdict. Its
 `pressure_l2` of 2.07 looked within reach of usability; its pattern error
 is 0.9904. **s44 does not predict the field better than the other seeds —
-it predicts an equally unrelated field that happens to land near the right
+it predicts an equally unrelated field that happens to fall near the right
 magnitude.** The 2491× seed band is a spread of amplitude accidents on top
 of uniformly orthogonal predictions, which explains the unstable seed
 ranking (@sec-nb-seed-transfer-caveat) far more parsimoniously than any
@@ -8556,7 +8551,7 @@ The model is a **nonlinear functional of the empirical measure** — MLPs,
 functional the expectation over sampled sets is not the functional of the
 expectation; there is a Jensen gap that closes only as $k$ grows. Per-cell
 weights debias a *linear* integral. They cannot debias a nonlinear one.
-The measure machinery was never capable of the job it was being asked to
+The measure implementation was never capable of the job it was being asked to
 do here, and that is a statement about the aggregation, not about a bug.
 
 ### The diagnosis, and what it implies
@@ -8572,7 +8567,7 @@ operator.** Extrapolating $k^{-1/2}$, reaching 1% bias needs ~700 000
 cells per sample — not a viable training configuration.
 
 The indicated fix is structural and is **not** augmentation and **not**
-reweighting: feed the model a genuine coarse *covering* mesh (decimation
+reweighting: feed the model a coarse *covering* mesh (decimation
 or remeshing whose panel areas sum to the true surface area), so the input
 lies in the convergent family and the measured $h^2$ consistency applies
 by construction — the same reason a CFD solver may be run on a coarse
@@ -8636,7 +8631,7 @@ one-step and 16-step replay could therefore test implementation sensitivity,
 but it was unlikely to select a more general architecture and was parked
 before producing a scientific result.
 
-Two useful scope corrections survive the audit. First, canonical geometry and
+Two useful scope corrections remain after the audit. First, canonical geometry and
 source quadrature can now be varied independently, but that is an experimental
 capability rather than evidence for an architecture. Second, the earlier
 “fixed-query” condition was an index-aligned prefix of the source support, not
@@ -8698,7 +8693,7 @@ result is changed by this editorial correction.
 | Do learned query corrections improve the Laplace model? | Removing them changed held-out error by only about $-1\%$ to $+7\%$, while normalized Laplacian residual fell from $0.865$ to $1.2\times10^{-13}$. | They have not earned a role on this family. Exact propagation is both simpler and more faithful. |
 | Is the remaining Laplace error mainly density inference or boundary resolution? | A solved density gave little advantage on a coarse boundary but about a fifteenfold advantage at the finest tested resolution. Geometry and frequency splits behaved differently. | Boundary representation and density inference are sequential bottlenecks, not rival single explanations. |
 | Was low-screening failure inherent to screened kernels? | With a correctly normalized trace, the double layer stayed stable as screening vanished. The old single-layer path separately showed charge-mode instability and $22$--$53\%$ error from omitting its self term. | No. The dramatic historical failure was an invalid instrument, not a discovered physical limit. |
-| Does a shared screened solver survive parameter and geometry shift? | A residual-controlled canonical double layer converged on all 160 manufactured cases, including stronger and unseen deformations and low/high screening. It matched the dense trace solution to roughly $10^{-6}$ in the field and improved monotonically under boundary refinement. | In this controlled known-operator setting, neither parameter-conditioned nor geometry-conditioned iteration is needed. |
+| Does a shared screened solver handle parameter and geometry shift? | A residual-controlled canonical double layer converged on all 160 manufactured cases, including stronger and unseen deformations and low/high screening. It matched the dense trace solution to roughly $10^{-6}$ in the field and improved monotonically under boundary refinement. | In this controlled known-operator setting, neither parameter-conditioned nor geometry-conditioned iteration is needed. |
 
 The last result is the cleanest synthesis. Across the five geometry/parameter
 splits, mean field error at 128 boundary panels was
@@ -8709,14 +8704,14 @@ with geometry, but its rule did not.
 
 ### Belief update
 
-The strongest surviving architectural hypothesis is now:
+The strongest remaining architectural hypothesis is now:
 
 > use analytically constrained singular structure to propagate boundary
 > information, infer the boundary density with a solver-like process governed
 > by a physical trace residual, and learn only the smooth remainder that the
 > known structure cannot explain.
 
-Two proposed flexibilities have failed to earn their place on the controlled
+Two proposed flexibilities were not warranted on the controlled
 problems: query-dependent readout corrections and parameter- or
 geometry-conditioned iteration depth. This is positive evidence for a compact
 mechanism, but only under a **known linear operator**.
@@ -8739,7 +8734,7 @@ training-resolution optimum is still causally unresolved.
 
 No further solver implementation or parameter sweep should be treated as
 agenda progress. When experimentation resumes, the highest-information
-question is whether the constrained principal-part idea survives when the
+question is whether the constrained principal-part idea remains when the
 operator is only partially known. A clean test would introduce controlled
 operator mismatch and ask whether learning a **smooth correction** transfers
 better than relearning singular behavior. The separate industrial question is
@@ -8784,7 +8779,7 @@ screening, stronger drift, unseen boundary geometry, near-boundary queries,
 and boundary refinement. The exact kernel supplies an oracle and an
 independent trace residual.
 
-The fixed principal part earns its place only if it is within 20% of the best
+The fixed principal part is warranted only if it is within 20% of the best
 flexible model in distribution and cuts both field error and exact-trace error
 by at least twofold on near-boundary and fine-resolution transfer, with the
 same direction in at least four of five seeds. A stronger

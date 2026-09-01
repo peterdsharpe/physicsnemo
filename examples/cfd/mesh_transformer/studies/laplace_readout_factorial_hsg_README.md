@@ -44,6 +44,6 @@ and training stream are part of the experiment.
 Completed on HSG on 2026-07-29. Smoke job `5688102` and full job `5688113`
 both exited successfully; all 20 reports are present and the logs contain no
 unexplained errors. The strict paired reducer classifies the pure readout as
-`sufficient`; neither the gate nor the contraction earns its place. The
+`sufficient`; neither the gate nor the contraction is warranted. The
 accepted local result bundle is
 `results/laplace_readout_factorial_2026-07-29_job5688113/`.

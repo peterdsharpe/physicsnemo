@@ -185,7 +185,7 @@ clamp feeds noise into the backbone.
 
 ## Part 3 — Does the blindness matter at DrivAerML scale?
 
-Honestly: marginally, and not through the mechanism the literature synthesis
+The improvement is marginal and does not come through the mechanism the literature synthesis
 conjectured.
 
 - **The symmetric-orbit ceiling (T4/T5) cannot fire exactly on DrivAerML.**
@@ -230,7 +230,7 @@ a DrivAerML-scale limitation; and the audit surfaced a distinct, benchmark-
 relevant defect (the vector-head parity anomaly) that is a symmetry
 *violation* rather than a symmetry-induced ceiling. The originally
 conjectured mechanism — parity-even invariants making the model
-chirality-blind for scalar fields — is refuted outright: that invariance is
+chirality-blind for scalar fields — is refuted directly: that invariance is
 exactly the parity covariance of the physics, and same-drive mirror pairs are
 separated whenever the physics separates them.
 

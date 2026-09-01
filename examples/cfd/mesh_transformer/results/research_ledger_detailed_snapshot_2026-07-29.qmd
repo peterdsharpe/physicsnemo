@@ -36,8 +36,8 @@ questions:
 
 | Research question | What is known | Decision |
 |---|---|---|
-| Which boundary and geometry information must survive? | Structured boundary propagation helps on controlled PDE families, but the necessary state under changing geometry is unknown. | Establish whether transfer exists first; analyze internal state only to explain a valid outcome. |
-| Which physical priors genuinely help? | Several exact structures improved fidelity or efficiency; others were neutral, harmful, or invalidated by bugs. | Require a controlled transfer or scaling gain before promoting any prior into the architecture. |
+| Which boundary and geometry information must be preserved? | Structured boundary propagation helps on controlled PDE families, but the necessary state under changing geometry is unknown. | Establish whether transfer exists first; analyze internal state only to explain a valid outcome. |
+| Which physical priors help? | Several exact structures improved fidelity or efficiency; others were neutral, harmful, or invalidated by bugs. | Require a controlled transfer or scaling gain before promoting any prior into the architecture. |
 | Can one learned model transfer between families? | Within-family transfer was sometimes good; untouched vehicle-family transfer failed decisively. | Industrial generalization remains unearned. |
 | Is one architecture plausible at all? | Broad PDE pretraining makes reusable representations credible, but remote frozen-model transfer remains unproved. | Separate frozen transfer, few-shot adaptation, and design reuse; do not call all three “generality.” |
 
@@ -107,7 +107,7 @@ span is insufficient.
 
 Scalar-only propagation matched the full typed model on 2D Laplace, even
 after a capacity-matched control, but degraded on screened and 3D problems.
-Vector channels therefore encode a genuine cross-family requirement rather
+Vector channels therefore encode a cross-family requirement rather
 than merely extra parameters.
 
 ### Iterations 15 and 17 — generic attention baselines did not close the gap {#sec-nb-iter15}
@@ -117,7 +117,7 @@ than the structured boundary model and violated similarity covariance.
 Because that was not Transolver's native setting, the claim remained scoped
 until the fixed-dataset comparison.
 
-### Iteration 17 — the comparison survived the fixed-dataset regime {#sec-nb-iter17}
+### Iteration 17 — the comparison remained the fixed-dataset regime {#sec-nb-iter17}
 
 On a fixed FEM-labeled dataset, both matched-size and native-size Transolver
 controls remained worse, including on trace-frequency transfer. This supports
@@ -138,7 +138,7 @@ On all-Dirichlet problems, removing boundary self-attention was essentially
 neutral. That null was predicted by the near-local second-kind trace
 structure, not treated as universal.
 
-### Iteration 19 — one attention layer earns its place on mixed conditions {#sec-nb-iter19}
+### Iteration 19 — mixed conditions require one attention layer {#sec-nb-iter19}
 
 The registered mixed-boundary discriminator made the zero-layer model
 unreliable, while one and two layers were comparable. The compact conclusion
@@ -180,7 +180,7 @@ it.
 
 Any degree-one geometric length preserves similarity covariance, so a
 measure-weighted RMS radius can replace a caller-supplied reference length.
-The theoretical statement survives. The later industrial calibration of its
+The theoretical statement remains. The later industrial calibration of its
 constant did not satisfy its claimed train-only protocol and is treated
 separately below.
 
@@ -265,7 +265,7 @@ This prevented a convection-only story.
 
 ### Iteration 38 — parity, capacity, and read-in class were disentangled {#sec-nb-iter38}
 
-A linear model with the same pseudoscalar machinery and closer capacity
+A linear model with the same pseudoscalar implementation and closer capacity
 isolated the read-in class. The revision held: pressure needed nonlinear
 degree, while the residual velocity gap could not be attributed to missing
 pseudoscalar channels alone.
@@ -275,7 +275,7 @@ pseudoscalar channels alone.
 ### 2026-07-05 — pivot to AirFRANS and DrivAerML {#sec-nb-industrial-pivot}
 
 The program moved from controlled PDEs to solver-labeled aerodynamic
-benchmarks to test whether the learned mechanisms survived realistic
+benchmarks to test whether the learned mechanisms remained realistic
 geometry and fields. This was explicitly an external-validity phase, not a
 replacement for the controlled mechanism studies.
 
@@ -304,7 +304,7 @@ AirFRANS role, but its gain was not evidence for a universal physical scale.
 ### Angle-of-attack extrapolation supported the parity mechanism {#sec-nb-extrapolation}
 
 The parity-typed model transferred especially well to angle-of-attack
-extrapolation, where handedness changes are load-bearing. This was
+extrapolation, where handedness changes are essential. This was
 mechanism-consistent external evidence, though still within one dataset
 family.
 
@@ -366,13 +366,13 @@ small rungs until the dominant discrepancy is localized.
 ### GeoTransolver gap — no single field or optimizer explained it {#sec-nb-geot-gap-verdict}
 
 The gap was broad across fields and appeared from the first epochs under the
-same trainer. The strongest surviving explanation was architectural credit
+same trainer. The strongest remaining explanation was architectural credit
 assignment on the surface task, with model scale as a later-discovered major
 factor.
 
 ### Configuration inspection excluded an optimizer explanation {#sec-nb-t3-launch}
 
-GeoTransolver and MeshTransformer used the same training machinery in the
+GeoTransolver and MeshTransformer used the same training implementation in the
 DrivAerML recipe. That eliminated optimizer choice as the explanation for the
 large epoch-efficiency difference without another run.
 
@@ -387,7 +387,7 @@ verification is archived separately.
 
 Trace reduced validation error by about twofold and broke the existing
 plateau, but failed the registered fivefold bar. It earned a role as a
-load-bearing mechanism, not as the complete explanation of the gap.
+essential mechanism, not as the complete explanation of the gap.
 
 ### Trace factorial — dominant channel, narrower mechanism claim {#sec-nb-trace-factorial-verdict}
 
@@ -455,7 +455,7 @@ could not bear architectural claims.
 
 ### GeoTransolver-budget rung — the gap remained {#sec-nb-x2l8-verdict}
 
-At approximately matched parameter count, MeshTransformer landed within its
+At approximately matched parameter count, MeshTransformer fell within its
 prediction band but remained about 2.3 times worse. Pure scaling was stopped;
 the next gain needed a better mechanism or supervision target.
 
@@ -480,7 +480,7 @@ within the generative family, not transfer to a new vehicle family.
 
 ### Zero-shot within-family OOD — no cliff, but tiny clean sets {#sec-nb-ood-zeroshot}
 
-On the genuinely unseen subset left after overlap accounting, degradation was
+On the unseen subset left after overlap accounting, degradation was
 small. The sample sizes were only ten and four cases, so this was evidence
 against an immediate boundary cliff, not a precise transfer estimate.
 
@@ -553,7 +553,7 @@ generalization claim.
 
 Every tested MeshTransformer checkpoint produced nonphysical zero-shot
 outputs on the untouched SHIFT-SUV set, while GeoTransolver degraded but
-remained structured. This falsified the shipped model's cross-family claim.
+remained structured. This falsified the released model's cross-family claim.
 
 **EDIT:** after this first read, the same SHIFT cases became a development
 set. Later gauge scans and architecture variants are hypothesis-generating,
@@ -576,7 +576,7 @@ calibration iterator included held-out DrivAerML cases. The sampled RMS
 statistic also inherited unmeasured sampling bias.
 
 **EDIT:** the numerical constant cannot support a train-only transfer claim.
-The algebraic covariance argument for an intrinsic gauge survives; this
+The algebraic covariance argument for an intrinsic gauge remains; this
 calibration does not.
 
 ### Gauge acceptance — not a drop-in transformation {#sec-nb-gauge-accept-verdict}
@@ -618,7 +618,7 @@ the surface was sampled.
 
 An independent reconstruction confirmed that subtracting the singular local
 term can reduce variance in subsampled boundary integration. The originally
-reported gains were overstated by roughly four to ten times. The surviving
+reported gains were overstated by roughly four to ten times. The remaining
 result supports singularity-aware quadrature, not the claim that it alone
 explains industrial transfer.
 
@@ -758,7 +758,7 @@ transition was necessary.
 **Belief update.** The useful factorization is: carry the singular and
 asymptotic limits exactly, then learn only the smooth transition. This
 substantially strengthens the constant-coefficient result, but it does not
-show transfer to a genuinely different local operator.
+show transfer to a different local operator.
 
 **Decision.** Stop modifying coordinates and losses on this family. Introduce
 spatially varying coefficients, where local asymptotics remain valid but no
@@ -772,7 +772,7 @@ summary yet differ only in layer order. Because their local propagators do
 not commute, they have different boundary-to-interior operators. Can a
 position-aware pooled encoder recover that distinction?
 
-**Evidence.** Scalar-summary models recovered none of the deliberately
+**Evidence.** Scalar-summary models recovered none of the intentionally
 matched order contrast, as required by the information argument. Giving a
 pooled model ordered samples reduced field error but recovered only 8%--52%
 of the true contrast, far below the registered 80% bar. A
@@ -804,7 +804,7 @@ separate problems.
 **EDIT (2026-07-29):** a proposed follow-up would have asked the model to
 relearn the already-known local reaction law. That would test an
 unknown-closure problem, not this PDE. The stronger next test supplies the
-known local operator and asks whether ordered composition survives local mode
+known local operator and asks whether ordered composition remains local mode
 coupling.
 
 ### Program check-in — ordered composition is supported, physical breadth is not {#sec-nb-ordered-program-checkin}
@@ -817,10 +817,10 @@ new exact global solution formula. The strategic risk was clear: a mechanism
 that worked only in separable reductions would be a bespoke reduced solver,
 not a general surrogate principle.
 
-### Physical-order composition survives coupled modes and longer paths {#sec-nb-coupled-path-order-result}
+### Physical-order composition remains coupled modes and longer paths {#sec-nb-coupled-path-order-result}
 
 []{#sec-nb-coupled-path-order}
-**Question.** Does the ordered-composition result survive when local
+**Question.** Does the ordered-composition result hold when local
 eigendirections rotate, so independent scalar channels are mathematically
 impossible?
 
@@ -906,7 +906,7 @@ unseen frequencies.
 the spectra it sees rather than learning one transferable propagation law.
 The learned rank-four flow branch is closed.
 
-### A connection-correct moving subspace buys no accuracy {#sec-nb-adaptive-subspace-result}
+### A connection-correct moving subspace provides no accuracy {#sec-nb-adaptive-subspace-result}
 
 []{#sec-nb-adaptive-subspace}
 **Question.** Could a physics-derived moving rank-four eigenspace realize the
@@ -920,7 +920,7 @@ and was slightly worse on every aggregate split.
 
 **Belief update.** The static rank-four oracle is not evidence for a useful
 low-rank propagation mechanism. End this branch. Future composition should
-retain a richer hidden physical state and earn compression only at readout.
+retain a richer hidden physical state and compress only at readout when justified.
 
 **EDIT (2026-07-29):** the last sentence was too binary. The moving-basis
 model supplied coordinate bookkeeping but no closure for modes discarded by
@@ -932,7 +932,7 @@ low-dimensional state in principle.
 
 ### Program check-in — stop optimizing the toy compression {#sec-nb-low-rank-checkin}
 
-Three principles survive the controlled program:
+Three principles remain after the controlled program:
 
 1. carry exact boundary, singular, and limiting structure rather than
    relearning it;
@@ -946,14 +946,14 @@ computation.
 
 | Research claim | Current confidence | Status |
 |---|---:|---|
-| Reusable constant-coefficient boundary mechanism | 90% | Strong within the controlled families; untested on a genuinely different operator. |
+| Reusable constant-coefficient boundary mechanism | 90% | Strong within the controlled families; untested on a different operator. |
 | Reusable physical-order mechanism for layered coefficients | 90% | Supported for scalar and coupled modes. |
 | Transferable rank-four dynamics for nonseparable coefficients | 15% | Refuted for the tested natural constructions. |
 | General variable-coefficient surrogate with a richer hidden state | 45% | Open; the state and geometry interaction are not identified. |
 | Defensible industrial cross-family gain | 25% | Unearned after the untouched family-shift failure. |
 
 **Research decision.** Stop optimizing the rank-four toy. The next decisive
-question is whether the surviving principles help on a geometry-bearing
+question is whether the remaining principles help on a geometry-bearing
 problem when discarded physical state is either retained or given a valid
 closure. That question is not yet preregistered or launched.
 
@@ -969,7 +969,7 @@ a particular port, latent rank, carrier, recurrence, or composition law. Any
 earlier wording that presented those candidates as requirements is withdrawn.
 They remain hypotheses only.
 
-Four findings survive this correction:
+Four findings remain after this correction:
 
 1. Boundary-aware structure can improve accuracy, fidelity, or efficiency on
    controlled PDE families.
@@ -986,10 +986,10 @@ The research program is therefore organized around three rival explanations:
 |---|---|
 | A task-adaptive physical representation is necessary for broad transfer. | A matched generic operator transfers and scales equally well without the proposed structure. |
 | A sufficiently capable generic operator can discover the needed representation. | Its failures repeatedly follow a missing physical information channel that a matched structured model repairs. |
-| Boundary-driven PDE families are too different for one useful architecture. | The same high-level design rule produces a repeatable advantage across genuinely different propagation classes. |
+| Boundary-driven PDE families are too different for one useful architecture. | The same high-level design rule produces a repeatable advantage across different propagation classes. |
 
 The next scientific decision is not which component to implement. First,
-finish the validity audit and retain only conclusions that survive confirmed
+finish the validity audit and retain only conclusions that remain valid after confirmed
 bugs and protocol corrections. Then define one benchmark capable of separating
 the three explanations above with frozen models, untouched shifts, and a
 steel-manned generic baseline. More toy latent variants, loss sweeps, and
@@ -1036,7 +1036,7 @@ Four explanations remain live:
 The first scientific gate is therefore not a model comparison. It is an
 information-flow measurement: determine how quickly boundary influence
 compresses within each geometry, whether the leading transferable subspaces
-align across geometries, and whether a deliberately omitted channel can
+align across geometries, and whether an omitted channel can
 become observable again downstream. Those measurements would distinguish
 state size, closure, and geometry-retention explanations before an
 architecture is chosen.
@@ -1345,8 +1345,8 @@ Three rival program hypotheses now remain:
 **Research exam, held in reserve.** Broaden one contract axis at a time:
 boundary bandwidth or regularity, propagation frequency or horizon, and
 operator or geometry family. At fixed error tolerance, ask how required
-capacity and data change, and whether accuracy survives a held-out extension
-of that axis. A general architecture earns its claim only if its scaling tracks
+capacity and data change, and whether accuracy remains a held-out extension
+of that axis. A general architecture supports its claim only if its scaling tracks
 the task's information law; interpolation on one compact set establishes
 eligibility, not generalization.
 
@@ -1618,11 +1618,11 @@ launched during the research pause.
 **Architecture hypothesis.** The evidence now supports a reusable sequence of
 scientific decisions, not one fixed representation for every boundary-driven
 PDE. One software architecture could eventually instantiate that sequence,
-but it would earn generality by adapting its physical port and capacity to the
+but it would demonstrate generality by adapting its physical port and capacity to the
 task rather than forcing incompatible propagation classes through one small
 latent.
 
-The minimal grammar consistent with the surviving results is:
+The minimal grammar consistent with the remaining results is:
 
 | Invariant decision | What remains task-dependent |
 |---|---|
@@ -1630,9 +1630,9 @@ The minimal grammar consistent with the surviving results is:
 | Identify the exact PDE port before reducing it | Cauchy data, incoming/outgoing waves, inflow characteristics, or a space-time trace; associated nullspaces and constraints |
 | Retain licensed physics only when it enforces the contract or reduces the unresolved problem | The available singular terms, jump laws, asymptotic limits, local operators, whether their coefficients are hard or soft, and the residual or closure left unknown |
 | Compose local responses in physical order with the correct stability notion | Directed propagation, path-ordered updates, or bidirectional scattering; contraction, conservation, passivity, and feedback margin |
-| Earn every compression from the task's information law | Preserved nondecaying channels, transfer-decaying remainder, basis, rank, and whether conditioning on geometry is necessary |
+| Derive each compression from the task's information law | Preserved nondecaying channels, transfer-decaying remainder, basis, rank, and whether conditioning on geometry is necessary |
 
-This is deliberately a *grammar*, not a component list. It says which
+This is a *grammar*, not a component list. It says which
 questions an architecture must answer and in what logical order. It does not
 yet say that attention, a particular kernel dictionary, or any other learned
 mechanism is universal.
@@ -1641,7 +1641,7 @@ Three meanings of generalization must now be kept separate:
 
 | Claim | What must stay fixed | What may change | Required evidence |
 |---|---|---|---|
-| Design generality | The five decisions above | PDE-specific ports, carriers, composition algebra, and capacity | The same rules predict successful scaling across genuinely different propagation classes. |
+| Design generality | The five decisions above | PDE-specific ports, carriers, composition algebra, and capacity | The same rules predict successful scaling across different propagation classes. |
 | Family transfer | One trained model and its representations | Boundary data, geometry, and operator parameters inside the declared family | Frozen-weight performance on untouched family members, with operator fidelity and stability checks. |
 | Contract scalability | The architecture rule and target tolerance | Capacity and data as bandwidth, frequency, horizon, or family breadth expands | Required resources track the task's information and conditioning laws rather than an arbitrary fixed rank. |
 
@@ -1719,19 +1719,18 @@ separately, not collapsed into one convenient score. A smaller residual norm
 alone is useful for absolute error but does not prove lower width, easier
 parameter dependence, or better accuracy on a sensitive observable.
 
-A physical carrier can therefore earn its place in three distinct ways:
+A physical carrier can therefore be justified in three distinct ways:
 
 | Scientific role | Deciding evidence | Failure signal |
 |---|---|---|
 | Contract enforcement | A licensed jump law, singularity, conservation law, or asymptotic limit is satisfied by construction in the declared continuum and discrete problem. | The supposedly exact term depends on an invalid normalization, discretization convention, or operator assumption. |
 | Complexity reduction | At matched representation class, the best residual approximation reaches tolerance with less capacity or data than the best direct approximation. | Direct and residual oracle curves coincide, or the residual is harder because it must cancel the carrier. |
-| Transfer simplification | The residual varies more smoothly or aligns better across the admitted operator and geometry family, and this survives untouched members. | Interpolation improves but the held-out transfer slope or operator fidelity does not. |
+| Transfer simplification | The residual varies more smoothly or aligns better across the admitted operator and geometry family, and this remains untouched members. | Interpolation improves but the held-out transfer slope or operator fidelity does not. |
 
 These roles can coexist, but none implies another. With an unconstrained
 residual, a poor carrier can always be cancelled in principle and may amount
-only to a change of coordinates. Once the residual is deliberately bounded,
-smooth, low-rank, or zero-preserving, carrier mismatch becomes genuine
-approximation bias. Hard physics is therefore justified only when its license
+only to a change of coordinates. Once the residual is bounded by design,
+smooth, low-rank, or zero-preserving, carrier mismatch becomes approximation bias. Hard physics is therefore justified only when its license
 is stronger than the flexibility being removed.
 
 The program's own results separate the mechanisms. Preserving singular form
@@ -1765,7 +1764,7 @@ Three rival explanations should be distinguished whenever a carrier helps:
    capacity undoing it; any apparent gain is local to the training regime.
 
 The first explanation is rejected if matched oracle curves show no residual
-advantage. The second is rejected if the gain survives optimization-equated
+advantage. The second is rejected if the gain remains optimization-equated
 oracle fitting and held-out contract expansion. The third is supported when a
 flexible residual learns systematic cancellation or when hard fixation loses
 to a soft coefficient with the same physical form. Fidelity-only gains should
@@ -1794,7 +1793,7 @@ The strongest current papers establish three narrower results:
 
 **Belief update.** The literature raises the probability that a reusable
 pretrained representation can reduce the data needed for a new PDE. It does not
-resolve whether frozen weights can survive a remote change in geometry,
+resolve whether frozen weights remain effective under a remote change in geometry,
 boundary distribution, and operator. Geometry papers and foundation-model
 papers largely test different kinds of transfer.
 
@@ -1818,10 +1817,10 @@ repeating the same experiment is now the highest-information action:
 |---|---|---|
 | Invalid screened-kernel specialist and unreliable high-Reynolds labels | The specialist comparison is withdrawn, and the high-Reynolds benchmark is scope-limited. A corrected screened solver already replaced the former instrument. | Do not rerun either invalid protocol. |
 | Held-out cases entered the intrinsic-gauge calibration | The fitted constant cannot support a train-only claim. A subsequently preregistered retraining test refuted the proposed gauge cause of family-transfer failure. | No further gauge rerun. |
-| “Exact-only” industrial arms retained expressive learned query machinery | Their measured marginal effects remain valid, but exact-kernel sufficiency and dominance are withdrawn. | Do not rebuild the factorial while industrial transfer itself is absent. |
+| “Exact-only” industrial arms retained expressive learned query implementation | Their measured marginal effects remain valid, but exact-kernel sufficiency and dominance are withdrawn. | Do not rebuild the factorial while industrial transfer itself is absent. |
 | Wall-shear metrics and provenance were inconsistent | The within-family differential is provisional and cannot support the broad claim. | Require fixed metrics and raw predictions in the next benchmark; do not polish the old result. |
 | SHIFT-SUV was untouched only for its first evaluation | The first failure remains decisive, while every later use is exploratory. | The dataset is burned as a final test; a future claim needs a fresh family. |
-| Canonical replay had failed attempts and only partial byte verification | The surviving conclusion is numerical noninferiority of two algebraically equivalent paths, not an architecture gain. | Repeat only if a future result depends on that construction path. |
+| Canonical replay had failed attempts and only partial byte verification | The remaining conclusion is numerical noninferiority of two algebraically equivalent paths, not an architecture gain. | Repeat only if a future result depends on that construction path. |
 | Singularity-subtraction gains were overstated | An independent reconstruction preserved the qualitative variance-reduction mechanism with a smaller effect. | Use the corrected magnitude; no repeat is needed. |
 | Source coverage, query coverage, and scoring measure were confounded | The old industrial resolution optimum is not a model mechanism. | Redesign the measurement before it is used again; repeating the same sweep would not identify the cause. |
 
@@ -1874,7 +1873,7 @@ against the necessity of explicit physical representation. A repeatable
 structured advantage across both propagation regimes counts against generic
 equivalence. If neither pretrained approach improves on a specialist trained
 from scratch when the PDE changes, the specialist-fragmentation explanation
-survives.
+remains.
 
 This is a candidate discriminating scientific exam, not yet a committed
 benchmark. Success across the pair would justify a broader test, not settle
@@ -1889,7 +1888,7 @@ The current literature supports three distinct effects:
 
 | Effect | Evidence | Necessary control |
 |---|---|---|
-| Task identification | In [PROSE-PDE](https://arxiv.org/abs/2404.12355), supplying the equation reduced error from roughly 30%--41% for data-only models to 1%--4% in a setting where the initial data alone could not identify which operator generated the future. | Compare correct, incomplete, and deliberately wrong task descriptions. Do not credit resolution of an underdetermined input to a learned physics representation. |
+| Task identification | In [PROSE-PDE](https://arxiv.org/abs/2404.12355), supplying the equation reduced error from roughly 30%--41% for data-only models to 1%--4% in a setting where the initial data alone could not identify which operator generated the future. | Compare correct, incomplete, and intentionally wrong task descriptions. Do not credit resolution of an underdetermined input to a learned physics representation. |
 | Reusable representation | [Poseidon](https://arxiv.org/abs/2405.19101) froze more than 99.5% of its pretrained core and adapted only input/output maps. The frozen core remained useful on Allen--Cahn and Poisson, although full fine-tuning was better. | Compare a pretrained frozen core with the same architecture frozen at random initialization; otherwise architecture and pretraining remain confounded. |
 | Optimization prior | In [PDEformer-2](https://arxiv.org/abs/2507.15409), correct PDE input mattered most with little target data, while differences between correct, incomplete, unknown, and wrong descriptions narrowed as fine-tuning data increased. | Compare full learning curves at matched target data and compute; an early advantage that vanishes is not evidence of lower asymptotic task complexity. |
 
@@ -1901,7 +1900,7 @@ not yet evidence for a universal physical state.
 **Belief update.** Broad pretraining is a serious candidate for the eventual
 architecture, but “it transfers” is too coarse a claim. The paired exam in
 @sec-nb-paired-generality-exam must determine whether success comes from
-identifying the task, reusing a genuinely informative representation, or
+identifying the task, reusing a informative representation, or
 merely starting optimization closer to a solution. Only the second would
 directly support a reusable internal surrogate representation.
 
@@ -1912,7 +1911,7 @@ No computation was launched for this mechanism audit.
 The screened-elliptic and Helmholtz pair is attractive because it changes how
 boundary information travels—from decay to oscillation—while preserving the
 domain, boundary forcing, and requested field. It can answer a useful
-next-ledge question: does a learned representation survive that change in
+next-ledge question: does a learned representation remain effective under that change in
 propagation?
 
 **EDIT (2026-07-29):** this is not a full cross-PDE-family benchmark. The two
@@ -1928,8 +1927,8 @@ The Heilmeier gate gives the following assessment:
 | Where does present evidence break? | Geometry-aware operators mostly demonstrate transfer within one PDE family, while broad pretrained models usually adapt to the target. Neither establishes remote reuse of a representation under a controlled change in propagation. |
 | What is new here? | Hold the physical input and output contract fixed, change one propagation regime at a time, test both transfer directions, and report frozen reuse, low-data adaptation, and independent design reuse separately. |
 | Who cares? | The result would decide whether a shared learned core is worth pursuing or whether generality should instead mean task-adaptive or specialist models governed by reusable scientific rules. |
-| What are the principal risks? | A task description could encode too much of the answer; resonance or unequal solution complexity could masquerade as failed transfer; and either outcome may be peculiar to this deliberately narrow pair. |
-| Is it attackable now? | Probably. Trusted linear solvers make the scientific comparison bounded, but an honest cost and schedule do not exist until the task contract and validity exams are frozen. |
+| What are the principal risks? | A task description could encode too much of the answer; resonance or unequal solution complexity could masquerade as failed transfer; and either outcome may be peculiar to this intentionally narrow pair. |
+| Is it attackable now? | Probably. Trusted linear solvers make the scientific comparison bounded, but cost and schedule remain undefined until the task contract and validity exams are frozen. |
 
 Three conditions remain before commitment:
 
@@ -1983,7 +1982,7 @@ $(-\Delta+\lambda I)^{-1}$ has poles at $\lambda=-\mu_j$. Therefore:
 | Regime | What it can test | What it cannot establish |
 |---|---|---|
 | Keep $k^2=-\lambda$ below the first eigenvalue on every domain. | A clean sign-extrapolation and continuation control, with no intervening real pole. | Transfer into a high-frequency, multi-channel wave regime. |
-| Use a genuinely wave-like, nonresonant $k$. | Whether a representation handles oscillation and geometry-dependent spectral structure. | Smooth continuation from screened-only training: the real parameter path may cross domain-dependent poles. |
+| Use a wave-like, nonresonant $k$. | Whether a representation handles oscillation and geometry-dependent spectral structure. | Smooth continuation from screened-only training: the real parameter path may cross domain-dependent poles. |
 
 **EDIT (2026-07-29):** the earlier statement that keeping evaluated
 frequencies away from resonance removes the conditioning confound was
@@ -2022,7 +2021,7 @@ The rival explanations make different predictions:
 
 1. **Reusable cross-regime knowledge:** related experience improves the target
    learning curve more than both controls. A benefit in both directions
-   supports a genuinely shared representation; a one-way benefit supports only
+   supports a shared representation; a one-way benefit supports only
    directional reuse.
 2. **Generic pretraining:** related and unrelated experience help by comparable
    amounts. Pretraining is useful, but the screened/wave relationship has not
@@ -2068,9 +2067,9 @@ The live questions rank as follows:
 
 | Research thread | Decision value now | Present attackability | Priority |
 |---|---|---|---|
-| What information about a new geometry must survive? | Directly decides whether one learned representation can cross shape families. | High: hold the PDE and boundary distribution fixed, and use a fresh untouched geometry family. | First |
+| What information about a new geometry must be preserved? | Directly decides whether one learned representation can cross shape families. | High: hold the PDE and boundary distribution fixed, and use a fresh untouched geometry family. | First |
 | Does experience transfer across propagation regimes? | Decides whether a shared learned core spans more than one PDE regime. | Medium: the spectral fork is understood, but the matched unrelated-source control is not yet chosen. | Second |
-| Can the result survive industrial scale? | Ultimate external-validity gate. | Low today: SHIFT-SUV is burned and the next family needs independent labels and a fixed metric. | Validation, not discovery |
+| Does the result hold at industrial scale? | Ultimate external-validity gate. | Low today: SHIFT-SUV is burned and the next family needs independent labels and a fixed metric. | Validation, not discovery |
 | Which individual physical component helps? | Useful only if it explains a failure in one of the questions above. | High but low leverage after many narrow ablations. | Do not pursue independently |
 | Can one frozen model solve remote PDE families zero-shot? | Aspirationally important. | Low and often underdetermined without task information or prior support. | Park |
 
@@ -2113,12 +2112,12 @@ The Heilmeier gate gives the following assessment:
 
 | Question | Current answer |
 |---|---|
-| What are we trying to learn? | Whether complete geometry and a fixed physical task are enough for frozen prediction on a genuinely new shape family, whether a few new-family responses are needed, or whether the model must be learned largely anew. |
+| What are we trying to learn? | Whether complete geometry and a fixed physical task are enough for frozen prediction on a new shape family, whether a few new-family responses are needed, or whether the model must be learned largely anew. |
 | Where does current practice break? | DrivAerML held-outs stayed inside one generative family and did not separate structured from generic models. The first SHIFT-SUV read proved non-transfer, but pipeline and measurement differences prevent a causal geometry diagnosis, and that target is now burned. |
 | What is new? | Change only the geometry family, keep one well-posed PDE and boundary distribution fixed, seal a fresh target, and read frozen, few-shot, and target-only performance as different scientific outcomes. |
 | Who cares? | The outcome decides whether to pursue a geometry-conditioned shared core, an adaptable representation, or family specialists before spending effort on architecture mechanisms. |
 | What could kill the study? | “New family” may be only a subjective label; mesh, solver, scale, or metric differences may impersonate geometry shift; the target may simply be unlearnable; and one PDE cannot establish cross-PDE geometry generality. |
-| Is it attackable? | Provisionally yes. A fixed linear boundary-value problem with trusted labels makes the question bounded, but cost and schedule are not honest until the two families and decision threshold are frozen. |
+| Is it attackable? | Provisionally yes. A fixed linear boundary-value problem with trusted labels makes the question bounded, but cost and schedule remain undefined until the two families and decision threshold are frozen. |
 
 The midterm exam is validity, not model performance:
 
@@ -2156,7 +2155,7 @@ Four geometry axes should not be collapsed:
 | Parameter extrapolation | Familiar shapes move beyond the source parameter range. | Can the model extrapolate inside one geometric grammar? |
 | Global composition | Familiar local features occur in arrangements excluded from the source, such as new shielding, gaps, or cavities. | Did the model learn nonlocal boundary relationships that recombine? |
 | Feature-vocabulary shift | The target introduces local shapes or physical length-scale ratios absent from the source. | Can the model extrapolate beyond its learned local geometry vocabulary? |
-| Topology shift | Boundary connectivity, component count, or genus changes. | Can the representation survive a different problem topology? |
+| Topology shift | Boundary connectivity, component count, or genus changes. | Can the representation handle a different problem topology? |
 
 Rigid motion, remeshing, file format, sampling density, solver, and metric
 changes are not geometry-family novelty. They are separate nuisance axes. A
@@ -2218,7 +2217,7 @@ ask how many labeled target solutions are needed to reach that same tolerance:
 | Adaptation helps, but by less than twofold. | A modest practical benefit, not evidence strong enough to motivate a general architecture. |
 | Adaptation provides no saving or hurts. | Evidence for family specialization or negative transfer, provided the target-only validity gate passes. |
 
-The twofold bar is a program decision, not a theorem. It is deliberately large
+The twofold bar is a program decision, not a theorem. It is large by design
 enough to be materially consequential despite the cost of pretraining and
 applies equally to every candidate model. It does not by itself identify the
 transfer mechanism. Replication count must later be chosen from pilot variance
@@ -2240,7 +2239,7 @@ to obtain that accuracy, nor that a general architecture is worth maintaining.
 **EDIT (2026-07-29):** @sec-nb-geometry-claim-bar said that the twofold bar
 was materially consequential “despite the cost of pretraining” and treated
 smaller gains as insufficient to motivate a general architecture. That
-overreached. The bar is retained as a deliberately strong **transfer** test,
+overreached. The bar is retained as a stringent **transfer** test,
 but its implication about total program value is withdrawn.
 
 These are separate claims:
@@ -2401,7 +2400,7 @@ inputs.
 Three explanations remain live. A reusable geometric response law predicts
 transfer when whole shapes are novel but the source covers the relevant
 harmonic responses. A distributional reconstruction account predicts that
-the strong manufactured-suite results will not survive once geometry causally
+the strong manufactured-suite results will not hold once geometry causally
 changes the field. A family-specific account predicts that the target is
 learnable, but source experience provides little or no target-label saving.
 
@@ -2417,7 +2416,7 @@ launched.
 
 Free-form geometry is the eventual target, but it cannot cleanly establish the
 first recombination claim. Any finite summary of a target harmonic-measure
-field may miss a response direction that is genuinely new, while using the
+field may miss a response direction that is new, while using the
 full target solution to choose the split makes the argument circular.
 
 **EDIT (2026-07-29):** @sec-nb-causal-geometry-testbed proposed harmonic
@@ -2433,7 +2432,7 @@ interfaces. Each subdomain has a local Dirichlet-to-Neumann response: it maps
 the value imposed on an interface to the flux returned there. The global
 solution follows exactly by matching interface values and balancing fluxes, as
 described in @sec-nb-exact-ports. A new assembly of already identified local
-responses is therefore a genuine recombination, not a judgment based on
+responses is therefore a recombination, not a judgment based on
 geometric resemblance.
 
 The source must do more than contain each module shape. Its boundary
@@ -2469,7 +2468,7 @@ same local PDE laws. It does not guarantee that a finite source dataset
 identifies everything those subdomains can do at their interfaces.
 
 **EDIT (2026-07-29):** @sec-nb-modular-recombination called a new assembly of
-known modules a “genuine recombination.” That is exact at the level of the
+known modules a “recombination.” That is exact at the level of the
 continuum PDE, but incomplete as a learning claim. A local
 Dirichlet-to-Neumann map acts on an infinite-dimensional trace space. A new
 assembly can activate interface patterns absent from the source even when
@@ -2481,7 +2480,7 @@ Three questions must therefore remain separate:
 |---|---|---|
 | Can known subproblem responses be composed? | Exact local response maps and their interfaces are supplied. | A composition rule works; this is an oracle control, not an end-to-end surrogate. |
 | Can a surrogate discover and reuse the needed interface information? | Only the declared external geometry and boundary data are supplied; local maps are used only for analysis. | Representation discovery, compression, and composition transfer together. |
-| Does the result survive free-form geometry? | No privileged module vocabulary exists. | External validity beyond the modular family. |
+| Does the result hold on free-form geometry? | No privileged module vocabulary exists. | External validity beyond the modular family. |
 
 Supplying module identities or local maps would change the scientific task.
 Withholding them preserves the long-term problem, but a failure then cannot be
@@ -2527,7 +2526,7 @@ exists.
 The controlled evidence is strong but narrow. On solver-labeled Laplace data,
 the structured surrogate reached relative errors of 0.016--0.017, compared
 with 0.061--0.136 for generic baselines with equal or greater capacity.
-Separate layered-system studies recovered 97.9%--99.5% of deliberately
+Separate layered-system studies recovered 97.9%--99.5% of intentionally
 order-sensitive response contrasts. These results show that boundary-aware
 structure and physical ordering can matter within declared contracts.
 
@@ -2550,7 +2549,7 @@ Current subjective probabilities, conditional on the declared scopes, are:
 | Claim | Probability | Evidence that would move it most |
 |---|---:|---|
 | High accuracy within a well-specified boundary-driven family | 90% | Repeated failure on trusted solver labels under a valid information contract would lower it. |
-| Useful adaptation to a genuinely new geometry family | 45% | A sealed causal shift with at least twofold target-label saving would raise it sharply; a valid null would lower it sharply. |
+| Useful adaptation to a new geometry family | 45% | A sealed causal shift with at least twofold target-label saving would raise it sharply; a valid null would lower it sharply. |
 | A reusable high-level design advantage across propagation classes | 60% | The same advantage over a steel-manned generic operator on a second distinct propagation class would raise it. |
 | One frozen model works on remote geometry and PDE families | 15% | Independent zero-shot success on several distant families would be required. |
 | A general architecture has net program value | 30% | Cost-weighted savings repeated across independent target families would be required. |
@@ -2558,7 +2557,7 @@ Current subjective probabilities, conditional on the declared scopes, are:
 These probabilities are not mutually exclusive. In particular, a reusable
 design rule can succeed even if shared frozen weights do not.
 
-The next decisive question is deliberately smaller than the interface theory:
+The next decisive question is narrower than the interface theory:
 under one fixed, well-posed PDE and one isolated, geometry-caused family shift,
 does related source experience beat both target-only learning and matched
 unrelated pretraining? Frozen success is the strongest outcome; adaptation
@@ -2576,14 +2575,14 @@ No experiment or compute was launched during the research pause.
 The strategic tension is control versus relevance. A controlled geometry
 study can produce an interpretable verdict but may remain a toy; an immediate
 industrial jump is relevant but would restore the confounds that obscured the
-first family failure. The program should earn one controlled transfer verdict
+first family failure. The program should establish one controlled transfer verdict
 without building a theory cathedral around it, then expose that verdict
 quickly to a fresh free-form family.
 
 ## 2026-07-29 — One-page claim card for causal geometry transfer {#sec-nb-geometry-transfer-claim-card}
 
 **Question.** When the PDE and boundary law stay fixed but the geometry comes
-from a genuinely different family, does experience on a related source reduce
+from a different family, does experience on a related source reduce
 the number of target solutions needed for accurate prediction?
 
 **Claim sought.** At one target error tolerance chosen before predictions are

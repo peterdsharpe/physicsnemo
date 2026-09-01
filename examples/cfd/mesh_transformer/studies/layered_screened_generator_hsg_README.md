@@ -21,7 +21,7 @@ sample. It is given the known transverse Fourier contribution, but not the
 exact local screening law. The sorted and physical-order arms have identical
 parameters and differ only in composition order.
 
-The physical-order model earns the composition claim only if it recovers at
+The physical-order model supports the composition claim only if it recovers at
 least 80% of the matched-pair contrast, improves paired field error at least
 fivefold over the scalar model and twofold over the pooled model, and
 preserves interpolation and held-mode accuracy. A separate local-law transfer

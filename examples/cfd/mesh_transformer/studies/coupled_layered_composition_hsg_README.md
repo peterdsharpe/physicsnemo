@@ -34,7 +34,7 @@ slowly rotating local eigenspaces. Evaluation holds out faster twists, doubles
 the number of layers, and swaps two layers while preserving the coefficient
 multiset exactly.
 
-Physical-order composition earns the claim only if it recovers at least 80%
+The physical-order composition claim is supported only if it recovers at least 80%
 of the matched-permutation effect in four seeds, halves paired error relative
 to pooling, and remains within 20% of pooling in distribution. Breadth
 transfer separately requires at least twofold lower cross-channel error on

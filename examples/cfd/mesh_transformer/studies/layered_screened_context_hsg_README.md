@@ -23,10 +23,10 @@ Five seeds train on modes 0--3 and layered coefficients in `[0.25, 3.0]`.
 Modes 4--7, low and high coefficient ranges, and matched optical-depth layer
 permutations are held out.
 
-Ordered context earns the nonlocality claim only if it recovers at least 80%
+Ordered context supports the nonlocality claim only if it recovers at least 80%
 of the paired contrast, reduces paired field error by at least fivefold
 relative to the scalar arm, and preserves interpolation and held-mode
-accuracy. The carrier earns a separate representation claim only if it
+accuracy. The carrier supports a separate representation claim only if it
 improves at least two of the low-coefficient, high-coefficient, and layer-order
 tests by at least 30% without losing the guards.
 

@@ -8,7 +8,7 @@ exponentially screened limit?
 
 The fixed carrier blends the leading small-screening response with the
 leading large-screening decay and includes the known angular and drift-gauge
-factors. It deliberately omits the exact Bessel response. The learned carrier
+factors. It omits the exact Bessel response by design. The learned carrier
 adds a bounded, capacity-matched transition correction that vanishes in both
 limits.
 
@@ -26,7 +26,7 @@ held-out boundary modes, near-boundary fields, and refinement while improving
 both field and exact-trace error by at least 30% on two of three
 operator-parameter extrapolations in at least four of five seeds.
 
-Learning earns its complexity over the fixed carrier only if it improves
+Learning is justified over the fixed carrier only if it improves
 interpolation and held-out-boundary fields by at least 30% without worsening
 any operator split by more than 20%.
 
