@@ -4126,3 +4126,19 @@ rate. Hyperparameter robustness and seed variance are different
 properties; the R1 arm now running should be read with both in view.
 Measure-weighting caveat: unweighted HiLift D drops to 0.64 — the
 architectures disagree most in large-area cells.
+
+**2026-09-01 operational addendum (chain design).** The
+"self-resubmitting tail" declared in the instrument-wave prereg does
+not work: Slurm kills the entire batch script at walltime, so nothing
+after `srun` is guaranteed to execute, and the eleven timed-out
+first-generation links resubmitted nothing. Two further lessons from
+the same day: singleton dependencies key on the job *name*, so array
+links of one name serialize behind the slowest lane (the cause of
+every "queue drained" wake in the high-lift waves), and Slurm
+snapshots the script at submission, so edits never reach already
+queued links. The pattern now in both wave scripts: **chain-ahead**
+— each link, after its completed/blocked guards, immediately submits
+its own successor under a per-lane singleton name
+(`inst-wave-<lane>`, `hl-ladder-<lane>`), then trains. Lanes
+progress independently, the chain self-terminates when the successor
+hits the completed guard, and no human or agent tops up links.
