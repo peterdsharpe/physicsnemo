@@ -1,0 +1,33 @@
+{
+  "title": "Instrument wave: DrivAerML noise floor (N1), symmetric lr-robustness (R1), resource-normalized anchor decode (V6), parity-fix wall-shear arm (W1)",
+  "date": "2026-09-01",
+  "motivation": "The 2026-09-01 campaign review (notebook) found that the program's first month optimized against DrivAerML's unmeasured label-noise floor (high-lift parity at MT2/GT=0.98 vs DrivAerML's 1.10-1.18x GT lead), that MT2's most reproducible advantage (optimizer robustness) has never been measured symmetrically, that the v5a4 anchor-decode closure ignored the user's resource-normalization frame, and that the parity_fix vector-head repair has never been trained on. All four are cheap, eval-heavy or single-link DrivAerML jobs.",
+  "arms": {
+    "N1_noise_floor": {
+      "question": "Is DrivAerML's in-family residual dominated by a component shared across independent models (label noise / irreducible), or do the architectures make different mistakes (capacity-limited)?",
+      "method": "Eval-only on existing checkpoints (GeoTransolver x2 seeds, MT2-v3c x2 seeds, DrivAerML val, resolution 10000, fixed sampling seed so all models see identical points). Save per-point pressure predictions. Compute per case: (a) disagreement ratio D = ||p_A - p_B|| / mean(||p_A - y||, ||p_B - y||) for cross-architecture pairs and for same-architecture seed pairs; (b) per-case error correlation across architectures; (c) shared-residual fraction: fraction of each model's residual energy explained by the mean residual across all four models. Repeat identical statistics on HiLift val with the lr-1e-3 checkpoints as the cleaner-label control.",
+      "predictions": "If the floor reading is right: cross-architecture D <= 0.5 on DrivAerML, per-case error correlation >= 0.8, shared-residual fraction >= 0.5; and D is LARGER on HiLift relative to DrivAerML (less shared floor). Falsifier: D >= 0.8 on DrivAerML (models disagree as much as they err) with weak per-case correlation -> the DrivAerML gap was architecture/capacity-limited after all and the review's reframing is wrong.",
+      "cost": "eval only"
+    },
+    "R1_lr_robustness": {
+      "question": "Is MT2's optimizer robustness (HiLift: 0.040-0.049 across lr x seed vs GT 0.041-0.397) a reproducible architecture property on DrivAerML too?",
+      "runs": "GeoTransolver and MT2-v3c at lr in {1e-3, 1e-2} x seeds {42,43} = 8 lanes; the existing 5-seed lr 3e-3 results are the middle rung. Frozen otherwise (500 epochs, resolution 10000, bf16, no augmentation).",
+      "predictions": "MT2's best-to-worst pressure_l2 spread across the 3-lr grid is smaller than GeoTransolver's; specifically GT at 1e-2 degrades > 2x from its best while MT2 degrades < 1.5x. Falsifier: spreads within 20% of each other -> robustness was HiLift-specific (step-count effect), not architectural.",
+      "cost": "8 lanes x 1 link"
+    },
+    "V6_anchor_decode_resource_normalized": {
+      "question": "Does anchor-conditioned decode (v5a4, n_anchors=2560) win when compared at MATCHED peak VRAM instead of matched token count? (Re-opens M2, which was closed on an accuracy-only gate that ignored the resource frame.)",
+      "runs": "v5a4 full (query_independent, n_anchors=2560, resolution 10000) x 2 seeds; v3c at sampling_resolution=6500 x 2 seeds as the VRAM-matched control (v5a4 measured 6.33 GB vs v3c 9.8 GB at 10000 tokens; MT2 memory is ~linear in tokens). Report pressure_l2, peak VRAM, and train+val throughput for all three configs (the two new ones plus the existing v3c@10000).",
+      "predictions": "At matched VRAM, v5a4 pressure_l2 is within 1.15x of v3c@6500 AND v5a4 is query-independent by construction. Falsifier: v5a4 > 1.3x v3c@6500 -> anchor decode loses even resource-normalized; M2 stays closed with the stronger reason.",
+      "cost": "4 lanes x 1 link"
+    },
+    "W1_parity_fix_wall_shear": {
+      "question": "Does the physics-correct vector head (parity_fix gating the e_phi pseudovector coefficients) improve wall-shear accuracy, where both architectures are weakest?",
+      "runs": "MT2-v3c + parity_fix=true x 2 seeds on DrivAerML (out_vectors=1 = wall shear).",
+      "predictions": "tau_wall_l2 improves by > 3% vs v3c seeds; pressure_l2 unchanged within seed spread (the scalar path is untouched, so any pressure change would indicate an unintended interaction). Falsifier: tau_wall within seed spread -> the defect was physically real but numerically immaterial on DrivAerML's near-symmetric geometry; keep the fix for correctness, drop the accuracy claim.",
+      "cost": "2 lanes x 1 link"
+    }
+  },
+  "operational": "New sbatch pattern: self-resubmitting tail (each link resubmits itself under singleton if not completed/blocked) to eliminate the chain-drain babysitting that cost ~5 days in the high-lift waves.",
+  "declared_before_results": true
+}
