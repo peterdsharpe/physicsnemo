@@ -322,7 +322,9 @@ def test_parity_fix_reflection_equivariance():
     M = torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=torch.float64))  # mirror
 
     torch.manual_seed(1)
-    fixed = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, parity_fix=True)
+    fixed = MeshTransformer2(
+        hidden=64, n_layers=2, n_slices=16, parity_fix=True, parity_gate_scale=0.1
+    )
     fixed = fixed.double().eval()
     torch.manual_seed(1)
     broken = MeshTransformer2(hidden=64, n_layers=2, n_slices=16).double().eval()

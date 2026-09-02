@@ -4142,3 +4142,76 @@ its own successor under a per-lane singleton name
 (`inst-wave-<lane>`, `hl-ladder-<lane>`), then trains. Lanes
 progress independently, the chain self-terminates when the successor
 hits the completed guard, and no human or agent tops up links.
+
+## 2026-09-02 — Instrument wave verdicts: lr robustness confirmed (R1); anchor decode loses resource-normalized (V6); the parity fix costs accuracy (W1, refuted instructively) {#sec-nb-instrument-wave-verdict}
+
+All fourteen DrivAerML lanes of the instrument wave
+(@sec-nb-campaign-review, prereg `1f6cb942`) trained and evaluated on
+the frozen val instrument (`results/instrument_wave_reduction_2026-09-01.json`).
+
+**R1 — learning-rate robustness: confirmed, with one bound missed.**
+Pressure rel-L2 across the symmetric grid (2 seeds at 1e-3 and 1e-2;
+the 3e-3 rung is the existing 5-seed result):
+
+| lr | GeoTransolver | MeshTransformer2 |
+|---|---|---|
+| 1e-3 | 0.0546 / 0.0550 | **0.0588 / 0.0567** |
+| 3e-3 | **0.0532** | 0.0633 |
+| 1e-2 | 0.739 / 0.221 | 0.0874 / 0.0914 |
+
+GeoTransolver degrades 4–14x at lr 1e-2 (prediction: > 2x, held);
+MT2 degrades 1.55x from its best (prediction: < 1.5x, **missed
+narrowly**). The spreads differ by far more than the 20% falsifier
+band, so robustness is a reproducible architecture property on both
+datasets, not a HiLift step-count artifact. A by-product corrects the
+DrivAerML ledger: **MT2's best learning rate on DrivAerML is 1e-3
+(0.0577), not the frozen 3e-3 (0.0633)**, so the honest best-vs-best
+in-family ratio there is 0.0577 / 0.0532 = **1.085x**, consistent
+with the earlier single-seed lr-parity figure of 1.10x.
+
+**V6 — anchor-conditioned decode at matched VRAM: the falsifier
+fired.** Peak training memory: v5a4 6.35 GB, v3c at 6,500 tokens
+6.56 GB (matched within 3%), v3c at 10,000 tokens 9.81 GB. Pressure:
+v5a4 **0.209 / 0.221** vs the VRAM-matched control **0.0697 / 0.0671**
+— 3.1x worse, far past the 1.3x closure bar. The v5a4 pilot's
+near-miss did not reflect its asymptote; at 500 epochs the
+anchor-conditioned decode lands where the fully passive v5a3 did
+(3.3–3.8x). Also, on DrivAerML its validation step is *slower* than
+v3c at 10,000 tokens (0.30 vs 0.21 s), so the throughput advantage
+seen on HiLift does not generalize. **M2 stays closed, now for the
+stronger reason.** Useful frontier point from the control: dropping
+v3c from 10,000 to 6,500 training tokens costs 8% accuracy for 33%
+less memory.
+
+**W1 — the parity fix, trained: refuted instructively.** Prediction
+was wall-shear improvement > 3% with pressure unchanged. Measured
+(2 seeds vs the v3c seeds evaluated on identical points):
+
+| | pressure | wall shear |
+|---|---|---|
+| v3c (3e-3) | 0.0636 / 0.0627 | 0.0916 / 0.0904 |
+| v3c + parity_fix | 0.0706 / 0.0667 (**+8.6%**) | 0.1112 / 0.1049 (**+18.8%**) |
+
+The physically correct head is *worse* on both fields, and pressure
+moved even though the scalar path is untouched — the joint loss
+routes the vector head's gradients into the shared trunk. Candidate
+mechanism (a hypothesis, not a result): the raw pseudoscalar gate
+p = r̂·(n̂×d̂) modulates *magnitude* as well as sign, and |p| ≈ 0
+wherever r, n, d are near-coplanar — including the entire symmetry
+plane of a mirror-symmetric car — so the two e_phi channels are
+switched off exactly where the head had been using them. The
+reflection-covariance defect is real (M3, @sec-nb-m3-verdict); the
+*repair* removed capacity.
+
+**W1' preregistered here, before any run.** Same fix with a
+sign-preserving, unit-magnitude odd gate tanh(p / 0.1) — exact
+reflection covariance retained (contract test updated to this
+variant, 16/16 passing) with the magnitude restored away from p = 0.
+Two seeds, same protocol. Prediction: wall shear within 3% of v3c
+and pressure within seed spread — i.e., the covariance constraint
+itself is free once capacity is restored. Falsifier: still > 10%
+worse on wall shear → the e_phi pseudovector channels are
+load-bearing in a non-covariant way, which would mean either the
+labels are not reflection-covariant (worth checking directly on the
+mirror-symmetric cases) or the head needs a different parity-odd
+basis, not a gate.

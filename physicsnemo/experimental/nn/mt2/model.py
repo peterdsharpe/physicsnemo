@@ -218,6 +218,7 @@ class MeshTransformer2(Module):
         local_radii: tuple[float, ...] = (0.01, 0.03),
         n_boundary_scalars: int = 0,
         parity_fix: bool = False,
+        parity_gate_scale: float = 0.0,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -254,6 +255,12 @@ class MeshTransformer2(Module):
         ### r_hat . (n_hat x d_hat) restores exact parity covariance. Off by
         ### default so frozen checkpoints keep their trained behavior.
         self.parity_fix = parity_fix
+        ### W1' (instrument wave follow-up): the raw pseudoscalar gate p also
+        ### modulates MAGNITUDE (|p| ~ 0 wherever r, n, d are near-coplanar,
+        ### e.g. the symmetry plane), which W1 showed costs ~19% wall-shear
+        ### accuracy. tanh(p / scale) keeps the odd sign structure (exact
+        ### reflection covariance) with unit magnitude away from p = 0.
+        self.parity_gate_scale = float(parity_gate_scale)
         ### v5a4 experiment: AB-UPT-style anchor-conditioned decode -- only a
         ### fixed-size anchor subset runs the interacting encoder; all points
         ### decode through the read-only path. The anchor count is absolute
@@ -522,6 +529,8 @@ class MeshTransformer2(Module):
             p_odd = (
                 r_hat * torch.linalg.cross(n_hat, d_hat, dim=-1)
             ).sum(-1)[..., None, None]  # (B, N, 1, 1), parity-odd invariant
+            if self.parity_gate_scale > 0:
+                p_odd = torch.tanh(p_odd / self.parity_gate_scale)
             gate = torch.ones_like(coeffs[..., :1, :]).expand_as(coeffs).clone()
             gate[..., 4] = p_odd[..., 0]
             gate[..., 6] = p_odd[..., 0]
