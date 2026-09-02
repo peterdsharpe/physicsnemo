@@ -4601,3 +4601,58 @@ tilt sensitivity is intrinsic to GeoTransolver's coordinate features,
 not an artefact of training in a single pose. Either outcome fixes
 the honest exchange rate between exact equivariance and
 canonicalization for the book.
+
+## 2026-09-02 — 3D kernel arm scoped: the surface-to-surface kernel decoder already ran and was null; the right next step is a potential-flow oracle gate (K0), then a symmetric feature arm (K1) {#sec-nb-kernel3d-scoping}
+
+**Scoping** (`results/kernel3d_arm_scoping_2026-09-02.md`), prompted
+by the G3 kernel result (@sec-nb-g3-kernel-rerun). The naive plan —
+"put the exact-kernel decoder on DrivAerML" — is already in the
+record: `conf/model/mesh_transformer_surface_flagship.yaml` trained at
+scale, and chapter 16's factorial (`#sec-drivaerml-factorial`) shows
+its exact members buying 0–8% in-family and nothing zero-shot. The
+document argues this null is *structural to the surface-to-surface
+formulation* on a 0.1%-coverage point subsample (the exterior trace is
+½I + compact K; exact panel integrals on a Monte Carlo sample carry a
+~34% quadrature floor), not evidence against the 3D kernel mechanism.
+The 2D result's leverage lives in boundary→interior — which is the
+program's stated north-star objective, and the axis on which MT2 has
+never been run (critic C-hill). Inventory: every piece that
+*evaluates* a 3D Laplace kernel exists and is tested
+(`kernel_decoder.py` triangle members, Barnes–Hut backend); every
+piece that *solves* a learned BIE is 2D/complex-plane-bound.
+
+**Preregistered, in readout units:**
+
+- **K0 — potential-flow oracle gate (eval-only, zero parameters).**
+  Exact 3D single/double-layer integrals on a closed coarse remesh per
+  vehicle, Neumann data U_inf·n, Morino second-kind solve,
+  Bernoulli Cp, compared to DrivAerML val pressure. **Gate: rel-L2
+  < 0.90** (a viscous, separated car; prior 0.55–0.80). If the oracle
+  is *worse* than that, "exact kernel = Laplace, viscous = learned
+  correction" is refuted for this dataset and no learned kernel arm
+  runs. Cost: eval-only, < 10 GPU-hours.
+- **K1 — symmetric feature arm (conditional on K0 passing).** K0's
+  field (Cp_pf and the tangential potential velocity, both exactly
+  similarity-invariant with no reference length) as a declared input
+  to *both* MeshTransformer2-v3c (lr 1e-3) and GeoTransolver (lr
+  3e-3), 2 seeds each. Predictions: in-family unchanged (|Δ| ≤
+  0.004); **SHIFT-SUV estate zero-shot improves** (MT2 0.997 → ≤ 0.85,
+  GT 0.614 → ≤ 0.55); P3 density ratio ≤ 8x (from 13–14x for
+  MT2-v3c on that instrument). Falsifier: neither architecture moves
+  ≥ 0.10 on estate → the potential-flow prior does not carry
+  transfer, K2 not launched.
+- **K2 — mechanism arm (conditional on K1):** exact measure-weighted
+  layer operators as a fixed exchange channel inside MT2's slice
+  block.
+- **K-alt (independent of K0–K2, admits the interior problem):** the
+  existing kernel-decoder MeshTransformer, unchanged, on
+  `drivaer_ml_volume.yaml` — boundary→interior, where the 2D
+  mechanism's spectral leverage actually lives. Deferred until K0
+  reads out, to keep the cluster share on S1/W2/P1''/ladder.
+
+**Side facts from the scoping worth keeping:** the one G-ledger axis
+the existing kernel-decoder arm already wins is P3 density bias
+(1.7–2.1x vs GeoTransolver 3.6x vs MT2-v3c 13–14x on that probe
+version); no watertightness check exists anywhere in the aero recipe
+(K0 adds a Gauss-identity gate); degree 0, not MT2's degree 1, is the
+correct drive law for pressure *coefficients*.
