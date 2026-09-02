@@ -4490,3 +4490,60 @@ robustness, and the measurement methodology. "Similarity-equivariant",
 and "the DrivAerML gap was noise" are retired from the book pending
 the S1 result, and chapters 02 and 17 will be corrected in the same
 pass that records S1.
+
+## 2026-09-02 — G3 frequency verdict OVERTURNED: the kernel-decoder MeshTransformer generalizes across BC frequency content (T1 0.070 vs 1.00); the original arm measured a proved nullspace {#sec-nb-g3-kernel-rerun}
+
+**The critic's confound was real.** G3's `mt1_linear` arm used the
+*moment* query decoder (`make_model("mesh_transformer", "reference")`,
+recorded in every artifact's config block), and chapter 3
+(`#sec-ceiling`) *proves* that decoder can emit only angular orders
+m ∈ {0, 1, 2} in linear scalar mode. G3's T1 test — drive modes 5–8
+with the constant removed — is entirely m ≥ 3 content, so
+rel-L2 ≈ 1.0 was structurally guaranteed. The notebook's sentence
+"the model has simply never learned the harmonic response to those
+modes … a data/coverage limit, not an architecture gap"
+(@sec-nb-g3-verdict) was wrong for that arm: it *could not represent*
+them. Chapter 6's kernel-decoder result (freq-OOD 0.0748) is on the
+same suite and the same OOD axis, under a different training protocol.
+
+**Rerun** (post-hoc decoder control, labelled as such, not
+preregistered): arm `mt1_kernel` = the singular-only exact
+double-layer kernel decoder, otherwise identical to `mt1_linear`
+(linear field mode, explicit gauge, reference capacity; 104k vs 136k
+parameters, inside the arm range). Same training set, seeds, epochs,
+optimizer, evaluation; ORD job 33696718, 3 seeds. Artifacts
+`results/g3/g3_partial_mt1_kernel_seed*.json`,
+`results/g3/g3_reduction_with_kernel.json`.
+
+| arm | T0 | T1 modes 5–8 | T2a ×2 | T2b ×4 | T3 geom |
+|---|---|---|---|---|---|
+| **mt1_kernel** | **0.0158** | **0.0701** (4.4×) | 0.0163 (1.03×) | 0.0154 (0.97×) | **0.0232** (1.46×) |
+| mt1_linear (moment) | 0.0723 | 1.0043 (13.9×) | 0.0667 (0.92×) | 0.0632 (0.87×) | 0.0898 (1.24×) |
+| mt2_bscalar | 0.0624 | 1.1485 (18.4×) | 0.3883 (6.2×) | 0.7289 (11.7×) | 0.0669 (1.07×) |
+| softslice_2d | 0.1114 | 1.2090 (10.9×) | 0.4979 (4.5×) | 0.7760 (7.0×) | 0.1221 (1.10×) |
+
+**Verdict.** The kernel-decoder MeshTransformer **does generalize
+across boundary-condition frequency content** (T1 0.070, 14× better
+than the moment decoder's 1.00, reproducing chapter 6's 0.075 under
+G3's protocol) and is the best arm on every axis: 4× lower
+in-distribution error than the next best, exact amplitude
+extrapolation from linearity, and the lowest geometry-OOD error. The
+G3 "no architecture generalizes frequency content" line is
+**retracted**; the correct statement is that the *soft-slice* family
+(mt2_bscalar, softslice_2d) and the moment decoder fail on that axis,
+while an exact-kernel decoder succeeds. The structural reading: an
+exact Green's-function operator carries the PDE's spectral response
+for free, whereas learned routing must have seen each mode.
+
+**Why this matters for direction.** This is the strongest
+generalization result the program owns, and it belongs to the
+architecture line (MT1 / learned boundary-integral operators, chapters
+3 and 6) that the program *pivoted away from* to chase DrivAerML
+in-family accuracy with GT-class routing — the local hill the critic
+identified. The open question is whether the mechanism transfers to
+3D aerodynamics, where the exact kernel is the Laplace/potential-flow
+double layer and viscous effects are corrections: a **3D
+kernel-decoder arm on DrivAerML/HiLift** (the `learned_bie` line,
+`results/learned_bie_2026-07-02.json`) is now the highest-value
+unturned stone, to be preregistered against the G-ledger axes rather
+than in-family accuracy alone.

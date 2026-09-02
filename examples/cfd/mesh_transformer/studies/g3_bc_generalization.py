@@ -36,6 +36,13 @@ Arms:
   matched parameter count (its native DomainMesh adapter).
 - ``mt1_linear``: the native MeshTransformer at the suite's reference
   capacity in linear field mode -- the drive-linearity exactness anchor.
+- ``mt1_kernel``: post-hoc control (2026-09-02, not in the preregistration):
+  ``mt1_linear`` with the singular-only kernel query decoder in place of the
+  moment decoder, everything else identical.  The moment decoder has a
+  proved angular ceiling at order two in linear mode (book chapter 3,
+  "The proved limitation"), and T1 is drive modes 5-8 only, so the arm
+  separates "no architecture generalizes frequency content" from "the
+  moment decoder cannot represent it".
 
 Usage::
 
@@ -247,6 +254,11 @@ def build_arm(arm: str) -> nn.Module:
         # The suite's home model at reference capacity, linear field mode
         # (build_mesh_transformer default), moment query decoder.
         return make_model("mesh_transformer", "reference")
+    if arm == "mt1_kernel":
+        # Same reference capacity, linear field mode and explicit gauge as
+        # mt1_linear; only the query decoder differs (exact double-layer
+        # kernel member alone -- chapter 6's singular-only dictionary).
+        return make_model("mesh_transformer_kernel_singonly", "reference")
     raise ValueError(f"unknown arm {arm!r}")
 
 
@@ -522,6 +534,10 @@ def _write(args, device, results, param_counts, wall_times, final_losses) -> Non
             },
             "softslice_2d": "transolver_intree preset intree_matched (native suite adapter)",
             "mt1_linear": "make_model('mesh_transformer', 'reference'): moment decoder, field_mode=linear, explicit gauge",
+            "mt1_kernel": "make_model('mesh_transformer_kernel_singonly', 'reference'): "
+            "singular-only kernel decoder (exact double layer; no polynomial or MLP "
+            "members), field_mode=linear, explicit gauge; post-hoc decoder control, "
+            "not preregistered",
         },
         "deviations": [
             "MT2 uses n_boundary_scalars=2 ([value, is_boundary flag]) instead of the "
