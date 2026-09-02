@@ -4547,3 +4547,57 @@ kernel-decoder arm on DrivAerML/HiLift** (the `learned_bie` line,
 `results/learned_bie_2026-07-02.json`) is now the highest-value
 unturned stone, to be preregistered against the G-ledger axes rather
 than in-family accuracy alone.
+
+## 2026-09-02 — P1' verdict: canonicalization gives GeoTransolver exact pose invariance at zero training cost, but a 1.15–1.7x in-pose penalty from sub-degree frame tilt; the "worth 1.6x" headline becomes "worth 1.15–1.2x, plus robustness to pose error" {#sec-nb-p1-canon-verdict}
+
+**The control the critic asked for** (`results/p1_canonicalization_control_2026-09-02.json`;
+eval-only, frozen GeoTransolver DrivAerML checkpoints, 2 seeds, 48 val
+cases). Canonical frame: U_inf → +x, roll about it from the
+area-weighted in-plane covariance (sign from the third moment;
+0/48 cases within 5% of eigenvalue degeneracy), vector outputs rotated
+back before the metric. Reproduction anchor held bit-for-bit (orbit
+raw 32.2x / 30.1x). Incidental finding: the P1 probe's yaml says
+"z-rotation" but the transform's default mode is uniform SO(3), so P1
+has always been a full-orientation orbit (angles 44–179°) — a stronger
+test than documented.
+
+**Results** (pressure rel-L2; ratio to in-pose raw):
+
+| pose | raw GT | canonicalized GT |
+|---|---|---|
+| in-pose | 0.0530 / 0.0533 (1.00x) | 0.0847 / 0.0918 (**1.60x / 1.72x**) |
+| SO(3) orbit | 1.71 / 1.60 (32x / 30x) | 0.0847 / 0.0918 (same as in-pose) |
+| yaw 90°, yaw 180°, roll 90° | 17–31x | identical to in-pose to 4 decimals |
+
+Canonicalization makes GeoTransolver **exactly pose-invariant** at
+zero training cost — but costs 1.6–1.7x in-pose. The follow-up
+control explains why: **GeoTransolver is hypersensitive to sub-degree
+frame tilt** — a fixed roll of 0.5° about U_inf costs 1.2–1.3x, 1°
+costs 1.7–1.8x, 2° costs 3.2–3.4x, 5° costs 6.5–6.8x. The
+canonical frame estimated from the 10,000-cell eval sample is off by
+0.82° on average (max 2.2°); estimated from 1M cells it is off by
+0.39°, and the canonicalization penalty falls to **1.15–1.19x**
+(in-pose and orbit alike).
+
+**Verdict.** The headline "exact equivariance is worth 1.6x" survives
+only against rotation *augmentation* (1.84–1.91x). Against the
+correct steel-man — canonicalized GeoTransolver with a well-estimated
+frame — MT2's exact-equivariance advantage is **~1.15–1.2x**, not
+1.6x, and the book's P1 framing must say so. What the control adds is
+arguably more valuable than what it removes: a *quantified pose-error
+sensitivity* for the non-equivariant baseline (1° → 1.7x) that MT2 is
+immune to by construction. In any deployment where the freestream
+direction or vehicle alignment carries even a degree of uncertainty,
+that is the operative difference, and it is now a measured curve
+rather than an argument.
+
+**P1'' preregistered here** (the remaining steel-man step, launched
+now): *train* GeoTransolver in the canonical frame (canonicalization
+as a dataset transform, 2 seeds, frozen protocol otherwise), so the
+model sees the estimator's sub-degree tilt noise during training.
+Prediction: canonically trained GT lands within 1.05x of raw GT
+in-pose and is pose-invariant; falsifier: penalty stays ≥ 1.15x → the
+tilt sensitivity is intrinsic to GeoTransolver's coordinate features,
+not an artefact of training in a single pose. Either outcome fixes
+the honest exchange rate between exact equivariance and
+canonicalization for the book.
