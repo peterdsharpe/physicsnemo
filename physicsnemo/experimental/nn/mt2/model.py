@@ -567,8 +567,9 @@ class MeshTransformer2(Module):
             z_s = torch.einsum("bns,bnc->bsc", a_s, src_r)
             m_s = torch.einsum("bns,bnc->bsc", a_s, src_n)
             b_q = torch.softmax(self.odd_assign(h_out), dim=-1)  # point over slices
-            z_q = torch.einsum("bns,bsc->bnc", b_q, z_s)
-            m_q = torch.einsum("bns,bsc->bnc", b_q, m_s)
+            ### autocast may emit bf16 from einsum; keep geometry in fp32.
+            z_q = torch.einsum("bns,bsc->bnc", b_q, z_s).to(r_hat.dtype)
+            m_q = torch.einsum("bns,bsc->bnc", b_q, m_s).to(r_hat.dtype)
             def trip(u, v, w):
                 return (u * torch.linalg.cross(v, w, dim=-1)).sum(-1, keepdim=True)
             pseudo = torch.cat(
@@ -583,7 +584,11 @@ class MeshTransformer2(Module):
             g = self.odd_gate(self.norm_out(h_out)).reshape(
                 b, n, self.out_vectors, 2, self.N_ODD
             )
-            odd_coeff = torch.einsum("bnvjk,bnk->bnvj", g, pseudo)  # (B,N,V,2)
+            ### mixed precision: pseudo is fp32 geometry, g may be bf16 under
+            ### autocast; contract in fp32 and cast back to the head's dtype.
+            odd_coeff = torch.einsum(
+                "bnvjk,bnk->bnvj", g.to(pseudo.dtype), pseudo
+            ).to(coeffs.dtype)  # (B,N,V,2)
             coeffs = coeffs.clone()
             coeffs[..., 4] = odd_coeff[..., 0]
             coeffs[..., 6] = odd_coeff[..., 1]

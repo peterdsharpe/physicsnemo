@@ -409,3 +409,19 @@ def test_odd_head_reflection_rotation_and_translation():
     with torch.no_grad():
         v5 = _split(m5(pts, nrm, drv, w))[1]
     assert not torch.allclose(v0, v5, atol=1e-6)
+
+
+@pytest.mark.parametrize("kw", [{"odd_head": True}, {"parity_fix": True}, {"vector_basis": "true7"}])
+def test_head_variants_run_under_bf16_autocast(kw):
+    """Mixed-precision smoke: every head variant must survive bf16 autocast
+    (the odd-coefficient head once failed with a dtype mismatch at step 0)."""
+    torch.manual_seed(0)
+    m = MeshTransformer2(hidden=32, n_layers=1, n_slices=8, **kw)
+    pts = torch.randn(1, 128, 3)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, 128) + 0.5
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        out = m(pts, nrm, drv, w)
+    out.float().sum().backward()
+    assert torch.isfinite(out.float()).all()
