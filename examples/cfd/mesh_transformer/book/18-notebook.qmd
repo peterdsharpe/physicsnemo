@@ -4260,3 +4260,52 @@ explanations remain, and they are distinguishable without training:
 codebase default-off: on this dataset a physically correct head is
 measurably worse, and the honest statement is that exact
 reflection covariance is a contract the *labels* may not honour.
+
+## 2026-09-02 — L1 verdict: DrivAerML labels are mirror-covariant to <1%, but a miscalibrated threshold hides that this can still account for most of the parity penalty {#sec-nb-l1-verdict}
+
+**Measurement** (`results/l1_label_covariance_2026-09-02.json`; 48
+val cars at full resolution, 14.6–19.8M cells each, cell-area
+weighted). DrivAerML geometry mirrors about y = 0 to 3e-6 m; the mesh
+itself is mirror-conformal over the bulk of the surface (median
+mirror-pair distance 0.003 cell lengths), and 95% of cells pair
+within one cell length. The mirror-antisymmetric energy fractions
+of the labels are tiny: **pressure A_p = 0.93%** (mean-subtracted),
+**wall shear A_v = 0.67%**, unchanged by k=8 spatial smoothing (so it
+is genuine smooth asymmetry, not pairing noise). The least symmetric
+channel is the side-force component v_y at 1.9% of its own energy —
+the expected weak asymmetric-wake signature — but it carries only
+10% of wall-shear energy. Wall shear is *more* symmetric than
+pressure.
+
+**Preregistered verdict: the falsifier fires** (both ≪ 5%; the
+prediction A_v ≳ 10% missed by 15x). **But the threshold was
+miscalibrated**, and this is the second such error this week (N1,
+@sec-nb-n1-verdict). I compared an *energy-fraction* statistic to a
+*rel-L2 penalty* without converting. The A statistic is 4x the
+antisymmetric-part energy, so the truly unfittable wall-shear energy
+for an exactly covariant head is A_v/4 = 0.17%. Errors add in
+quadrature on a small baseline: sqrt(0.0910² + 0.0017) = 0.0999, a
+**+9.8% penalty** in the extreme case where the unconstrained head
+fits that component perfectly. The observed W1' penalty is +12.6%
+(@sec-nb-w1p-verdict). So label antisymmetry, though below 1% in
+energy, can account for *most* of the covariant head's disadvantage.
+The lesson for future preregistrations: state thresholds in the
+units of the readout they must explain, and derive them.
+
+**The discriminating follow-up (L1b, data-only, dispatched now).**
+Compute the same antisymmetry statistic on the *predictions*: the
+unconstrained v3c head's val wall-shear predictions, and the
+parity-fix head's. If v3c's predictions are as antisymmetric as the
+labels (A ≈ 0.67%), the head is exploiting the labels' asymmetry and
+L1 accounts for the penalty; if its predictions are nearly symmetric
+(A ≪ labels'), the unconstrained head is *not* fitting the
+antisymmetric part and the penalty must come from the covariant
+basis losing rank where r̂ aligns with n or d (L2). The parity-fix
+head's predictions must show A ≈ 0 by construction — a deployment
+check of the contract.
+
+**Side result worth keeping.** Mirror pairing gives a *model-free*
+handle on label structure that N1 lacked: the antisymmetric energy is
+smooth, not point-iid, so DrivAerML's labels carry little white
+noise at the cell level; whatever "shared residual" the four models
+have in common (N1: 71%) is not iid label noise either.
