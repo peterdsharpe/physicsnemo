@@ -4403,3 +4403,90 @@ head's advantage is not about parity at all but about optimization
 (e.g. the two extra unconstrained channels acting as a
 better-conditioned overparameterization), which would be tested next
 by an unconstrained 9-channel head.
+
+## 2026-09-02 — Independent critic review: two of MT2's stated contracts are not implemented; M4 closure retracted; program reframed {#sec-nb-critic-review}
+
+At Peter's request a fresh-context critic reviewed the whole written
+record with no framing from the program (report:
+`results/critic_review_2026-09-02.md`, 17 graded claims). The two
+most consequential findings were **verified in-session against the
+code** before being accepted:
+
+1. **MT2 is not scale-equivariant** (critic C4, confirmed). A
+   geometric 2x rescale of the input (points ×2, areas ×4) changes
+   the output by **63%** (fp64, random weights). `reference_length`
+   is a constant 8.0, and the only "scale" contract test ever written
+   (`test_measure_weight_scale_invariance`) checks measure-*weight*
+   rescaling — exact to 1e-16 — not geometry. Every chapter that
+   calls MT2 "similarity-equivariant" is wrong; the correct statement
+   is SE(3)-equivariant (rotations + translations), with a fixed
+   length gauge. **Consequence:** the M1 scale-relaxation arm
+   (@sec-nb-m1-verdict-wave-close) tested nothing — it appended a
+   log-size feature to a model that already saw absolute size — so
+   its "refuted" verdict is void, and the literature synthesis's
+   over-symmetrization hypothesis was never actually tested.
+2. **MT2 is not measure-complete** (critic C6, confirmed). The
+   centroid is an unweighted `points.mean`; under 10:1 biased density
+   it shifts by **0.94 RMS radii**. The M4 "closed by derivation"
+   verdict (@sec-nb-lit-wave-prereg) is **retracted** — the audit
+   missed the very first line of the geometry reduction. The P3
+   density floor (4.3–4.5x) therefore has an implementation
+   component after all.
+3. **The drive-degree-1 contract is vacuous in deployment** (C7): the
+   recipe feeds a unit vector (`U_inf_dir`), so the output scaling by
+   |drive| is identically 1; and physically pressure is degree 2 in
+   speed, Cp degree 0. The contract test is exact and the contract is
+   irrelevant.
+
+Also accepted from the report: MT2's peak memory is 9.8 GB against
+GeoTransolver's 4.6 GB on the same DrivAerML protocol (C16 — the
+review chapter's cost table is wrong); the "DrivAerML gap was label
+noise" framing survives in chapter 17 despite N1 retracting it
+(C14); every 2026-08/09 verdict is two seeds without a paired
+statistic; the HiLift dataset config lives only job-locally on AGA;
+and the program has been optimizing a 48-case DrivAerML val ratio
+rather than its stated boundary→interior generalization objective
+(volume recipes exist in the tree and MT2 has never run on them).
+Two claims I do not yet accept without checking: that the G3 MT1 arm
+used the moment decoder with the proved m ≤ 2 ceiling rather than
+the kernel decoder that chapter 6 reports at 0.075 on frequency-OOD
+(being re-run, below), and the exact 3.7x density-sensitivity figure.
+
+**Actions taken today, all preregistered before running:**
+
+- **S1 — a real similarity gauge.** New flag `similarity_gauge`:
+  measure-weighted centroid and measure-weighted RMS-radius
+  normalization replace the unweighted mean and the constant
+  reference length. Contract test added for *geometric* scale
+  equivariance (points ×k, areas ×k² → identical output) alongside
+  the existing weight-scale test. Arms: v3c + gauge, 2 seeds,
+  DrivAerML frozen protocol, then the P3 biased-density probe and the
+  SHIFT-SUV zero-shot pair on the new checkpoints. Predictions in
+  readout units: in-family within seed spread of v3c (≤ 0.066); **P3
+  density ratio drops from 4.3–4.5x to below 2x** (the unweighted
+  centroid was the dominant density leak); zero-shot estate improves
+  from 0.83–0.90 (a truly similarity-covariant model cannot bind to
+  DrivAerML's absolute size). Falsifier for the last: estate
+  unchanged within seed spread → absolute size was not the transfer
+  leak and the G2 mechanism list is back to GeoTransolver's
+  pointwise features.
+- **P1' — GeoTransolver canonicalization control** (eval-only): align
+  each input to a canonical frame from U_inf (and the geometry's
+  principal axes for the remaining rotation), run the frozen GT
+  checkpoint, rotate outputs back; re-read the P1 rotation orbit. If
+  GT recovers its in-pose accuracy off-pose at zero training cost,
+  the "equivariance is worth 1.6x" headline is void and MT2's
+  rotation robustness is a convenience, not a capability.
+- **G3' — rerun the G3 ladder's MT1 arm with the kernel decoder** to
+  resolve the chapter-6-vs-G3 contradiction on frequency
+  generalization (< 3 GPU-hours).
+
+**Reframing accepted.** MT2 should be described as an SE(3)-equivariant
+soft-slice transformer with a learned local geometry basis; the
+differentiators that survive are exact rotation/translation
+covariance (with the O(3) extension under test in W2), learning-rate
+robustness, and the measurement methodology. "Similarity-equivariant",
+"measure-complete", "equal-or-lower cost", "drive-degree contract",
+and "the DrivAerML gap was noise" are retired from the book pending
+the S1 result, and chapters 02 and 17 will be corrected in the same
+pass that records S1.
