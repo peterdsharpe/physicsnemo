@@ -4215,3 +4215,48 @@ load-bearing in a non-covariant way, which would mean either the
 labels are not reflection-covariant (worth checking directly on the
 mirror-symmetric cases) or the head needs a different parity-odd
 basis, not a gate.
+
+## 2026-09-02 — W1' verdict: restoring gate magnitude halves the penalty but the falsifier fires (+12.6% wall shear); label covariance audit preregistered {#sec-nb-w1p-verdict}
+
+**W1' result** (2 seeds, DrivAerML val, identical points; comparators
+v3c seeds 42/43 at 0.0636/0.0627 pressure and 0.0916/0.0904 wall
+shear). With the unit-magnitude odd gate tanh(p/0.1):
+
+| | pressure | wall shear |
+|---|---|---|
+| v3c | 0.0632 | 0.0910 |
+| W1 raw gate p | 0.0686 (+8.6%) | 0.1081 (+18.8%) |
+| **W1' tanh(p/0.1)** | **0.0671 (+6.2%)** | **0.1025 (+12.6%)** |
+
+The magnitude hypothesis was *partly* right — restoring unit
+magnitude recovers a third of the wall-shear penalty and a quarter of
+the pressure penalty — but the preregistered falsifier (still > 10%
+worse on wall shear) **fires**. The e_phi pseudovector channels are
+load-bearing in a way no parity-odd gate restores. Two candidate
+explanations remain, and they are distinguishable without training:
+
+- **L1 (labels are not reflection-covariant).** DrivAerML's
+  time-averaged fields on mirror-symmetric cars need not be
+  mirror-symmetric (asymmetric wake modes, finite averaging windows,
+  mesh asymmetry). If a material fraction of the wall-shear energy is
+  mirror-antisymmetric, an exactly covariant head *cannot* fit it by
+  construction and the "defect" the M3 audit found was, in effect,
+  the head learning the labels' asymmetry. **Preregistered
+  measurement:** on mirror-symmetric DrivAerML cases, pair each
+  surface point with its mirror image (nearest neighbour after
+  reflecting through the symmetry plane) and compute the
+  antisymmetric energy fraction ||v(Mx) − M v(x)||² / ||v||² for wall
+  shear and |p(Mx) − p(x)|² / |p|² for pressure. Prediction if L1
+  explains W1/W1': wall-shear antisymmetric fraction ≳ 10%, larger
+  than pressure's. Falsifier: both ≪ 5% → labels are covariant and
+  the problem is the head's basis (L2 below).
+- **L2 (basis, not parity).** With the e_phi channels gated, the
+  true-vector basis is {d, n, r̂, e_θ,n, e_θ,d}; where r̂ is nearly
+  parallel to n or d the θ-complements vanish and the basis is
+  locally rank-deficient, so the pseudovectors may have been serving
+  as a generic tangent completion. Test only if L1 is refuted.
+
+**Program note.** Whatever L1 shows, the parity fix stays in the
+codebase default-off: on this dataset a physically correct head is
+measurably worse, and the honest statement is that exact
+reflection covariance is a contract the *labels* may not honour.
