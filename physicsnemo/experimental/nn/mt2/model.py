@@ -221,6 +221,7 @@ class MeshTransformer2(Module):
         parity_gate_scale: float = 0.0,
         vector_basis: str = "globe7",
         odd_head: bool = False,
+        similarity_gauge: bool = False,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -313,6 +314,13 @@ class MeshTransformer2(Module):
         ### vectors), and set coeff_phi = sum_k p_k * g_k(h). Exactly
         ### reflection-covariant; not killed where any single p_k vanishes.
         self.odd_head = odd_head
+        ### S1 (critic review 2026-09-02): the original reduction used an
+        ### UNWEIGHTED centroid and a CONSTANT reference length, so MT2 was
+        ### neither measure-complete nor scale-equivariant despite the book's
+        ### claims. This gauge uses the measure-weighted centroid and the
+        ### measure-weighted RMS radius: exact geometric-scale equivariance
+        ### and a density-robust frame.
+        self.similarity_gauge = similarity_gauge
         if odd_head:
             self.N_ODD = 7
             self.odd_assign = nn.Linear(hidden, n_slices)
@@ -424,8 +432,21 @@ class MeshTransformer2(Module):
         d_hat = (drive / drive_mag)[:, None, :].expand(b, n, 3)
 
         ### Similarity reduction: center by the plain mean, scale by L_ref.
-        center = points.mean(dim=1, keepdim=True)
-        r = (points - center) / self.reference_length
+        if self.similarity_gauge:
+            w_raw = (
+                measure_weights.reshape(b, n, 1).to(points.dtype)
+                if measure_weights is not None
+                else torch.ones(b, n, 1, dtype=points.dtype, device=points.device)
+            )
+            w_n = w_raw / w_raw.sum(dim=1, keepdim=True).clamp_min(self.eps)
+            center = (w_n * points).sum(dim=1, keepdim=True)
+            gauge = (
+                (w_n * (points - center).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
+            ).sqrt().clamp_min(self.eps)  # (B,1,1) weighted RMS radius
+        else:
+            center = points.mean(dim=1, keepdim=True)
+            gauge = self.reference_length
+        r = (points - center) / gauge
         r_mag = r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
         r_hat = r / r_mag
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
@@ -500,7 +521,7 @@ class MeshTransformer2(Module):
             else:
                 q_pts = query_points
                 q_nrm = query_normals if query_normals is not None else normals
-            q_r = (q_pts - center) / self.reference_length
+            q_r = (q_pts - center) / gauge
             q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             q_rhat = q_r / q_mag
             q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)

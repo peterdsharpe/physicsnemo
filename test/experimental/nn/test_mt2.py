@@ -425,3 +425,32 @@ def test_head_variants_run_under_bf16_autocast(kw):
         out = m(pts, nrm, drv, w)
     out.float().sum().backward()
     assert torch.isfinite(out.float()).all()
+
+
+def test_similarity_gauge_geometric_scale_equivariance():
+    """S1: with the measure-weighted gauge, a geometric rescale (points x k,
+    areas x k^2) must leave the output exactly unchanged; the default gauge
+    must NOT (documenting that the original model is not scale-equivariant)."""
+    torch.manual_seed(0)
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    torch.manual_seed(1)
+    mg = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, similarity_gauge=True).double().eval()
+    torch.manual_seed(1)
+    m0 = MeshTransformer2(hidden=64, n_layers=2, n_slices=16).double().eval()
+    k = 2.7
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        a = mg(pts, nrm, drv, w)
+        bsc = mg(k * pts + shift, nrm, drv, k * k * w)
+        a0 = m0(pts, nrm, drv, w)
+        b0 = m0(k * pts, nrm, drv, k * k * w)
+    assert torch.allclose(bsc, a, atol=1e-10)
+    assert not torch.allclose(b0, a0, atol=1e-3)
