@@ -220,6 +220,7 @@ class MeshTransformer2(Module):
         parity_fix: bool = False,
         parity_gate_scale: float = 0.0,
         vector_basis: str = "globe7",
+        odd_head: bool = False,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -304,6 +305,18 @@ class MeshTransformer2(Module):
         self.vector_basis = vector_basis
         self.n_basis = 5 if vector_basis == "true5" else 7
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
+        ### W2 (2026-09-02): odd-coefficient head. {r,n,d} span R^3, so the
+        ### e_phi (pseudovector) direction is reachable COVARIANTLY only with a
+        ### parity-odd coefficient, and the trunk emits even invariants only.
+        ### Build K pseudoscalars from {r, n, d} and the point's soft slice
+        ### anchor (weighted anchor position z and normal m, both true
+        ### vectors), and set coeff_phi = sum_k p_k * g_k(h). Exactly
+        ### reflection-covariant; not killed where any single p_k vanishes.
+        self.odd_head = odd_head
+        if odd_head:
+            self.N_ODD = 7
+            self.odd_assign = nn.Linear(hidden, n_slices)
+            self.odd_gate = nn.Linear(hidden, out_vectors * 2 * self.N_ODD)
 
 
     def _local_invariants_at(self, q_r, q_n, q_d, src_r, src_n, log_w):
@@ -543,6 +556,37 @@ class MeshTransformer2(Module):
             basis = torch.stack(
                 [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
             )  # (B, N, 7, 3)
+        if self.odd_head and self.vector_basis == "globe7":
+            ### per-point soft slice anchor (true vectors, equivariant)
+            src_r = r_src if (self.query_independent and 0 < self.n_anchors < n) else r
+            src_n = n_src if (self.query_independent and 0 < self.n_anchors < n) else n_hat
+            src_h = h
+            src_logw = log_w_enc if (self.query_independent and 0 < self.n_anchors < n) else log_w
+            lg = self.odd_assign(src_h)
+            a_s = torch.softmax(lg + src_logw, dim=1)  # slices over source points
+            z_s = torch.einsum("bns,bnc->bsc", a_s, src_r)
+            m_s = torch.einsum("bns,bnc->bsc", a_s, src_n)
+            b_q = torch.softmax(self.odd_assign(h_out), dim=-1)  # point over slices
+            z_q = torch.einsum("bns,bsc->bnc", b_q, z_s)
+            m_q = torch.einsum("bns,bsc->bnc", b_q, m_s)
+            def trip(u, v, w):
+                return (u * torch.linalg.cross(v, w, dim=-1)).sum(-1, keepdim=True)
+            pseudo = torch.cat(
+                [
+                    trip(r_hat, n_hat, d_hat),
+                    trip(r_hat, n_hat, z_q), trip(r_hat, n_hat, m_q),
+                    trip(n_hat, d_hat, z_q), trip(n_hat, d_hat, m_q),
+                    trip(r_hat, d_hat, z_q), trip(r_hat, d_hat, m_q),
+                ],
+                dim=-1,
+            )  # (B, N, K) all parity-odd, rotation-invariant
+            g = self.odd_gate(self.norm_out(h_out)).reshape(
+                b, n, self.out_vectors, 2, self.N_ODD
+            )
+            odd_coeff = torch.einsum("bnvjk,bnk->bnvj", g, pseudo)  # (B,N,V,2)
+            coeffs = coeffs.clone()
+            coeffs[..., 4] = odd_coeff[..., 0]
+            coeffs[..., 6] = odd_coeff[..., 1]
         if self.parity_fix and self.vector_basis == "globe7":
             p_odd = (
                 r_hat * torch.linalg.cross(n_hat, d_hat, dim=-1)

@@ -4351,3 +4351,55 @@ the N1/L1 lesson):
 If true7 lands, MT2 gains exact O(3) covariance (rotations *and*
 reflections) at no accuracy cost, and the parity_fix gate is
 retired in its favour. 18/18 contract tests pass.
+
+## 2026-09-02 — L2 verdict: dropping the pseudovector channels costs +23% wall shear, and the "true7" arm was a derivation error; the real constraint is coefficient parity (W2 preregistered) {#sec-nb-l2-verdict}
+
+**Results** (DrivAerML val, 2 seeds; v3c reference 0.0632 pressure /
+0.0910 wall shear):
+
+| basis | pressure | wall shear |
+|---|---|---|
+| true5 (drop e_φ channels) | 0.0707 (+12%) | 0.1120 (+23%) |
+| "true7" (e_φ,n×d̂, e_φ,d×n̂ added) | 0.0716 (+13%) | 0.1146 (+26%) |
+| W1 raw gate / W1' tanh gate | +8.6% / +6.2% | +18.8% / +12.6% |
+
+**true5 confirms the capacity reading**: removing the two
+pseudovector channels costs about what gating them did (a little
+more — the gates at least kept them alive away from the symmetry
+plane). **true7 fails its falsifier (> 0.100) — but the arm was
+invalid, and the reason is the finding.** e_φ,n × d̂ is perpendicular
+to e_φ,n, hence lies in span{r̂, n̂}; likewise e_φ,d × n̂ ∈ span{r̂, d̂}.
+The two "new" vectors added no direction, so true7 ≡ true5 within
+seed noise, exactly as observed. My derivation error, disclosed.
+
+**The correct statement of the problem.** {r̂, n̂, d̂} already span
+R³, so *every* direction is available; what differs is the parity of
+the coefficient needed. Components along true-vector directions take
+even coefficients; the component along e_φ ∝ n̂ × r̂ (a
+pseudovector direction) needs a **parity-odd coefficient**, and the
+trunk emits only even invariants. The unconstrained head fakes it
+with even coefficients (breaking covariance, M3), the gates supply
+oddness through a single pseudoscalar p = r̂·(n̂×d̂) that vanishes
+on the entire symmetry plane and wherever r̂, n̂, d̂ are coplanar
+(W1, W1'), and the true-vector bases give up the direction (L2).
+L1b's finding that the unconstrained head's predictions are already
+mirror-symmetric fits: it learned an approximately covariant function
+by *using* the e_φ directions off-plane; the exact versions took
+those directions away.
+
+**W2 preregistered here: the odd-coefficient head.** Build K = 7
+pseudoscalars per point — the triple product of {r̂, n̂, d̂} plus six
+triple products involving the point's soft slice anchor position ẑ
+and anchor normal m̂ (true, equivariant vectors from a
+measure-weighted assignment) — and set each e_φ coefficient to
+Σ_k p_k g_k(h) with g even. Exactly O(3)-covariant (reflections and
+rotations) and translation-invariant by construction (contract test,
+19/19 passing, including a liveness check that the odd channels are
+not silently zero); not extinguished where any single pseudoscalar
+vanishes. Two seeds, frozen v3c protocol. **Prediction, in readout
+units:** wall shear ≤ 0.094 (within 3% of v3c) and pressure ≤ 0.066.
+**Falsifier:** wall shear > 0.100 → the even-coefficient pseudovector
+head's advantage is not about parity at all but about optimization
+(e.g. the two extra unconstrained channels acting as a
+better-conditioned overparameterization), which would be tested next
+by an unconstrained 9-channel head.

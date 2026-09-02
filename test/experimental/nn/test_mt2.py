@@ -373,3 +373,39 @@ def test_true_vector_basis_reflection_and_rotation(basis):
     p2, v2 = _split(rot)
     assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ M.T, atol=1e-10)
     assert torch.allclose(p2, p0, atol=1e-10) and torch.allclose(v2, v0 @ q.T, atol=1e-10)
+
+
+def test_odd_head_reflection_rotation_and_translation():
+    """W2 arm: odd-coefficient head must be exactly O(3)-covariant and
+    translation-invariant, and must actually use the e_phi channels."""
+    torch.manual_seed(0)
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    m = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, odd_head=True).double().eval()
+    M = torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=torch.float64))
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+        mirr = m(pts @ M.T, nrm @ M.T, drv @ M.T, w)
+        rot = m(pts @ q.T + shift, nrm @ q.T, drv @ q.T, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(mirr)
+    p2, v2 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ M.T, atol=1e-10)
+    assert torch.allclose(p2, p0, atol=1e-10) and torch.allclose(v2, v0 @ q.T, atol=1e-10)
+    ### the odd channels must be live (else the head silently equals true5)
+    torch.manual_seed(0)
+    m5 = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, vector_basis="true5").double().eval()
+    with torch.no_grad():
+        v5 = _split(m5(pts, nrm, drv, w))[1]
+    assert not torch.allclose(v0, v5, atol=1e-6)
