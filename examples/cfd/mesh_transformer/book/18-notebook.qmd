@@ -4309,3 +4309,45 @@ handle on label structure that N1 lacked: the antisymmetric energy is
 smooth, not point-iid, so DrivAerML's labels carry little white
 noise at the cell level; whatever "shared residual" the four models
 have in common (N1: 71%) is not iid label noise either.
+
+## 2026-09-02 — L1b: the unconstrained head never exploited label asymmetry (L1 nil, L2 live); true-vector basis arms preregistered {#sec-nb-l1b-l2-prereg}
+
+**L1b result** (`results/l1b_prediction_antisymmetry_2026-09-02.json`).
+The mirror-antisymmetry statistic computed on *predictions* at the
+10,000-point val subsample, on identical mirror pairs for every model
+(pairing error dominates the absolute level, so the exactly covariant
+parity heads define the floor and the per-case *excess* over it is
+the informative quantity): unconstrained MT2-v3c excess
+−0.002 ± 0.001 (i.e. zero), GeoTransolver +0.001, the labels on the
+same pairs **+0.012 to +0.016**. The unconstrained head predicts
+fields exactly as mirror-symmetric as the constrained ones and does
+*not* reproduce the labels' 0.67% antisymmetry. **L1 is nil.** The
+covariant head's +12.6% wall-shear penalty is therefore a
+representation effect — the gate removes two of seven basis
+directions (and where |p| is small, removes them precisely on the
+symmetry plane) — not a labels effect.
+
+**L2 preregistered here** (two arms, two seeds each, otherwise the
+frozen v3c protocol; thresholds stated in the readout's own units per
+the N1/L1 lesson):
+
+- **true5** (capacity control): drop the two e_phi pseudovector
+  channels outright, no gate — a 5-vector all-true basis
+  {d̂, n̂, r̂, e_θ,n, e_θ,d}. Exactly reflection-covariant by
+  construction (contract test added). Prediction: wall-shear rel-L2
+  within the W1/W1' band (0.102–0.108, i.e. +12% to +19% over v3c's
+  0.091) — the penalty is the lost channels, not the gate.
+- **true7** (the fix): replace the two pseudovectors with the *true*
+  vectors e_φ,n × d̂ and e_φ,d × n̂ (pseudovector × vector =
+  vector), restoring seven directions with exact reflection
+  covariance and no gating (contract test: reflection and rotation
+  exact to 1e-10). Prediction: wall shear within 3% of v3c
+  (≤ 0.094) and pressure within seed spread (≤ 0.066). Falsifier:
+  wall shear > 0.100 (> 10% over v3c) → the specific pseudovector
+  directions carry something no true-vector completion supplies,
+  which would reopen the labels question at the *query-point* level
+  (a model-in-the-loop covariance check at exactly mirrored points).
+
+If true7 lands, MT2 gains exact O(3) covariance (rotations *and*
+reflections) at no accuracy cost, and the parity_fix gate is
+retired in its favour. 18/18 contract tests pass.

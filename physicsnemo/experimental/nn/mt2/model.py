@@ -219,6 +219,7 @@ class MeshTransformer2(Module):
         n_boundary_scalars: int = 0,
         parity_fix: bool = False,
         parity_gate_scale: float = 0.0,
+        vector_basis: str = "globe7",
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -293,7 +294,15 @@ class MeshTransformer2(Module):
         ### Vector head: coefficients over {d, n, rhat} plus the
         ### spherical-basis complements of (rhat, n) and (rhat, d) -- the
         ### GLOBE multi-vector expansion (7 basis vectors).
-        self.n_basis = 7
+        ### L2 experiment (2026-09-02): the two e_phi complements are
+        ### pseudovectors. "globe7" is the original basis; "true5" drops them
+        ### (capacity control); "true7" replaces them with the TRUE vectors
+        ### e_phi_n x d_hat and e_phi_d x n_hat (pseudo x true = true), giving
+        ### exact reflection covariance with no gating and no lost channel.
+        if vector_basis not in ("globe7", "true5", "true7"):
+            raise ValueError(f"unknown vector_basis {vector_basis!r}")
+        self.vector_basis = vector_basis
+        self.n_basis = 5 if vector_basis == "true5" else 7
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
 
 
@@ -522,10 +531,19 @@ class MeshTransformer2(Module):
         ### non-orthogonal inputs span via the complements.
         _, e_th_n, e_ph_n = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
         _, e_th_d, e_ph_d = spherical_basis(r_hat, d_hat, normalize_basis_vectors=False)
-        basis = torch.stack(
-            [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
-        )  # (B, N, 7, 3)
-        if self.parity_fix:
+        if self.vector_basis == "true5":
+            basis = torch.stack([d_hat, n_hat, r_hat, e_th_n, e_th_d], dim=-2)
+        elif self.vector_basis == "true7":
+            t_n = torch.linalg.cross(e_ph_n, d_hat, dim=-1)
+            t_d = torch.linalg.cross(e_ph_d, n_hat, dim=-1)
+            basis = torch.stack(
+                [d_hat, n_hat, r_hat, e_th_n, e_th_d, t_n, t_d], dim=-2
+            )
+        else:
+            basis = torch.stack(
+                [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
+            )  # (B, N, 7, 3)
+        if self.parity_fix and self.vector_basis == "globe7":
             p_odd = (
                 r_hat * torch.linalg.cross(n_hat, d_hat, dim=-1)
             ).sum(-1)[..., None, None]  # (B, N, 1, 1), parity-odd invariant

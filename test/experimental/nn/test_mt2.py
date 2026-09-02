@@ -342,3 +342,34 @@ def test_parity_fix_reflection_equivariance():
     _, v0b = _split(base_b)
     _, v1b = _split(mirr_b)
     assert not torch.allclose(v1b, v0b @ M.T, atol=1e-6)
+
+
+@pytest.mark.parametrize("basis", ["true5", "true7"])
+def test_true_vector_basis_reflection_and_rotation(basis):
+    """L2 arms: the all-true-vector bases must be exactly reflection-covariant
+    (no gate) and rotation-equivariant."""
+    torch.manual_seed(0)
+    n = 400
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    m = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, vector_basis=basis)
+    m = m.double().eval()
+    M = torch.diag(torch.tensor([1.0, -1.0, 1.0], dtype=torch.float64))
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+        mirr = m(pts @ M.T, nrm @ M.T, drv @ M.T, w)
+        rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+    p0, v0 = _split(base)
+    p1, v1 = _split(mirr)
+    p2, v2 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ M.T, atol=1e-10)
+    assert torch.allclose(p2, p0, atol=1e-10) and torch.allclose(v2, v0 @ q.T, atol=1e-10)
