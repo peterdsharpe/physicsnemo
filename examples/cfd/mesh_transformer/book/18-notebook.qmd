@@ -4715,3 +4715,39 @@ of the parity thread**: five head variants have been trained
 program records "exact O(3) covariance of the vector head costs
 ≥ 10% wall shear on DrivAerML with every construction tried" and
 moves on — the critic's hill-climbing warning applies here.
+
+## 2026-09-03 — Parity thread CLOSED: W2' diverged to NaN at epoch 95; exact O(3) covariance of MT2's vector head costs ≥ 10% wall shear or fails to train under every construction tried {#sec-nb-parity-thread-closed}
+
+W2' (zero-initialized odd gate, unit-normalized anchors, bounded
+pseudoscalars) reached epoch 95 and produced `Train Loss: nan`
+(both seeds; lanes cancelled at once). With the cap declared in
+@sec-nb-w2-verdict, the thread closes. Ledger of the six
+constructions, all on the frozen DrivAerML protocol (v3c reference:
+pressure 0.0632 / wall shear 0.0910):
+
+| head | reflection covariance | pressure | wall shear |
+|---|---|---|---|
+| v3c default (pseudovector channels, even coeffs) | violated (M3) | 0.0632 | **0.0910** |
+| W1 raw gate p | exact | +8.6% | +18.8% |
+| W1' tanh(p/0.1) | exact | +6.2% | +12.6% |
+| true5 (channels dropped) | exact | +12% | +23% |
+| true7 (invalid: replacements ∈ span{r̂,n̂}) | exact | +13% | +26% |
+| W2 odd head (K=7 pseudoscalars) | exact | collapsed 0.77 | 0.74 |
+| W2' zero-init, bounded | exact | **NaN @95** | — |
+
+**Closing statement for the book.** MT2's vector head reaches the
+e_φ (pseudovector) directions with parity-even coefficients, which
+formally violates reflection covariance (M3). The labels are
+mirror-covariant to < 1% energy (L1) and the trained head's
+predictions are empirically as covariant as the exactly constrained
+ones (L1b), so the violation is a *representation convenience* the
+optimizer uses, not a physical error the model makes. Every exact
+construction tried either removes needed capacity (gates, true
+bases: ≥ 12% wall-shear penalty) or destabilizes training (odd
+coefficient heads: collapse, NaN). The default head is retained;
+`parity_fix`, `vector_basis`, and `odd_head` stay in the code as
+documented negative results. The unexplored fix — parity-odd
+*features in the trunk* rather than a bolt-on odd head — is left for
+MT3's design and is not pursued further here, per the critic's
+hill-climbing warning. Six trained variants on one head is where a
+demanding reviewer would say stop; we stop.
