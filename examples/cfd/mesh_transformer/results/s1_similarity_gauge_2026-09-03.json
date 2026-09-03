@@ -1,0 +1,299 @@
+{
+  "meta": {
+    "arm": "S1 similarity_gauge (measure-weighted centroid + measure-weighted RMS-radius gauge)",
+    "prereg": "examples/cfd/mesh_transformer/book/18-notebook.qmd #sec-nb-critic-review, S1 bullet",
+    "protocol": "DrivAerML frozen protocol; gauge runs differ from mt2_v3c_seed4x resolved_config only by run_id and model.similarity_gauge=true (diffed)",
+    "eval": "infer.py infer_split=val sampling_resolution=10000; in-family = drivaer_ml_surface (49 val cases); estate = shift_suv_surface (100); fastback = shift_suv_surface_fastback (100); P3 biased = drivaer_probe_biased3 (PoissonBiasedSubsampleMesh bias=10, 40k pool -> 10k, exact HT weights; the 'p3v3' instrument); P3 uniform control = drivaer_probe_unif2 (same 40k->10k pipeline, uniform draw)",
+    "p3_readout": "p3_ratio_vs_infamily = P3-biased pressure rel-L2 / in-family (drivaer_ml_surface res10000) pressure rel-L2; p3_ratio_vs_unif_control uses the p3v2_unif control as denominator (reduce_v3c.py convention)",
+    "v3c_reference_provenance": "mt2_v3c_seed42/43 re-reduced here from the raw metrics.jsonl under $T/sweep/<run>/res10000, $T/smoke/<run>, $T/smoke_fastback/<run>, $T/probes/p3v3_biased/<run>, $T/probes/p3v2_unif/<run> (written by mt2v3c_eval_aga.sbatch; numbers match $T/mt2_v3c_reduction.json and $T/iw_evals/iw_reduction.json ref_* entries). Seeds 45/46 estate/fastback from $T/mega_reduction.json quoted for spread.",
+    "prereg_baseline_note": "The prereg's '4.3-4.5x' P3 baseline is v5a3's number (#sec-nb-v5-line-verdict), not v3c's. On the p3v3 instrument v3c seeds 42/43 sit at 13-14x; no other biased-density yaml exists in $T/recipe/datasets (only drivaer_probe_biased3)."
+  },
+  "runs": {
+    "iw_mt2_gauge_seed42": {
+      "infamily": {
+        "pressure_l2": {
+          "mean": 0.06382,
+          "max": 0.08611,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09218,
+          "max": 0.12117,
+          "n": 49
+        }
+      },
+      "estate": {
+        "pressure_l2": {
+          "mean": 1.03608,
+          "max": 1.25732,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.74305,
+          "max": 1.92087,
+          "n": 100
+        }
+      },
+      "fastback": {
+        "pressure_l2": {
+          "mean": 1.03885,
+          "max": 1.20668,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.72624,
+          "max": 1.9038,
+          "n": 100
+        }
+      },
+      "p3v3_biased": {
+        "pressure_l2": {
+          "mean": 0.07665,
+          "max": 0.12366,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.12047,
+          "max": 0.26886,
+          "n": 49
+        }
+      },
+      "p3v2_unif": {
+        "pressure_l2": {
+          "mean": 0.06364,
+          "max": 0.08224,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09292,
+          "max": 0.12275,
+          "n": 49
+        }
+      },
+      "p3_ratio_vs_infamily": 1.2,
+      "p3_ratio_vs_unif_control": 1.2
+    },
+    "mt2_v3c_seed42": {
+      "infamily": {
+        "pressure_l2": {
+          "mean": 0.06362,
+          "max": 0.08846,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09161,
+          "max": 0.12714,
+          "n": 49
+        }
+      },
+      "estate": {
+        "pressure_l2": {
+          "mean": 0.94637,
+          "max": 1.10002,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.39817,
+          "max": 1.5113,
+          "n": 100
+        }
+      },
+      "fastback": {
+        "pressure_l2": {
+          "mean": 0.97938,
+          "max": 1.08242,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.39611,
+          "max": 1.5117,
+          "n": 100
+        }
+      },
+      "p3v3_biased": {
+        "pressure_l2": {
+          "mean": 0.92561,
+          "max": 1.04633,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.89313,
+          "max": 0.95295,
+          "n": 49
+        }
+      },
+      "p3v2_unif": {
+        "pressure_l2": {
+          "mean": 0.06451,
+          "max": 0.08551,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09287,
+          "max": 0.14233,
+          "n": 49
+        }
+      },
+      "p3_ratio_vs_infamily": 14.55,
+      "p3_ratio_vs_unif_control": 14.35
+    },
+    "iw_mt2_gauge_seed43": {
+      "infamily": {
+        "pressure_l2": {
+          "mean": 0.06294,
+          "max": 0.08712,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.08961,
+          "max": 0.12704,
+          "n": 49
+        }
+      },
+      "estate": {
+        "pressure_l2": {
+          "mean": 0.86179,
+          "max": 1.40569,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.53031,
+          "max": 1.92059,
+          "n": 100
+        }
+      },
+      "fastback": {
+        "pressure_l2": {
+          "mean": 0.85611,
+          "max": 1.23191,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.53693,
+          "max": 1.92007,
+          "n": 100
+        }
+      },
+      "p3v3_biased": {
+        "pressure_l2": {
+          "mean": 0.07578,
+          "max": 0.12731,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.12354,
+          "max": 0.44866,
+          "n": 49
+        }
+      },
+      "p3v2_unif": {
+        "pressure_l2": {
+          "mean": 0.06302,
+          "max": 0.08071,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09109,
+          "max": 0.13797,
+          "n": 49
+        }
+      },
+      "p3_ratio_vs_infamily": 1.2,
+      "p3_ratio_vs_unif_control": 1.2
+    },
+    "mt2_v3c_seed43": {
+      "infamily": {
+        "pressure_l2": {
+          "mean": 0.06271,
+          "max": 0.08459,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09042,
+          "max": 0.12724,
+          "n": 49
+        }
+      },
+      "estate": {
+        "pressure_l2": {
+          "mean": 0.98751,
+          "max": 1.69799,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.38986,
+          "max": 1.914,
+          "n": 100
+        }
+      },
+      "fastback": {
+        "pressure_l2": {
+          "mean": 0.98356,
+          "max": 1.80756,
+          "n": 100
+        },
+        "wss_l2": {
+          "mean": 1.39675,
+          "max": 2.26973,
+          "n": 100
+        }
+      },
+      "p3v3_biased": {
+        "pressure_l2": {
+          "mean": 0.81197,
+          "max": 1.00671,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.73536,
+          "max": 0.90044,
+          "n": 49
+        }
+      },
+      "p3v2_unif": {
+        "pressure_l2": {
+          "mean": 0.06261,
+          "max": 0.08136,
+          "n": 49
+        },
+        "wss_l2": {
+          "mean": 0.09175,
+          "max": 0.1401,
+          "n": 49
+        }
+      },
+      "p3_ratio_vs_infamily": 12.95,
+      "p3_ratio_vs_unif_control": 12.97
+    }
+  },
+  "v3c_extra_seeds_from_mega_reduction": {
+    "mt2_v3c_seed45": {
+      "in10k": {
+        "mean": 0.06313,
+        "max": 0.08574
+      },
+      "estate": {
+        "mean": 0.90104,
+        "max": 1.62436
+      },
+      "fastback": {
+        "mean": 0.91452,
+        "max": 1.67882
+      }
+    },
+    "mt2_v3c_seed46": {
+      "in10k": {
+        "mean": 0.06707,
+        "max": 0.08894
+      },
+      "estate": {
+        "mean": 1.12259,
+        "max": 1.33553
+      },
+      "fastback": {
+        "mean": 1.14379,
+        "max": 1.38252
+      }
+    }
+  }
+}

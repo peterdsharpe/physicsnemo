@@ -4797,3 +4797,49 @@ canonicalization needs a known freestream (true in aerodynamics, not
 in every PDE surrogate setting) and a sign-resolvable principal frame
 (cars: skewness sign 48/48 consistent; a symmetric body would need
 another disambiguator); the equivariant model needs neither.
+
+## 2026-09-03 — S1 verdict: the real similarity gauge is free in-family and cuts MT2's biased-density penalty from 13–14.5x to 1.20x; zero-shot transfer unchanged {#sec-nb-s1-verdict}
+
+**Result** (`results/s1_similarity_gauge_2026-09-03.json`; 2 seeds
+each, seed-matched against v3c; configs differ only in
+`similarity_gauge: true`):
+
+| run | in-family p / wss | estate | fastback | P3 biased (10:1) | P3 ratio |
+|---|---|---|---|---|---|
+| **v3c + gauge** s42 / s43 | 0.0638 / 0.0922 · 0.0629 / 0.0896 | 1.036 / 0.862 | 1.039 / 0.856 | 0.0766 / 0.0758 | **1.20x / 1.20x** |
+| v3c s42 / s43 | 0.0636 / 0.0916 · 0.0627 / 0.0904 | 0.946 / 0.988 | 0.979 / 0.984 | 0.926 / 0.812 | 14.55x / 12.95x |
+
+**Prediction 1 (in-family within seed spread): held.** The
+measure-weighted centroid and RMS-radius gauge cost nothing on either
+field. **Prediction 2 (P3 density ratio < 2x): held decisively** —
+the 10:1 biased-sampling penalty falls from **13–14.5x to 1.20x** on
+the p3v3 instrument (biased-sampling error 0.077 against a uniform
+0.064). The unweighted centroid *was* the dominant density leak, and
+the earlier "information-limited floor" reading (M4,
+@sec-nb-lit-wave-prereg, already retracted in @sec-nb-critic-review)
+is now positively refuted by measurement: the floor was an
+implementation gap. With the gauge, MT2 is the most density-robust
+architecture the program has measured on this instrument
+(GeoTransolver 3.6x, kernel-decoder MeshTransformer 1.7–2.1x,
+MT2-v3c 13–14.5x, **MT2-gauge 1.20x**) — and it is exactly the
+property the SE(3) + measure contracts were supposed to deliver.
+**Prediction 3 (zero-shot estate improves): falsifier fired.** Estate
+0.949 mean vs 0.967, inside a two-seed spread of 0.17 and inside
+v3c's own cross-seed range (0.90–1.12); fastback identical. Absolute
+size was not the transfer leak; the G2 mechanism list reverts to
+GeoTransolver's pointwise features. Disclosure: the preregistration
+quoted a v3c estate baseline of "0.83–0.90" that matches no v3c run
+(seeds 42–46 span 0.90–1.12) — a transcription error, the third
+threshold/baseline slip this week, caught by the seed-matched
+re-reduction.
+
+**Adoption.** `similarity_gauge=true` becomes the reference MT2
+configuration for all new runs (frozen checkpoints keep the constant
+gauge; the flag stays default-off in code for that reason and the
+book's MT2 description now states both). The HiLift ladder's MT2
+lanes predate this and are recorded as v3c-constant-gauge. The honest
+MT2 claim set after this week: exact SE(3) equivariance as a
+contract (not an accuracy edge, P1''); learning-rate robustness
+(R1); **biased-density robustness at 1.2x** (S1); in-family parity
+with GeoTransolver on high-lift and a 1.085x deficit on DrivAerML at
+best-vs-best learning rates.
