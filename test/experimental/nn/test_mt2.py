@@ -403,12 +403,16 @@ def test_odd_head_reflection_rotation_and_translation():
     p2, v2 = _split(rot)
     assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ M.T, atol=1e-10)
     assert torch.allclose(p2, p0, atol=1e-10) and torch.allclose(v2, v0 @ q.T, atol=1e-10)
-    ### the odd channels must be live (else the head silently equals true5)
-    torch.manual_seed(0)
-    m5 = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, vector_basis="true5").double().eval()
+    ### the odd channels must be live once the (zero-initialized) gate is
+    ### non-zero, and must remain exactly reflection-covariant
     with torch.no_grad():
-        v5 = _split(m5(pts, nrm, drv, w))[1]
-    assert not torch.allclose(v0, v5, atol=1e-6)
+        m.odd_gate.weight.normal_(0.0, 0.1)
+        base2 = m(pts, nrm, drv, w)
+        mirr2 = m(pts @ M.T, nrm @ M.T, drv @ M.T, w)
+    _, v0b = _split(base2)
+    _, v1b = _split(mirr2)
+    assert not torch.allclose(v0b, v0, atol=1e-6)
+    assert torch.allclose(v1b, v0b @ M.T, atol=1e-10)
 
 
 @pytest.mark.parametrize("kw", [{"odd_head": True}, {"parity_fix": True}, {"vector_basis": "true7"}])

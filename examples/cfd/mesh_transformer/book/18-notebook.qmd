@@ -4656,3 +4656,62 @@ the existing kernel-decoder arm already wins is P3 density bias
 version); no watertightness check exists anywhere in the aero recipe
 (K0 adds a Gauss-identity gate); degree 0, not MT2's degree 1, is the
 correct drive law for pressure *coefficients*.
+
+## 2026-09-02 — K0 gate FAILS: inviscid potential flow is not a usable prior for DrivAerML pressure (oracle rel-L2 4.8 vs 0.77 for the case mean); the 3D kernel line does not launch {#sec-nb-k0-verdict}
+
+**Result** (`results/k0_potential_flow_oracle_2026-09-02.json`; 45 of
+48 val cars passing the watertightness and Gauss-identity gates;
+~6 GPU-hours). The zero-parameter exact potential-flow oracle —
+Morino second-kind solve on a closed 4 cm marching-cubes remesh,
+Bernoulli Cp, read at the recipe's exact 10,000 evaluation points —
+scores a measure-weighted **rel-L2 of 4.79 (median 1.97, every case
+> 1.6)** against the CFD pressure. On the same points, predicting
+Cp = 0 scores 1.00 and Cp = case mean scores **0.774**. The
+preregistered gate (< 0.90) **fails by a factor of five**, and no
+numerical explanation survives the controls: clipping outliers gives
+1.7; the oracle-optimal affine rescale reaches only 0.73; the remesh
+resolution sweep (4/6/8 cm) shows no trend; the sphere validation is
+exact (Cp error 0.07%, second-order convergence, Gauss identities to
+1e-15). The physics is the failure: 69% of the surface has label Cp
+in [−0.5, 0] — the separated-base pressure deficit — where inviscid
+flow predicts ≈ 0 to +0.13, and inviscid suction peaks are 2–3× too
+strong. **Verdict: for a bluff separated body, "exact kernel =
+Laplace, viscous effects = correction" is refuted; K1 and K2 do not
+launch on DrivAerML.**
+
+**What this bounds.** The G3 kernel result (@sec-nb-g3-kernel-rerun)
+stands: an exact Green's-function operator generalizes for free *when
+it is the PDE's operator*. RANS aerodynamics of a car has no cheap
+exact operator — the dominant physics is separation — so the
+program's "structure buys generalization" thesis is bounded exactly
+where the available structure stops matching the PDE. The remaining
+kernel path is K-alt (a *learned* density through the exact 3D
+double layer on the boundary→interior problem, where the operator is
+at least the right *kind*), and it should be argued on that footing,
+not on potential flow. Two repo findings for the recipe: the
+DrivAerML `vehicle` patch is oriented inward (signed volume
+−6.3 to −8.0 m³), and `physicsnemo.mesh.repair.fix_orientation`
+propagates by normal dot-product, which fails across folds > 90°.
+
+## 2026-09-02 — W2 collapsed in training (pressure 0.77, wall shear 0.74): an implementation failure, not a parity verdict; W2' (zero-init, bounded pseudoscalars) is the last rung of this thread {#sec-nb-w2-verdict}
+
+The odd-coefficient head (@sec-nb-l2-verdict) trained to a
+near-mean predictor on both fields — pressure 0.770 / 0.761, wall
+shear 0.743 / 0.738 — so the shared trunk was wrecked, not just the
+vector head. The preregistered falsifier fires trivially, but this is
+**not** a scientific verdict on coefficient parity: the arm failed to
+train. Likely causes, from the code: the odd gate was randomly
+initialized (so from step 0 the head emitted large pseudovector-
+direction outputs), and the anchor triple products were unbounded
+(anchor positions are O(1) in the gauge, but the products enter
+unnormalized). **W2'** (launched now, 2 seeds): the odd gate is
+zero-initialized so training starts as the stable true5 head and the
+odd channels grow from zero, and the anchors are unit-normalized so
+every pseudoscalar lies in [−1, 1]; contract tests updated (O(3)
+covariance verified with the gate perturbed to non-zero; 23/23).
+Prediction unchanged: wall shear ≤ 0.094. **This is the final rung
+of the parity thread**: five head variants have been trained
+(W1, W1', true5, true7, W2); if W2' also fails to beat 0.100 the
+program records "exact O(3) covariance of the vector head costs
+≥ 10% wall shear on DrivAerML with every construction tried" and
+moves on — the critic's hill-climbing warning applies here.

@@ -325,6 +325,13 @@ class MeshTransformer2(Module):
             self.N_ODD = 7
             self.odd_assign = nn.Linear(hidden, n_slices)
             self.odd_gate = nn.Linear(hidden, out_vectors * 2 * self.N_ODD)
+            ### W2' (2026-09-02): W2 collapsed to a near-mean predictor
+            ### (pressure 0.77). Zero-init the odd gate so training starts as
+            ### the stable true5 head and the odd channels grow from zero, and
+            ### bound the pseudoscalars to [-1, 1] by normalizing the anchor
+            ### vectors before the triple products.
+            nn.init.zeros_(self.odd_gate.weight)
+            nn.init.zeros_(self.odd_gate.bias)
 
 
     def _local_invariants_at(self, q_r, q_n, q_d, src_r, src_n, log_w):
@@ -591,6 +598,8 @@ class MeshTransformer2(Module):
             ### autocast may emit bf16 from einsum; keep geometry in fp32.
             z_q = torch.einsum("bns,bsc->bnc", b_q, z_s).to(r_hat.dtype)
             m_q = torch.einsum("bns,bsc->bnc", b_q, m_s).to(r_hat.dtype)
+            z_q = z_q / z_q.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            m_q = m_q / m_q.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             def trip(u, v, w):
                 return (u * torch.linalg.cross(v, w, dim=-1)).sum(-1, keepdim=True)
             pseudo = torch.cat(
