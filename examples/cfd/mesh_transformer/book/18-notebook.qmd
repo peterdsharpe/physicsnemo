@@ -4843,3 +4843,42 @@ contract (not an accuracy edge, P1''); learning-rate robustness
 (R1); **biased-density robustness at 1.2x** (S1); in-family parity
 with GeoTransolver on high-lift and a 1.085x deficit on DrivAerML at
 best-vs-best learning rates.
+
+## 2026-09-03 — G5 preregistration drafted (PRE-DATA): single-factor generalization on the forthcoming cfd-datagen corpus; dataset recommendations filed {#sec-nb-g5-prereg}
+
+Peter is generating a new 3D RANS corpus (`~/gh/cfd-datagen`) designed
+to isolate generalization factors. A forked session reviewed it and
+filed two artifacts, archived here verbatim:
+`results/cfd_datagen_feedback_2026-09-03.md` (recommendations to the
+dataset run: counterfactual *twin* draws per random-number namespace —
+pose, physics, scale, layout, mesh — so single-factor tests are exact
+rather than marginal; multiple draws for the val/test geometry banks;
+mesh-refinement twins for a per-stratum discretization-error floor;
+`body_id` on the no-slip boundary; export of half-window
+block-difference fields; realized-regime diagnostics) and
+`results/g5_cfd_datagen_generalization_preregistration_2026-09-03.md`
+(status PRE-DATA; kept as prose rather than converted to JSON so
+nothing is lost in translation).
+
+**G5 in one paragraph.** Six arms on the new corpus, every threshold
+in readout units: **A1 pose twins** (exact SE(3) axis — MT2's twin
+difference must sit at its own mesh-realization floor; raw
+GeoTransolver fails by ≥ 5x on the two profiles without a freestream
+frame; canonicalized GeoTransolver matches MT2 within 1.05x where a
+frame exists); **A2 scale twins** — the *first real test of the
+similarity gauge*, at fixed Reynolds number across 0.02–20 m
+(GeoTransolver predicted to exceed 2x at a 10x scale change); **A3
+Reynolds twins** (coverage axis — prediction from G2/G3: no
+architecture transfers a decade of Re better than another); **A4 mesh
+twins** (the label-noise floor that defines "resolvable" for every
+other arm — a between-architecture difference smaller than the floor
+is reported as not resolvable); **B1 bank-held-out geometry** (the
+strong G2, at two training sizes to test the transfer-slope
+hypothesis); **B2 profile-held-out boundary conditions** (do explicit
+BC operators buy anything on realized 3D flows). Architectures:
+GeoTransolver raw and canonicalized, MT2 with the gauge, the
+kernel-decoder MeshTransformer as the GLOBE-lineage arm; surface task
+first, then the boundary→interior volume task the program has never
+run MT2 on. The A-arms are void unless the twin-draw recommendation is
+adopted, which is why the preregistration exists before generation.
+Tech tree: node **G5 PLANNED**, gated on the corpus launch.
