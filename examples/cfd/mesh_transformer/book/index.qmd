@@ -14,22 +14,30 @@ the chapters record which hypotheses were supported or refuted.
 The authoritative, current synthesis of this program is
 @sec-program-review-2026-08 — one chapter holding the frozen-instrument
 frontier table, the five campaign verdicts, and their scope. The
-short version: the program's product is `MeshTransformer2`, which matches
-GeoTransolver to within 10--20% in-family at equal cost while
-being **exactly pose-robust where GeoTransolver degrades 26--32×** — and
-recovering that robustness the conventional way (rotation augmentation) is
-measured to cost GeoTransolver 1.8--1.9× of its accuracy. Cross-family
-transfer turned out to be a property of training-data diversity, not of
-any architecture tested; query-independence is measured to trade 2.7×
-against accuracy and is shelved with its price tag attached. The
-mechanism hunt that followed (the refutation wave of 2026-08-20/21,
-@sec-review-refutation-wave) closed locality, scale relaxation,
-anchor-conditioned decoding, the expressivity ceiling, and the
-normalization audit; the live status of every experiment is the tech
-tree of @sec-tech-tree. Everything
-below and in earlier chapters is the historical evidence behind those
-sentences; the dated lab notebook (@sec-notebook) holds every
-preregistration and verdict, including the failed ones.
+short version: the program's product is `MeshTransformer2` (MT2), an
+SE(3)-equivariant soft-slice transformer that is at in-family parity
+with GeoTransolver on HiLiftAeroML (MT2/GT = 0.98) and 1.085× behind on
+DrivAerML at best-vs-best learning rates; it is markedly more
+learning-rate robust (1.55× degradation across a decade where
+GeoTransolver loses 4--14×), the most density-robust architecture
+measured once its similarity gauge is on (1.20× under 10:1 sampling bias
+vs GeoTransolver's 3.6×), and about twice as expensive in training memory
+(9.8 GB vs 4.6 GB). Its exact rotation equivariance is a contract, not an
+accuracy edge: canonically trained GeoTransolver is exactly pose-invariant
+at 1.01× cost on these datasets. Cross-family transfer turned out to be a
+property of training-data diversity, not of any architecture tested;
+query-independence is measured to trade 2.7--3.1× against accuracy and is
+shelved with its price tag attached. An independent critic review on
+2026-09-02 (`results/critic_review_2026-09-02.md`, @sec-nb-critic-review)
+found that earlier versions of this book claimed contracts MT2 did not
+have — similarity (scale) equivariance, measure completeness, equal cost,
+a 1.6× equivariance dividend, and a label-noise explanation of the
+DrivAerML gap; @sec-review-reframing records each retirement and the
+measurement that replaced it. The live status of every experiment is the
+tech tree of @sec-tech-tree. Everything below and in earlier chapters is
+the historical evidence behind those sentences; the dated lab notebook
+(@sec-notebook) holds every preregistration and verdict, including the
+failed ones.
 :::
 
 ## The thesis, in one paragraph
@@ -53,8 +61,14 @@ preregistration and verdict, including the failed ones.
 > evidence; @sec-notebook holds the history).
 
 One scope line the industrial campaign added (2026-07-18): the
-paragraph above is the *synthetic-program* thesis, and there it is
-best supported within the tested controlled suites. At industrial scale
+paragraph above is the *synthetic-program* thesis for the original
+`MeshTransformer` (MT1), and there it is best supported within the
+tested controlled suites. It does **not** describe the current product.
+`MeshTransformer2` keeps exact rotation and translation covariance and
+drops everything else in that paragraph — the kernel dictionary, the
+superposition contract, query independence, and (until the 2026-09-03
+similarity gauge, @sec-nb-s1-verdict) the intrinsic scale gauge itself;
+@sec-mt2-architecture states what MT2 is. At industrial scale
 the causal picture measured differently —
 the completed attribution factorials showed the DrivAerML gains are
 DOMINATED by the trace formulation — measured 3.8× at flagship
@@ -168,7 +182,10 @@ augmentation*:
   training-set statistics; a per-instance, similarity-covariant functional
   of the input geometry (the radius-of-gyration gauge of
   @sec-forward-pass) is licensed precisely because it transforms with the
-  data.
+  data. MT2 violated this constraint for a month without anyone
+  noticing — its reference length was a constant pinned in a config
+  file — until the critic review of 2026-09-02 (@sec-nb-critic-review);
+  the `similarity_gauge` repair of @sec-nb-s1-verdict restores it.
 - **All-to-all information flow.** Elliptic solutions couple every boundary
   point to every interior point (@sec-global-flow); graph neighborhoods,
   distance cutoffs, and locality heuristics are excluded.
@@ -457,42 +474,60 @@ The generalization campaign — the program's current phase — is run as an
 explicit tech tree: every experiment is a node with a preregistered
 question, a dependency, an acceptance criterion, and a dated verdict in
 the lab notebook (@sec-notebook). Three architectures recur throughout.
-**MeshTransformer2 (MT2)** is the program's product: a similarity-equivariant
-slice-routing surrogate whose physical contracts (rotation, translation,
-scale, drive degree) are exact by construction. **GeoTransolver** is the
-strongest external baseline, a soft-slice global-attention architecture
-with pointwise raw-coordinate features and no equivariance contract.
+**MeshTransformer2 (MT2)** is the program's product: an SE(3)-equivariant
+slice-routing surrogate — exact under rotations and translations by
+construction, with a measure-weighted similarity gauge (measure-weighted
+centroid and RMS-radius reference length) as the reference configuration
+for new runs since 2026-09-03; the checkpoints most of this book reports
+predate that gauge and saw absolute scale through a constant reference
+length (@sec-mt2-architecture). **GeoTransolver** is the strongest
+external baseline, a soft-slice global-attention architecture with
+pointwise raw-coordinate features and no equivariance contract.
 **MeshTransformer (MT1)** is the original GLOBE-lineage architecture,
-retained where its drive-linearity contract makes it the exactness
-reference. The central open question the tree is organized around is the
-**G2 transfer gap**: on the frozen DrivAerML→SHIFT-SUV instrument,
-GeoTransolver's zero-shot error on a held-out vehicle family improves
-monotonically with in-family training data (0.784 → 0.657 across five
-rungs) while MT2's stays flat — the one measured axis where the baseline
-generalizes and the structured model does not.
+retained where its drive-linearity contract and exact kernel decoder make
+it the exactness reference. The central open question the tree is
+organized around is the **G2 transfer gap**: on the frozen
+DrivAerML→SHIFT-SUV instrument, GeoTransolver's zero-shot error on a
+held-out vehicle family improves with in-family training data (0.784 →
+0.657 across five rungs, two seeds per rung, with per-seed reversals
+inside the spread) while MT2's stays flat — the one measured axis where
+the baseline generalizes and the structured model does not.
 
 ```{mermaid}
 %%| fig-cap: >
-%%|   The generalization-campaign tech tree as of 2026-08-24. Green: done,
+%%|   The generalization-campaign tech tree as of 2026-09-03. Green: done,
 %%|   with the verdict in the node. Amber: running. Gray dashed: planned,
-%%|   gated on an upstream readout. Every node has a ledger row below with
-%%|   its acceptance criterion and notebook evidence link.
+%%|   gated on an upstream readout. Red: a verdict that was later
+%%|   retracted, voided, or overturned; the node that did so is its
+%%|   downstream neighbour. Every node has a ledger row below with its
+%%|   acceptance criterion and notebook evidence link.
 flowchart TB
     classDef done fill:#eaf7ea,stroke:#2a6a2a,color:#1a1a1a
     classDef running fill:#fff8e8,stroke:#8a6d1a,color:#1a1a1a
     classDef planned fill:#f2f1ec,stroke:#898781,color:#1a1a1a,stroke-dasharray:4 3
+    classDef retracted fill:#fbeaea,stroke:#a33a3a,color:#1a1a1a
 
     NSTAR["NSTAR: generalization north star<br/>(measure curves, not points)<br/>DONE - framing adopted"]:::done
-    G1G2["G1G2: data-scaling + transfer ladder<br/>DONE - GeoTransolver's transfer compounds<br/>with data; MT2's is flat"]:::done
+    G1G2["G1G2: data-scaling + transfer ladder<br/>DONE - GeoTransolver's transfer compounds<br/>with data; MT2's is flat (2 seeds/rung)"]:::done
     LOC["LOC: locality-hypothesis ladder<br/>DONE - REFUTED as the transfer carrier<br/>(constant 3-5% in-family offset only)"]:::done
-    M1["M1: scale-relaxation arm<br/>DONE - REFUTED on DrivAerML<br/>(1.3-2.0% gain, inside seed spread)"]:::done
+    M1["M1: scale-relaxation arm<br/>DONE - verdict VOID: MT2 already saw<br/>absolute scale (constant gauge)"]:::retracted
     M2["M2: v5a4 anchor-conditioned decode<br/>DONE - CLOSED at pilot gate<br/>(0.01517 vs 0.01500 bar)"]:::done
-    M3["M3: invariant-completeness audit<br/>DONE - PARTIAL: ceiling real, not<br/>DrivAerML-scale; parity_fix by-product"]:::done
-    M4["M4: NEO normalization audit<br/>DONE - CLOSED BY DERIVATION<br/>(MT2 already measure-complete)"]:::done
-    G3["G3: 2D BC-generalization ladder<br/>DONE - linearity guarantees exact<br/>amplitude extrapolation; no arm<br/>generalizes across frequency content"]:::done
-    HL["HL: high-lift wave (HiLiftAeroML)<br/>RUNNING - ~epoch 260/500;<br/>lr-parity amendment preregistered"]:::running
-    HLGEN["HLGEN: HiLift generalization ladder<br/>PLANNED - gated on HL readout"]:::planned
-    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on HL readout"]:::planned
+    M3["M3: invariant-completeness audit<br/>DONE - PARTIAL: ceiling real, not<br/>DrivAerML-scale; parity defect found"]:::done
+    M4["M4: NEO normalization audit<br/>DONE - closure RETRACTED (unweighted<br/>centroid), then REFUTED by S1"]:::retracted
+    G3["G3: 2D BC-generalization ladder<br/>DONE - amplitude extrapolation exact<br/>under linearity; T1 frequency verdict<br/>OVERTURNED by G3K"]:::retracted
+    HL["HL: high-lift wave (HiLiftAeroML)<br/>DONE - parity at best lr (MT2/GT 0.98);<br/>DrivAerML gap does not transfer"]:::done
+    N1["N1: DrivAerML noise-floor probe<br/>DONE - NON-DISCRIMINATING (shared<br/>residual 0.71 vs 0.70 on HiLift)"]:::done
+    R1["R1: symmetric lr-robustness grid<br/>DONE - CONFIRMED: GT 4-14x at lr 1e-2,<br/>MT2 1.55x; best-vs-best 1.085x"]:::done
+    V6["V6: anchor decode at matched VRAM<br/>DONE - 3.1x worse; M2 closed for good"]:::done
+    PAR["W1, W1', L2, W2, W2': parity thread<br/>DONE - CLOSED NEGATIVE: exact O(3)<br/>costs >= 12% wall shear or fails to train"]:::done
+    L1["L1 / L1b: label + prediction covariance<br/>DONE - labels mirror-covariant to <1%;<br/>default head already covariant"]:::done
+    CRIT["CRIT: independent critic review<br/>DONE - similarity-equivariance and<br/>measure-completeness claims contradicted<br/>by the code; program reframed"]:::done
+    G3K["G3K: G3 rerun, kernel decoder<br/>DONE - OVERTURNS G3-T1: kernel MT1<br/>generalizes frequency (0.070 vs 1.00)"]:::done
+    K0["K0: potential-flow oracle gate<br/>DONE - GATE FAILED (rel-L2 4.8 vs 0.77);<br/>K1 / K2 STOPPED"]:::done
+    P1C["P1' / P1'': GT canonicalization control<br/>DONE - canonically trained GT exactly<br/>pose-invariant at 1.01x; 1.6x headline retired"]:::done
+    S1["S1: similarity gauge (weighted centroid<br/>+ RMS radius)<br/>DONE - free in-family; P3 13-14.5x -> 1.20x;<br/>zero-shot unchanged; gauge ADOPTED"]:::done
+    HLGEN["HLGEN: HiLift generalization ladder<br/>RUNNING - launched at lr 1e-3 both arms<br/>after HL parity"]:::running
+    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on HLGEN readout"]:::planned
 
     NSTAR --> G1G2
     NSTAR --> G3
@@ -504,36 +539,71 @@ flowchart TB
     G1G2 --> HL
     LOC --> HL
     M1 --> HL
+    HL --> N1
+    HL --> R1
+    M2 --> V6
+    M3 --> PAR
+    PAR --> L1
+    N1 --> CRIT
+    R1 --> CRIT
+    M1 --> CRIT
+    M4 --> CRIT
+    CRIT --> G3K
+    G3 --> G3K
+    G3K --> K0
+    CRIT --> P1C
+    CRIT --> S1
+    M4 --> S1
     HL --> HLGEN
-    HL --> MT3
-    M3 --> MT3
-    G3 --> MT3
+    HLGEN --> MT3
+    P1C --> MT3
+    S1 --> MT3
+    K0 --> MT3
+    L1 --> MT3
 ```
 
 The refutation wave of 2026-08-20/21 resolved every mechanism candidate
-then on the table. What remains as the candidate explanation of the G2
-transfer gap: GeoTransolver's **pointwise raw coordinate features** and
-its **non-equivariant global encoder** — the hypothesis that transfer on
-this instrument is carried by representations that exact similarity
-equivariance forbids MT2 from learning (@sec-nb-m1-verdict-wave-close).
-The discriminating experiments in flight are the high-lift wave (HL) and,
-next, the HiLift generalization ladder (HLGEN).
+then on the table, and the instrument wave and critic review of
+2026-09-01/03 then re-examined the premises. Two of the wave's closures
+did not survive: M1 tested a scale symmetry MT2 never had (its reference
+length was a constant), and M4 declared measure-complete a model whose
+centroid was an unweighted mean; S1 repaired both and measured the
+effect. With MT2 genuinely similarity-covariant, its zero-shot transfer
+did not move, so absolute size is ruled out as the G2 carrier
+(@sec-nb-s1-verdict). What remains as the candidate explanation of the
+G2 transfer gap is GeoTransolver's **pointwise raw coordinate features**
+and its **non-equivariant global encoder**. The discriminating experiment
+in flight is the HiLift generalization ladder (HLGEN). The exact-kernel
+line that G3K revived generalizes across boundary-condition frequency
+content on 2D Laplace, but the K0 gate showed that inviscid potential
+flow is not a usable prior for separated bluff-body aerodynamics, so it
+does not launch on DrivAerML.
 
 | ID | Status | Question and why it matters | Depends on | Acceptance criterion | Evidence |
 |---|---|--------|---|------|---|
 | NSTAR | DONE | Reframe the program's goal: multi-family transfer was a coverage demonstration, not generalization; measure generalization as curves (error vs training-set size, error beyond the training hull), not points. Sets the ledger G1–G4. | — | Preregistered framing adopted (sha 02ca9432) with a declared ladder design. | @sec-nb-generalization-northstar |
 | G1G2 | DONE | Do MT2's contracts improve performance per sample (G1), and does either architecture's zero-shot transfer improve with in-family data (G2)? The G2 slope is the program's first measured architecture-carried generalization. | NSTAR | 22-lane nested ladder, n ∈ {14…435}, 2 seeds per rung; preregistered predictions scored. | @sec-nb-g1g2-verdict |
 | LOC | DONE — refuted | Is GeoTransolver's data-compounding transfer carried by *local* features? If yes, MT2's flag-gated local patch-integral channel should bend MT2's G2 curve downward. | G1G2 | Preregistered (p ~ 0.45): monotone zero-shot decrease across n ∈ {27, 109, 218}; a flat curve refutes locality as sufficient. Verdict: refuted — the local channel is a constant 3–5% in-family offset with no G2 slope change, and destabilizes transfer at n=218 (seed spread 0.12). | @sec-nb-locality-verdict |
-| M1 | DONE — refuted | Is MT2's exact scale equivariance an over-symmetrization (aerodynamics depends on Reynolds number, hence absolute size)? Literature wave arm, prereg 69a81e2a. | G1G2 | Preregistered: >5% in-family gain at n=218 from scale conditioning; falsifier: within the ±3% seed band. Verdict: refuted — 1.3–2.0% gains, plus a zero-shot transfer *penalty*. | @sec-nb-m1-verdict-wave-close |
-| M2 | DONE — closed | Does AB-UPT-style anchor-conditioned decoding (fixed 2,560-token interacting core, all queries passive) recover the accuracy the fully passive v5a3 decode lost? | G1G2 | Preregistered pilot gate: 50-epoch validation loss ≤ v5a3 pilot × 1.15 (= 0.01500). Verdict: fail at 0.01517 (1.2% over); arm closed per prereg, no seeds promoted. | @sec-nb-v5a4-gate |
-| M3 | DONE — partial | Does MT2's invariant-only feature set have a provable expressivity ceiling (geometry pairs it cannot separate)? | G1G2 | Analytic fp64 probe: constructed pairs separate at roundoff vs controls. Verdict: ceiling real (rotationally symmetric geometries, separations 5e-16–2e-15) but not DrivAerML-relevant; by-product: a reflection-equivariance defect in the vector head found and fixed (`parity_fix`). | @sec-nb-m3-verdict |
-| M4 | DONE — closed by derivation | Does MT2 miss a measure-weighted (NEO-style) normalization somewhere, explaining the P3 density floor? | G1G2 | Code audit: every point-population normalization carries measure weights. Verdict: MT2 is already measure-complete; the P3 floor is information-limited, not a bug — no retrain arm warranted. | @sec-nb-lit-wave-prereg |
-| G3 | DONE | Which boundary-condition generalization axes can architecture or contracts improve? Exact-label 2D conformal-Laplace suite; three arms (MT2+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Verdict: the linearity contract guarantees *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×); no arm generalizes across BC frequency content (rel-L2 ≈ 1.0 on unseen modes); MT2+BC-scalar wins absolute error on every axis but has the worst amplitude degradation ratio. | @sec-nb-g3-verdict |
-| HL | RUNNING | Does the DrivAerML frontier (MT2 within 1.10× of GeoTransolver, exactly pose-robust) extend to harder, Reynolds-varying physics? GeoTransolver vs MT2-v3c on the HiLiftAeroML curated full split, 2 seeds each. | G1G2, LOC, M1 | Preregistered H1/H2 readouts (prereg 2026-08-17); lr-parity amendment preregistered mid-flight after GeoTransolver destabilized at the frozen lr 3e-3 — symmetric 1e-3 lanes added, each architecture reports its best lane over {3e-3, 1e-3}. ~Epoch 260/500. | @sec-nb-hl-lr-amendment |
-| HLGEN | PLANNED | The HiLift analogue of the G1/G2 ladder: does GeoTransolver's transfer compounding — the remaining G2-gap discriminator — reproduce on Reynolds-varying physics with curated OOD splits? | HL | Gated on the high-lift full-split readout; to be preregistered with scaling rungs and falsifiers before any run. | @sec-nb-hl-lr-amendment |
-| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation, keep the parity gate and a local channel (cheap in-family offset), treat scale/Reynolds as explicit conditioning only where data varies it — and address whatever the high-lift readout says about the remaining G2-gap candidates. | HL, M3, G3 | Gated on the high-lift readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-m1-verdict-wave-close |
+| M1 | DONE — verdict VOID | Is MT2's exact scale equivariance an over-symmetrization (aerodynamics depends on Reynolds number, hence absolute size)? Literature wave arm, prereg 69a81e2a. | G1G2 | Preregistered: >5% in-family gain at n=218 from scale conditioning; falsifier: within the ±3% seed band. Read as refuted (1.3–2.0% gain). Voided by CRIT: MT2's constant reference length already fed absolute size to the backbone, so the appended log-size feature was redundant and the null was guaranteed; the hypothesis was never tested. | @sec-nb-m1-verdict-wave-close; @sec-nb-critic-review |
+| M2 | DONE — closed | Does AB-UPT-style anchor-conditioned decoding (fixed 2,560-token interacting core, all queries passive) recover the accuracy the fully passive v5a3 decode lost? | G1G2 | Preregistered pilot gate: 50-epoch validation loss ≤ v5a3 pilot × 1.15 (= 0.01500). Verdict: fail at 0.01517 (1.2% over); arm closed per prereg. The campaign review flagged this accuracy-only closure as a judgment error (the arm ran at 65% of v3c's memory); V6 re-opened it resource-normalized. | @sec-nb-v5a4-gate; @sec-nb-campaign-review |
+| M3 | DONE — partial | Does MT2's invariant-only feature set have a provable expressivity ceiling (geometry pairs it cannot separate)? | G1G2 | Analytic fp64 probe: constructed pairs separate at roundoff vs controls. Verdict: ceiling real (rotationally symmetric geometries, separations 5e-16–2e-15) but not DrivAerML-relevant; by-product: a reflection-covariance defect in the vector head, which opened the parity thread (PAR). | @sec-nb-m3-verdict |
+| M4 | DONE — RETRACTED, then refuted | Does MT2 miss a measure-weighted (NEO-style) normalization somewhere, explaining the P3 density floor? | G1G2 | Code audit claimed every point-population normalization carries measure weights and closed the arm by derivation. Retracted by CRIT: the centroid was an unweighted mean (0.94 RMS-radii shift under 10:1 bias). Refuted by S1: the weighted gauge cuts the P3 penalty 13–14.5× → 1.20×, so the floor was an implementation gap, not information-limited. | @sec-nb-lit-wave-prereg; @sec-nb-critic-review; @sec-nb-s1-verdict |
+| G3 | DONE — T1 verdict overturned | Which boundary-condition generalization axes can architecture or contracts improve? Exact-label 2D conformal-Laplace suite; three arms (MT2+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Amplitude verdict stands: the linearity contract guarantees *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×). Frequency verdict ("no arm generalizes", rel-L2 ≈ 1.0) overturned by G3K: the MT1 arm used the moment decoder, whose proved m ≤ 2 nullspace made the T1 modes unrepresentable. | @sec-nb-g3-verdict; @sec-nb-g3-kernel-rerun |
+| HL | DONE — parity | Does the DrivAerML frontier (MT2 within 1.10× of GeoTransolver) extend to harder, Reynolds-varying physics? GeoTransolver vs MT2-v3c on the HiLiftAeroML curated full split, 2 seeds × 2 learning rates each. | G1G2, LOC, M1 | Preregistered H1/H2 readouts with the mid-flight lr-parity amendment (each architecture reports its best lane over {3e-3, 1e-3}). Verdict: at best lr (1e-3 for both) MT2/GT = 0.98 — parity, MT2 nominally ahead on every field; both architectures beat their DrivAerML levels; GeoTransolver destabilizes at 3e-3 (0.148/0.397) where MT2 spans 0.040–0.049. The DrivAerML gap does not transfer. | @sec-nb-hl-lr-amendment; @sec-nb-hl-verdict |
+| N1 | DONE — non-discriminating | Was the DrivAerML 1.10–1.18× GeoTransolver lead a property of noisy time-averaged labels rather than of the architectures? Eval-only: shared residual across two GeoTransolver and two MT2 checkpoints on bit-identical val points, HiLift as the cleaner-label control. Prereg 1f6cb942. | HL | Prediction: cross-architecture disagreement D larger on HiLift than on DrivAerML; falsifier D ≥ 0.8 with weak correlation. Verdict: shared-residual fraction 0.713 (DrivAerML) vs 0.703 (HiLift) — the control shows the same or more shared structure; the "gap = label noise" attribution is unsupported. Disclosed: thresholds not mutually calibrated; shared residual is only an upper bound on label noise. | @sec-nb-n1-verdict |
+| R1 | DONE — confirmed | Is learning-rate robustness a reproducible MT2 architecture property, or a HiLift step-count artefact? Symmetric grid {1e-3, 3e-3, 1e-2} × 2 seeds × both architectures on DrivAerML. Prereg 1f6cb942. | HL | Predictions: GeoTransolver degrades > 2× at 1e-2 (held: 4–14×); MT2 < 1.5× (missed narrowly: 1.55×). Spreads differ by far more than the 20% falsifier band. By-product: MT2's best DrivAerML lr is 1e-3 (0.0577), fixing the best-vs-best gap at 1.085×. | @sec-nb-instrument-wave-verdict |
+| V6 | DONE — M2 closed for good | Does anchor-conditioned decode (v5a4) win once compared at matched peak VRAM, the resource frame M2's pilot gate omitted? Prereg 1f6cb942. | M2 | Matched VRAM: v5a4 6.35 GB vs v3c at 6,500 tokens 6.56 GB; closure bar 1.3×. Verdict: 0.209/0.221 vs 0.0697/0.0671 — 3.1× worse, and a slower validation step on DrivAerML. Frontier by-product: v3c at 6,500 tokens costs 8% accuracy for 33% less memory than at 10,000 (9.81 GB). | @sec-nb-instrument-wave-verdict |
+| PAR | DONE — closed negative | Can MT2's vector head be made exactly reflection-covariant (full O(3)) at no accuracy cost? Trained constructions: W1 raw pseudoscalar gate, W1' tanh gate, true5/true7 all-true-vector bases (`vector_basis`), W2 and W2' odd-coefficient heads (`odd_head`). | M3, L1 | Preregistered per arm in readout units: wall shear within 3% of v3c (≤ 0.094); falsifier > 10% worse (> 0.100). Verdict: every exact construction cost ≥ 12% wall shear (+12.6% to +26%, pressure also worse) or failed to train (W2 collapsed to 0.77/0.74; W2' NaN at epoch 95). Default head retained; flags stay as documented negative results. | @sec-nb-instrument-wave-verdict; @sec-nb-w1p-verdict; @sec-nb-l2-verdict; @sec-nb-w2-verdict; @sec-nb-parity-thread-closed |
+| L1 | DONE — labels covariant; L1 nil | Are DrivAerML's labels mirror-covariant (L1), and does the unconstrained head exploit any asymmetry (L1b)? Data-only mirror-pairing on 48 val cars at full resolution. | PAR | L1 prediction if labels explain the parity penalty: wall-shear antisymmetric energy ≳ 10%. Measured 0.67% (pressure 0.93%) — falsifier fires; disclosed threshold miscalibration (converted, the unfittable part is worth at most +9.8%). L1b: the unconstrained head's predictions are as mirror-symmetric as the constrained heads' (excess −0.002 vs labels' +0.012–0.016), so the penalty is a representation effect, not a labels effect. | @sec-nb-l1-verdict; @sec-nb-l1b-l2-prereg |
+| CRIT | DONE — program reframed | Independent fresh-context review of the whole written record against the code and artifacts; seventeen graded claims (`results/critic_review_2026-09-02.md`). | N1, R1, M1, M4 | Verified in-session before acceptance: MT2 is not scale-equivariant (constant `reference_length`; 63% output change under 2× rescale — M1 void); not measure-complete (unweighted centroid — M4 retracted); the drive-degree-1 contract is vacuous on unit-direction inputs; peak memory 9.8 GB vs GeoTransolver 4.6 GB; the label-noise framing survived in chapter 17 after N1 retracted it. Actions preregistered: S1, P1', G3'. | @sec-nb-critic-review |
+| G3K | DONE — overturns G3-T1 | Does the exact double-layer kernel decoder generalize across BC frequency content where G3's moment-decoder arm could not (chapter 6's 0.075 vs G3's 1.00)? Post-hoc decoder control, labelled as such; 3 seeds, otherwise G3's protocol. | CRIT, G3 | Falsifier for chapter 6: kernel MT1 T1 > 0.5; falsifier for G3: T1 < 0.15. Verdict: T1 **0.070** (14× better than the moment decoder's 1.004), best arm on every axis (T0 0.016, exact amplitude extrapolation, geometry-OOD 0.023). The soft-slice family and the moment decoder fail on the frequency axis; an exact Green's-function operator does not. | @sec-nb-g3-kernel-rerun |
+| K0 | DONE — gate failed; K1/K2 STOPPED | Is inviscid potential flow a usable prior for DrivAerML pressure, so that "exact kernel = Laplace, viscous = learned correction" could carry the G3K mechanism into 3D? Zero-parameter oracle: Morino second-kind solve on a closed remesh, Bernoulli Cp, at the recipe's exact evaluation points. | G3K | Preregistered gate: oracle rel-L2 < 0.90. Verdict: measure-weighted rel-L2 **4.79** (median 1.97, every case > 1.6) against 0.774 for predicting the case mean; no numerical control rescues it (oracle-optimal affine rescale 0.73; remesh sweep flat; sphere validation exact). The physics is separation. K1 (symmetric feature arm) and K2 (mechanism arm) do not launch; K-alt (learned density through the exact 3D double layer on the boundary→interior problem) deferred. | @sec-nb-kernel3d-scoping; @sec-nb-k0-verdict |
+| P1C | DONE — 1.6× headline retired | Does GeoTransolver recover pose invariance for free by canonicalizing its input frame (U_inf → +x, principal-axis roll), rather than by the augmentation the 1.6× headline compared against? P1' eval-only on frozen checkpoints; P1'' trains in the canonical frame. | CRIT | P1' falsifier for the headline: canonicalized GT P1 ratio ≈ 1.00 at in-pose 1.00×. P1': exactly pose-invariant but 1.6–1.7× in-pose (sub-degree tilt hypersensitivity: 1° roll costs 1.7–1.8×; 1.15–1.19× with a 1M-cell frame estimate). P1'' prediction ≤ 1.05×: **held at 1.01×** — canonically trained GT is exactly pose-invariant at 1% cost. MT2's equivariance is a contract (no freestream or resolvable frame needed), not an accuracy edge on vehicle data. | @sec-nb-p1-canon-verdict; @sec-nb-p1pp-verdict |
+| S1 | DONE — gauge adopted | Does a real similarity gauge (measure-weighted centroid + measure-weighted RMS-radius reference length, geometric-scale contract test added) change in-family accuracy, the P3 density floor, or zero-shot transfer? v3c + `similarity_gauge`, 2 seeds, seed-matched against v3c. | CRIT, M4 | Predictions in readout units: in-family ≤ 0.066 (held: 0.0638/0.0629); P3 density ratio < 2× (held decisively: 13–14.5× → **1.20×**, now the most density-robust architecture measured — GeoTransolver 3.6×, kernel MT1 1.7–2.1×); zero-shot estate improves (falsifier fired: 0.949 vs 0.967, inside seed spread — absolute size was not the transfer leak). `similarity_gauge=true` is the reference configuration for new runs; frozen checkpoints keep the constant gauge. | @sec-nb-s1-verdict |
+| HLGEN | RUNNING | The HiLift analogue of the G1/G2 ladder: data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA extrapolation, pre-to-post-stall) — does GeoTransolver's transfer compounding, the remaining G2-gap discriminator, reproduce on Reynolds-varying physics? | HL | Launched at LR_GT = LR_MT2 = 1e-3 per the preregistered gate rule (prereg 499bcfe8, which the critic notes is not yet checked in under `results/`). MT2 lanes are constant-gauge v3c (they predate S1). | @sec-nb-hl-verdict |
+| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation; adopt the similarity gauge; keep a local channel (cheap in-family offset); carry parity-odd features in the trunk rather than a bolt-on odd head, or drop reflection covariance explicitly; treat Reynolds as explicit conditioning only where data varies it; and address whatever HLGEN says about the remaining G2-gap candidate. | HLGEN, P1C, S1, K0, L1 | Gated on the HLGEN readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-parity-thread-closed; @sec-nb-p1pp-verdict; @sec-nb-s1-verdict |
 
-: The tech-tree ledger. Every status is as of 2026-08-24; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. {#tbl-tech-tree}
+: The tech-tree ledger. Every status is as of 2026-09-03; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. Rows whose verdicts were later voided, retracted, or overturned say so and link both the original and the correcting entry. {#tbl-tech-tree}
 
 ## How the book is organized
 

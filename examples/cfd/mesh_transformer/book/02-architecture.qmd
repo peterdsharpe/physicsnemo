@@ -491,10 +491,10 @@ contracts inside every layer, MT2 pays for them **once at the network's
 edges** and spends the interior on the empirically strongest routing.
 
 The forward pass, in words. All sampled surface points are reduced to
-similarity invariants of the per-point vector set (centered position,
-unit normal, unit drive direction) — no coordinate frame is ever
-constructed, a design constraint the campaign validated twice by
-refutation. A stack of pre-norm *soft-slice* layers routes information
+rotation- and translation-invariant features of the per-point vector set
+(centered position, unit normal, unit drive direction) — no coordinate
+frame is ever constructed, a design constraint the campaign validated
+twice by refutation. A stack of pre-norm *soft-slice* layers routes information
 globally: each layer softly assigns points to a few hundred learned
 slices, computes measure-weighted slice states and **equivariant anchor
 positions** (weighted mean positions per slice — many local,
@@ -503,30 +503,113 @@ invariants against those anchors (distances, direction dots against
 normal, drive, and the slice's mean normal). Separation comes from
 multilateration against the anchor constellation, not from coordinates.
 Vector outputs are expanded in the GLOBE-style multi-vector basis (input
-vectors plus spherical-basis complements) with invariant coefficients;
-a norm-factored bypass makes every output exactly degree one in the
-drive. All four contracts — similarity equivariance, full O(3), drive
-degree, measure-weight scale invariance — are exact by construction and
-enforced by fp64 unit tests (`test/experimental/nn/test_mt2.py`), not by
-training.
+vectors plus spherical-basis complements) with invariant coefficients.
 
-One defect in that contract set was found and fixed after the fact. The
-2026-08-20 invariant-completeness audit (@sec-nb-m3-verdict) ran a
-full-problem mirror test and exposed a **reflection-equivariance
-violation in the vector head**: two of the output basis vectors (the
-`e_phi` spherical-basis complements) are cross products — pseudovectors,
-which flip sign under reflection — but their coefficients come from the
-parity-even invariant trunk, so vector outputs such as wall-shear-stress
-direction deviated from the physically correct mirror by 0.56--1.37
-relative error. Scalar outputs (pressure, the headline metric) were
-unaffected — they match a mirrored input bitwise — which is why the
-frozen benchmark instrument never caught it. The fix gates the `e_phi`
-coefficients with the smooth parity-odd invariant
-$\hat r \cdot (\hat n \times \hat d)$, exposed as the `parity_fix` flag
-(default OFF, so frozen checkpoints keep their trained behavior). Two
-new contract tests pin it down: one asserts exact reflection covariance
-at $10^{-10}$ with the fix on, and one asserts the unfixed head
-*violates* it, so the fix cannot become ineffective unnoticed.
+**What is exact, and what is not.** MT2 is **SE(3)-equivariant** — exact
+under rotations and translations — and invariant to a uniform rescaling
+of the measure weights. Both properties are enforced by fp64 unit tests
+(`test/experimental/nn/test_mt2.py`), not by training. Earlier drafts of
+this section described MT2 as *similarity*-equivariant (rotation,
+translation, **and** scale) and as measure-complete. Both statements
+were wrong, and the independent critic review of 2026-09-02 caught
+them; both findings were then verified against the code before being
+accepted (@sec-nb-critic-review):
+
+- *Scale.* The original reduction divides centered positions by a
+  **constant** `reference_length` (8.0 in the DrivAerML config), and the
+  resulting radial distance and its logarithm are fed to the backbone —
+  so the network sees absolute size. A geometric 2$\times$ rescale of
+  the input (points $\times 2$, areas $\times 4$) changes the output by
+  **63%**. The only "scale" contract test ever written checked
+  measure-*weight* rescaling, which is exact, not geometric scale. This
+  is precisely the constant-gauge failure mode that step 1 of
+  @sec-forward-pass warns against for `MeshTransformer`; MT2 inherited
+  the constant and nobody re-asked the question. One consequence: the
+  M1 "scale-relaxation" arm (@sec-nb-m1-verdict-wave-close) appended a
+  log-size feature to a model that already saw absolute size, so its
+  "refuted" verdict is void.
+- *Measure.* The centroid was an unweighted `mean` over the sampled
+  points, not a measure-weighted one. Under a 10:1 spatially biased
+  sample it shifts by **0.94 RMS radii**, and every downstream
+  invariant — distances, direction cosines, the anchor invariants —
+  shifts with it. The M4 "closed by derivation" audit
+  (@sec-nb-lit-wave-prereg) missed the first line of the geometry
+  reduction and is retracted.
+
+**The similarity gauge — the reference configuration for new runs.**
+The `similarity_gauge` flag repairs both defects at the source: the
+centroid becomes the measure-weighted mean, and the reference length
+becomes the measure-weighted RMS radius about it — the
+radius-of-gyration gauge that @sec-forward-pass has always prescribed.
+With the flag on, MT2 is genuinely similarity-equivariant, and a new
+contract test (`test_similarity_gauge_geometric_scale_equivariance`:
+points $\times k$, areas $\times k^2$ $\to$ identical output) pins the
+geometric-scale contract alongside the existing weight-scale test. The
+measured effect (S1, @sec-nb-s1-verdict; two seeds, seed-matched against
+the constant-gauge v3c on the frozen DrivAerML protocol): in-family
+pressure and wall shear unchanged within seed spread; the P3
+biased-density penalty (10:1 sampling bias) falls from **13--14.5$\times$
+to 1.20$\times$**, which makes MT2 the most density-robust architecture
+the program has measured on that instrument (GeoTransolver 3.6$\times$,
+the kernel-decoder `MeshTransformer` 1.7--2.1$\times$); zero-shot
+transfer to the held-out SHIFT-SUV estate family is unchanged, so
+absolute size was *not* the cross-family leak. `similarity_gauge=true`
+is the reference configuration for every new MT2 run. It stays
+default-off in code so that checkpoints trained with the constant gauge
+keep their trained behaviour — and that includes every v3c number in
+this book and the HiLift lanes. A result in this book is constant-gauge
+unless it says otherwise.
+
+**The drive-degree bypass is not a merit.** A norm-factored bypass makes
+every output exactly degree one in the drive magnitude, and a test
+asserts it. In deployment the contract is vacuous: the recipe feeds the
+*unit* freestream direction, so the factor $|\text{drive}|$ is
+identically 1 — and the physically correct law would in any case be
+degree 0 for a pressure coefficient and degree 2 for dimensional
+pressure, not degree 1 (@sec-nb-critic-review). The bypass stays in the
+code as housekeeping (the backbone sees direction only); this book no
+longer lists it among MT2's contracts.
+
+**Reflection covariance: a documented defect, retained after a
+negative result.** The 2026-08-20 invariant-completeness audit
+(@sec-nb-m3-verdict) ran a full-problem mirror test and exposed a
+**reflection-covariance violation in the vector head**: two of the
+output basis vectors (the `e_phi` spherical-basis complements) are cross
+products — pseudovectors, which flip sign under reflection — but their
+coefficients come from the parity-even invariant trunk, so vector
+outputs such as wall-shear-stress direction deviated from the physically
+correct mirror by 0.56--1.37 relative error. Scalar outputs (pressure,
+the headline metric) are unaffected — they match a mirrored input
+bitwise — which is why the frozen benchmark instrument never caught it.
+The first repair gates the `e_phi` coefficients with the smooth
+parity-odd invariant $\hat r \cdot (\hat n \times \hat d)$, exposed as
+the `parity_fix` flag; contract tests assert exact reflection covariance
+at $10^{-10}$ with the fix on and assert that the default head
+*violates* it.
+
+That fix was then trained, and the thread it opened closed on
+2026-09-03 with a negative verdict (@sec-nb-parity-thread-closed). Six
+exactly covariant constructions ran on the frozen DrivAerML protocol —
+the raw pseudoscalar gate (W1), a unit-magnitude $\tanh$ gate (W1'), two
+all-true-vector bases (`vector_basis`; one of them a disclosed
+derivation error whose "new" vectors added no direction), and two
+odd-coefficient heads (`odd_head`; W2 and W2'). Every one either cost
+$\geq 12\%$ wall shear (gates and bases: $+12.6\%$ to $+26\%$, with
+pressure moving too because the joint loss routes the head's gradients
+into the shared trunk) or failed to train (collapse to a near-mean
+predictor; NaN at epoch 95) — @sec-nb-instrument-wave-verdict,
+@sec-nb-w1p-verdict, @sec-nb-l2-verdict, @sec-nb-w2-verdict. Two
+data-only checks bound what the violation costs physically: the
+DrivAerML labels are mirror-covariant to $<1\%$ of their energy
+(@sec-nb-l1-verdict), and the trained default head's predictions are
+empirically as mirror-symmetric as the exactly constrained heads'
+(@sec-nb-l1b-l2-prereg). The violation is therefore a representation
+convenience — the optimizer reaches the `e_phi` directions with even
+coefficients — not a physical error the model makes. **The default head
+is retained**; `parity_fix`, `vector_basis`, and `odd_head` stay in the
+code as documented negative results, and the honest contract statement
+is SE(3), not O(3). The unexplored alternative — parity-odd features in
+the trunk rather than a bolt-on odd head — is left to the MT3 design.
 
 What MT2 omits relative to this chapter's architecture:
 per-layer typed scalar/vector streams (the resource cost was measured at

@@ -2,17 +2,22 @@
 
 ::: {.callout-note title="What this chapter is"}
 This chapter is the authoritative synthesis of the research program as of
-2026-08-24. It supersedes the earlier "future directions" chapter (whose open
-questions have all since been measured) and compresses roughly sixty
+2026-09-03. It supersedes the earlier "future directions" chapter (whose open
+questions have all since been measured) and compresses roughly ninety
 preregistered training runs, four adversarial probes, and three architecture
-generations into the tables and verdicts a reviewer actually needs. Every
-number is computed live from the committed reduction artifacts in
+generations into the tables and verdicts a reviewer actually needs. The
+frontier table is computed live from the committed reduction artifacts in
 `results/`, and every claim links to the dated lab-notebook entry
 (@sec-notebook) where it was preregistered and read out. The campaign
 narrative (@sec-review-arc) ends 2026-08-19; the refutation wave that
 followed (@sec-review-refutation-wave) resolved every mechanism candidate
-then open and is the current state of the mechanism hunt. The live
-tech-tree ledger is @sec-tech-tree.
+then open. An independent critic review on 2026-09-02
+(`results/critic_review_2026-09-02.md`, recorded at @sec-nb-critic-review)
+then found that several of this chapter's claims were contradicted by the
+program's own code and artifacts; @sec-review-reframing records what was
+retired, what replaced it, and the evidence for each. Read that section
+before quoting anything from the earlier ones. The live tech-tree ledger is
+@sec-tech-tree.
 :::
 
 ## The one-paragraph verdict
@@ -22,17 +27,25 @@ generalization comes from **declared physical structure** rather than data
 coverage. After a falsification campaign against the strongest available baseline (GeoTransolver, a soft-slice global-attention architecture), the
 result is a *decomposition*: *accuracy* at industrial scale comes
 from normalized global routing and rich features, and GeoTransolver had it;
-*pose robustness* comes from exact equivariance, GeoTransolver measurably
-lacks it, and recovering it with data augmentation costs 1.8--1.9$\times$
-accuracy where our contracts provide it free; *cross-family transfer* comes
-from training-data diversity, not from any architecture we tested; and
-*query-independence* — the ability to evaluate the surrogate anywhere without
-the answer depending on which other points are sampled — trades directly
-against accuracy in every design we built. The program's product is
-`MeshTransformer2` (MT2): GeoTransolver's routing wrapped in exact contracts
-at the network's edges, within 10--18% of GeoTransolver's in-family accuracy
-at equal-or-lower cost, exactly pose-robust, and transferring at parity when
-trained on two families.
+*pose robustness* is a contract MT2 holds by construction and GeoTransolver
+recovers by canonicalization at 1.01$\times$ cost whenever a freestream
+direction and a resolvable principal frame exist — which is every vehicle
+dataset in this program (@sec-nb-p1pp-verdict); *cross-family transfer*
+comes from training-data diversity, not from any architecture we tested;
+and *query-independence* — the ability to evaluate the surrogate anywhere
+without the answer depending on which other points are sampled — trades
+directly against accuracy in every design we built. The program's product
+is `MeshTransformer2` (MT2): GeoTransolver's routing on SE(3)-invariant
+features, with exact rotation/translation covariance paid once at the
+network's edges. Honestly stated (@sec-review-reframing), MT2 is at
+in-family parity with GeoTransolver on HiLiftAeroML (MT2/GT = 0.98 at each
+architecture's best learning rate) and 1.085$\times$ behind on DrivAerML at
+best-vs-best rates; it trains stably across a learning-rate decade where
+GeoTransolver degrades 4--14$\times$; with the similarity gauge it is the
+most density-robust architecture measured (1.20$\times$ under 10:1 sampling
+bias versus GeoTransolver's 3.6$\times$); and it costs about twice
+GeoTransolver's peak training memory (9.8 GB vs 4.6 GB) on the same
+protocol.
 
 ## The frozen instrument {#sec-review-instrument}
 
@@ -49,8 +62,14 @@ test (P4). Training protocol is identical for every arm ever compared: 500
 epochs, batch 1, lr $3\times10^{-3}$ StepLR, bfloat16, no augmentation
 unless the augmentation *is* the arm, four-GPU single-node DDP on identical
 hardware. A two-point learning-rate parity check ran for both architectures;
-it moves the headline gap from 1.18$\times$ to 1.10$\times$ in MT2's favor
-and is reported wherever it matters.
+it moves the headline gap from 1.18$\times$ to 1.10$\times$ in MT2's favor,
+and the symmetric three-point grid of the instrument wave (R1,
+@sec-nb-instrument-wave-verdict) fixes the best-vs-best figure at
+1.085$\times$ (MT2 at lr $10^{-3}$, 0.0577; GeoTransolver at
+$3\times10^{-3}$, 0.0532). Two caveats the critic review made explicit:
+every 2026-08/09 verdict rests on two seeds per cell with no paired
+statistic, and the instrument is one 48-case validation split of one
+dataset.
 
 ## The frontier, in one table {#sec-review-frontier}
 
@@ -93,12 +112,12 @@ rows = [
      "GeoTransolver reference"),
     ("GT + rotation aug.", rot_in / gt10, rot_zs, "--", "closed (1.00)",
      "4.6 GB", "the augmentation price"),
-    ("MT2-v3c (8.6M)", v3c_in / gt10, v3c_zs, "13-14x", "exact (1.00)",
-     "5.9 GB", "canonical single-family MT2"),
+    ("MT2-v3c (8.6M)", v3c_in / gt10, v3c_zs, "13-14.5x (1.20x with gauge)",
+     "exact (1.00)", "9.8 GB", "canonical single-family MT2"),
     ("GT multi-family", gtm_in / gt10, gtm_zs, "--", "26-32x broken",
      "4.6 GB", "zero-shot on HELD-OUT family"),
     ("MT2 multi-family", mt2m_in / gt10, mt2m_zs, "--", "exact (1.00)",
-     "5.9 GB", "zero-shot on HELD-OUT family"),
+     "9.8 GB", "zero-shot on HELD-OUT family"),
 ]
 out = ("| configuration | in-family (xGT) | zero-shot | density (P3) "
        "| rotation (P1) | peak VRAM | note |\n|---|---|---|---|---|---|---|\n")
@@ -109,28 +128,44 @@ print(f": The frontier on the frozen instrument. In-family is normalized "
       f"pressure $L_2$ at 10k cells relative to the GeoTransolver reference "
       f"({gt10:.4f}); zero-shot is the mean normalized pressure $L_2$ on a "
       f"held-out vehicle family (estate for single-family rows, fastback "
-      f"for the multi-family rows; 1.0 is mean-predictor level). Sources: "
+      f"for the multi-family rows; 1.0 is mean-predictor level). Peak VRAM "
+      f"is training memory at 10,000 tokens on the same four-GPU protocol "
+      f"(MT2-v3c 9.81 GB measured in the V6 arm, "
+      f"@sec-nb-instrument-wave-verdict; the 5.9 GB this table once "
+      f"carried was wrong). The P3 column for MT2 gives the constant-gauge "
+      f"v3c figure and, in parentheses, the same model with "
+      f"`similarity_gauge` on (@sec-nb-s1-verdict). Sources: "
       f"mega_reduction.json, round3_reduction.json, mt2_v3c_reduction.json.")
 ```
 
-Three facts to read off the table before any narrative. First, **the
-augmentation price**: closing GeoTransolver's rotation hole with the classic
-data-augmentation remedy costs it most of its accuracy lead —
-1.8--1.9$\times$ in-family — while MT2's exact equivariance is free by
-construction; at equal pose-robustness the structured model is the
-*more* accurate one by roughly 1.6$\times$. Second, **the multi-family rows are a
-coverage result, not generalization** (reframed 2026-08-20,
-@sec-nb-generalization-northstar): one additional training family moves
-held-out-family error from mean-predictor level to 0.11--0.13 for *both*
-architectures — a $\sim$7$\times$ improvement that dwarfs every
-architectural intervention measured on that axis. This shows
-that *neither* architecture was extrapolating beyond its training hull.
-Measuring generalization — as scaling curves and
-beyond-distribution tests rather than points inside an expanded hull — is
-the program's current campaign.
-Third, **the remaining accuracy gap is small and tuning-sensitive**: 1.18×
-at the frozen learning rate, 1.10× when each architecture uses its
-preferred rate.
+Three facts to read off the table before any narrative. First, **pose
+robustness is a contract, not an accuracy edge.** Closing GeoTransolver's
+rotation hole with data augmentation costs it 1.8--1.9$\times$ in-family
+(the second row), and this chapter once concluded from that number that
+exact equivariance was "worth 1.6$\times$". That comparison used the wrong
+steel-man. Canonicalizing GeoTransolver's input frame — freestream to $+x$,
+roll fixed from the geometry's principal axes — and training it in that
+frame makes it *exactly* pose-invariant at a 1.01$\times$ accuracy cost
+(P1'', @sec-nb-p1pp-verdict). What MT2's exact equivariance still buys is
+generality: it needs neither a known freestream direction nor a
+sign-resolvable principal frame, both of which every vehicle dataset here
+happens to supply. Second, **the multi-family rows are a coverage result,
+not generalization** (reframed 2026-08-20, @sec-nb-generalization-northstar):
+one additional training family moves held-out-family error from
+mean-predictor level to 0.11--0.13 for *both* architectures — a
+$\sim$7$\times$ improvement that dwarfs every architectural intervention
+measured on that axis. This shows that *neither* architecture was
+extrapolating beyond its training hull. Measuring generalization — as
+scaling curves and beyond-distribution tests rather than points inside an
+expanded hull — is the program's current campaign. Third, **the remaining
+DrivAerML accuracy gap is small and tuning-sensitive, and it does not
+transfer**: 1.18$\times$ at the frozen learning rate, 1.085$\times$ at
+best-vs-best rates on DrivAerML (R1), and 0.98 — parity, MT2 nominally
+ahead — on HiLiftAeroML at each architecture's best rate
+(@sec-nb-hl-verdict). Memory is the cost MT2 pays: 9.8 GB against
+GeoTransolver's 4.6 GB at 10,000 tokens; the V6 control shows that
+dropping MT2-v3c to 6,500 training tokens brings it to 6.56 GB at an 8%
+accuracy cost (@sec-nb-instrument-wave-verdict).
 
 ## How we got here: the campaign in five verdicts {#sec-review-arc}
 
@@ -156,11 +191,18 @@ program: structure the winner rather than accelerate the loser.
 **3. The probes made the benchmark's blind spots measurable**
 (@sec-nb-contract-probes-synthesis). Rotation: GeoTransolver loses
 26--32$\times$ off-pose — every number it posts carries an implicit "in
-the dataset's canonical pose." Amplitude: its output is drive-amplitude
-*blind* (layer normalization saturates scale), while the declared-degree
-contract measures exactly 1.0000. Density: geometry-adaptive statistics
-pay a variance-bounded tax no weighting scheme removes; the measure
-contract halves the damage but cannot zero it.
+the dataset's canonical pose" (the P1'/P1'' controls later showed that
+the implicit assumption can be made explicit and exact by
+canonicalization, @sec-review-reframing). Amplitude: GeoTransolver's
+output is drive-amplitude *blind* (layer normalization saturates scale),
+while MT2's declared-degree bypass measures exactly 1.0000 — a result
+the critic review correctly reduced to a tautology, since the recipe
+feeds a unit freestream direction and the bypass multiplies by its norm
+(@sec-nb-critic-review). Density: geometry-adaptive statistics pay a
+variance-bounded tax; for the kernel-decoder `MeshTransformer` the
+measure contract halves the damage (1.7--2.1$\times$ vs GeoTransolver's
+3.6$\times$), while for MT2 the same probe read 13--14.5$\times$ until
+the S1 gauge repair brought it to 1.20$\times$ (@sec-nb-s1-verdict).
 
 **4. MT2 was built in eleven preregistered iterations, most of which
 failed informatively** (@sec-nb-mt2-charter through
@@ -194,9 +236,11 @@ its target: **the G2 transfer gap** — GeoTransolver's zero-shot error on
 a held-out vehicle family improves monotonically with in-family training
 data (0.784 → 0.657 across five training-set-size rungs) while
 MeshTransformer2's stays flat at 0.83–0.94. Between 2026-08-20 and
-2026-08-21, five preregistered lines resolved every candidate
-explanation then on the table. None of these are open questions anymore;
-each verdict below is dated and anchored.
+2026-08-21, five preregistered lines appeared to resolve every candidate
+explanation then on the table. Two of those closures (M1, M4) were later
+voided or retracted by the critic review and re-measured by S1
+(@sec-review-reframing); each verdict below carries its current status
+and is dated and anchored.
 
 **Locality: refuted as the transfer carrier** (@sec-nb-locality-verdict).
 The hypothesis that GeoTransolver's transfer compounding is carried by
@@ -213,120 +257,251 @@ offset.
 preregistration** (prereg 69a81e2a, @sec-nb-lit-wave-prereg;
 wave-close @sec-nb-m1-verdict-wave-close):
 
-- **M1 scale relaxation: REFUTED** (@sec-nb-m1-verdict-wave-close).
-  Appending a log raw-cloud-radius scalar — breaking MT2's
-  exact scale equivariance — gained only 1.3–2.0% in-family, inside the
-  declared ±3% seed band and far from the preregistered >5% threshold,
-  and *hurt* zero-shot transfer (0.949–0.956 vs plain MT2's
-  0.825–0.856). Caveat preserved: DrivAerML's scale signal is weak
-  (fixed freestream); the Reynolds-varying high-lift wave is the strong
-  test.
-- **M2 anchor-conditioned decode: CLOSED at the pilot gate**
-  (@sec-nb-v5a4-gate). The AB-UPT-style design (a fixed 2,560-token
-  interacting anchor core, all queries decoding passively) came in at
-  0.01517 against the preregistered 0.01500 bar — a fail by 1.2%; no
-  seeds promoted. The query-independence price finding of
-  @sec-nb-v5-line-verdict stands; any reopening requires a new
-  matched-resource preregistration, not a rerun.
-- **M3 invariant completeness: PARTIAL** (@sec-nb-m3-verdict). An
+- **M1 scale relaxation: verdict VOID** (@sec-nb-m1-verdict-wave-close,
+  voided at @sec-nb-critic-review). The arm appended a log
+  raw-cloud-radius scalar to "break MT2's exact scale equivariance" and
+  read a null (1.3–2.0% in-family, inside the ±3% seed band). MT2 never
+  had scale equivariance: its constant `reference_length` already let
+  the backbone see absolute size, so the added feature was redundant by
+  construction and the null was guaranteed. The over-symmetrization
+  hypothesis was never tested. The S1 gauge arm (@sec-review-reframing)
+  is the first experiment to actually vary MT2's scale behaviour.
+- **M2 anchor-conditioned decode: CLOSED, twice** (@sec-nb-v5a4-gate,
+  then V6 at @sec-nb-instrument-wave-verdict). The AB-UPT-style design
+  (a fixed 2,560-token interacting anchor core, all queries decoding
+  passively) first failed its accuracy-only pilot gate by 1.2% — a
+  closure the campaign review flagged as a judgment error, because the
+  arm ran at 65% of v3c's memory and the resource frame was not
+  applied (@sec-nb-campaign-review). V6 re-opened it at matched peak
+  VRAM (v5a4 6.35 GB vs v3c at 6,500 tokens 6.56 GB): 0.209/0.221
+  against the control's 0.0697/0.0671, 3.1$\times$ worse and far past
+  the 1.3$\times$ closure bar, with a *slower* validation step on
+  DrivAerML. The query-independence price finding of
+  @sec-nb-v5-line-verdict stands, now resource-normalized.
+- **M3 invariant completeness: PARTIAL, and its by-product closed
+  negative** (@sec-nb-m3-verdict; @sec-nb-parity-thread-closed). An
   expressivity ceiling is real — geometries with a discrete rotational
   symmetry about the drive axis are provably invisible to MT2's
   invariant set — but it is refuted as a DrivAerML-scale limitation (no
   car has such a symmetry; 1° of drive misalignment restores
-  separation). The audit's by-product was finding and **fixing a   reflection-equivariance defect in MT2's vector head** (the `parity_fix`
-  flag; see @sec-mt2-architecture).
-- **M4 NEO normalization audit: CLOSED BY DERIVATION**
-  (@sec-nb-lit-wave-prereg). MT2 was already measure-complete — measure
-  weights enter every point-population normalization — so the P3
-  density floor (4.3–4.5× at 10:1 bias) is the information-limited
-  component the importance-sampling analysis predicts, not a bug. No
-  retrain arm was warranted.
+  separation). The audit also found a **reflection-covariance defect in
+  MT2's vector head**. Six exactly covariant repairs were then trained
+  and every one either cost $\geq 12\%$ wall shear or failed to train;
+  the labels are mirror-covariant to $<1\%$ and the default head's
+  predictions are empirically covariant, so the default is retained and
+  the honest contract is SE(3), not O(3) (@sec-mt2-architecture has the
+  ledger).
+- **M4 NEO normalization audit: RETRACTED, then REFUTED by S1**
+  (@sec-nb-lit-wave-prereg; retracted at @sec-nb-critic-review; refuted
+  at @sec-nb-s1-verdict). The audit concluded MT2 was already
+  measure-complete and the P3 density floor information-limited. It
+  missed the first line of the geometry reduction: the centroid was an
+  unweighted mean, shifting 0.94 RMS radii under 10:1 bias. Replacing
+  it with the measure-weighted centroid and RMS-radius gauge cut MT2's
+  P3 penalty from 13–14.5$\times$ to 1.20$\times$ at no in-family cost.
+  The floor was an implementation gap.
 
 **G3, the boundary-condition axis: contracts guarantee only what they
-declare, and no tested mechanism improves frequency coverage** (@sec-nb-g3-verdict).
-On the exact-label 2D conformal-Laplace suite (three arms at matched
-parameters: MeshTransformer2 with a boundary-scalar channel, the
-soft-slice mechanism of GeoTransolver's family, and MeshTransformer in
-drive-linear mode), the drive-linearity contract makes amplitude
+declare — and an exact kernel decoder generalizes across frequency
+content where learned routing does not** (@sec-nb-g3-verdict, overturned
+in part at @sec-nb-g3-kernel-rerun). On the exact-label 2D
+conformal-Laplace suite, the drive-linearity contract makes amplitude
 extrapolation *free* — exact at ×2 and ×4 amplitude — while the two
 learned-amplitude arms degrade 6–12× (MT2+BC-scalar) and 4.5–7×
-(soft-slice): the first measured price of an undeclared linearity. But
-*no* arm generalizes across BC frequency content: on drive modes never
-seen in training, every architecture reaches rel-L2 ≈ 1.0–1.2, as bad
-as predicting zero — a data-coverage limit no tested mechanism
-addresses. MT2+BC-scalar wins absolute error on every axis (1.8× better
-than soft-slice at control) but has the *worst* amplitude degradation
-ratio; architecture-driven BC generalization, as preregistered, was not
-observed.
+(soft-slice): the first measured price of an undeclared linearity. The
+original verdict went on to say that *no* arm generalizes across BC
+frequency content (rel-L2 ≈ 1.0 on unseen drive modes) and called this
+a data-coverage limit. That sentence measured the wrong arm: the
+`MeshTransformer` arm used the *moment* query decoder, whose proved
+$m \le 2$ angular ceiling (@sec-mesh-attention) makes the T1 test —
+drive modes 5–8, pure $m \ge 3$ content — structurally unrepresentable,
+so rel-L2 ≈ 1.0 was guaranteed. Rerun with the exact double-layer
+kernel decoder (a post-hoc decoder control, labelled as such, three
+seeds), `MeshTransformer` scores **T1 0.070** — 14× better than the
+moment decoder and reproducing chapter 6's 0.075 under G3's protocol —
+and is the best arm on every G3 axis: 4× lower in-distribution error
+than the next best, exact amplitude extrapolation, and the lowest
+geometry-OOD error. The corrected statement: the soft-slice family
+(MT2+BC-scalar, the GeoTransolver-family mechanism) and the moment
+decoder fail on the frequency axis; an exact Green's-function operator
+carries the PDE's spectral response for free. This is the strongest
+generalization result the program owns, and it belongs to the
+architecture line the program pivoted away from.
 
-**What remains.** With locality refuted, the scale axis refuted, the
-expressivity ceiling ruled out at DrivAerML scale, and the normalization
-audit closed, the remaining candidate mechanisms for the G2 transfer
-gap are GeoTransolver's **pointwise raw coordinate features** and its
-**non-equivariant global encoder** — the hypothesis that transfer on
-this instrument is carried by representations exact similarity
-equivariance forbids MT2 from learning. The corresponding qualification is
-that the same equivariance provides MT2's free pose robustness and small-data
-parity. The discriminators in flight: the **high-lift wave**
-(GeoTransolver vs MeshTransformer2 on the HiLiftAeroML curated full
-split, ~epoch 260 of 500 as of 2026-08-24) and, gated on its readout,
-the **HiLift generalization ladder**. Mid-flight, both GeoTransolver
-seeds destabilized at the frozen lr 3e-3 (tuned on DrivAerML, where an
-epoch is 54 optimizer steps; HiLift's is 315), so an lr-parity
-amendment was preregistered *before any readout exists*: symmetric
-lr-1e-3 lanes for both architectures under the steel-man rule, each
-architecture reporting its best lane over {3e-3, 1e-3}
-(@sec-nb-hl-lr-amendment).
+**What remains.** Locality is refuted; the expressivity ceiling is ruled
+out at DrivAerML scale; the normalization floor was an implementation
+gap, now closed; and the scale axis has finally been tested — S1 made
+MT2 genuinely similarity-covariant and its zero-shot estate error did
+not move (0.949 vs 0.967, inside the two-seed spread), so absolute size
+was not the cross-family leak (@sec-nb-s1-verdict). The earlier
+hypothesis that GeoTransolver "learns what exact similarity equivariance
+forbids MT2 from learning" cannot be right as stated: MT2 was not
+scale-equivariant, and both models saw absolute size in the same units.
+The remaining candidate for the G2 transfer gap is GeoTransolver's
+**pointwise raw coordinate features** and non-equivariant encoder, with
+the HiLift generalization ladder (launched at LR 1e-3 for both
+architectures after the high-lift parity verdict, @sec-nb-hl-verdict) as
+the discriminator in flight.
 
 ## What this does not solve {#sec-review-honesty}
 
 The claims above are scoped by construction, and the scoping is part of
 the result. The industrial evidence rests on two automotive dataset
-families plus a harder third (high-lift) in flight; no volume fields.
-Boundary-condition variation is now measured, but only in 2D with exact
-labels (the G3 suite, @sec-nb-g3-verdict); its verdict — amplitude
-generalization is purchasable by a declared linearity contract at a
-measured 4.5--12$\times$ value, frequency-content generalization is
-purchasable by nothing tested — is what any 3D BC-varying dataset
-decision should be built on. The typed-BC ingestion that distinguishes
-the GLOBE lineage remains unbuilt at industrial scale for the same
-reason as before: no *industrial* benchmark can yet measure it.
-Density robustness is scoped at $\sim$13$\times$ under a 10:1 sampling
-bias — and the M4 audit closed the question of whether that floor is a
-normalization bug: MeshTransformer2 is already measure-complete, so the
-floor is information-limited (@sec-nb-lit-wave-prereg). Both
-architectures misbehave at scale extremes
-under the frozen learning rate (seed-conditioned detonations at 11M for
-the original MeshTransformer; a turned frontier at 564M for GeoTransolver), so
-no "scales to very large runs" claim is made by either side. And the
-irreducible-error question — whether the 1.10$\times$ residual gap is
-architecture or the dataset's time-averaging noise floor — is exactly
-what the running high-lift wave (@sec-nb-highlift-prereg) exists to
-answer, now under its preregistered lr-parity amendment
-(@sec-nb-hl-lr-amendment).
+families plus one high-lift aircraft dataset; every industrial run is
+surface $\to$ surface, and the boundary $\to$ *interior* problem the
+program's statement of scope names has never been run with MT2 (the
+volume recipes exist in the tree). Boundary-condition variation is
+measured only in 2D with exact labels (the G3 suite); its corrected
+verdict — amplitude generalization is purchasable by a declared linearity
+contract at a measured 4.5--12$\times$ value, and frequency-content
+generalization is purchasable by an exact kernel decoder but by no
+soft-slice mechanism tested (@sec-nb-g3-kernel-rerun) — is what any 3D
+BC-varying dataset decision should be built on. Whether that kernel
+result transfers to 3D aerodynamics was gated on a zero-parameter test
+and the gate failed: an exact potential-flow oracle scores rel-L2 4.8 on
+DrivAerML pressure against 0.77 for predicting the case mean, because
+the dominant physics is separation, which no Laplace operator carries
+(K0, @sec-nb-k0-verdict). The "structure buys generalization" thesis is
+therefore bounded exactly where the available structure stops matching
+the PDE. The typed-BC ingestion that distinguishes the GLOBE lineage
+remains unbuilt at industrial scale for the same reason as before: no
+*industrial* benchmark can yet measure it. Density robustness is
+1.20$\times$ under a 10:1 sampling bias for MT2 with the similarity
+gauge and 13--14.5$\times$ for the constant-gauge checkpoints this book
+mostly reports (@sec-nb-s1-verdict). Both architectures misbehave at
+scale extremes under the frozen learning rate (seed-conditioned
+detonations at 11M for the original MeshTransformer; a turned frontier
+at 564M for GeoTransolver), so no "scales to very large runs" claim is
+made by either side. Finally, the DrivAerML gap is *not* explained. The
+high-lift wave showed it does not transfer (parity at 0.98,
+@sec-nb-hl-verdict), and the campaign review read that as evidence the
+gap was DrivAerML's time-averaged label noise — but the N1 probe built
+to test that attribution did not discriminate: the four-model
+shared-residual fraction is 0.71 on DrivAerML and 0.70 on the
+cleaner-label HiLift control (@sec-nb-n1-verdict). The honest statement
+is narrower: the gap does not transfer across datasets, and the
+residuals on both are dominated by structure common to both
+architectures, which this probe cannot split into label noise and shared
+inductive bias.
 
 ## Roads from here {#sec-review-roads}
 
-In recommended order: (1) a scoped experimental release of MT2-v3c/v4 —
-"exactly pose-robust surface aero surrogate at GeoTransolver-class accuracy
-and cost," with the augmentation pricing as its headline evidence and the
-entanglement finding as its stated limitation; (2) the high-lift verdict
-(running, @sec-nb-hl-lr-amendment), which either extends the claim to
-harder physics or bounds it, and which gates the two planned nodes of
-the tech tree (@sec-tech-tree): the HiLift generalization ladder — the
-Reynolds-varying analogue of the G1/G2 ladder, the strongest remaining
-discriminator for the remaining G2-gap candidates — and the MT3
-preregistration; (3) the
-upstream PR series for the engineering bycatch (rank-failure barrier,
-distributed-timeout knob, degenerate-cell guards, measure infrastructure — all
-verified still absent upstream); (4) any 3D BC-varying dataset decision,
-now informed by the completed 2D G3 fingerprint (@sec-nb-g3-verdict):
-build it for the axes where architecture can matter — amplitude and
-geometry — because frequency-content coverage is a data axis no tested
-mechanism improves; and (5) the closed query-independence line — the fully
-passive decode priced at 2.7$\times$ (@sec-nb-v5-line-verdict) and the
-anchor-conditioned variant closed at its pilot gate
-(@sec-nb-v5a4-gate) — revisited only via the registered follow-up (a
-matched-resource anchor-count scaling study under a new
-preregistration) and only if a deployment actually demands
-evaluate-anywhere semantics at the measured price.
+In recommended order: (1) a scoped experimental release of MT2 with the
+similarity gauge as its reference configuration — "SE(3)-equivariant
+surface aero surrogate at GeoTransolver-class accuracy, learning-rate
+robust and density robust, at about twice the training memory" — with the
+R1 and S1 measurements as its headline evidence and the entanglement
+finding as its stated limitation; (2) the HiLift generalization ladder
+(running, launched after the parity verdict of @sec-nb-hl-verdict) — the
+Reynolds-varying analogue of the G1/G2 ladder and the last discriminator
+in flight for the G2-gap candidates — which gates the MT3 preregistration
+(@sec-tech-tree); (3) the volume-target run the program's scope statement
+demands, on `drivaer_ml_volume` or `highlift_volume`, which also decides
+whether MT2's query-side dependence forces the passive decoder's measured
+3$\times$ price at $10^5$--$10^6$ interior queries; (4) the upstream PR
+series for the engineering bycatch (rank-failure barrier,
+distributed-timeout knob, degenerate-cell guards, measure infrastructure —
+all verified still absent upstream); (5) any 3D BC-varying dataset
+decision, now informed by the corrected 2D G3 fingerprint
+(@sec-nb-g3-kernel-rerun): build it for amplitude, geometry, *and*
+frequency content, because an exact kernel decoder does generalize on the
+last axis — while remembering that K0 (@sec-nb-k0-verdict) bounds the
+exact-kernel line to problems whose operator the kernel actually is; and
+(6) the closed query-independence line — the fully passive decode priced
+at 2.7$\times$ (@sec-nb-v5-line-verdict) and the anchor-conditioned
+variant closed at matched VRAM at 3.1$\times$
+(@sec-nb-instrument-wave-verdict) — revisited only if a deployment
+actually demands evaluate-anywhere semantics at the measured price, and
+then against AB-UPT as a measured baseline rather than against MT2
+itself.
+
+## The 2026-09 reframing: what the instrument wave and the critic review changed {#sec-review-reframing}
+
+Between 2026-09-01 and 2026-09-03 the program ran an instrument wave
+(@sec-nb-campaign-review), commissioned an independent critic review of
+the entire written record (@sec-nb-critic-review;
+`results/critic_review_2026-09-02.md`, seventeen graded claims), and ran
+the controls that review asked for. Several sentences the earlier
+sections of this chapter and @sec-mt2-architecture carried were
+contradicted by the program's own code or artifacts. This section is the
+ledger of what was retired and what replaced it; the notebook entries
+hold the numbers.
+
+**Retired: "MT2 is similarity-equivariant" and "MT2 is
+measure-complete."** MT2 in its original form is SE(3)-equivariant only.
+Its reference length was a constant, so a 2$\times$ geometric rescale
+changed the output by 63%, and its centroid was an unweighted mean that
+shifted 0.94 RMS radii under 10:1 biased sampling (both verified against
+the code, @sec-nb-critic-review). The M1 verdict is void and the M4
+closure was retracted. The repair — the `similarity_gauge` flag,
+measure-weighted centroid and RMS-radius gauge, with a geometric-scale
+contract test — is free in-family and cuts the P3 density penalty from
+13--14.5$\times$ to 1.20$\times$ (S1, @sec-nb-s1-verdict). It is the
+reference configuration for new runs; frozen checkpoints keep the
+constant gauge.
+
+**Retired: "exact equivariance is worth 1.6$\times$."** The
+augmentation baseline was the wrong steel-man. Canonicalizing
+GeoTransolver's input frame at evaluation time already made a frozen
+checkpoint exactly pose-invariant, at a 1.6--1.7$\times$ in-pose penalty
+traced to hypersensitivity to sub-degree frame tilt (1° of roll costs
+1.7--1.8$\times$; P1', @sec-nb-p1-canon-verdict). Training GeoTransolver
+in the canonical frame removed even that: exact pose invariance at
+1.01$\times$ cost (P1'', @sec-nb-p1pp-verdict). MT2's exact equivariance
+remains a genuine *contract* — it needs no known freestream direction
+and no sign-resolvable principal frame, whereas canonicalization needs
+both — but on the vehicle datasets this program measures (0/48 degenerate
+frames; skewness sign consistent 48/48) it is not an accuracy advantage.
+
+**Retired: "equal-or-lower cost."** MT2-v3c peaks at 9.8 GB of training
+memory at 10,000 tokens on the same DrivAerML protocol where
+GeoTransolver peaks at 4.6 GB (V6, @sec-nb-instrument-wave-verdict); the
+frontier table's earlier 5.9 GB was wrong. At 6,500 tokens MT2 runs in
+6.56 GB at an 8% accuracy cost.
+
+**Retired: "the DrivAerML gap was label noise."** The N1 shared-residual
+probe does not discriminate (0.71 on DrivAerML vs 0.70 on the HiLift
+control, @sec-nb-n1-verdict). The high-lift parity measurement stands;
+its explanation does not.
+
+**Retired: "no architecture generalizes across BC frequency content."**
+The G3 `MeshTransformer` arm used the moment decoder with the proved
+$m \le 2$ nullspace, so the T1 test was unrepresentable by construction.
+The kernel-decoder rerun scores T1 0.070 and wins every G3 axis
+(@sec-nb-g3-kernel-rerun). Whether this transfers to 3D aerodynamics was
+then gated on the K0 potential-flow oracle, which failed by a factor of
+five (rel-L2 4.8 vs 0.77 for the case mean, @sec-nb-k0-verdict): for a
+bluff separated body there is no cheap exact operator, so the K1/K2
+learned-kernel arms did not launch.
+
+**Retired: the drive-degree contract as a merit.** Inert on
+unit-direction inputs and the wrong law for pressure in any case
+(@sec-mt2-architecture).
+
+**Closed negative: exact reflection covariance of the vector head.** Six
+constructions, all $\geq 12\%$ worse on wall shear or untrainable;
+labels covariant to $<1\%$; default retained
+(@sec-nb-parity-thread-closed).
+
+**Confirmed: learning-rate robustness is an architecture property (R1,
+@sec-nb-instrument-wave-verdict).** On the symmetric DrivAerML grid
+$\{10^{-3}, 3\times10^{-3}, 10^{-2}\}$, GeoTransolver degrades
+4--14$\times$ at $10^{-2}$ (0.739/0.221 against its best 0.0532) while
+MT2 degrades 1.55$\times$ (0.0874/0.0914 against 0.0577); the same
+pattern held on HiLift (MT2 0.040--0.049 across the whole grid,
+GeoTransolver 0.041--0.397). One caveat from N1: MT2 has the *larger*
+seed-to-seed prediction spread on both datasets, so robustness to
+learning rate and robustness to seed are different properties.
+
+**The honest MT2 claim set, after this week.** (i) Exact SE(3)
+equivariance as a contract — no frame needed, valid for degenerate
+geometries and unknown freestreams — but not an accuracy edge on
+vehicle data. (ii) Learning-rate robustness: 1.55$\times$ degradation
+across a decade where GeoTransolver loses 4--14$\times$. (iii)
+Biased-density robustness of 1.20$\times$ with the similarity gauge,
+against GeoTransolver's 3.6$\times$. (iv) In-family parity with
+GeoTransolver on HiLiftAeroML at best learning rate (MT2/GT = 0.98) and a
+1.085$\times$ deficit on DrivAerML at best-vs-best rates. (v) About
+twice GeoTransolver's peak training memory. Every one of these is a
+two-seed measurement on one validation split per dataset; none has a
+paired statistic behind it yet.
