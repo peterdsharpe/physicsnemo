@@ -4882,3 +4882,46 @@ first, then the boundary→interior volume task the program has never
 run MT2 on. The A-arms are void unless the twin-draw recommendation is
 adopted, which is why the preregistration exists before generation.
 Tech tree: node **G5 PLANNED**, gated on the corpus launch.
+
+## 2026-09-03 — HiLift ladder, data-efficiency rungs: MT2 is 2.5–2.9x more accurate than GeoTransolver at 35 and 210 training cases, converging to parity at 1,260 {#sec-nb-hl-ladder-dataeff}
+
+**First half of the ladder readout** (prereg `499bcfe8`;
+`results/hilift_ladder_reduction_2026-09-03.json`). Both
+architectures at lr 1e-3 (each one's best on the full split), 500
+epochs, 2 seeds, evaluated on the *shared* 180-case val set that the
+`full`, `scarce` and `super_scarce` splits have in common — so these
+three rungs are directly comparable:
+
+| training cases | GeoTransolver (min–max) | MeshTransformer2 (min–max) | MT2 / GT |
+|---|---|---|---|
+| 35 (`super_scarce`) | 0.392 (0.375–0.409) | **0.138** (0.135–0.141) | **0.35** |
+| 210 (`scarce`) | 0.159 (0.157–0.160) | **0.064** (0.062–0.067) | **0.41** |
+| 1,260 (`full`) | 0.042 | 0.041 | 0.98 |
+
+**Prediction P1 of the preregistration held, and not marginally.**
+MT2 is **2.9x more accurate at 35 cases and 2.5x at 210**, with seed
+spreads an order of magnitude smaller than the gap; MT2 trained on 210
+cases (0.064) is already as good as GeoTransolver trained on 1,260
+would have been on DrivAerML (0.053–0.063 range), and better than
+GeoTransolver on 210 by the same factor the whole month-one DrivAerML
+chase was about. The curves cross to parity only at the full split.
+This is the **first measured architecture-driven generalization
+advantage in 3D** in the program — on data-efficiency, the axis the
+north-star correction named first — and it is the Branch A condition
+of the MT3 decision rule (`results/mt3_preregistration_skeleton_2026-09-03.md`,
+r(35) ≤ 0.85; measured 0.35).
+
+**Steel-man before believing it (preregistered now, launched now).**
+The protocol holds epochs fixed, so at 35 cases both models take ~9
+optimizer steps per epoch — 4,500 steps total — and the ladder
+inherited lr 1e-3 from the full split. GeoTransolver's collapse at
+small n could be under-training or an lr mismatch at small n rather
+than an architectural property; on DrivAerML's G1 ladder the same
+protocol gave parity at n = 14, which argues against that, but it is
+cheap to test: **GeoTransolver `super_scarce` and `scarce` at lr 3e-3
+(500 epochs) and at lr 1e-3 with 1,000 epochs, 2 seeds each (8 small
+lanes).** Prediction: the best of these stays ≥ 2x MT2 at 35 cases.
+Falsifier: any GeoTransolver control within 1.2x of MT2 at 35 cases →
+the data-efficiency gap is a protocol artefact and the Branch A
+decision is void. The OOD half of the ladder (aoa, stall) is still
+training; its verdict and the single sealed test evaluation follow.
