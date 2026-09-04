@@ -69,7 +69,8 @@ measured in 3D (@sec-nb-hl-ladder-dataeff).
 #|   shared 180-case validation set versus number of training cases, for
 #|   GeoTransolver (red circles) and MeshTransformer2 (blue squares); lines
 #|   join seed means, shaded bands span the two seeds, small dots are the
-#|   individual seeds. Assumptions held fixed for both architectures:
+#|   individual seeds; the annotated factor is GeoTransolver's error divided
+#|   by MT2's at the same rung. Assumptions held fixed for both architectures:
 #|   learning rate 1e-3 (each architecture's best on the full split, chosen
 #|   by validation before the ladder ran), 500 epochs, bfloat16, no
 #|   augmentation, 10,000 sampled surface points per case, two seeds. MT2
@@ -120,15 +121,15 @@ for arch in ("gt", "mt2"):
                 bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
 gt, mt = data["gt"], data["mt2"]
 for i, n in enumerate(gt[0]):
-    r = mt[1][i] / gt[1][i]
+    r = gt[1][i] / mt[1][i]  # GeoTransolver error / MT2 error (>1: MT2 more accurate)
     ymid = (gt[1][i] * mt[1][i]) ** 0.5
     if n < 1000:
         ax.annotate("", (n, mt[1][i]), (n, gt[1][i]),
                     arrowprops=dict(arrowstyle="<->", color=INK2, lw=0.9, shrinkA=4, shrinkB=4))
-        ax.text(n * 1.08, ymid, f"MT2/GT = {r:.2f}", color=INK2, fontsize=9, va="center",
+        ax.text(n * 1.08, ymid, f"GT error = {r:.1f}x MT2", color=INK2, fontsize=9, va="center",
                 bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
     else:
-        ax.annotate(f"MT2/GT = {r:.2f} (parity)", (n, ymid), xytext=(10, 16),
+        ax.annotate(f"{r:.2f}x (parity)", (n, ymid), xytext=(14, 30),
                     textcoords="offset points", color=INK2, fontsize=9, ha="left", va="bottom")
 ax.set_xscale("log"); ax.set_yscale("log")
 ax.set_xticks([35, 210, 1260]); ax.set_xticklabels(["35\n(super_scarce)", "210\n(scarce)", "1,260\n(full)"])
