@@ -47,6 +47,118 @@ bias versus GeoTransolver's 3.6$\times$); and it costs about twice
 GeoTransolver's peak training memory (9.8 GB vs 4.6 GB) on the same
 protocol.
 
+## The result that matters: data efficiency on HiLiftAeroML {#sec-review-data-efficiency}
+
+Everything else in this chapter is a fair-comparison ledger; this is the
+one measurement where the two architectures separate by more than a
+seed spread on a production dataset. On HiLiftAeroML's curated
+data-efficiency splits — 35, 210 and 1,260 training cases, all scored on
+the *same* 180-case validation set — MeshTransformer2 (MT2) is 2.9x more
+accurate than GeoTransolver at 35 cases and 2.5x at 210, converging to
+parity at 1,260 (@fig-hilift-data-efficiency). The seed spreads are an
+order of magnitude smaller than the gaps. Put differently: MT2 trained on
+210 cases reaches the accuracy GeoTransolver needs 1,260 cases to reach.
+This is the axis the program's north-star correction named first, and the
+first architecture-driven generalization advantage the program has
+measured in 3D (@sec-nb-hl-ladder-dataeff).
+
+```{python}
+#| label: fig-hilift-data-efficiency
+#| fig-cap: >
+#|   Data efficiency on HiLiftAeroML. Pressure relative L2 error on the
+#|   shared 180-case validation set versus number of training cases, for
+#|   GeoTransolver (red circles) and MeshTransformer2 (blue squares); lines
+#|   join seed means, shaded bands span the two seeds, small dots are the
+#|   individual seeds. Assumptions held fixed for both architectures:
+#|   learning rate 1e-3 (each architecture's best on the full split, chosen
+#|   by validation before the ladder ran), 500 epochs, bfloat16, no
+#|   augmentation, 10,000 sampled surface points per case, two seeds. MT2
+#|   is the v3c constant-gauge configuration (these lanes predate the
+#|   similarity gauge). The test split is sealed and untouched.
+#|   Provisional until the preregistered GeoTransolver small-n steel-man
+#|   controls (lr 3e-3; 1,000 epochs) land; their falsifier is any control
+#|   within 1.2x of MT2 at 35 cases. Data:
+#|   results/hilift_ladder_reduction_2026-09-03.json.
+#| code-fold: true
+import json, statistics
+from pathlib import Path
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+# book palette (mirrors figures.py without importing it: that module
+# switches matplotlib to Agg, which suppresses inline output here)
+BLUE, RED = "#2a78d6", "#e34948"
+INK, INK2, MUTED, GRID, BASELINE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
+mpl.rcParams.update({"figure.dpi": 110, "font.size": 10, "axes.edgecolor": BASELINE,
+                     "axes.labelcolor": INK2, "axes.grid": True, "grid.color": GRID,
+                     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2,
+                     "ytick.labelcolor": INK2, "axes.spines.top": False,
+                     "axes.spines.right": False, "legend.frameon": False})
+
+lad = json.load(open(Path("..") / "results" / "hilift_ladder_reduction_2026-09-03.json"))
+rungs = [(35, "lad_hl_{a}_super_scarce_seed{s}"), (210, "lad_hl_{a}_scarce_seed{s}"), (1260, "{a}_hl_lr1_seed{s}")]
+data = {}
+for arch in ("gt", "mt2"):
+    xs, means, lo, hi, pts = [], [], [], [], []
+    for n, pat in rungs:
+        v = [lad[pat.format(a=arch, s=s)]["pressure_l2"] for s in (42, 43) if pat.format(a=arch, s=s) in lad]
+        xs.append(n); means.append(statistics.mean(v)); lo.append(min(v)); hi.append(max(v)); pts.append(v)
+    data[arch] = (xs, means, lo, hi, pts)
+
+fig, ax = plt.subplots(figsize=(7.2, 4.6))
+style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "MeshTransformer2", "s")}
+for arch in ("gt", "mt2"):
+    xs, means, lo, hi, pts = data[arch]
+    c, name, mk = style[arch]
+    ax.fill_between(xs, lo, hi, color=c, alpha=0.18, lw=0)
+    ax.plot(xs, means, color=c, lw=2.2, marker=mk, ms=7, label=name, zorder=3)
+    for x, v in zip(xs, pts):
+        ax.scatter([x] * len(v), v, color=c, s=14, alpha=0.9, zorder=4)
+    lab_i = 0 if arch == "gt" else 1
+    ax.annotate(name, (xs[lab_i], means[lab_i]), xytext=(14, 2 if arch == "gt" else -14),
+                textcoords="offset points", color=c, fontsize=10.5, fontweight="bold",
+                ha="left", va="center",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+gt, mt = data["gt"], data["mt2"]
+for i, n in enumerate(gt[0]):
+    r = mt[1][i] / gt[1][i]
+    ymid = (gt[1][i] * mt[1][i]) ** 0.5
+    if n < 1000:
+        ax.annotate("", (n, mt[1][i]), (n, gt[1][i]),
+                    arrowprops=dict(arrowstyle="<->", color=INK2, lw=0.9, shrinkA=4, shrinkB=4))
+        ax.text(n * 1.08, ymid, f"MT2/GT = {r:.2f}", color=INK2, fontsize=9, va="center",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+    else:
+        ax.annotate(f"MT2/GT = {r:.2f} (parity)", (n, ymid), xytext=(10, 16),
+                    textcoords="offset points", color=INK2, fontsize=9, ha="left", va="bottom")
+ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_xticks([35, 210, 1260]); ax.set_xticklabels(["35\n(super_scarce)", "210\n(scarce)", "1,260\n(full)"])
+ax.set_yticks([0.04, 0.06, 0.1, 0.2, 0.4]); ax.set_yticklabels(["0.04", "0.06", "0.10", "0.20", "0.40"])
+ax.set_xlim(22, 3200)
+ax.set_xlabel("Training cases [count]  (HiLiftAeroML curated splits)", color=INK2)
+ax.set_ylabel("Pressure error\nrel-L2 [–]", color=INK2, rotation=0, ha="right", va="center", labelpad=28)
+ax.set_title("Data efficiency on HiLiftAeroML: shared 180-case validation set",
+             color=INK, loc="left", fontsize=11, pad=14)
+ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
+ax.text(0.01, -0.30,
+        "Both architectures: lr 1e-3 (each one's best on the full split), 500 epochs, bf16, no augmentation, "
+        "10k points/case,\n2 seeds (band = min–max, dots = seeds). MT2 = v3c constant-gauge config (predates "
+        "the similarity gauge).\nTest split sealed. GeoTransolver small-n steel-man controls (lr 3e-3; 1,000 "
+        "epochs) are running; result provisional until they land.",
+        transform=ax.transAxes, fontsize=7.6, color=MUTED, va="top")
+fig.tight_layout()
+plt.show()
+```
+
+::: {.callout-note title="How to read this figure"}
+It says: *with the same budget of training cases, MT2 gets far more
+accuracy out of few cases, and the advantage vanishes once data is
+plentiful.* It does not say MT2 is more accurate in general (the full-split
+point is parity), it does not yet include the small-n steel-man controls
+for GeoTransolver, and it says nothing about out-of-distribution
+transfer — the aoa and stall axes of the same ladder are reported
+separately when their sealed test evaluation is run.
+:::
+
 ## The frozen instrument {#sec-review-instrument}
 
 Every comparison in this chapter runs on one instrument, frozen on
