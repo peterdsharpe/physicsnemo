@@ -4925,3 +4925,45 @@ Falsifier: any GeoTransolver control within 1.2x of MT2 at 35 cases →
 the data-efficiency gap is a protocol artefact and the Branch A
 decision is void. The OOD half of the ladder (aoa, stall) is still
 training; its verdict and the single sealed test evaluation follow.
+
+## 2026-09-04 — HiLift ladder training complete: in-distribution results on the OOD splits, and the sealed test protocol declared before it runs {#sec-nb-hl-ladder-ood-indist}
+
+**All 16 ladder lanes trained and evaluated on their own validation
+sets** (`results/hilift_ladder_reduction_2026-09-03.json`). The two
+OOD-axis splits train on their low-side populations (aoa: 788 cases
+at low angle of attack; stall: 942 pre-stall cases) and validate on
+in-distribution held-out cases from the same populations:
+
+| split (train n) | GeoTransolver s42 / s43 | MT2 s42 / s43 | MT2 / GT |
+|---|---|---|---|
+| aoa (788) | 0.0285 / 0.0317 | 0.0205 / 0.0209 | **0.69** |
+| stall (942) | 0.0289 / 0.0304 | 0.0204 / 0.0210 | **0.70** |
+
+These are *in-distribution* numbers and extend the data-efficiency
+curve (@sec-nb-hl-ladder-dataeff) with two more rungs: MT2/GT is
+0.35 at 35 cases, 0.41 at 210, ~0.70 at 788–942, 0.98 at 1,260. The
+absolute errors are lower than on the full split because the low-AoA
+and pre-stall populations are attached-flow cases.
+
+**Sealed test evaluation — protocol declared here, before any test
+case is read.** Per the ladder preregistration (`499bcfe8`), the
+HiLift test splits are evaluated exactly once. What runs: the eight
+OOD-lane checkpoints (aoa and stall × both architectures × seeds
+42/43), each on *its own split's curated test list* (`aoa_test`: 900
+high-AoA cases; `stall_test`: 723 post-stall cases) taken verbatim
+from the dataset's `manifest.json`, with the frozen inference
+configuration (resolution 10,000, val-identical sampling seed, the
+same `infer.py`). No data-efficiency lane touches test. Readouts, in
+the units of the MT3 decision rule
+(`results/mt3_preregistration_skeleton_2026-09-03.md`):
+d_axis = (OOD-test pressure rel-L2) / (in-distribution val pressure
+rel-L2) per architecture and seed. **Predictions** (from the ladder
+prereg): stall is the harder axis for both (d_stall > d_aoa);
+GeoTransolver's transfer compounding (G2) predicts d_GT < d_MT2 on at
+least one axis. **Decision rule** (Branch B trigger): d_GT ≤ 0.8 d_MT2
+on an axis, resolvable above seed spread → run the raw-coordinate
+mechanism discriminator before any MT3 design; otherwise Branch A
+(data-efficiency) stands. No reruns, no configuration changes after
+the numbers are seen; if a lane fails for an infrastructure reason,
+it is rerun with the identical configuration and the failure is
+recorded.
