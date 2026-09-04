@@ -105,7 +105,7 @@ for arch in ("gt", "mt2"):
         xs.append(n); means.append(statistics.mean(v)); lo.append(min(v)); hi.append(max(v)); pts.append(v)
     data[arch] = (xs, means, lo, hi, pts)
 
-fig, ax = plt.subplots(figsize=(7.2, 4.6))
+fig, ax = plt.subplots(figsize=(7.2, 5.2))
 style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "MeshTransformer2", "s")}
 for arch in ("gt", "mt2"):
     xs, means, lo, hi, pts = data[arch]
@@ -137,15 +137,16 @@ ax.set_yticks([0.04, 0.06, 0.1, 0.2, 0.4]); ax.set_yticklabels(["0.04", "0.06", 
 ax.set_xlim(22, 3200)
 ax.set_xlabel("Training cases [count]  (HiLiftAeroML curated splits)", color=INK2)
 ax.set_ylabel("Pressure error\nrel-L2 [–]", color=INK2, rotation=0, ha="right", va="center", labelpad=28)
-ax.set_title("Data efficiency on HiLiftAeroML: shared 180-case validation set",
-             color=INK, loc="left", fontsize=11, pad=14)
+ax.set_title("Data efficiency on HiLiftAeroML\n(shared 180-case validation set)",
+             color=INK, loc="left", fontsize=11, pad=10)
 ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
-ax.text(0.01, -0.30,
-        "Both architectures: lr 1e-3 (each one's best on the full split), 500 epochs, bf16, no augmentation, "
-        "10k points/case,\n2 seeds (band = min–max, dots = seeds). MT2 = v3c constant-gauge config (predates "
-        "the similarity gauge).\nTest split sealed. GeoTransolver small-n steel-man controls (lr 3e-3; 1,000 "
-        "epochs) are running; result provisional until they land.",
-        transform=ax.transAxes, fontsize=7.6, color=MUTED, va="top")
+ax.text(0.0, -0.30,
+        "Both architectures: lr 1e-3 (each one's best on the full split), 500 epochs, bf16,\n"
+        "no augmentation, 10k points/case, 2 seeds (band = min–max, dots = seeds).\n"
+        "MT2 = v3c constant-gauge config (predates the similarity gauge). Test split sealed.\n"
+        "GeoTransolver small-n steel-man controls (lr 3e-3; 1,000 epochs) are running;\n"
+        "result provisional until they land.",
+        transform=ax.transAxes, fontsize=7.6, color=MUTED, va="top", linespacing=1.35)
 fig.tight_layout()
 plt.show()
 ```
