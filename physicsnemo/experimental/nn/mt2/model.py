@@ -50,8 +50,10 @@ class _SliceBlock(nn.Module):
 
     N_GEO = 8  # v3b: dist, log dist, rel dots (d, n, m_s), n.m_s, |z_s|, zhat_s.d
 
-    def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4) -> None:
+    def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4,
+                 use_relational_geo: bool = True) -> None:
         super().__init__()
+        self.use_relational_geo = use_relational_geo
         self.norm_assign = nn.LayerNorm(hidden)
         self.assign = nn.Linear(hidden, n_slices)
         ### Relational geometry (v2): per-slice equivariant anchors and
@@ -110,14 +112,20 @@ class _SliceBlock(nn.Module):
             ],
             dim=-1,
         )  # (B, N, S, 8) invariants
-        ### Geometry refines the routing and the readback.
-        logits = logits + self.geo_logit(geo).squeeze(-1)
+        ### Geometry refines the routing and the readback. A35b ablation:
+        ### use_relational_geo=False removes the anchor-relational invariants
+        ### from routing and readback (Transolver-style feature-only slicing).
+        if self.use_relational_geo:
+            logits = logits + self.geo_logit(geo).squeeze(-1)
         a = torch.softmax(logits + log_w, dim=1)
         z = torch.einsum("bns,bnh->bsh", a, h)  # slice states
         z = z + self.slice_mlp(z)
         point_mix = torch.softmax(logits, dim=-1)  # normalized over slices
         back = torch.einsum("bns,bsh->bnh", point_mix, z)
-        geo_pool = torch.einsum("bns,bnsg->bng", point_mix, self.geo_feat(geo))
+        if self.use_relational_geo:
+            geo_pool = torch.einsum("bns,bnsg->bng", point_mix, self.geo_feat(geo))
+        else:
+            geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_feat.out_features)
         h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
         return h + self.mlp(self.norm_mlp(h))
 
@@ -227,6 +235,8 @@ class MeshTransformer2(Module):
         anchor_normal_rho: float = 0.25,
         latent_volume_tokens: bool = False,
         lvt_offsets: tuple = (0.5, 1.0, 2.0),
+        seed_mode: str = "invariant",
+        use_relational_geo: bool = True,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -275,7 +285,14 @@ class MeshTransformer2(Module):
         ### (not a fraction) so the anchor set cannot depend on the query set,
         ### which is the query-independence contract. 0 disables (v5a3).
         self.n_anchors = int(n_anchors)
-        n_seed = (5 + (7 * len(self.local_radii) if use_local_features else 0)
+        ### A35b ablations: seed_mode="raw" replaces the five {r,n,d} invariant
+        ### seeds with the raw vectors [r, n, d] (GeoTransolver-style inputs);
+        ### use_relational_geo=False removes anchor geometry from the slices.
+        if seed_mode not in ("invariant", "raw"):
+            raise ValueError(f"unknown seed_mode {seed_mode!r}")
+        self.seed_mode = seed_mode
+        n_base = 5 if seed_mode == "invariant" else 9
+        n_seed = (n_base + (7 * len(self.local_radii) if use_local_features else 0)
                   + self.n_boundary_scalars + (1 if scale_conditioning else 0)
                   + (6 if raw_coord_channel else 0))
         ### Seed invariants of {r, n, d}; separation comes from the slice
@@ -284,7 +301,8 @@ class MeshTransformer2(Module):
             nn.Linear(n_seed, hidden), nn.GELU(), nn.Linear(hidden, hidden)
         )
         self.blocks = nn.ModuleList(
-            _SliceBlock(hidden, n_slices, mlp_ratio) for _ in range(n_layers)
+            _SliceBlock(hidden, n_slices, mlp_ratio, use_relational_geo=use_relational_geo)
+            for _ in range(n_layers)
         )
         ### v5a EXPERIMENT (flag-gated, default off): encode/decode split.
         ### Queries decode passively from final encoder slices and anchors:
@@ -501,16 +519,19 @@ class MeshTransformer2(Module):
             measure_weights = measure_weights.reshape(b, n)
             log_w = torch.log(measure_weights.clamp_min(self.eps))[..., None]
 
-        invariants = torch.cat(
-            [
-                r_mag,
-                torch.log(r_mag),
-                (r_hat * d_hat).sum(-1, keepdim=True),
-                (r_hat * n_hat).sum(-1, keepdim=True),
-                (n_hat * d_hat).sum(-1, keepdim=True),
-            ],
-            dim=-1,
-        )
+        if self.seed_mode == "raw":
+            invariants = torch.cat([r, n_hat, d_hat], dim=-1)
+        else:
+            invariants = torch.cat(
+                [
+                    r_mag,
+                    torch.log(r_mag),
+                    (r_hat * d_hat).sum(-1, keepdim=True),
+                    (r_hat * n_hat).sum(-1, keepdim=True),
+                    (n_hat * d_hat).sum(-1, keepdim=True),
+                ],
+                dim=-1,
+            )
         if self.use_local_features:
             invariants = torch.cat(
                 [invariants, self._local_invariants(r, n_hat, d_hat, log_w)],

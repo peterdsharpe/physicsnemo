@@ -543,3 +543,34 @@ def test_latent_volume_tokens_contracts():
     assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ q.T, atol=1e-10)
     assert torch.allclose(sub, base[:, :40], atol=1e-12, rtol=0.0)
     assert not torch.allclose(base, plain, atol=1e-6)
+
+
+def test_a35b_ablation_flags_run_and_differ():
+    """A35b: raw seeds break equivariance by design; no-relational-geo stays
+    exactly equivariant; both run, are finite, and change the output."""
+    torch.manual_seed(0)
+    n = 300
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    torch.manual_seed(1)
+    ref = MeshTransformer2(hidden=64, n_layers=2, n_slices=16).double().eval()
+    torch.manual_seed(1)
+    nogeo = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, use_relational_geo=False).double().eval()
+    raw = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, seed_mode="raw").double().eval()
+    with torch.no_grad():
+        o_ref = ref(pts, nrm, drv, w)
+        o_ng = nogeo(pts, nrm, drv, w)
+        o_ng_rot = nogeo(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+        o_raw = raw(pts, nrm, drv, w)
+        o_raw_rot = raw(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+    assert torch.isfinite(o_ng).all() and torch.isfinite(o_raw).all()
+    assert not torch.allclose(o_ng, o_ref, atol=1e-6)
+    p0, v0 = _split(o_ng); p1, v1 = _split(o_ng_rot)
+    assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ q.T, atol=1e-10)
+    pr0, _ = _split(o_raw); pr1, _ = _split(o_raw_rot)
+    assert not torch.allclose(pr1, pr0, atol=1e-3)

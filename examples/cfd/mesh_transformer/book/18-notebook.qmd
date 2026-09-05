@@ -5283,3 +5283,41 @@ covariance recipe.
 **Promotion:** all four arms to 2 seeds × 500 epochs at the frozen
 protocol (val_interval 10), then the full eval battery including the
 SDF-band stratification and the exact query-independence check.
+
+## 2026-09-05 — A35 verdict: exact equivariance is NOT what buys the data-efficiency (raw coordinates cost nothing); measure weights *hurt* at 35 cases; the invariant seed parameterization and the relational routing are the surviving candidates (A35b preregistered) {#sec-nb-a35-verdict}
+
+**Result** (MT2 at 35 HiLift cases, shared val pressure rel-L2, 2 seeds;
+reference MT2 ladder 0.135 / 0.141, mean 0.138):
+
+| ablation | pressure (s42 / s43) | vs reference |
+|---|---|---|
+| + raw coordinates (breaks SE(3) equivariance) | 0.1430 / 0.1430 | **1.04x** |
+| measure weights OFF | **0.1210 / 0.1231** | **0.88x** |
+| similarity gauge ON | 0.1510 / 0.1471 | 1.08x |
+
+**The equivariance reading is falsified.** Adding raw coordinates,
+which makes MT2 non-equivariant, changes the 35-case error by 4% — far
+inside the 1.15x falsifier band — so exact SE(3) equivariance is not
+the ingredient that buys the 2.8x small-data advantage. Two further
+surprises: turning **measure weights off improves accuracy by 12%** at
+35 cases (uniform 10k sampling makes the area weights a source of
+gradient variance rather than information; the density robustness
+they buy (S1) is a different axis), and the gauge is 8% *worse* at this
+rung (neutral in-family at full data, S1). Note the raw-coordinate arm
+still *has* the invariant seeds — it adds coordinates on top — so the
+invariant feature parameterization {|r|, r̂·d, r̂·n, n·d} remains a
+live candidate even though exactness does not matter.
+
+**A35b preregistered here** — the two remaining candidates, one flag
+each, 2 seeds, 35 cases, lr 1e-3 (implemented and contract-tested:
+27/27): (i) `seed_mode=raw` — the five invariant seeds *replaced* by
+the raw vectors [r, n, d] (GeoTransolver-style inputs; breaks
+equivariance); (ii) `use_relational_geo=false` — the anchor-relational
+invariants removed from slice routing and readback (Transolver-style
+feature-only slicing; stays exactly equivariant). **Predictions:** if
+the invariant seed set is the carrier, (i) degrades ≥ 1.5x (≥ 0.21)
+and (ii) stays within 1.15x; if the relational routing is the carrier,
+the reverse; if neither moves ≥ 1.3x, the advantage is distributed and
+the honest statement becomes "MT2's soft-slice design as a whole,
+not any single contract". Falsifier for the whole line: both within
+1.15x. The ablations launch now under the existing A35 script pattern.
