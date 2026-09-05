@@ -5128,3 +5128,51 @@ that statement:
   V0 arm with predictions in readout units.
 - **Deferred:** AB-UPT implementation (gated on T1), G5 (gated on the
   cfd-datagen corpus), MT3 design (gated on B1 + controls + V0).
+
+## 2026-09-05 — T1 verdict (35 cases): plain Transolver lands in GeoTransolver's band (0.40–0.63), not MT2's 0.14; the data-efficiency gap is MT2-specific {#sec-nb-t1-verdict}
+
+**Result** (same shared 180-case val set as the ladder; 2 seeds each):
+
+| model @ 35 training cases | lr | pressure rel-L2 |
+|---|---|---|
+| Transolver | 1e-3 | 0.634 / 0.616 |
+| Transolver | 3e-3 | **0.406 / 0.398** |
+| GeoTransolver (ladder, lr 1e-3; control lr 3e-3) | | 0.375 / 0.409; 0.392 / 0.481 |
+| **MeshTransformer2** (ladder, lr 1e-3) | | **0.135 / 0.141** |
+
+**Prediction held; falsifier (Transolver ≤ 0.18) not approached.** The
+same-family, no-geometry-encoder Transolver collapses at 35 cases
+exactly as GeoTransolver does (its best, 0.40 at lr 3e-3, sits inside
+GeoTransolver's 0.30–0.50 band), so the small-data liability is not
+GeoTransolver's geometry encoder and the 2.8x advantage is not an
+artefact of one baseline. Two Transolver-family architectures at their
+better learning rate are 2.8–2.9x behind MT2 at 35 cases. Transolver
+also shows the same lr sensitivity as GeoTransolver (1.55x between
+1e-3 and 3e-3), consistent with R1. The 210-case Transolver lanes are
+still training and will be read the same way (bar: ≤ 0.084).
+
+**What this does and does not establish.** It establishes that the
+data-efficiency advantage belongs to something MeshTransformer2 has
+that neither Transolver-family model has: the candidates are the exact
+SE(3) equivariance, the measure-weighted soft-slice routing, and the
+invariant local geometry basis. It does not yet say *which*; the
+natural next discriminator is a single-factor ablation of MT2 at 35
+cases (equivariance broken via the raw-coordinate channel already
+built for B1; measure weights off; local basis off), one flag at a
+time, 2 seeds each — cheap at this rung (~4 epochs/minute) and
+preregistered below as A35. A faithful AB-UPT implementation remains
+gated: with two Transolver-family models already in the same band,
+the marginal information from a third is low relative to its 31–44
+engineer-hour cost.
+
+**A35 preregistered here.** MT2 at 35 cases, lr 1e-3, 2 seeds per arm:
+(i) `raw_coord_channel=true` (breaks SE(3)); (ii) `use_measure_weights=false`;
+(iii) `use_local_features=false` if the default config has them on,
+else this arm is the gauge on/off pair (`similarity_gauge` true vs
+the v3c constant gauge). Readout: shared-val pressure rel-L2 vs the
+ladder's 0.138. **Prediction:** breaking equivariance costs the most
+(≥ 1.5x, i.e. ≥ 0.21), measure weights matter less at uniform
+sampling (≤ 1.15x), the gauge is neutral in-family (S1). **Falsifier
+for the equivariance reading:** the raw-coordinate arm within 1.15x of
+0.138 → equivariance is not what buys small-data accuracy and the
+routing/basis becomes the candidate.
