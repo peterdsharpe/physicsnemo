@@ -5069,3 +5069,32 @@ checkpoint. It does change the wall-clock: per-epoch full-validation
 passes were the dominant cost under slow I/O. Recorded so the
 B1/control train logs' sparser validation lines are not mistaken for a
 protocol difference against the ladder lanes.
+
+## 2026-09-05 — Same-family control preregistered: plain Transolver on the HiLift data-efficiency rungs (is the 2.8x MT2's contracts, or GeoTransolver's geometry encoder?) {#sec-nb-transolver-control-prereg}
+
+**Why.** The AB-UPT baseline scoping
+(`results/abupt_baseline_scoping_2026-09-05.md`) found no AB-UPT in
+PhysicsNeMo (a faithful surface variant is 31–44 engineer-hours and
+needs a design note from the primary paper first), but a plain
+**Transolver** is already recipe-ready (`conf/model/transolver_surface.yaml`)
+and has never been run on HiLiftAeroML. It is the same attention
+family as GeoTransolver with no geometry encoder, no ball-query
+context path, and no MT2 contracts — exactly the control that
+separates two readings of the data-efficiency result
+(@sec-nb-hl-ladder-dataeff): *MT2's geometric contracts buy small-data
+accuracy* versus *GeoTransolver's geometry encoder loses it*.
+
+**Arm T1 (launched now).** Transolver on `super_scarce` (35) and
+`scarce` (210), 2 seeds each, lr 1e-3 (GeoTransolver's best on the
+full split; Transolver has no prior tuning on this dataset, so a 3e-3
+sibling is added at 35 cases only, 2 seeds, to cover the lr axis
+cheaply), 500 epochs, val_interval 25, otherwise the frozen ladder
+protocol; scored on the shared 180-case val set. **Predictions in
+readout units:** Transolver at 35 cases lands in GeoTransolver's band,
+0.30–0.50 (the gap is contract-specific); **falsifier:** Transolver
+≤ 1.3 × MT2 = **≤ 0.18 at 35 cases** → the advantage is not
+MT2-specific, GeoTransolver's geometry encoder is the small-data
+liability, and the headline must be restated before publication. A
+secondary readout at 210 cases (MT2 0.064, GT 0.159) discriminates the
+same way with the 1.3x bar at 0.084. The sealed test split is not
+touched by this arm.
