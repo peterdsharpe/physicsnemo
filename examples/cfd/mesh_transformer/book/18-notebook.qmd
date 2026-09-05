@@ -5321,3 +5321,15 @@ the reverse; if neither moves ≥ 1.3x, the advantage is distributed and
 the honest statement becomes "MT2's soft-slice design as a whole,
 not any single contract". Falsifier for the whole line: both within
 1.15x. The ablations launch now under the existing A35 script pattern.
+
+**2026-09-05 addendum (A35b launch incident).** The `use_relational_geo=false`
+lanes died at step 1 under DDP with "parameters that were not used in
+producing loss": the slice blocks built their relational-geometry
+projections unconditionally and skipped them in forward. Fixed in the
+job-local copy for the relaunch and ported to the repo with a
+regression test that checks every parameter receives a gradient for
+each flag variant (32/32) — the single-process contract suite could not
+have caught this. Both A35b variants are now training and accepted; an
+early, non-readout observation is that the no-relational-geometry
+variant runs at 2.0 GB versus 9.8 GB for every other MT2 arm and trails
+in validation loss at epoch 50.

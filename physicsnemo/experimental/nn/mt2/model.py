@@ -59,8 +59,12 @@ class _SliceBlock(nn.Module):
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
         ### points instead of any global frame (smooth by construction).
-        self.geo_logit = nn.Linear(self.N_GEO, 1)
-        self.geo_feat = nn.Linear(self.N_GEO, hidden // 2)
+        ### Built only when used: parameters that never receive gradients
+        ### crash DDP (A35b nogeo, 2026-09-05).
+        self.geo_width = hidden // 2
+        if use_relational_geo:
+            self.geo_logit = nn.Linear(self.N_GEO, 1)
+            self.geo_feat = nn.Linear(self.N_GEO, self.geo_width)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),
             nn.Linear(hidden, mlp_ratio * hidden),
@@ -125,7 +129,7 @@ class _SliceBlock(nn.Module):
         if self.use_relational_geo:
             geo_pool = torch.einsum("bns,bnsg->bng", point_mix, self.geo_feat(geo))
         else:
-            geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_feat.out_features)
+            geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_width)
         h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
         return h + self.mlp(self.norm_mlp(h))
 

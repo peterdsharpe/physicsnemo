@@ -574,3 +574,19 @@ def test_a35b_ablation_flags_run_and_differ():
     assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ q.T, atol=1e-10)
     pr0, _ = _split(o_raw); pr1, _ = _split(o_raw_rot)
     assert not torch.allclose(pr1, pr0, atol=1e-3)
+
+
+@pytest.mark.parametrize("kw", [{}, {"use_relational_geo": False}, {"seed_mode": "raw"},
+                                {"odd_head": True}, {"similarity_gauge": True}])
+def test_all_parameters_receive_gradients(kw):
+    """DDP requires every parameter to take part in the loss; a module built
+    but skipped in forward crashes distributed training (A35b nogeo incident)."""
+    torch.manual_seed(0)
+    m = MeshTransformer2(hidden=32, n_layers=2, n_slices=8, **kw)
+    pts = torch.randn(1, 128, 3)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 128, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, 128) + 0.5
+    m(pts, nrm, drv, w).sum().backward()
+    unused = [n for n, p in m.named_parameters() if p.grad is None]
+    assert not unused, unused
