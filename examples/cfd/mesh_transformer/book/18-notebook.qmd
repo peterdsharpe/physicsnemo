@@ -5055,3 +5055,17 @@ not job-side. At the current pace B1 needs ~2 more days rather than
 ~10 hours. No configuration is changed; the lanes run until the
 cluster recovers. Lesson recorded: the recipe's log timestamps are
 cluster-local (UTC−7); compare them to `date`, not `date -u`.
+
+**2026-09-05 protocol note (validation cadence).** To get the B1
+discriminator and the remaining GeoTransolver controls through AGA's
+I/O degradation, the recipe gained an optional `training.val_interval`
+(default 1; commit `710999a0`) and the eight running lanes were
+resumed from their checkpoints with `val_interval=25`. This changes
+*nothing* about training: validation feeds only the log line and
+metric table, while checkpointing and the scheduler are independent of
+it (verified in `train.py` before the change), and every headline
+number comes from the separate `infer.py` evaluation of the final
+checkpoint. It does change the wall-clock: per-epoch full-validation
+passes were the dominant cost under slow I/O. Recorded so the
+B1/control train logs' sparser validation lines are not mistaken for a
+protocol difference against the ladder lanes.
