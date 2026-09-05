@@ -66,3 +66,50 @@ and a measured map of which structure buys which property at what cost.
 - The book's hero framing is rewritten from the ladder verdict, not before.
 - The HiLift test split is evaluated exactly once, after all ladder decisions,
   and the evaluation configuration is committed before it runs.
+
+## Addendum 2026-09-05 — Branch V (boundary→interior), written before the full V0 readout
+
+The V0 pilot (notebook `#sec-nb-v0-pilot`) puts MT2's passive interior decode
+2.9–4.0x behind GeoTransolver's token-level query interaction at 50 epochs,
+and the exact-kernel decoder 6.2x behind. If the 500-epoch runs hold within
+those bands, the useful-architecture question for the restated goal is:
+
+> How can interior queries receive interaction (the thing GeoTransolver's
+> queries-as-tokens gives) while remaining exactly query-independent (the
+> thing a deployable surrogate needs: predictions at one point cannot depend
+> on which other points were asked)?
+
+**Candidate mechanism — equivariant latent volume tokens (LVT).** Add a fixed
+set of K latent tokens whose *positions* are constructed equivariantly from
+the boundary alone (so they are query-independent by construction): for each
+slice anchor (position z_s, mean normal m_s, RMS radius rho_s of its assigned
+boundary points) place tokens at z_s + c_j rho_s m_s for a few fixed offsets
+c_j ∈ {0.5, 1, 2} (in gauge units, along the anchor normal into the fluid),
+plus one token at the domain centroid. These tokens join the encoder as
+ordinary interacting tokens (they read and write, like boundary tokens), so
+the slice states after the encoder carry *off-surface* context. Interior
+queries then decode passively from slices + boundary tokens + LVT states
+(the existing `_ReadBlock` path with the LVT set appended to the source),
+still never writing. Contracts preserved exactly: SE(3) covariance (token
+positions are covariant constructions), measure completeness (LVT carry
+zero measure weight in boundary sums; a separate learned weight for the
+latent set), query independence (LVT depend only on the source).
+
+**Decision rule for launching Branch V** (after full V0 lands):
+- If full V0 gives MT2-interior/GT ≥ 2.0 (interaction gap confirmed) → launch
+  LVT with K = 3 × n_slices + 1, 2 seeds, same protocol, pilot-gated.
+  Prediction in readout units: MT2-interior-LVT / GT ≤ 1.5 on interior
+  pressure (halving the gap) with exact query independence retained
+  (allclose 1e-12 at shared queries). Falsifier: ratio ≥ 2.0 → interaction
+  *at the query itself* is required; the honest product is then
+  "GeoTransolver for interior accuracy, MT2 for contracts", and the next
+  candidate is a hybrid decode (a small query-side self-attention over a
+  fixed lattice of probe points that is re-computed per request but never
+  depends on the request's other queries — i.e. interaction with a canonical
+  probe set, not with the batch).
+- If full V0 gives MT2-interior/GT ≤ 1.5 (the pilot gap closed with training)
+  → Branch V is unnecessary; report the 500-epoch parity and proceed to the
+  interior G-ledger axes (query-resolution transfer, SDF-band error,
+  surface-trace consistency).
+- The kernel-decoder arm's fate is decided by the far-band readout
+  (SDF ≥ 0.5 L_ref) as preregistered in `#sec-nb-v0-prereg`.
