@@ -225,6 +225,8 @@ class MeshTransformer2(Module):
         raw_coord_channel: bool = False,
         interior_queries: bool = False,
         anchor_normal_rho: float = 0.25,
+        latent_volume_tokens: bool = False,
+        lvt_offsets: tuple = (0.5, 1.0, 2.0),
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -340,6 +342,22 @@ class MeshTransformer2(Module):
         ### parameters; explicit query_normals (e.g. SDF normals) override it.
         self.interior_queries = interior_queries
         self.anchor_normal_rho = float(anchor_normal_rho)
+        ### Branch V (MT3 skeleton addendum 2026-09-05): equivariant LATENT
+        ### VOLUME TOKENS. K = n_slices*len(offsets)+1 interacting tokens whose
+        ### positions are built covariantly from the boundary alone (slice
+        ### anchor + c_j * rho_s along the anchor normal, plus the centroid),
+        ### so interior queries can read off-surface context while staying
+        ### exactly query-independent. Only meaningful with query_independent.
+        self.latent_volume_tokens = bool(latent_volume_tokens)
+        self.lvt_offsets = tuple(float(c) for c in lvt_offsets)
+        if self.latent_volume_tokens:
+            if not query_independent:
+                raise ValueError("latent_volume_tokens requires query_independent=True")
+            self.lvt_assign = nn.Linear(hidden, n_slices)
+            self.lvt_logw = nn.Parameter(torch.zeros(1))
+            self.lvt_embed = nn.Sequential(
+                nn.Linear(7, hidden), nn.GELU(), nn.Linear(hidden, hidden)
+            )
         if odd_head:
             self.N_ODD = 7
             self.odd_assign = nn.Linear(hidden, n_slices)
@@ -511,6 +529,49 @@ class MeshTransformer2(Module):
             )
         h = self.embed(invariants)
 
+        if self.latent_volume_tokens and self.query_independent:
+            ### pre-encoder geometric slice assignment -> anchors z0, m0, rho0
+            a0 = torch.softmax(self.lvt_assign(h) + log_w, dim=1)  # (B,N,S)
+            z0 = torch.einsum("bns,bnc->bsc", a0, r)
+            m0 = torch.einsum("bns,bnc->bsc", a0, n_hat)
+            m0 = m0 / m0.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            d2 = (r[:, :, None, :] - z0[:, None, :, :]).square().sum(-1)  # (B,N,S)
+            rho0 = torch.einsum("bns,bns->bs", a0, d2).clamp_min(self.eps).sqrt()  # (B,S)
+            S = z0.shape[1]
+            pos, mtok, ctok, rtok = [], [], [], []
+            for c in self.lvt_offsets:
+                pos.append(z0 + c * rho0[..., None] * m0)
+                mtok.append(m0)
+                ctok.append(torch.full_like(rho0, c))
+                rtok.append(rho0)
+            pos.append(torch.zeros_like(z0[:, :1]))            # centroid token
+            mtok.append(d_hat[:, :1])                          # covariant placeholder normal
+            ctok.append(torch.zeros_like(rho0[:, :1]))
+            rtok.append(rho0.mean(dim=1, keepdim=True))
+            p_l = torch.cat(pos, dim=1)                        # (B,K,3)
+            m_l = torch.cat(mtok, dim=1)
+            c_l = torch.cat(ctok, dim=1)[..., None]
+            rho_l = torch.cat(rtok, dim=1)[..., None]
+            K = p_l.shape[1]
+            d_l = d_hat[:, :1].expand(b, K, 3)
+            p_mag = p_l.norm(dim=-1, keepdim=True).clamp_min(self.eps)
+            p_hat = p_l / p_mag
+            inv_l = torch.cat(
+                [
+                    p_mag, torch.log(p_mag),
+                    (p_hat * d_l).sum(-1, keepdim=True),
+                    (p_hat * m_l).sum(-1, keepdim=True),
+                    (m_l * d_l).sum(-1, keepdim=True),
+                    c_l, rho_l,
+                ],
+                dim=-1,
+            )
+            h = torch.cat([h, self.lvt_embed(inv_l)], dim=1)
+            r = torch.cat([r, p_l], dim=1)
+            n_hat = torch.cat([n_hat, m_l], dim=1)
+            d_hat = torch.cat([d_hat, d_l], dim=1)
+            log_w = torch.cat([log_w, self.lvt_logw.to(log_w.dtype).expand(b, K, 1)], dim=1)
+            n = n + K
 
         if not (self.query_independent and 0 < self.n_anchors < n):
             for block in self.blocks:

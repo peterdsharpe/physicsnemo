@@ -511,3 +511,35 @@ def test_interior_queries_contracts():
     assert torch.allclose(p1, p0, atol=1e-10)
     assert torch.allclose(v1, v0 @ q.T, atol=1e-10)
     assert torch.allclose(sub, base[:, :50], atol=1e-12, rtol=0.0)
+
+
+def test_latent_volume_tokens_contracts():
+    """Branch V: latent volume tokens keep exact SE(3) covariance and query
+    independence for interior queries, and are live (change the output)."""
+    torch.manual_seed(0)
+    n, nq = 400, 120
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    qpts = torch.randn(1, nq, 3, dtype=torch.float64) * 4.0
+    kw = dict(hidden=64, n_layers=2, n_slices=8, query_independent=True, n_decoder_layers=2,
+              interior_queries=True, similarity_gauge=True, out_scalars=1, out_vectors=1)
+    torch.manual_seed(1)
+    m = MeshTransformer2(latent_volume_tokens=True, **kw).double().eval()
+    torch.manual_seed(1)
+    m0 = MeshTransformer2(latent_volume_tokens=False, **kw).double().eval()
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w, query_points=qpts)
+        rot = m(pts @ q.T + shift, nrm @ q.T, drv @ q.T, w, query_points=qpts @ q.T + shift)
+        sub = m(pts, nrm, drv, w, query_points=qpts[:, :40])
+        plain = m0(pts, nrm, drv, w, query_points=qpts)
+    assert torch.isfinite(base).all()
+    p0, v0 = _split(base); p1, v1 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(v1, v0 @ q.T, atol=1e-10)
+    assert torch.allclose(sub, base[:, :40], atol=1e-12, rtol=0.0)
+    assert not torch.allclose(base, plain, atol=1e-6)
