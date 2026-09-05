@@ -11,7 +11,7 @@ first-principles: every architectural decision is stated as a hypothesis, and
 the chapters record which hypotheses were supported or refuted.
 
 ::: {.callout-important title="Start with the program review"}
-**The one result to see first:** on HiLiftAeroML's data-efficiency splits, MeshTransformer2 is 2.9x more accurate than GeoTransolver at 35 training cases and 2.5x at 210, converging to parity at 1,260 (@fig-hilift-data-efficiency; provisional until the preregistered GeoTransolver small-n controls land).
+**The one result to see first:** on HiLiftAeroML's data-efficiency splits, MeshTransformer2 is 2.9x more accurate than GeoTransolver at 35 training cases and 2.5x at 210, converging to parity at 1,260 (@fig-hilift-data-efficiency; provisional until the remaining preregistered GeoTransolver small-n controls land), while on the same ladder's regime-extrapolation axes both architectures degrade about 10x across a sealed angle-of-attack or stall boundary, with MT2 keeping the lower absolute error (@fig-hilift-ood).
 
 The authoritative, current synthesis of this program is
 @sec-program-review-2026-08 — one chapter holding the frozen-instrument
@@ -497,7 +497,7 @@ the baseline generalizes and the structured model does not.
 
 ```{mermaid}
 %%| fig-cap: >
-%%|   The generalization-campaign tech tree as of 2026-09-03. Green: done,
+%%|   The generalization-campaign tech tree as of 2026-09-04. Green: done,
 %%|   with the verdict in the node. Amber: running. Gray dashed: planned,
 %%|   gated on an upstream readout. Red: a verdict that was later
 %%|   retracted, voided, or overturned; the node that did so is its
@@ -528,8 +528,11 @@ flowchart TB
     K0["K0: potential-flow oracle gate<br/>DONE - GATE FAILED (rel-L2 4.8 vs 0.77);<br/>K1 / K2 STOPPED"]:::done
     P1C["P1' / P1'': GT canonicalization control<br/>DONE - canonically trained GT exactly<br/>pose-invariant at 1.01x; 1.6x headline retired"]:::done
     S1["S1: similarity gauge (weighted centroid<br/>+ RMS radius)<br/>DONE - free in-family; P3 13-14.5x -> 1.20x;<br/>zero-shot unchanged; gauge ADOPTED"]:::done
-    HLGEN["HLGEN: HiLift generalization ladder<br/>RUNNING - launched at lr 1e-3 both arms<br/>after HL parity"]:::running
-    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on HLGEN readout"]:::planned
+    HLGEN["HLGEN: HiLift generalization ladder<br/>DONE - MT2 2.9x / 2.5x more accurate at<br/>35 / 210 cases, parity at 1,260; both arms<br/>degrade ~10x across a regime boundary"]:::done
+    CTRL["CTRL: GeoTransolver small-n steel-man<br/>controls (lr 3e-3; 1,000 epochs; 35 and 210)<br/>RUNNING - first of four REFUTED the<br/>lr hypothesis (0.392/0.481 vs 0.375/0.409)"]:::running
+    STEST["STEST: sealed OOD test (aoa, stall)<br/>DONE - both ~10x worse OOD; MT2 lower<br/>absolute error; GeoTransolver smaller ratio d;<br/>Branch B triggered on stall (0.74)"]:::done
+    B1["B1: raw-coordinate discriminator<br/>(MT2 + raw_coord_channel, stall split)<br/>RUNNING - gated by Branch B"]:::running
+    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on B1 + CTRL"]:::planned
     G5["G5: single-factor generalization on the<br/>cfd-datagen corpus (pose/scale/Re/mesh twins,<br/>held-out banks and BC profiles)<br/>PLANNED - gated on corpus launch"]:::planned
 
     NSTAR --> G1G2
@@ -558,7 +561,11 @@ flowchart TB
     CRIT --> S1
     M4 --> S1
     HL --> HLGEN
-    HLGEN --> MT3
+    HLGEN --> CTRL
+    HLGEN --> STEST
+    STEST --> B1
+    B1 --> MT3
+    CTRL --> MT3
     G3K --> G5
     S1 --> G5
     G5 --> MT3
@@ -578,8 +585,17 @@ effect. With MT2 genuinely similarity-covariant, its zero-shot transfer
 did not move, so absolute size is ruled out as the G2 carrier
 (@sec-nb-s1-verdict). What remains as the candidate explanation of the
 G2 transfer gap is GeoTransolver's **pointwise raw coordinate features**
-and its **non-equivariant global encoder**. The discriminating experiment
-in flight is the HiLift generalization ladder (HLGEN). The exact-kernel
+and its **non-equivariant global encoder**. The HiLift generalization
+ladder (HLGEN) has now read out on both halves: MT2 is 2.9x and 2.5x more
+accurate than GeoTransolver at 35 and 210 training cases
+(@sec-nb-hl-ladder-dataeff), and on the sealed regime-extrapolation test
+both architectures degrade about 10x, MT2 with the lower absolute error
+and GeoTransolver with the smaller ratio (STEST,
+@sec-nb-hl-sealed-test). That ratio fired the preregistered Branch B
+trigger on the stall axis, so the discriminating experiment now in flight
+is B1, MT2 with a raw-coordinate channel that breaks its equivariance on
+purpose; the GeoTransolver small-n steel-man controls (CTRL) run alongside
+it, and MT3 waits on both. The exact-kernel
 line that G3K revived generalizes across boundary-condition frequency
 content on 2D Laplace, but the K0 gate showed that inviscid potential
 flow is not a usable prior for separated bluff-body aerodynamics, so it
@@ -606,11 +622,14 @@ does not launch on DrivAerML.
 | K0 | DONE — gate failed; K1/K2 STOPPED | Is inviscid potential flow a usable prior for DrivAerML pressure, so that "exact kernel = Laplace, viscous = learned correction" could carry the G3K mechanism into 3D? Zero-parameter oracle: Morino second-kind solve on a closed remesh, Bernoulli Cp, at the recipe's exact evaluation points. | G3K | Preregistered gate: oracle rel-L2 < 0.90. Verdict: measure-weighted rel-L2 **4.79** (median 1.97, every case > 1.6) against 0.774 for predicting the case mean; no numerical control rescues it (oracle-optimal affine rescale 0.73; remesh sweep flat; sphere validation exact). The physics is separation. K1 (symmetric feature arm) and K2 (mechanism arm) do not launch; K-alt (learned density through the exact 3D double layer on the boundary→interior problem) deferred. | @sec-nb-kernel3d-scoping; @sec-nb-k0-verdict |
 | P1C | DONE — 1.6× headline retired | Does GeoTransolver recover pose invariance for free by canonicalizing its input frame (U_inf → +x, principal-axis roll), rather than by the augmentation the 1.6× headline compared against? P1' eval-only on frozen checkpoints; P1'' trains in the canonical frame. | CRIT | P1' falsifier for the headline: canonicalized GT P1 ratio ≈ 1.00 at in-pose 1.00×. P1': exactly pose-invariant but 1.6–1.7× in-pose (sub-degree tilt hypersensitivity: 1° roll costs 1.7–1.8×; 1.15–1.19× with a 1M-cell frame estimate). P1'' prediction ≤ 1.05×: **held at 1.01×** — canonically trained GT is exactly pose-invariant at 1% cost. MT2's equivariance is a contract (no freestream or resolvable frame needed), not an accuracy edge on vehicle data. | @sec-nb-p1-canon-verdict; @sec-nb-p1pp-verdict |
 | S1 | DONE — gauge adopted | Does a real similarity gauge (measure-weighted centroid + measure-weighted RMS-radius reference length, geometric-scale contract test added) change in-family accuracy, the P3 density floor, or zero-shot transfer? v3c + `similarity_gauge`, 2 seeds, seed-matched against v3c. | CRIT, M4 | Predictions in readout units: in-family ≤ 0.066 (held: 0.0638/0.0629); P3 density ratio < 2× (held decisively: 13–14.5× → **1.20×**, now the most density-robust architecture measured — GeoTransolver 3.6×, kernel MT1 1.7–2.1×); zero-shot estate improves (falsifier fired: 0.949 vs 0.967, inside seed spread — absolute size was not the transfer leak). `similarity_gauge=true` is the reference configuration for new runs; frozen checkpoints keep the constant gauge. | @sec-nb-s1-verdict |
-| HLGEN | RUNNING | The HiLift analogue of the G1/G2 ladder: data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA extrapolation, pre-to-post-stall) — does GeoTransolver's transfer compounding, the remaining G2-gap discriminator, reproduce on Reynolds-varying physics? | HL | Launched at LR_GT = LR_MT2 = 1e-3 per the preregistered gate rule (prereg 499bcfe8, `results/hilift_generalization_ladder_preregistration_2026-08-24.json`). MT2 lanes are constant-gauge v3c (they predate S1). | @sec-nb-hl-verdict |
+| HLGEN | DONE — both halves read out | The HiLift analogue of the G1/G2 ladder: data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA extrapolation, pre-to-post-stall) — does GeoTransolver's transfer compounding, the remaining G2-gap discriminator, reproduce on Reynolds-varying physics? | HL | Launched at LR_GT = LR_MT2 = 1e-3 per the preregistered gate rule (prereg 499bcfe8, `results/hilift_generalization_ladder_preregistration_2026-08-24.json`); MT2 lanes are constant-gauge v3c (they predate S1). Data-efficiency verdict: prediction P1 held, MT2/GT = 0.35 at 35 cases (Branch A condition r(35) ≤ 0.85 met), 0.41 at 210, 0.98 at 1,260, seed spreads an order of magnitude below the gaps; provisional on CTRL. OOD half: in-distribution MT2/GT 0.69 (aoa) and 0.70 (stall) on the low-side populations; the sealed test is STEST. | @sec-nb-hl-ladder-dataeff; @sec-nb-hl-ladder-ood-indist |
+| CTRL | RUNNING — 1 of 4 landed | Steel-man for the data-efficiency result: is GeoTransolver's collapse at 35 and 210 cases a learning-rate mismatch or under-training at fixed epochs (about 4,500 optimizer steps at 35 cases) rather than an architectural property? GeoTransolver `super_scarce` and `scarce` at lr 3e-3 (500 epochs) and at lr 1e-3 (1,000 epochs), 2 seeds each. | HLGEN | Preregistered: the best control stays ≥ 2x MT2 at 35 cases; falsifier: any control within 1.2x of MT2 at 35 cases (≤ 0.166) voids the Branch A decision. First control: lr 3e-3 at 35 cases scores 0.392 / 0.481, no better than the lr 1e-3 lanes (0.375 / 0.409), so the lr hypothesis is refuted. The 1,000-epoch lanes and the 210-case controls are still running. | @sec-nb-hl-ladder-dataeff; @sec-nb-hl-ladder-ood-indist |
+| STEST | DONE — Branch B triggered on stall | The one-shot sealed test of the OOD lanes: eight checkpoints (aoa and stall × both architectures × seeds 42/43) on their own curated test lists (900 high-AoA, 723 post-stall cases), frozen inference configuration, protocol declared before any test case was read. Readout d_axis = OOD test pressure rel-L2 / in-distribution val pressure rel-L2. | HLGEN | Predictions: d_stall > d_aoa for both (held for MT2 only); d_GT < d_MT2 on at least one axis (held on both). Verdict: both architectures degrade about 10x (GeoTransolver d 10.5 / 9.3, MT2 11.8 / 12.5 on aoa / stall); MT2 keeps the lower absolute OOD pressure error (0.244 vs 0.315 aoa, 0.260 vs 0.276 stall); GeoTransolver has the smaller ratio because its in-distribution floor is higher (0.030 vs 0.021). Branch B trigger d_GT ≤ 0.8 d_MT2: aoa 0.89 not triggered; stall 0.74 with disjoint seed intervals, triggered. No reruns, no failures. | @sec-nb-hl-ladder-ood-indist; @sec-nb-hl-sealed-test |
+| B1 | RUNNING | Branch B mechanism discriminator: is GeoTransolver's residual transfer-ratio edge carried by pointwise raw-coordinate features? MT2 with the similarity gauge plus a `raw_coord_channel` that appends raw gauge-normalized coordinates and normals to the seed invariants, deliberately breaking SE(3) equivariance (24/24 contract tests, one asserting the break); 2 seeds, stall split, lr 1e-3, 500 epochs, otherwise frozen. One additional sealed `stall_test` evaluation, limited to the two B1 checkpoints, declared before the lanes existed. | STEST | Preregistered in readout units: raw features carry transfer if d ≤ 11.0 (at least halfway from MT2's stall d toward GeoTransolver's 9.3) *and* OOD stall pressure < 0.245; they do not if d ≥ 12.0 or OOD pressure ≥ 0.255, in which case the next discriminator is a GeoTransolver ablation removing its raw coordinates. Stated caveat: the trigger is denominator-driven, so the absolute OOD readout is weighed at least as heavily as the ratio. | @sec-nb-hl-sealed-test |
 | G5 | PLANNED | Single-factor generalization on the forthcoming cfd-datagen 3D RANS corpus: exact-symmetry axes (pose and scale twins) versus coverage axes (Reynolds twins, held-out geometry banks, held-out boundary-condition profiles), with mesh twins defining the per-stratum label floor — the 3D test of what G3 found in 2D. | Corpus launch with twin draws (see dataset feedback); S1 gauge; G3K | Each arm's prediction and falsifier is stated in readout units in the preregistration; between-architecture differences below the A4 floor are reported as not resolvable | @sec-nb-g5-prereg |
-| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation; adopt the similarity gauge; keep a local channel (cheap in-family offset); carry parity-odd features in the trunk rather than a bolt-on odd head, or drop reflection covariance explicitly; treat Reynolds as explicit conditioning only where data varies it; and address whatever HLGEN says about the remaining G2-gap candidate. | HLGEN, P1C, S1, K0, L1 | Gated on the HLGEN readout; a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-parity-thread-closed; @sec-nb-p1pp-verdict; @sec-nb-s1-verdict |
+| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation; adopt the similarity gauge; keep a local channel (cheap in-family offset); carry parity-odd features in the trunk rather than a bolt-on odd head, or drop reflection covariance explicitly; treat Reynolds as explicit conditioning only where data varies it; and address what B1 says about the remaining G2-gap candidate. HLGEN's data-efficiency half is the Branch A condition (met: r(35) = 0.35); its sealed test fired Branch B on stall, which is why B1 runs first. | B1, CTRL, HLGEN, STEST, P1C, S1, K0, L1 | Gated on the B1 readout and on the CTRL controls (if any control lands within 1.2x of MT2 at 35 cases, the Branch A premise is void); a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-hl-sealed-test; @sec-nb-parity-thread-closed; @sec-nb-p1pp-verdict; @sec-nb-s1-verdict |
 
-: The tech-tree ledger. Every status is as of 2026-09-03; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. Rows whose verdicts were later voided, retracted, or overturned say so and link both the original and the correcting entry. {#tbl-tech-tree}
+: The tech-tree ledger. Every status is as of 2026-09-04; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. Rows whose verdicts were later voided, retracted, or overturned say so and link both the original and the correcting entry. {#tbl-tech-tree}
 
 ## How the book is organized
 

@@ -155,10 +155,156 @@ plt.show()
 It says: *with the same budget of training cases, MT2 gets far more
 accuracy out of few cases, and the advantage vanishes once data is
 plentiful.* It does not say MT2 is more accurate in general (the full-split
-point is parity), it does not yet include the small-n steel-man controls
-for GeoTransolver, and it says nothing about out-of-distribution
-transfer — the aoa and stall axes of the same ladder are reported
-separately when their sealed test evaluation is run.
+point is parity), it does not yet include all of the small-n steel-man
+controls for GeoTransolver (the first, at lr 3e-3, has landed and refuted
+the learning-rate hypothesis; the rest are running), and it says nothing
+about out-of-distribution transfer: the aoa and stall axes of the same
+ladder are the subject of @fig-hilift-ood below.
+:::
+
+### The other half of the ladder: regime extrapolation {#sec-review-regime-extrapolation}
+
+The same ladder has two out-of-distribution axes, and their verdict is the
+counterweight to the figure above. The `aoa` split trains on 788
+low-angle-of-attack cases and is tested on 900 high-angle cases; the
+`stall` split trains on 942 attached-flow cases and is tested on 723
+post-stall cases. Each trained model was evaluated exactly once on its
+sealed test list, under a protocol declared before any test case was read
+(@sec-nb-hl-ladder-ood-indist; verdict at @sec-nb-hl-sealed-test). Three
+readings, in the notebook's order of importance. First, neither
+architecture generalizes across a physical-regime boundary: crossing from
+low to high angle of attack, or from attached to separated flow, multiplies
+pressure error by roughly ten for both, from 0.021 to 0.030 in
+distribution to 0.24 to 0.33 on the sealed test. Those test errors are
+worse than MT2 reaches from only 35 in-distribution training cases (0.135
+to 0.141), so coverage of the regime, not architecture, governs this axis;
+it is the 3D analogue of the G3 frequency-content null. Second, MT2 keeps
+the lower absolute OOD pressure error on both axes (seed means 0.244
+against GeoTransolver's 0.315 on AoA, 0.260 against 0.276 on stall): its
+in-distribution advantage shrinks but does not invert. Third,
+GeoTransolver has the smaller degradation ratio d = test / validation
+(10.5 against MT2's 11.8 on AoA, 9.3 against 12.5 on stall), and it has it
+because its in-distribution floor is higher (0.030 against 0.021). The two
+architectures converge to similar OOD error from different starting
+points, which is exactly what a ratio criterion rewards.
+
+The MT3 decision rule committed in advance fires on that ratio. Its
+Branch B trigger, d_GT ≤ 0.8 d_MT2 resolvable above seed spread, is met
+on the stall axis (d_GT / d_MT2 = 0.74 with disjoint seed intervals) and
+not on AoA (0.89). The preregistered next step is therefore a mechanism
+discriminator rather than an MT3 design: B1, MT2 with a raw-coordinate
+channel that deliberately breaks its SE(3) equivariance, is preregistered
+and running on the stall split (@sec-nb-hl-sealed-test). It asks whether
+GeoTransolver's residual ratio edge is carried by its pointwise
+raw-coordinate features, and its falsifiers are stated in readout units
+there. The notebook's caveat carries over: the trigger is driven by the
+denominator, and a reader should weigh B1's absolute OOD readout at least
+as heavily as its ratio. On the data-efficiency half, the first of the
+four GeoTransolver small-n steel-man controls has landed and refuted the
+learning-rate hypothesis: GeoTransolver at 35 cases and lr 3e-3 scores
+0.392 / 0.481, no better than its lr 1e-3 ladder lanes (0.375 / 0.409)
+and nowhere near the falsifier of 1.2x MT2 (@sec-nb-hl-ladder-ood-indist,
+addendum). The 1,000-epoch and 210-case controls are still running, so
+@fig-hilift-data-efficiency stays provisional on those alone.
+
+```{python}
+#| label: fig-hilift-ood
+#| fig-cap: >
+#|   Regime extrapolation on HiLiftAeroML, one-shot sealed test. Left
+#|   panel: the aoa split (trained on 788 low-angle-of-attack cases, tested
+#|   on the 900-case high-angle test list). Right panel: the stall split
+#|   (trained on 942 attached-flow cases, tested on the 723-case post-stall
+#|   test list). Each line is one seed of GeoTransolver (red circles) or
+#|   MeshTransformer2 (blue squares), joining its in-distribution validation
+#|   pressure error (held-out cases from the training regime) to its OOD
+#|   test pressure error; the annotated d is the seed mean of
+#|   d = (OOD test pressure rel-L2) / (in-distribution validation pressure
+#|   rel-L2), the readout unit of the MT3 decision rule. Assumptions,
+#|   identical to @fig-hilift-data-efficiency: learning rate 1e-3 for both
+#|   architectures, 500 epochs, bfloat16, no augmentation, 10,000 sampled
+#|   surface points per case, two seeds, MT2 in the v3c constant-gauge
+#|   configuration. The test lists are taken verbatim from the dataset's
+#|   manifest.json and were evaluated exactly once with the frozen inference
+#|   configuration (resolution 10,000, validation-identical sampling seed),
+#|   with no reruns and no non-finite predictions; no data-efficiency lane
+#|   touched them. Data: results/hilift_ladder_reduction_2026-09-03.json
+#|   (validation) and results/hilift_sealed_test_2026-09-04.json (test, d).
+#| code-fold: true
+import json, statistics
+from pathlib import Path
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+# book palette (mirrors figures.py without importing it: that module
+# switches matplotlib to Agg, which suppresses inline output here)
+BLUE, RED = "#2a78d6", "#e34948"
+INK, INK2, MUTED, GRID, BASELINE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
+mpl.rcParams.update({"figure.dpi": 110, "font.size": 10, "axes.edgecolor": BASELINE,
+                     "axes.labelcolor": INK2, "axes.grid": True, "grid.color": GRID,
+                     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2,
+                     "ytick.labelcolor": INK2, "axes.spines.top": False,
+                     "axes.spines.right": False, "legend.frameon": False})
+
+lad = json.load(open(Path("..") / "results" / "hilift_ladder_reduction_2026-09-03.json"))
+sealed = json.load(open(Path("..") / "results" / "hilift_sealed_test_2026-09-04.json"))
+runs = sealed["runs"]
+style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "MeshTransformer2", "s")}
+panels = [("aoa", "AoA extrapolation\n(train low AoA, test high AoA)"),
+          ("stall", "Stall extrapolation\n(train pre-stall, test post-stall)")]
+
+fig, axs = plt.subplots(1, 2, figsize=(8.6, 4.9), sharey=True)
+for ax, (axis, title) in zip(axs, panels):
+    n_test = {runs[f"lad_hl_{a}_{axis}_seed{s}"]["n_test"] for a in ("gt", "mt2") for s in (42, 43)}
+    assert len(n_test) == 1
+    for arch in ("gt", "mt2"):
+        c, name, mk = style[arch]
+        dx = -0.05 if arch == "gt" else 0.05  # horizontal dodge so the two architectures do not overprint
+        vals, tests, ds = [], [], []
+        for s in (42, 43):
+            key = f"lad_hl_{arch}_{axis}_seed{s}"
+            v, t, d = lad[key]["pressure_l2"], runs[key]["pressure_l2"], runs[key]["d_axis"]
+            assert abs(v - runs[key]["val_pressure_l2"]) < 1e-6  # the sealed-test file carries the same val number
+            vals.append(v); tests.append(t); ds.append(d)
+            ax.plot([dx, 1 + dx], [v, t], color=c, lw=1.6, marker=mk, ms=6.5, alpha=0.95, zorder=3)
+        dmean = statistics.mean(ds)
+        # GeoTransolver's line lies above MT2's at both ends, so its label goes in the empty
+        # upper-left corner and MT2's in the empty lower-right corner.
+        if arch == "gt":
+            ax.text(-0.38, statistics.mean(tests) * 0.72, f"{name}\nd = {dmean:.1f}x", color=c, fontsize=9.2,
+                    fontweight="bold", ha="left", va="top")
+        else:
+            ax.text(1.40, 0.0165, f"{name}\nd = {dmean:.1f}x", color=c, fontsize=9.2,
+                    fontweight="bold", ha="right", va="bottom")
+    ax.set_yscale("log")
+    ax.set_xticks([0, 1]); ax.set_xticklabels(["in-distribution\nvalidation", f"OOD test\n({n_test.pop()} cases)"])
+    ax.set_xlim(-0.45, 1.45)
+    ax.set_title(title, color=INK, loc="left", fontsize=10.5, pad=8)
+    ax.grid(True, which="major", axis="y", color=GRID); ax.grid(False, which="minor"); ax.grid(False, axis="x")
+axs[0].set_yticks([0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5])
+axs[0].set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20", "0.30", "0.50"])
+axs[0].set_ylim(0.015, 0.6)
+axs[0].set_ylabel("Pressure error, rel-L2 [–]  (log)", color=INK2)
+fig.suptitle("Regime extrapolation on HiLiftAeroML: one-shot sealed test (2 seeds, one line per seed)",
+             x=0.02, ha="left", color=INK, fontsize=11)
+fig.text(0.02, 0.02,
+        "Same lanes and protocol as the data-efficiency figure (lr 1e-3, 500 epochs, bf16, no augmentation, 10k points/case;\n"
+        "MT2 = v3c constant gauge). Left of each line: validation error on held-out cases from the training regime.\n"
+        "Right: error on the sealed test split of the other regime, evaluated exactly once. d = test / validation, seed mean.",
+        fontsize=7.6, color=MUTED, va="bottom", linespacing=1.35)
+fig.subplots_adjust(left=0.09, right=0.98, bottom=0.27, top=0.80, wspace=0.10)
+plt.show()
+```
+
+::: {.callout-note title="How to read this figure"}
+It says: *trained on one flow regime, neither architecture predicts the
+other; both lose about a factor of ten.* The lower blue endpoints show
+that MT2 is still the more accurate model on the far side of the boundary;
+the shallower red slope shows that GeoTransolver loses a smaller multiple
+of a worse starting point. Which of those two facts matters depends on
+whether the question is absolute error or transfer mechanism, and the
+program's preregistered rule asks the mechanism question first (B1). It
+does not say anything about data efficiency, which is
+@fig-hilift-data-efficiency's job, and it is a two-seed, one-shot
+measurement with no paired statistic behind it.
 :::
 
 ## The frozen instrument {#sec-review-instrument}
@@ -452,10 +598,14 @@ hypothesis that GeoTransolver "learns what exact similarity equivariance
 forbids MT2 from learning" cannot be right as stated: MT2 was not
 scale-equivariant, and both models saw absolute size in the same units.
 The remaining candidate for the G2 transfer gap is GeoTransolver's
-**pointwise raw coordinate features** and non-equivariant encoder, with
-the HiLift generalization ladder (launched at LR 1e-3 for both
-architectures after the high-lift parity verdict, @sec-nb-hl-verdict) as
-the discriminator in flight.
+**pointwise raw coordinate features** and non-equivariant encoder. The
+HiLift generalization ladder has now read out (@sec-review-data-efficiency):
+MT2 is 2.5 to 2.9x more accurate at 35 and 210 training cases, both
+architectures degrade about 10x across a regime boundary with MT2 keeping
+the lower absolute error, and GeoTransolver's smaller degradation ratio on
+the stall axis triggered the preregistered raw-coordinate discriminator
+(B1, @sec-nb-hl-sealed-test), which is the test of this candidate now in
+flight.
 
 ## What this does not solve {#sec-review-honesty}
 
@@ -505,11 +655,11 @@ similarity gauge as its reference configuration — "SE(3)-equivariant
 surface aero surrogate at GeoTransolver-class accuracy, learning-rate
 robust and density robust, at about twice the training memory" — with the
 R1 and S1 measurements as its headline evidence and the entanglement
-finding as its stated limitation; (2) the HiLift generalization ladder
-(running, launched after the parity verdict of @sec-nb-hl-verdict) — the
-Reynolds-varying analogue of the G1/G2 ladder and the last discriminator
-in flight for the G2-gap candidates — which gates the MT3 preregistration
-(@sec-tech-tree); (3) the volume-target run the program's scope statement
+finding as its stated limitation; (2) the HiLift generalization ladder's
+follow-ups (@sec-review-data-efficiency): the GeoTransolver small-n
+steel-man controls (the first of four refuted the learning-rate
+explanation) and the B1 raw-coordinate discriminator on the stall axis,
+which together gate the MT3 preregistration (@sec-tech-tree); (3) the volume-target run the program's scope statement
 demands, on `drivaer_ml_volume` or `highlift_volume`, which also decides
 whether MT2's query-side dependence forces the passive decoder's measured
 3$\times$ price at $10^5$--$10^6$ interior queries; (4) the upstream PR
