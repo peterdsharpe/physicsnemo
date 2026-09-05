@@ -481,3 +481,33 @@ def test_raw_coord_channel_breaks_equivariance_by_design():
     p1, _ = _split(rot)
     assert torch.isfinite(base).all()
     assert not torch.allclose(p1, p0, atol=1e-3)
+
+
+def test_interior_queries_contracts():
+    """V0 boundary->interior mode: off-surface queries without normals must be
+    exactly rotation/translation-equivariant, query-set independent, and
+    finite; the derived proxy normal must not be degenerate."""
+    torch.manual_seed(0)
+    n, nq = 400, 150
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    qpts = torch.randn(1, nq, 3, dtype=torch.float64) * 4.0  # interior/exterior points, no normals
+    m = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, query_independent=True,
+                         n_decoder_layers=2, interior_queries=True, similarity_gauge=True,
+                         out_scalars=1, out_vectors=1).double().eval()
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w, query_points=qpts)
+        rot = m(pts @ q.T + shift, nrm @ q.T, drv @ q.T, w, query_points=qpts @ q.T + shift)
+        sub = m(pts, nrm, drv, w, query_points=qpts[:, :50])
+    assert torch.isfinite(base).all()
+    p0, v0 = _split(base)
+    p1, v1 = _split(rot)
+    assert torch.allclose(p1, p0, atol=1e-10)
+    assert torch.allclose(v1, v0 @ q.T, atol=1e-10)
+    assert torch.allclose(sub, base[:, :50], atol=1e-12, rtol=0.0)

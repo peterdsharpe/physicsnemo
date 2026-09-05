@@ -223,6 +223,8 @@ class MeshTransformer2(Module):
         odd_head: bool = False,
         similarity_gauge: bool = False,
         raw_coord_channel: bool = False,
+        interior_queries: bool = False,
+        anchor_normal_rho: float = 0.25,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -329,6 +331,15 @@ class MeshTransformer2(Module):
         ### whether GeoTransolver's pointwise raw-coordinate features are what
         ### carry its smaller OOD degradation ratio. Never a product setting.
         self.raw_coord_channel = raw_coord_channel
+        ### V0 (boundary->interior, 2026-09-05): off-surface queries carry no
+        ### normal. Instead of removing the normal from every query-side
+        ### invariant (a thin-pipe rewrite), derive an equivariant proxy normal
+        ### per query as the geometric soft assignment of the query position
+        ### to the slice anchors, applied to the anchor mean normals m_s.
+        ### Exactly SE(3)-covariant, smooth, defined everywhere, no learned
+        ### parameters; explicit query_normals (e.g. SDF normals) override it.
+        self.interior_queries = interior_queries
+        self.anchor_normal_rho = float(anchor_normal_rho)
         if odd_head:
             self.N_ODD = 7
             self.odd_assign = nn.Linear(hidden, n_slices)
@@ -537,10 +548,19 @@ class MeshTransformer2(Module):
                 q_pts, q_nrm = points, normals
             else:
                 q_pts = query_points
-                q_nrm = query_normals if query_normals is not None else normals
+                if query_normals is not None:
+                    q_nrm = query_normals
+                elif self.interior_queries:
+                    q_nrm = None  # derived from the anchors below
+                else:
+                    q_nrm = normals
             q_r = (q_pts - center) / gauge
             q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             q_rhat = q_r / q_mag
+            if q_nrm is None:
+                d2 = torch.cdist(q_r, z_pos).square()  # (B, Nq, S)
+                a_q = torch.softmax(-d2 / (self.anchor_normal_rho ** 2), dim=-1)
+                q_nrm = torch.einsum("bqs,bsc->bqc", a_q, m_s)
             q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             bq, nq, _ = q_pts.shape
             q_d = (drive / drive_mag)[:, None, :].expand(bq, nq, 3)

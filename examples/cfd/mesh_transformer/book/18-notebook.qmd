@@ -5176,3 +5176,54 @@ sampling (≤ 1.15x), the gauge is neutral in-family (S1). **Falsifier
 for the equivariance reading:** the raw-coordinate arm within 1.15x of
 0.138 → equivariance is not what buys small-data accuracy and the
 routing/basis becomes the candidate.
+
+## 2026-09-05 — V0 preregistered: the first boundary→interior measurement (DrivAerML volume), with MT2's new interior-query mode {#sec-nb-v0-prereg}
+
+**The architecture step.** MT2's query-independent decode required a
+normal at every query, so it could not decode off-surface points.
+The `interior_queries` mode derives an equivariant proxy normal per
+query from the source anchors — the geometric soft assignment of the
+query position to the slice anchors (width `anchor_normal_rho`, gauge
+units), applied to the anchor mean normals — so every existing
+invariant, read block and the vector head work unchanged. No new
+learned modules (the thin-pipe collapses of v5a1/v5a2 and W2 argue
+against them). Contract test: off-surface queries without normals are
+exactly SE(3)-covariant (1e-10) and query-set independent (1e-12);
+25/25 pass. Explicit query normals (e.g. SDF normals) override the
+proxy, which gives a zero-code companion arm.
+
+**Scoping** (`results/volume_arm_scoping_2026-09-05.md`): the
+DrivAerML volume recipe is a complete boundary→interior contract
+(interior points with velocity/pressure/nut targets, the subsampled
+vehicle boundary kept alongside with measure weights, per-point SDF
+and SDF normals); GeoTransolver-volume is wired but has never produced
+a number in this program; the kernel-decoder MeshTransformer decodes
+at interior points natively and needs only a yaml (flagship minus the
+trace terms); HiLift volume is not runnable as committed. All arms
+share a dataset variant adding the freestream direction, the
+reference length, the degenerate-cell guard, and a scalars-first
+target order (MT2 emits scalars then vectors).
+
+**V0 arms, pilot-gated** (1 seed × 50 epochs; gate: pressure rel-L2
+≤ 0.6 and descending, ≤ 60 GB, ≤ 1 s/step), then 2 seeds × 500
+epochs at the frozen protocol: GeoTransolver-volume; MT1-kernel-volume;
+MT2-interior (proxy normals); MT2-interior-sdf (SDF normals as query
+normals). **Predictions in readout units** (val-mean interior
+pressure rel-L2 ratios; no absolute volume number exists in the record,
+so absolute bands are priors, not predictions): MT2-interior / GT in
+[1.3, 2.5] — falsifiers ≤ 1.2 (the v5 entanglement finding was
+surface-specific) and ≥ 3.0 (no MT2 interior product without query
+interaction); MT1-kernel / GT in [1.5, 3.0] on pressure and
+[1.0, 2.0] on perturbation velocity, **and ≤ 1.0x GT in the far band
+(SDF ≥ 0.5 L_ref)** — MT1 ≥ 1.5x GT there closes the kernel line for
+good. **New ledger axes this task enables** (eval-only on the V0
+checkpoints): exact query-independence as a first-class property
+(interior queries are never tokens for MT1/MT2-interior, always
+tokens for GeoTransolver), query-resolution transfer at fixed source,
+SDF-band-stratified error, and surface-trace consistency against the
+surface labels the boundary tokens already carry.
+
+**A35 launched alongside** (@sec-nb-t1-verdict): MT2 at 35 cases with
+one factor removed at a time — equivariance (raw-coordinate channel),
+measure weights, gauge — to name which of MT2's ingredients buys the
+data-efficiency result.
