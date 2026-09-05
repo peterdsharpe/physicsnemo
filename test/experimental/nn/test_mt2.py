@@ -458,3 +458,26 @@ def test_similarity_gauge_geometric_scale_equivariance():
         b0 = m0(k * pts, nrm, drv, k * k * w)
     assert torch.allclose(bsc, a, atol=1e-10)
     assert not torch.allclose(b0, a0, atol=1e-3)
+
+
+def test_raw_coord_channel_breaks_equivariance_by_design():
+    """Branch-B discriminator flag: must run, must change the output, and must
+    NOT be rotation-equivariant (that is the point); default stays exact."""
+    torch.manual_seed(0)
+    n = 300
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=torch.float64), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    m = MeshTransformer2(hidden=64, n_layers=2, n_slices=16, similarity_gauge=True,
+                         raw_coord_channel=True).double().eval()
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    with torch.no_grad():
+        base = m(pts, nrm, drv, w)
+        rot = m(pts @ q.T, nrm @ q.T, drv @ q.T, w)
+    p0, _ = _split(base)
+    p1, _ = _split(rot)
+    assert torch.isfinite(base).all()
+    assert not torch.allclose(p1, p0, atol=1e-3)

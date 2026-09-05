@@ -222,6 +222,7 @@ class MeshTransformer2(Module):
         vector_basis: str = "globe7",
         odd_head: bool = False,
         similarity_gauge: bool = False,
+        raw_coord_channel: bool = False,
         scale_conditioning: bool = False,
         query_independent: bool = False,
         n_anchors: int = 0,
@@ -271,7 +272,8 @@ class MeshTransformer2(Module):
         ### which is the query-independence contract. 0 disables (v5a3).
         self.n_anchors = int(n_anchors)
         n_seed = (5 + (7 * len(self.local_radii) if use_local_features else 0)
-                  + self.n_boundary_scalars + (1 if scale_conditioning else 0))
+                  + self.n_boundary_scalars + (1 if scale_conditioning else 0)
+                  + (6 if raw_coord_channel else 0))
         ### Seed invariants of {r, n, d}; separation comes from the slice
         ### blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
@@ -321,6 +323,12 @@ class MeshTransformer2(Module):
         ### measure-weighted RMS radius: exact geometric-scale equivariance
         ### and a density-robust frame.
         self.similarity_gauge = similarity_gauge
+        ### Branch-B mechanism discriminator (2026-09-04): append the raw
+        ### gauge-normalized coordinates and normal components to the seed
+        ### invariants. This DELIBERATELY breaks SE(3) equivariance; it tests
+        ### whether GeoTransolver's pointwise raw-coordinate features are what
+        ### carry its smaller OOD degradation ratio. Never a product setting.
+        self.raw_coord_channel = raw_coord_channel
         if odd_head:
             self.N_ODD = 7
             self.odd_assign = nn.Linear(hidden, n_slices)
@@ -482,6 +490,8 @@ class MeshTransformer2(Module):
         if self.n_boundary_scalars:
             bs = boundary_scalars.reshape(b, n, self.n_boundary_scalars)
             invariants = torch.cat([invariants, bs.to(invariants.dtype)], dim=-1)
+        if self.raw_coord_channel:
+            invariants = torch.cat([invariants, r, n_hat], dim=-1)
         if self.scale_conditioning:
             raw_scale = (points - center).norm(dim=-1).mean(dim=1, keepdim=True)
             log_s = torch.log(raw_scale.clamp_min(self.eps))[..., None]

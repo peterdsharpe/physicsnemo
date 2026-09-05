@@ -4979,3 +4979,64 @@ under-training hypothesis (1,000-epoch lanes, currently past epoch
 500 of 1,000) and the 210-case controls remain to be read; the
 data-efficiency result (@sec-nb-hl-ladder-dataeff) stands provisional
 on those alone.
+
+## 2026-09-04 — Sealed test verdict: both architectures degrade ~10x on AoA and stall extrapolation; MT2 keeps the lower absolute error, GeoTransolver the smaller ratio; Branch B triggers on stall {#sec-nb-hl-sealed-test}
+
+**One-shot evaluation, run exactly as declared**
+(@sec-nb-hl-ladder-ood-indist; `results/hilift_sealed_test_2026-09-04.json`;
+job 657341; 900 high-AoA and 723 post-stall test cases; no reruns, no
+failures).
+
+| axis | model | in-dist val p | OOD test p | d = test/val | OOD test velocity / wss |
+|---|---|---|---|---|---|
+| aoa | GeoTransolver | 0.0285 / 0.0317 | 0.300 / 0.330 | **10.5** | 0.22 / 0.34 |
+| aoa | MT2 | 0.0205 / 0.0209 | **0.241 / 0.248** | 11.8 | 0.25 / 0.37 |
+| stall | GeoTransolver | 0.0289 / 0.0303 | 0.274 / 0.277 | **9.3** | 0.19 / 0.33 |
+| stall | MT2 | 0.0204 / 0.0210 | **0.261 / 0.259** | 12.6 | 0.19 / 0.32 |
+
+**Reading, in order of importance.** (1) **Neither architecture
+generalizes across a physical-regime boundary.** Extrapolating from low
+to high angle of attack, or from attached to separated flow, costs
+both models roughly a factor of ten in pressure error; the OOD test
+errors (0.24–0.33) are worse than the *35-case* in-distribution error.
+This is the 3D analogue of G3's frequency-content null: coverage of
+the regime, not architecture, governs this axis. (2) **MT2 keeps the
+lower absolute OOD error on pressure on both axes** (0.244 vs 0.315
+aoa; 0.260 vs 0.276 stall), so its in-distribution advantage shrinks
+but does not invert. (3) **GeoTransolver has the smaller degradation
+*ratio*** because its in-distribution floor is higher (0.030 vs
+0.021): the two architectures converge to similar OOD error from
+different starting points. Prediction "stall harder than aoa" held for
+MT2 only.
+
+**Decision rule, applied by the letter.** The MT3 skeleton's Branch B
+trigger is d_GT ≤ 0.8 d_MT2, resolvable above seed spread: aoa gives
+0.885 (not triggered); **stall gives 0.741 with disjoint seed
+intervals (worst-case pairing 0.769) — triggered.** So the
+preregistered next step is the mechanism discriminator, not an MT3
+design. **Caveat, stated before it runs:** this trigger is driven by
+the denominator. A ratio criterion rewards a worse in-distribution
+model, and in absolute OOD terms MT2 is ahead; a reader should weigh
+the discriminator's *absolute* OOD readout at least as heavily as the
+ratio. The rule is followed because it was committed in advance and
+because the question it asks — is GeoTransolver's residual transfer
+edge carried by pointwise raw-coordinate features? — is worth a cheap
+answer either way.
+
+**B1 — raw-coordinate discriminator, preregistered here.** MT2 with
+the similarity gauge plus a `raw_coord_channel` that appends the raw
+gauge-normalized coordinates and normal components to the seed
+invariants, deliberately breaking SE(3) equivariance (24/24 contract
+tests, including one asserting it *does* break rotation equivariance).
+Two seeds, `stall` split, lr 1e-3, 500 epochs, otherwise frozen.
+Readouts: in-distribution val pressure; OOD stall-test pressure; d.
+**Predictions in readout units:** if pointwise raw features carry
+transfer, MT2+raw's d moves at least halfway from MT2's 12.6 toward
+GeoTransolver's 9.3 (d ≤ 11.0) *and* its absolute OOD pressure drops
+below 0.245; if it does not (d ≥ 12.0 or OOD pressure ≥ 0.255), the
+carrier is elsewhere and the next discriminator is a GeoTransolver
+ablation removing its raw coordinates. **Test-split use:** the sealed
+protocol permitted one evaluation of the existing models; B1 requires
+one additional evaluation on `stall_test`, limited to the two new B1
+checkpoints only, with the identical configuration — declared here,
+before the lanes exist. No previously evaluated model is re-evaluated.
