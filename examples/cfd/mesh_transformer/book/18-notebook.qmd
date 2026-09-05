@@ -5240,3 +5240,46 @@ advantage is now robust to learning rate, training length, and the
 choice of Transolver-family baseline. The last control pair
 (210 cases, 1,000 epochs) is still training; the hero figure's
 "provisional" footnote comes off when it lands.
+
+## 2026-09-05 — V0 pilot gate: all four boundary→interior arms pass; GeoTransolver leads the interior task 2.9–6x at 50 epochs; promoted to 2 seeds × 500 epochs {#sec-nb-v0-pilot}
+
+**First boundary→interior numbers in the program** (DrivAerML
+volume, 48 val cases, 10,000 interior query points and 10,000 boundary
+tokens per case, 50-epoch pilots, seed 42, lr 1e-3; interior rel-L2):
+
+| arm | pressure | velocity | nut | vs GT (pressure) |
+|---|---|---|---|---|
+| GeoTransolver-volume | **0.093** | **0.169** | **0.159** | 1.0 |
+| MT2-interior (SDF query normals) | 0.269 | 0.397 | 0.631 | 2.9x |
+| MT2-interior (anchor proxy normals) | 0.375 | 0.482 | 0.715 | 4.0x |
+| kernel-decoder MeshTransformer | 0.577 | 0.605 | 0.817 | 6.2x |
+
+**Gate (≤ 0.6 and descending): all four pass**, the kernel arm
+barely. Facts fixed by the launch: 150–166 million interior points per
+case on disk (the model sees a 10,000-point sample, ~6e-5 coverage);
+the volume manifest is the surface instrument's own 435/48 split; all
+arms fit in 4–9 GB at ~0.35 s/step.
+
+**Early reading, not a verdict.** GeoTransolver dominates the interior
+task at pilot stage: MT2's query-independent read path is 2.9–4x
+behind, echoing the surface-era finding that passive decoding costs
+accuracy (v5a3: 2.7–3.9x), and the exact-kernel decoder is 6x behind,
+echoing its surface null. Two of the preregistered predictions
+(@sec-nb-v0-prereg) are already under pressure: MT2-interior/GT was
+predicted in [1.3, 2.5] with a falsifier at ≥ 3.0 (the proxy-normal
+variant sits at 4.0 at pilot; the SDF variant at 2.9), and MT1-kernel/GT
+in [1.5, 3.0] (6.2 at pilot). Pilot ratios can move with 10x more
+training, so the full runs decide; if they hold, the honest statement
+for the goal is that *for boundary→interior on this task, token-level
+query interaction (GeoTransolver's) is worth ~3x over passive
+equivariant decoding, and the exact Laplace kernel buys nothing* —
+which would locate the "useful architecture" question squarely in how
+to give MT2 interior queries interaction without giving up
+query-independence. Also worth noting for the SDF-band readout to
+come: SDF query normals beat the anchor-derived proxy by 1.4x, so the
+query's local geometry information matters more than its exact
+covariance recipe.
+
+**Promotion:** all four arms to 2 seeds × 500 epochs at the frozen
+protocol (val_interval 10), then the full eval battery including the
+SDF-band stratification and the exact query-independence check.
