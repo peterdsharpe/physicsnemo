@@ -5040,3 +5040,18 @@ protocol permitted one evaluation of the existing models; B1 requires
 one additional evaluation on `stall_test`, limited to the two new B1
 checkpoints only, with the identical configuration — declared here,
 before the lanes exist. No previously evaluated model is re-evaluated.
+
+**2026-09-05 operational addendum (AGA I/O degradation).** Since the
+evening of 2026-09-04 every running lane on AGA (B1 and the six
+remaining GeoTransolver controls) has been I/O-bound: per-step times
+of 4–6 s with individual stalls of 400+ s against a normal 0.27 s, so
+an epoch takes 400–560 s instead of 60–140 s. This coincides with the
+admins' network isolation work (their requeue of the last ladder lane
+was the first symptom). I mis-read the flat epoch counters as a hang
+and cancelled the running links; the chain-ahead successors resumed
+from checkpoints within a minute at a cost of ≤ 5 epochs per lane, but
+the slowdown persists on the new nodes, so it is storage/fabric-side,
+not job-side. At the current pace B1 needs ~2 more days rather than
+~10 hours. No configuration is changed; the lanes run until the
+cluster recovers. Lesson recorded: the recipe's log timestamps are
+cluster-local (UTC−7); compare them to `date`, not `date -u`.
