@@ -1172,22 +1172,35 @@ def main(cfg: DictConfig) -> None:
                 log_jsonl=log_jsonl,
             )
 
-            val_loss, val_metrics = val_epoch(
-                val_loader,
-                model,
-                loss_calculator,
-                metric_calculator,
-                logger,
-                epoch,
-                cfg,
-                dist_manager,
-                output_type=output_type,
-                target_config=target_config,
-                val_writer=val_writer,
-                log_jsonl=log_jsonl,
+            # Validation cadence (default every epoch). Validation only feeds
+            # logging here -- checkpointing and the scheduler do not depend on
+            # it -- so a sparser cadence leaves training bit-identical while
+            # cutting I/O on large validation sets.
+            val_interval = int(cfg.training.get("val_interval", 1))
+            run_val = (
+                val_interval <= 1
+                or epoch % val_interval == 0
+                or epoch == num_epochs - 1
             )
+            if run_val:
+                val_loss, val_metrics = val_epoch(
+                    val_loader,
+                    model,
+                    loss_calculator,
+                    metric_calculator,
+                    logger,
+                    epoch,
+                    cfg,
+                    dist_manager,
+                    output_type=output_type,
+                    target_config=target_config,
+                    val_writer=val_writer,
+                    log_jsonl=log_jsonl,
+                )
+            else:
+                val_loss, val_metrics = float("nan"), {}
 
-            if is_rank0:
+            if is_rank0 and run_val:
                 all_keys = list(dict.fromkeys(list(train_metrics) + list(val_metrics)))
 
                 rows = [
