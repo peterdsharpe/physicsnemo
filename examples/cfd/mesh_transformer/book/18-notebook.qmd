@@ -5429,3 +5429,19 @@ LVT pilot now has a specific stratified prediction: its gain over the
 SDF-normal base should be *larger in the mid and far bands than near
 the wall*. A GeoTransolver weakness surfaces too: far-band pressure
 rel-L2 of 1.71 — worse than predicting zero 20 m from the body.
+
+**2026-09-05 addendum — Branch V pilot gate: passes, but the prediction
+is under pressure from the start.** MT2-interior with SDF query normals
+plus latent volume tokens, 50 epochs, seed 42: interior pressure
+**0.340**, velocity 0.445, nut 0.756 — against the SDF-normal base's
+own 50-epoch pilot of 0.269 / 0.397 / 0.631. The gate (≤ 0.6 and
+descending) passes, so per the rule the arm promotes to 2 seeds × 500
+epochs; but at pilot length the 769 latent tokens make the model 1.26x
+*worse*, not better, and the same comparison held throughout training
+(epoch-49 val loss 0.035 vs 0.026). Two readings are possible and the
+full run separates them: the extra tokens slow early convergence
+(the base itself improved 1.68x from pilot to full), or they dilute the
+measure-weighted slice routing that the boundary tokens rely on. The
+preregistered full-run prediction (LVT/GT ≤ 1.5) and falsifier (≥ 2.0)
+stand unchanged; the stratified prediction (gain largest in the mid/far
+bands) will be read from the SDF-band analysis on the full checkpoints.
