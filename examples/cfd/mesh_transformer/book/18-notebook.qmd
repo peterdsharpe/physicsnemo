@@ -5386,3 +5386,46 @@ the query itself is required; the honest product is then
 "GeoTransolver for interior accuracy, MT2 for contracts," and the next
 candidate is interaction with a canonical probe set re-computed per
 request but never across the request's queries.
+
+## 2026-09-05 — SDF-band stratification: the exact-kernel line closes (far-band velocity 16.7x GT; its "≤1.0x pressure" is a zero-output artefact); MT2's interior deficit grows with distance from the wall {#sec-nb-v0-sdf-band}
+
+**Method** (`results/v0_sdf_band_2026-09-05.json`; eval-only on the
+saved full-V0 predictions; the 10k interior sample and its SDF are
+bit-identical across all eight runs; the all-points band reproduces the
+aggregate metrics to five digits). Preregistered bands in the recipe's
+centred nondimensional frame with L_ref = 8: near < 2 m, mid 2–20 m,
+far ≥ 20 m physical. The sample is overwhelmingly near-wall (97.8% /
+2.0% / 0.12%; median SDF 5 mm), so the far band holds 4–25 points per
+case; a 2.5 m far band (1.8% of points) is reported alongside.
+
+**Kernel-decoder verdict: the line closes.** On the preregistered far
+band the kernel decoder's pressure ratio is 0.59x GT — *formally* the
+≤ 1.0x survival criterion, but it is an artefact: its far-field
+pressure output has decayed to exactly zero (|Cp| < 1e-6 against a true
+RMS of 0.0055), which is the trivial rel-L2 floor of 1.000 in every case,
+and GeoTransolver scores 1.71 there only because its ~0.01 Cp error
+exceeds that tiny signal. On the one well-conditioned far field,
+velocity (true RMS 0.95 |U∞|), the kernel decoder is **16.7x GT**
+(perturbation velocity 22x; RMS error 0.34 |U∞| vs 0.027). In the 2.5 m
+band its pressure is 4.5x and velocity 8.6x GT. There is no SDF band
+under any definition where the kernel decoder is within 1.5x of
+GeoTransolver on velocity. **The preregistered falsifier fires; the
+0.59x pressure number is not survival and is not reported as such.**
+Together with K0 and the surface-era factorial, the exact-Laplace
+kernel is now closed for separated 3D aerodynamics on every readout
+the program owns.
+
+**MT2-interior, stratified** (SDF-normal variant, pressure / velocity
+vs GT): near 2.54x / 2.28x → mid 3.7x / 4.7x → far 3.3x / 5.4x. The
+scoping document predicted the passive-decode price would be worst
+*near* the wall (a local-detail deficit); it is the opposite:
+**near-wall is MT2's best band and the deficit grows with distance.**
+That is the signature of missing *volumetric* context, not missing
+local detail — the slices and anchors are boundary-centric and the
+local kernel readout sees only boundary tokens, so far-field queries
+have nothing off-surface to read. This is exactly the gap Branch V's
+latent volume tokens are built to fill (@sec-nb-v0-verdict), so the
+LVT pilot now has a specific stratified prediction: its gain over the
+SDF-normal base should be *larger in the mid and far bands than near
+the wall*. A GeoTransolver weakness surfaces too: far-band pressure
+rel-L2 of 1.71 — worse than predicting zero 20 m from the body.
