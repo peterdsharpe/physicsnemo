@@ -43,9 +43,11 @@ architecture's best learning rate) and 1.085$\times$ behind on DrivAerML at
 best-vs-best rates; it trains stably across a learning-rate decade where
 GeoTransolver degrades 4--14$\times$; with the similarity gauge it is the
 most density-robust architecture measured (1.20$\times$ under 10:1 sampling
-bias versus GeoTransolver's 3.6$\times$); and it costs about twice
-GeoTransolver's peak training memory (9.8 GB vs 4.6 GB) on the same
-protocol.
+bias versus GeoTransolver's 3.6$\times$); and, after an exact
+pool-then-project rewrite of its relational-geometry readback
+(@sec-nb-geo-pool-memory), it trains in less peak memory than
+GeoTransolver (3.6 GB vs 4.6 GB at 10,000 tokens; it was 9.8 GB, about
+twice GeoTransolver's, until 2026-09-05).
 
 ## The result that matters: data efficiency on HiLiftAeroML {#sec-review-data-efficiency}
 
@@ -415,11 +417,11 @@ rows = [
     ("GT + rotation aug.", rot_in / gt10, rot_zs, "--", "closed (1.00)",
      "4.6 GB", "the augmentation price"),
     ("MT2-v3c (8.6M)", v3c_in / gt10, v3c_zs, "13-14.5x (1.20x with gauge)",
-     "exact (1.00)", "9.8 GB", "canonical single-family MT2"),
+     "exact (1.00)", "3.6 GB (was 9.8)", "canonical single-family MT2"),
     ("GT multi-family", gtm_in / gt10, gtm_zs, "--", "26-32x broken",
      "4.6 GB", "zero-shot on HELD-OUT family"),
     ("MT2 multi-family", mt2m_in / gt10, mt2m_zs, "--", "exact (1.00)",
-     "9.8 GB", "zero-shot on HELD-OUT family"),
+     "3.6 GB (was 9.8)", "zero-shot on HELD-OUT family"),
 ]
 out = ("| configuration | in-family (xGT) | zero-shot | density (P3) "
        "| rotation (P1) | peak VRAM | note |\n|---|---|---|---|---|---|---|\n")
@@ -434,7 +436,9 @@ print(f": The frontier on the frozen instrument. In-family is normalized "
       f"is training memory at 10,000 tokens on the same four-GPU protocol "
       f"(MT2-v3c 9.81 GB measured in the V6 arm, "
       f"@sec-nb-instrument-wave-verdict; the 5.9 GB this table once "
-      f"carried was wrong). The P3 column for MT2 gives the constant-gauge "
+      f"carried was wrong; 3.6 GB after the exact pool-then-project "
+      f"rewrite of 2026-09-05, @sec-nb-geo-pool-memory, which leaves the "
+      f"function unchanged to fp64 roundoff). The P3 column for MT2 gives the constant-gauge "
       f"v3c figure and, in parentheses, the same model with "
       f"`similarity_gauge` on (@sec-nb-s1-verdict). Sources: "
       f"mega_reduction.json, round3_reduction.json, mt2_v3c_reduction.json.")
@@ -464,10 +468,15 @@ DrivAerML accuracy gap is small and tuning-sensitive, and it does not
 transfer**: 1.18$\times$ at the frozen learning rate, 1.085$\times$ at
 best-vs-best rates on DrivAerML (R1), and 0.98 — parity, MT2 nominally
 ahead — on HiLiftAeroML at each architecture's best rate
-(@sec-nb-hl-verdict). Memory is the cost MT2 pays: 9.8 GB against
-GeoTransolver's 4.6 GB at 10,000 tokens; the V6 control shows that
-dropping MT2-v3c to 6,500 training tokens brings it to 6.56 GB at an 8%
-accuracy cost (@sec-nb-instrument-wave-verdict).
+(@sec-nb-hl-verdict). Memory was the cost MT2 paid: 9.8 GB against
+GeoTransolver's 4.6 GB at 10,000 tokens, and the V6 control showed that
+dropping MT2-v3c to 6,500 training tokens brought it to 6.56 GB at an 8%
+accuracy cost (@sec-nb-instrument-wave-verdict). The A35b ablation exposed
+where that memory went — the per-point-per-slice *projected* relational
+features saved for backward, about 0.5 GB per layer — and an exact
+pool-then-project rewrite removed it: MT2 now peaks at 3.6 GB at 10,000
+tokens, below GeoTransolver, with the function unchanged to fp64 roundoff
+(@sec-nb-geo-pool-memory).
 
 ## How we got here: the campaign in five verdicts {#sec-review-arc}
 
@@ -759,11 +768,19 @@ and no sign-resolvable principal frame, whereas canonicalization needs
 both — but on the vehicle datasets this program measures (0/48 degenerate
 frames; skewness sign consistent 48/48) it is not an accuracy advantage.
 
-**Retired: "equal-or-lower cost."** MT2-v3c peaks at 9.8 GB of training
-memory at 10,000 tokens on the same DrivAerML protocol where
-GeoTransolver peaks at 4.6 GB (V6, @sec-nb-instrument-wave-verdict); the
-frontier table's earlier 5.9 GB was wrong. At 6,500 tokens MT2 runs in
-6.56 GB at an 8% accuracy cost.
+**Retired, then restored by implementation: "equal-or-lower cost."**
+MT2-v3c peaked at 9.8 GB of training memory at 10,000 tokens on the same
+DrivAerML protocol where GeoTransolver peaks at 4.6 GB (V6,
+@sec-nb-instrument-wave-verdict); the frontier table's earlier 5.9 GB was
+wrong, and at 6,500 tokens MT2 ran in 6.56 GB at an 8% accuracy cost. The
+claim was retired on that evidence. On 2026-09-05 the A35b
+no-relational-geometry ablation trained at 2.0 GB, which located the cost
+in the projected per-point-per-slice relational features saved for
+backward; pooling over slices before the affine projection is exactly
+equal (softmax weights sum to one) and brings MT2 to 3.6 GB at 10,000
+tokens with the function unchanged to fp64 roundoff
+(@sec-nb-geo-pool-memory). The claim now holds, by construction rather
+than by argument: MT2 trains in less peak memory than GeoTransolver.
 
 **Retired: "the DrivAerML gap was label noise."** The N1 shared-residual
 probe does not discriminate (0.71 on DrivAerML vs 0.70 on the HiLift
@@ -807,7 +824,8 @@ across a decade where GeoTransolver loses 4--14$\times$. (iii)
 Biased-density robustness of 1.20$\times$ with the similarity gauge,
 against GeoTransolver's 3.6$\times$. (iv) In-family parity with
 GeoTransolver on HiLiftAeroML at best learning rate (MT2/GT = 0.98) and a
-1.085$\times$ deficit on DrivAerML at best-vs-best rates. (v) About
-twice GeoTransolver's peak training memory. Every one of these is a
+1.085$\times$ deficit on DrivAerML at best-vs-best rates. (v) Less peak
+training memory than GeoTransolver (3.6 GB vs 4.6 GB) after the exact
+pool-then-project rewrite (@sec-nb-geo-pool-memory). Every one of these is a
 two-seed measurement on one validation split per dataset; none has a
 paired statistic behind it yet.

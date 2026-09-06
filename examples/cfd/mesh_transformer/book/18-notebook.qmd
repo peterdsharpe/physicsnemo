@@ -5502,3 +5502,81 @@ launched now, same protocol. **Prediction:** they land within 0.08–0.10
 got *worse*). **Falsifier of the 1.4x statement:** Transolver lr 3e-3 ≤
 0.070 → MT2's 210-case advantage over the best same-family baseline is
 within seed spread and the figure's 210-rung annotation must say so.
+
+## 2026-09-05 — Derivation from the A35b memory anomaly: MT2's peak training memory falls 2.75x (9.8 → 3.6 GB at 10k tokens) from an exact pool-then-project rewrite; MT2 now trains in less memory than GeoTransolver {#sec-nb-geo-pool-memory}
+
+**Setting.** The critic review (@sec-nb-critic-review, C16) established
+that MeshTransformer2 (MT2) costs about twice GeoTransolver's peak
+training memory on the DrivAerML surface protocol — 9.8 GB against
+4.6 GB at 10,000 surface tokens — and chapter 17 retired the
+"equal-or-lower cost" claim on that basis. The A35b ablation launch
+(@sec-nb-a35-verdict, addendum) then produced an anomaly: the
+`use_relational_geo=false` variant, which removes the anchor-relational
+invariants from slice routing and readback, trained at **2.0 GB** while
+every other MT2 arm sat at 9.8 GB. Removing eight scalar features per
+point–slice pair should not remove four fifths of the memory. This
+entry derives where the memory actually goes and removes it exactly.
+
+**The derivation, from the code rather than the description.** In each
+slice block, MT2 forms the relational invariants
+`geo` of shape (B, N, S, 8) — for every point and every slice anchor,
+the distance, its log, and six direction cosines — and uses them twice:
+a linear map to one logit per pair refines the routing, and a linear map
+to hidden/2 features per pair, pooled over slices with the point's slice
+mixture, is read back into the point. The second use was written as
+"project, then pool": `einsum(mix, geo_feat(geo))`. Autograd saves the
+projected tensor (B, N, S, hidden/2) for the backward pass of the einsum.
+At the recipe's dimensions (N = 10,000, S = 256, hidden = 192, so
+hidden/2 = 96) that is 2.5e8 elements, about 0.5 GB in bfloat16, **per
+layer, times twelve layers ≈ 5.9 GB**, plus the (B, N, S, 8) invariants
+and the (B, N, S, 3) direction tensors saved for the dot products (a
+further ~1 GB). The relational-geometry path accounts for roughly 7 GB
+of the 9.8 GB, which is exactly the 9.8 → 2.0 GB drop the ablation
+exposed. The invariants themselves are cheap; the *projected* pairwise
+activation is the cost.
+
+**The fix is an identity, not an approximation.** The projection is
+affine, $W g + b$, and the slice mixture is a softmax over slices, so
+$\sum_s m_{ns} (W g_{ns} + b) = W \sum_s m_{ns} g_{ns} + b$. Pooling
+first and projecting second — `geo_feat(einsum(mix, geo))` — produces
+the same tensor and saves a (B, N, 8) activation instead of
+(B, N, S, hidden/2). The same rewrite applies to the passive read blocks
+of the decoder. Nothing about the model changes: same parameters, same
+function, same contracts.
+
+**Verification.**
+
+- Exactness: a new contract test checks the identity on both block
+  types at fp64 to 1e-12 absolute (33/33 tests pass); at the model level,
+  the old and new code with identical weights differ by 3.9e-15 max
+  absolute (1.3e-15 relative) in fp64 on a 4,000-point cloud.
+- Memory, measured locally (RTX 4090, forward + backward under bf16
+  autocast, hidden 192, 12 layers, 256 slices, 10,000 tokens, batch 1):
+  old code **9.15 GiB (9.82 GB)** — reproducing the 9.81 GB recorded in
+  the V6 arm to 0.1%, which validates the instrument — new code
+  **3.33 GiB (3.58 GB)**, a **2.75x** reduction.
+
+**Why it matters.** MT2 now trains in *less* peak memory than
+GeoTransolver (3.6 GB vs 4.6 GB at the same token count), with no
+change in its function. The critic's cost finding (C16) is resolved at
+the implementation, not by argument, and the "retired: equal-or-lower
+cost" paragraph in chapter 17 is superseded — with the caveat that the
+GeoTransolver figure is from a training run (optimizer state included)
+while this is forward+backward; on a 9M-parameter model the optimizer
+adds under 0.2 GB, and the old-code agreement to 0.1% shows the
+instruments are comparable. The V6 resource-normalized comparison
+(v5a4 anchor decode vs v3c at matched VRAM) was framed against the
+old memory; at the new memory, v3c at 10,000 tokens (3.6 GB) fits
+under v5a4's 6.35 GB with room to spare, which strengthens, not weakens,
+that closure. The memory headroom also changes what is affordable:
+more tokens per case, larger hidden width, or the latent volume tokens
+of Branch V at no net memory increase over the old baseline.
+
+**Scope note on running experiments.** The running lanes (LVT, B1,
+controls, Transolver) keep the job-local code snapshot they started
+with; they are unaffected. New runs pick up the rewrite. Because the
+function is unchanged to roundoff, checkpoints are interchangeable.
+
+**What this does not say.** It says nothing about accuracy — the A35b
+readout of the *no-relational-geometry* variant (which removes the
+features, not just their cost) is a separate question, read out below.

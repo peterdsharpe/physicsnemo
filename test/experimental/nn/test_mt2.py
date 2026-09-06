@@ -590,3 +590,20 @@ def test_all_parameters_receive_gradients(kw):
     m(pts, nrm, drv, w).sum().backward()
     unused = [n for n, p in m.named_parameters() if p.grad is None]
     assert not unused, unused
+
+
+def test_geo_pool_then_project_is_exact():
+    """Pooling the 8 relational invariants over slices and then projecting is
+    exactly the old project-then-pool (the projection is affine and the slice
+    mix is a softmax over slices, so the bias passes through unchanged). This
+    is the identity behind the memory saving: the saved activation is
+    (B, N, 8) instead of (B, N, S, hidden/2)."""
+    from physicsnemo.experimental.nn.mt2.model import _ReadBlock, _SliceBlock
+
+    torch.manual_seed(0)
+    for blk in (_SliceBlock(64, 32).double(), _ReadBlock(64, 32).double()):
+        geo = torch.randn(2, 50, 32, blk.N_GEO, dtype=torch.float64)
+        mix = torch.softmax(torch.randn(2, 50, 32, dtype=torch.float64), dim=-1)
+        old = torch.einsum("bns,bnsg->bng", mix, blk.geo_feat(geo))
+        new = blk.geo_feat(torch.einsum("bns,bnsg->bng", mix, geo))
+        assert torch.allclose(old, new, atol=1e-12, rtol=0.0)

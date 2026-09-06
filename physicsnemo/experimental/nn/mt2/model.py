@@ -127,7 +127,12 @@ class _SliceBlock(nn.Module):
         point_mix = torch.softmax(logits, dim=-1)  # normalized over slices
         back = torch.einsum("bns,bsh->bnh", point_mix, z)
         if self.use_relational_geo:
-            geo_pool = torch.einsum("bns,bnsg->bng", point_mix, self.geo_feat(geo))
+            ### Pool the 8 invariants over slices FIRST, then project: exactly
+            ### equal to projecting then pooling (the projection is affine and
+            ### point_mix sums to one over slices), but the saved activation is
+            ### (B, N, 8) instead of (B, N, S, hidden/2) -- ~0.5 GB per layer at
+            ### 10k tokens, 256 slices, hidden 192 (A35b memory derivation).
+            geo_pool = self.geo_feat(torch.einsum("bns,bnsg->bng", point_mix, geo))
         else:
             geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_width)
         h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
@@ -183,7 +188,7 @@ class _ReadBlock(nn.Module):
         logits = self.assign(self.norm(q_h)) + self.geo_logit(geo).squeeze(-1)
         mix = torch.softmax(logits, dim=-1)
         back = torch.einsum("bqs,bsh->bqh", mix, z_states)
-        geo_pool = torch.einsum("bqs,bqsg->bqg", mix, self.geo_feat(geo))
+        geo_pool = self.geo_feat(torch.einsum("bqs,bqsg->bqg", mix, geo))  # pool-then-project (exact)
         q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
         if src_h is not None:
             ### v5a3: local token readout -- the per-point detail 256 slice
