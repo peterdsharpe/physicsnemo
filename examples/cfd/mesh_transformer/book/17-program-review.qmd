@@ -58,28 +58,41 @@ accurate than GeoTransolver at 35 cases and 2.5x at 210, converging to
 parity at 1,260 (@fig-hilift-data-efficiency). The seed spreads are an
 order of magnitude smaller than the gaps. Put differently: MT2 trained on
 210 cases reaches the accuracy GeoTransolver needs 1,260 cases to reach.
-This is the axis the program's north-star correction named first, and the
-first architecture-driven generalization advantage the program has
-measured in 3D (@sec-nb-hl-ladder-dataeff).
+The same-family control sharpens the claim rather than removing it: plain
+Transolver, GeoTransolver's attention family with no geometry encoder,
+collapses exactly like GeoTransolver at 35 cases (0.40 at its better
+learning rate, 2.9x MT2) but recovers faster, reaching 0.091 at 210 cases,
+so at that rung MT2's advantage over the *best* Transolver-family baseline
+is 1.4x, and most of the 2.5x gap to GeoTransolver is GeoTransolver's
+geometry encoder under-performing its own backbone at small n
+(@sec-nb-t1-210-verdict). The robust statement is therefore: a
+2.9x advantage at 35 cases against both baselines, 1.4–2.5x at 210
+depending on the baseline, parity at 1,260. This is the axis the
+program's north-star correction named first, and the first
+architecture-driven generalization advantage the program has measured in
+3D (@sec-nb-hl-ladder-dataeff).
 
 ```{python}
 #| label: fig-hilift-data-efficiency
 #| fig-cap: >
 #|   Data efficiency on HiLiftAeroML. Pressure relative L2 error on the
 #|   shared 180-case validation set versus number of training cases, for
-#|   GeoTransolver (red circles) and MeshTransformer2 (blue squares); lines
-#|   join seed means, shaded bands span the two seeds, small dots are the
-#|   individual seeds; the annotated factor is GeoTransolver's error divided
-#|   by MT2's at the same rung. Assumptions held fixed for both architectures:
-#|   learning rate 1e-3 (each architecture's best on the full split, chosen
-#|   by validation before the ladder ran), 500 epochs, bfloat16, no
-#|   augmentation, 10,000 sampled surface points per case, two seeds. MT2
-#|   is the v3c constant-gauge configuration (these lanes predate the
-#|   similarity gauge). The test split is sealed and untouched.
-#|   Provisional until the preregistered GeoTransolver small-n steel-man
-#|   controls (lr 3e-3; 1,000 epochs) land; their falsifier is any control
-#|   within 1.2x of MT2 at 35 cases. Data:
-#|   results/hilift_ladder_reduction_2026-09-03.json.
+#|   GeoTransolver (red circles), MeshTransformer2 (blue squares) and, as the
+#|   same-family control, plain Transolver without a geometry encoder (gray
+#|   triangles, dashed; at its better learning rate of those run: 3e-3 at 35
+#|   cases, 1e-3 at 210); lines join seed means, shaded bands span the two
+#|   seeds, small dots are the individual seeds; the annotated factors are
+#|   each baseline's error divided by MT2's at the same rung. Assumptions held
+#|   fixed: learning rate 1e-3 for GeoTransolver and MT2 (each one's best on
+#|   the full split, chosen by validation before the ladder ran), 500 epochs,
+#|   bfloat16, no augmentation, 10,000 sampled surface points per case, two
+#|   seeds. MT2 is the v3c constant-gauge configuration (these lanes predate
+#|   the similarity gauge). The test split is sealed and untouched. The
+#|   GeoTransolver small-n steel-man controls (lr 3e-3; 1,000 epochs) refuted
+#|   the learning-rate and under-training explanations at 35 cases
+#|   (@sec-nb-hl-ladder-ood-indist); Transolver at 210 cases with lr 3e-3 is
+#|   still running. Data: results/hilift_ladder_reduction_2026-09-03.json and
+#|   results/t1_transolver_control_reduction_2026-09-05.json.
 #| code-fold: true
 import json, statistics
 from pathlib import Path
@@ -96,6 +109,7 @@ mpl.rcParams.update({"figure.dpi": 110, "font.size": 10, "axes.edgecolor": BASEL
                      "axes.spines.right": False, "legend.frameon": False})
 
 lad = json.load(open(Path("..") / "results" / "hilift_ladder_reduction_2026-09-03.json"))
+t1 = json.load(open(Path("..") / "results" / "t1_transolver_control_reduction_2026-09-05.json"))
 rungs = [(35, "lad_hl_{a}_super_scarce_seed{s}"), (210, "lad_hl_{a}_scarce_seed{s}"), (1260, "{a}_hl_lr1_seed{s}")]
 data = {}
 for arch in ("gt", "mt2"):
@@ -104,29 +118,53 @@ for arch in ("gt", "mt2"):
         v = [lad[pat.format(a=arch, s=s)]["pressure_l2"] for s in (42, 43) if pat.format(a=arch, s=s) in lad]
         xs.append(n); means.append(statistics.mean(v)); lo.append(min(v)); hi.append(max(v)); pts.append(v)
     data[arch] = (xs, means, lo, hi, pts)
+# Plain Transolver (same attention family as GeoTransolver, no geometry encoder),
+# at its better learning rate per rung among those run: 3e-3 at 35 cases, 1e-3 at 210.
+t1_rungs = [(35, "t1_hl_transolver_super_scarce_{lr}_seed{s}"), (210, "t1_hl_transolver_scarce_{lr}_seed{s}")]
+xs, means, lo, hi, pts, lrs = [], [], [], [], [], []
+for n, pat in t1_rungs:
+    best = None
+    for lr in ("lr1e3", "lr3e3"):
+        v = [t1[pat.format(lr=lr, s=s)]["pressure_l2"] for s in (42, 43) if pat.format(lr=lr, s=s) in t1]
+        if len(v) == 2 and (best is None or statistics.mean(v) < statistics.mean(best[0])):
+            best = (v, lr)
+    if best:
+        xs.append(n); means.append(statistics.mean(best[0])); lo.append(min(best[0])); hi.append(max(best[0]))
+        pts.append(best[0]); lrs.append(best[1])
+data["t"] = (xs, means, lo, hi, pts)
 
 fig, ax = plt.subplots(figsize=(7.2, 5.2))
-style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "MeshTransformer2", "s")}
-for arch in ("gt", "mt2"):
+style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "MeshTransformer2", "s"), "t": (INK2, "Transolver (no geometry encoder)", "^")}
+for arch in ("gt", "t", "mt2"):
     xs, means, lo, hi, pts = data[arch]
     c, name, mk = style[arch]
     ax.fill_between(xs, lo, hi, color=c, alpha=0.18, lw=0)
-    ax.plot(xs, means, color=c, lw=2.2, marker=mk, ms=7, label=name, zorder=3)
+    ax.plot(xs, means, color=c, lw=2.2 if arch != "t" else 1.6, ls="-" if arch != "t" else "--",
+            marker=mk, ms=7, label=name, zorder=3)
     for x, v in zip(xs, pts):
         ax.scatter([x] * len(v), v, color=c, s=14, alpha=0.9, zorder=4)
+    if arch == "t":
+        # label at the geometric midpoint of the dashed segment, below the line
+        xm, ym = (xs[0] * xs[1]) ** 0.5, (means[0] * means[1]) ** 0.5
+        ax.annotate("Transolver", (xm, ym), xytext=(8, -12),
+                    textcoords="offset points", color=c, fontsize=9.5, ha="left", va="top",
+                    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+        continue
     lab_i = 0 if arch == "gt" else 1
-    ax.annotate(name, (xs[lab_i], means[lab_i]), xytext=(14, 2 if arch == "gt" else -14),
+    ax.annotate(name, (xs[lab_i], means[lab_i]), xytext=(14, 2) if arch == "gt" else (14, -14),
                 textcoords="offset points", color=c, fontsize=10.5, fontweight="bold",
                 ha="left", va="center",
                 bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
-gt, mt = data["gt"], data["mt2"]
+gt, mt, tr = data["gt"], data["mt2"], data["t"]
 for i, n in enumerate(gt[0]):
     r = gt[1][i] / mt[1][i]  # GeoTransolver error / MT2 error (>1: MT2 more accurate)
     ymid = (gt[1][i] * mt[1][i]) ** 0.5
     if n < 1000:
         ax.annotate("", (n, mt[1][i]), (n, gt[1][i]),
                     arrowprops=dict(arrowstyle="<->", color=INK2, lw=0.9, shrinkA=4, shrinkB=4))
-        ax.text(n * 1.08, ymid, f"GT error = {r:.1f}x MT2", color=INK2, fontsize=9, va="center",
+        rt = tr[1][tr[0].index(n)] / mt[1][i] if n in tr[0] else None
+        txt = f"GT error = {r:.1f}x MT2" + (f"\nTransolver = {rt:.1f}x MT2" if rt else "")
+        ax.text(n * 1.08, ymid, txt, color=INK2, fontsize=9, va="center", linespacing=1.3,
                 bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
     else:
         ax.annotate(f"{r:.2f}x (parity)", (n, ymid), xytext=(14, 30),
@@ -141,11 +179,11 @@ ax.set_title("Data efficiency on HiLiftAeroML\n(shared 180-case validation set)"
              color=INK, loc="left", fontsize=11, pad=10)
 ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
 ax.text(0.0, -0.30,
-        "Both architectures: lr 1e-3 (each one's best on the full split), 500 epochs, bf16,\n"
+        "GeoTransolver and MT2: lr 1e-3 (each one's best on the full split), 500 epochs, bf16,\n"
         "no augmentation, 10k points/case, 2 seeds (band = min–max, dots = seeds).\n"
+        "Transolver (same-family control, no geometry encoder): better of lr 1e-3 / 3e-3 per rung.\n"
         "MT2 = v3c constant-gauge config (predates the similarity gauge). Test split sealed.\n"
-        "GeoTransolver small-n steel-man controls (lr 3e-3; 1,000 epochs) are running;\n"
-        "result provisional until they land.",
+        "GeoTransolver lr 3e-3 and 1,000-epoch controls at 35 cases did not move it (notebook).",
         transform=ax.transAxes, fontsize=7.6, color=MUTED, va="top", linespacing=1.35)
 fig.tight_layout()
 plt.show()
@@ -155,9 +193,11 @@ plt.show()
 It says: *with the same budget of training cases, MT2 gets far more
 accuracy out of few cases, and the advantage vanishes once data is
 plentiful.* It does not say MT2 is more accurate in general (the full-split
-point is parity), it does not yet include all of the small-n steel-man
-controls for GeoTransolver (the first, at lr 3e-3, has landed and refuted
-the learning-rate hypothesis; the rest are running), and it says nothing
+point is parity). The size of the advantage depends on the baseline: at 210
+cases it is 2.5x against GeoTransolver but 1.4x against plain Transolver,
+which beats GeoTransolver at that rung; the GeoTransolver steel-man
+controls (lr 3e-3; 1,000 epochs) at 35 cases did not move it, and the
+Transolver lr 3e-3 lanes at 210 cases are still running. It says nothing
 about out-of-distribution transfer: the aoa and stall axes of the same
 ladder are the subject of @fig-hilift-ood below.
 :::
@@ -199,13 +239,15 @@ GeoTransolver's residual ratio edge is carried by its pointwise
 raw-coordinate features, and its falsifiers are stated in readout units
 there. The notebook's caveat carries over: the trigger is driven by the
 denominator, and a reader should weigh B1's absolute OOD readout at least
-as heavily as its ratio. On the data-efficiency half, the first of the
-four GeoTransolver small-n steel-man controls has landed and refuted the
-learning-rate hypothesis: GeoTransolver at 35 cases and lr 3e-3 scores
-0.392 / 0.481, no better than its lr 1e-3 ladder lanes (0.375 / 0.409)
-and nowhere near the falsifier of 1.2x MT2 (@sec-nb-hl-ladder-ood-indist,
-addendum). The 1,000-epoch and 210-case controls are still running, so
-@fig-hilift-data-efficiency stays provisional on those alone.
+as heavily as its ratio. On the data-efficiency half, three of the four
+GeoTransolver small-n steel-man controls have landed and none approaches
+the falsifier: at 35 cases, lr 3e-3 scores 0.392 / 0.481 and 1,000 epochs
+at lr 1e-3 scores 0.373 / 0.429, against ladder lanes of 0.375 / 0.409 and
+a falsifier of 1.2x MT2 = 0.166; at 210 cases lr 3e-3 scores 0.220 / 0.290,
+worse than the ladder's 0.159 (@sec-nb-hl-ladder-ood-indist, addendum).
+Neither a higher learning rate nor twice the optimizer steps moves
+GeoTransolver toward MT2 at small n. The last control pair (210 cases,
+1,000 epochs) is still running.
 
 ```{python}
 #| label: fig-hilift-ood

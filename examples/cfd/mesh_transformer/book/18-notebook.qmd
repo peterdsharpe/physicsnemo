@@ -5129,7 +5129,7 @@ that statement:
 - **Deferred:** AB-UPT implementation (gated on T1), G5 (gated on the
   cfd-datagen corpus), MT3 design (gated on B1 + controls + V0).
 
-## 2026-09-05 — T1 verdict (35 cases): plain Transolver lands in GeoTransolver's band (0.40–0.63), not MT2's 0.14; the data-efficiency gap is MT2-specific {#sec-nb-t1-verdict}
+## 2026-09-05 — T1 verdict (35 cases): plain Transolver lands in GeoTransolver's band (0.40–0.63), not MT2's 0.14; the data-efficiency gap is MT2-specific {#sec-nb-t1-35-verdict}
 
 **Result** (same shared 180-case val set as the ladder; 2 seeds each):
 
@@ -5223,7 +5223,7 @@ tokens for GeoTransolver), query-resolution transfer at fixed source,
 SDF-band-stratified error, and surface-trace consistency against the
 surface labels the boundary tokens already carry.
 
-**A35 launched alongside** (@sec-nb-t1-verdict): MT2 at 35 cases with
+**A35 launched alongside** (@sec-nb-t1-35-verdict): MT2 at 35 cases with
 one factor removed at a time — equivariance (raw-coordinate channel),
 measure weights, gauge — to name which of MT2's ingredients buys the
 data-efficiency result.
@@ -5235,7 +5235,7 @@ the falsifier.** GeoTransolver at 35 cases: lr 3e-3 → 0.392 / 0.480;
 0.220 / 0.290, *worse* than the ladder's 0.159, versus a bar of
 0.077. Neither more optimizer steps nor a higher learning rate moves
 GeoTransolver toward MeshTransformer2 at small n; together with the
-T1 Transolver result (@sec-nb-t1-verdict) the data-efficiency
+T1 Transolver result (@sec-nb-t1-35-verdict) the data-efficiency
 advantage is now robust to learning rate, training length, and the
 choice of Transolver-family baseline. The last control pair
 (210 cases, 1,000 epochs) is still training; the hero figure's
@@ -5445,3 +5445,60 @@ measure-weighted slice routing that the boundary tokens rely on. The
 preregistered full-run prediction (LVT/GT ≤ 1.5) and falsifier (≥ 2.0)
 stand unchanged; the stratified prediction (gain largest in the mid/far
 bands) will be read from the SDF-band analysis on the full checkpoints.
+
+## 2026-09-05 — T1 verdict (210 cases): plain Transolver lands at 0.091, above the 0.084 bar but 1.8x better than GeoTransolver; MT2's edge at 210 is 1.4x against the best same-family baseline {#sec-nb-t1-210-verdict}
+
+**Setting.** The HiLift data-efficiency ladder (@sec-nb-hl-ladder-dataeff)
+measured MeshTransformer2 (MT2) 2.5x more accurate than GeoTransolver at
+210 training cases (pressure rel-L2 0.064 vs 0.159 on the shared 180-case
+validation set). The same-family control preregistered at
+@sec-nb-transolver-control-prereg trains plain **Transolver** — the same
+soft-slice attention family as GeoTransolver, with no geometry encoder,
+no ball-query context and none of MT2's contracts — on the same rungs,
+to separate "MT2's structure buys small-data accuracy" from
+"GeoTransolver's geometry encoder loses it". At 35 cases the verdict was
+clean (@sec-nb-t1-35-verdict): Transolver collapsed into GeoTransolver's
+band. This entry reads the 210-case rung.
+
+**Result** (lr 1e-3, 500 epochs, 2 seeds, shared val set;
+`results/t1_transolver_control_reduction_2026-09-05.json`):
+
+| model @ 210 training cases | lr | pressure rel-L2 | vs MT2 |
+|---|---|---|---|
+| GeoTransolver (ladder) | 1e-3 | 0.160 / 0.157 | 2.5x |
+| GeoTransolver (steel-man control) | 3e-3 | 0.220 / 0.290 | 4.0x |
+| **Transolver** | 1e-3 | **0.092 / 0.089** | **1.4x** |
+| **MeshTransformer2** (ladder) | 1e-3 | **0.062 / 0.067** | 1.0 |
+
+**The preregistered bar holds, narrowly, and the honest reading is a
+qualification.** The falsifier was Transolver ≤ 1.3x MT2 = 0.084; the
+measured 0.0905 mean is 1.41x MT2, so the advantage is still
+MT2-specific at this rung. But Transolver is **1.76x more accurate than
+GeoTransolver** at 210 cases with the identical learning rate, whereas at
+35 cases the two were at parity (0.40 vs 0.39 at each one's better lr).
+Most of the 2.5x MT2/GeoTransolver gap at 210 is therefore GeoTransolver
+falling behind its own backbone, not MT2 pulling ahead of the family: the
+geometry encoder and context path that GeoTransolver adds are a liability
+between 35 and 210 cases on this dataset. The full-split rung (1,260) has
+no Transolver lane, and GeoTransolver reaches MT2 parity there (0.042 vs
+0.041), so whether the geometry encoder ever pays for itself on HiLift is
+open — a 1,260-case Transolver pair would answer it but is a benchmarking
+question, not an architecture one, and is parked.
+
+**What changes.** The hero figure (@fig-hilift-data-efficiency) now
+carries the Transolver series and both factors per rung, and its caption
+states the claim as: *2.9x at 35 cases against both baselines; 1.4x
+(Transolver) to 2.5x (GeoTransolver) at 210; parity at 1,260*. The
+architecture question A35/A35b is asking — which MT2 ingredient carries
+the small-data advantage — is unchanged, because the 35-case rung, where
+the effect is largest, is exactly where all Transolver-family variants
+collapse together.
+
+**Steel-man applied to the control too.** Transolver at 210 cases was
+run only at lr 1e-3; at 35 cases it preferred 3e-3 by 1.55x. Two lanes at
+210 cases and lr 3e-3 (seeds 42, 43; `t1_hl_transolver_scarce_lr3e3_*`)
+launched now, same protocol. **Prediction:** they land within 0.08–0.10
+(lr 3e-3 helps less at 210 than at 35, as it did for GeoTransolver, which
+got *worse*). **Falsifier of the 1.4x statement:** Transolver lr 3e-3 ≤
+0.070 → MT2's 210-case advantage over the best same-family baseline is
+within seed spread and the figure's 210-rung annotation must say so.
