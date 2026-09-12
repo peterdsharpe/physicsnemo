@@ -1642,3 +1642,9 @@ interior control @sec-nb-udrv-int-prereg.
   lower on 168/180. Physical-drive GT 0.0557 (1.14x), T 0.0586 (1.20x) = protocol artifact. Unit vs physical per-case medians 0.62 (GT), 0.67 (T).
   Prediction holds at SIX OF SEVEN rungs; only 1,260 pending. Case-ladder ratios flat: GT 0.80/0.83/0.84x, T 0.83/0.91/0.90x at 35/210/510.
   ISLA value = prior configuration (reference not trained on 510). Write "six of seven", not "five of six", from now on.
+- **RELFRAME-LADDER verdict (2026-09-12, fp32; results/frame_reduction_2026-09-11.json hilift_val).** 21 geo reference 0.1048/0.1084 → 0.1066 (+5.2% vs 0.1014;
+  +2.2% vs gauge). 210 cases reference 0.0706/0.0726 → 0.0716 (+11.3% vs 0.0643; +9.1% vs gauge 0.0656) → RECURRENCE CONFIRMED
+  (≥8% cell). Full ladder reference÷gauge: DrivAerML 1.017, 4geo 0.940, 21geo 1.022, fixed angle 0.965, 35 1.032, 210 1.091. Write "the
+  frame-free reference is the most accurate ISLA on never-seen-geometry rungs and loses 3–9% to the gauge where geometries recur; the
+  reference stays by the principle (generalization), price stated per rung"; never hide the recurring-rung price. Fixed angle unexplained →
+  FF fixed-angle pair (recovers ≤3% → positional seeds; pays ≥7% → mesher pattern) + seed-44 reference arms launched.

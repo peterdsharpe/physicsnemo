@@ -16122,3 +16122,77 @@ has not been trained on this rung, and on the rungs where it has, it pays 0
 to 11% relative to the prior, so the ordering would not change. The
 bfloat16 evaluation of the same checkpoints (job 724819) is running for the
 record and is not used here. Owner: this session.
+
+## 2026-09-12 — RELFRAME-LADDER verdict, 21-geometry and 210-case rungs: the reference pays 5% where geometries are never seen and 11% where they recur, so the recurrence reading is confirmed on its discriminating cell; across six rungs the frame-free reference beats the similarity gauge on never-seen geometries and loses to it on recurring ones {#sec-nb-relframe-ladder-verdict}
+
+The two rungs preregistered together in @sec-nb-relframe-ladder-amend read
+out (lanes rf_hl_mt2_meas_geometry_scarce_seed{42,43} and
+rf_hl_mt2_meas_scarce_seed{42,43}; reference configuration, unit drive, lr
+1e-3, 500 epochs, snapshot code_frame; float32 under code_eval_frame, jobs
+725855 and 727672, no loader warnings; artifact `results/frame_reduction_2026-09-11.json`, block
+hilift_val). **21 geometries** (210 training cases, 18 never-seen validation
+geometries): 0.1048 / 0.1084 → **0.1066**, +5.2% against the
+constant-gauge prior 0.1014 and +2.2% against the similarity gauge's
+0.1043. **210 cases** (recurring geometries): 0.0706 / 0.0726 →
+**0.0716**, +11.3% against the prior 0.0643 and +9.1% against the
+gauge's 0.0656.
+
+**Against the preregistered predictions.** The discriminating cell was the
+210-case rung: ≥ 8% confirms the recurrence reading, ≤ 3% refutes it in
+favour of data quantity. It reads +11.3%, **recurrence confirmed**: with the
+same 210 training cases, the reference pays 11% where the validation
+geometries recur in training and 5% where they do not, and the 35-case rung
+(recurring) paid 11% too. The 21-geometry cell was predicted ≤ 3% by both
+readings and reads +5.1%, just past the cheap band; the recurrence reading
+survives with the amendment that never-seen rungs are cheap but not free
+when there are many training geometries at varied angles (the 4-geometry
+rung, +1.0%, had too few for the pattern to matter either way). The fixed
+angle (+10.3%, never seen) remains the one rung the reading does not
+cover, as @sec-nb-relframe-ladder-fixed-angle stated.
+
+**The ladder, complete on six rungs** (float32; all rate-matched at lr
+1e-3 except the DrivAerML gauge row, which is rate-matched separately):
+
+| rung | training cases | validation geometries | constant gauge (prior) | similarity gauge | **reference** (relative frame, total measure) | reference ÷ gauge |
+|---|---|---|---|---|---|---|
+| DrivAerML, 435 cars | 435 | same family | 0.0557 | 0.0543 (-2.5%) | **0.0552 (-0.9%)** | 1.017x |
+| HiLift, 4 geometries | 40 | never seen | 0.2496 | 0.2680 (+7.4%) | **0.2520 (+1.0%)** | 0.940x |
+| HiLift, 21 geometries | 210 | never seen | 0.1014 | 0.1043 (+2.9%) | **0.1066 (+5.2%)** | 1.022x |
+| HiLift, fixed angle | 126 | never seen | 0.0348 | 0.0398 (+14.4%) | **0.0384 (+10.3%)** | 0.965x |
+| HiLift, 35 cases | 35 | recurring | 0.1377 | 0.1482 (+7.6%) | **0.1529 (+11.0%)** | 1.032x |
+| HiLift, 210 cases | 210 | recurring | 0.0643 | 0.0656 (+2.0%) | **0.0716 (+11.3%)** | 1.091x |
+
+**Reading.** Two frames sit beside the plain mean now on every rung. The
+similarity gauge estimates a centroid and a scale from the sample; the
+reference has no frame at all. Where validation geometries recur in
+training (35 and 210 cases) the gauge is 3% and 9% more accurate than the
+reference; where they are never seen (4 geometries, fixed angle) the
+reference is 7% and 3.5% more accurate, and at 21 geometries and on the
+cars they are within 2%. That pattern says what a frame is worth: an
+estimated centre and scale give every token an absolute position on *this*
+wing, which is reusable information when the same wings return and a
+liability that has to be unlearned when they do not. The plain mean adds
+the mesher's density pattern on top, which is why it beats both on the
+recurring rungs and the fixed angle and neither on the never-seen rungs.
+Under @sec-principle and Peter's ruling the reference stays the reference:
+the property the program is buying is generalization to geometries,
+meshers and poses the training set did not contain, and on the rungs that
+test new geometries the frame-free construction is the most accurate ISLA
+on the ladder. The price of that choice is now stated per rung: about 11%
+where validation geometries recur, 5% at 21 never-seen geometries, 10% at
+the fixed angle, and nothing on the cars or at 4 geometries. **The
+recurring-rung price is a pro for the frame-free construction only if the
+reader's deployment is on new geometries; for a fixed fleet of shapes the
+gauge's frame is worth 3–9% and the plain mean's mesher pattern more.**
+Both are written into the recommendation rather than hidden.
+
+**Follow-up launched.** The fixed angle is the unexplained rung, and it
+now has the prerequisite: the full-geometry frame table for its 144 cases
+(frame/frame_table_hilift_single_aoa_12.json; plain-mean displacement 0.132
+body lengths, max 0.215). The FRAME-FULL pair at the fixed angle
+(exact centroid and scale, all positional seeds kept;
+ff_hl_mt2_frame_single_aoa_12_seed{42,43}) separates the two candidates for
+its 10%: *positional seeds at a fixed drive* if it recovers to within 3% of
+0.0348, *the mesher pattern* if it pays ≥ 7% as the 35-case FRAME-FULL did.
+Third seeds of both fixed-angle reference arms (seed 44) are launched with
+it, because the pair's spreads (11% and 22%) are the widest on the ladder.
