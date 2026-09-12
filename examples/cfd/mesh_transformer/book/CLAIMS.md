@@ -1637,3 +1637,9 @@ interior control @sec-nb-udrv-int-prereg.
   Gauge −0.1% / +2.4% (more consistent at 40k); constant prior +960% / +1385%. Reference is the MOST ACCURATE arm under every sampler at
   every count (unif 40k 0.0364 vs gauge 0.0389; biased 40k 0.0384 vs 0.0399). Write "converging, not yet at the bias bar at 40k on this rung";
   never "the reference is consistent at the fixed angle" without the bias qualification.
+- **RELFRAME-LADDER verdict (2026-09-12, fp32; results/frame_reduction_2026-09-11.json hilift_val).** 21 geo reference 0.1048/0.1084 → 0.1066 (+5.2% vs 0.1014;
+  +2.2% vs gauge). 210 cases reference 0.0706/0.0726 → 0.0716 (+11.3% vs 0.0643; +9.1% vs gauge 0.0656) → RECURRENCE CONFIRMED
+  (≥8% cell). Full ladder reference÷gauge: DrivAerML 1.017, 4geo 0.940, 21geo 1.022, fixed angle 0.965, 35 1.032, 210 1.091. Write "the
+  frame-free reference is the most accurate ISLA on never-seen-geometry rungs and loses 3–9% to the gauge where geometries recur; the
+  reference stays by the principle (generalization), price stated per rung"; never hide the recurring-rung price. Fixed angle unexplained →
+  FF fixed-angle pair (recovers ≤3% → positional seeds; pays ≥7% → mesher pattern) + seed-44 reference arms launched.
