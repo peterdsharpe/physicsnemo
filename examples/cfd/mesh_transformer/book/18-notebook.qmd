@@ -16073,6 +16073,56 @@ smaller than the gauge's accuracy price: under the biased sampler at
 half of the fixed-angle rung is therefore "converging, not yet at the bar
 under the bias", stated as such beside the accuracy row.
 
+## 2026-09-12 — Verdict, UDRV-L 510 cases: unit-drive GeoTransolver 0.84x and Transolver 0.90x of the prior ISLA (168 of 180 cases each); the prediction holds at six of seven rungs {#sec-nb-udrvl-510-verdict}
+
+*Setting.* The HiLiftAeroML ladder trains on nested subsets of 35, 210, 510
+and 1,260 cases and validates on one 180-case set. The original ladder fed
+GeoTransolver and Transolver the physical freestream velocity while ISLA
+received a unit direction, which collapsed the baselines' global-context
+projector and manufactured ISLA's small-data advantage
+(@sec-part-baseline). The unit-drive reruns restore the matched input,
+change nothing else, and were preregistered with one prediction: the
+unit-drive baselines match or beat ISLA at every rung
+(@sec-nb-udrvl-210-verdict for the bars). Five rungs had been measured;
+the 510-case rung is the sixth, and the 1,260-case rung remains.
+
+*Instruments.* Four lanes from the wave-2 table (rows 69–72):
+GeoTransolver at its reference learning rate of 1e-3 and Transolver at
+3e-3, seeds 42 and 43, unit direction supplied through the Hydra
+forward-kwargs override, otherwise the frozen ladder protocol (10,000
+tokens, 500 epochs). Float32 evaluation under the guarded snapshot on the
+180 validation cases (job 724818; 183 rows per run deduplicated to 180 by
+sample id; zero skipped loads), reduced with seed means and paired per-case
+comparisons on seed-mean pressure against the prior-configuration ISLA of
+the ladder (`lad_hl_mt2_medium_seed42/43`, constant gauge) and against the
+physical-drive baselines of the original ladder.
+Artifact: `results/udrvl_510_reduction_2026-09-12.json`.
+
+*What we saw.* **Unit-drive GeoTransolver scores 0.0410 (seeds 0.0418 /
+0.0402) against the prior ISLA's 0.0489 (0.0478 / 0.0499), a ratio of
+0.84, and is lower on 168 of the 180 cases; unit-drive Transolver scores
+0.0441 (0.0437 / 0.0444), a ratio of 0.90, also lower on 168 of 180.** Both
+fall in the "baseline ahead" band of the preregistered bars (0.90 or
+below with the baseline lower on at least two thirds of cases;
+Transolver sits at the band's edge). The physical-drive baselines of the
+original ladder scored 0.0557 and 0.0586 on the same cases, 1.14x and 1.20x
+behind ISLA; the unit direction improves GeoTransolver by a median factor of
+0.62 per case (lower on 167 of 180 against its physical-drive self) and
+Transolver by 0.67 (170 of 180). The 510-case "advantage" of the original
+ladder was therefore the input-scale artifact, as at every other rung.
+
+*Reading.* The prediction has now held at six of the seven rungs (35, 210,
+510 cases; 4 and 21 geometries; the fixed angle), with GeoTransolver ahead
+by 0.76x to 0.92x and Transolver by 0.86x to 0.93x, and the 1,260-case
+rerun is the last. Along the case ladder the baseline-to-ISLA ratio is
+flat: GeoTransolver 0.80x at 35, 0.83x at 210, 0.84x at 510; Transolver
+0.83x, 0.91x, 0.90x. The ISLA value here is the prior configuration's
+record; the reference configuration (relative frame, total-measure scale)
+has not been trained on this rung, and on the rungs where it has, it pays 0
+to 11% relative to the prior, so the ordering would not change. The
+bfloat16 evaluation of the same checkpoints (job 724819) is running for the
+record and is not used here. Owner: this session.
+
 ## 2026-09-12 — RELFRAME-LADDER verdict, 21-geometry and 210-case rungs: the reference pays 5% where geometries are never seen and 11% where they recur, so the recurrence reading is confirmed on its discriminating cell; across six rungs the frame-free reference beats the similarity gauge on never-seen geometries and loses to it on recurring ones {#sec-nb-relframe-ladder-verdict}
 
 The two rungs preregistered together in @sec-nb-relframe-ladder-amend read

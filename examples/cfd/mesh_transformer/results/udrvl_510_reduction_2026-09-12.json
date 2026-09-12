@@ -1,0 +1,118 @@
+{
+ "date": "2026-09-12",
+ "rung": "HiLiftAeroML 510 training cases (highlift_surface_medium), 180 validation cases",
+ "instrument": "float32 (hl_evals_fp32; guarded code_eval snapshot; zero skipped loads; job 724818; 183 rows deduplicated to 180 by sample_id); seed means over two seeds; paired per-case on seed-mean pressure_l2",
+ "protocol": "unit-drive baselines (freestream as unit direction: GeoTransolver forward_kwargs.global_embedding=global_data.U_inf_dir at lr 1e-3; Transolver forward_kwargs.fx.source=global_data.U_inf_dir at lr 3e-3) vs the prior-configuration ISLA (constant gauge, lr 1e-3, lad_hl_mt2_medium) and the physical-drive baselines of the original ladder (lad_hl_gt_medium, t1_hl_transolver_medium_lr3e3); wave2_lanes.tsv rows 69-72",
+ "bars": "prediction written before the reruns (2026-09-09): the unit-drive baselines match or beat ISLA at every rung; 'beat' = seed-mean ratio below 1 with the baseline lower on more than half the paired cases",
+ "arms_fp32": {
+  "gt_unit": {
+   "runs": [
+    "udrv_hl_gt_medium_seed42",
+    "udrv_hl_gt_medium_seed43"
+   ],
+   "n_cases": 180,
+   "seed_pressure": [
+    0.04184,
+    0.04017
+   ],
+   "mean_pressure": 0.04101,
+   "seed_wss": [
+    0.08071,
+    0.07915
+   ]
+  },
+  "transolver_unit_lr3e3": {
+   "runs": [
+    "udrv_hl_transolver_medium_lr3e3_seed42",
+    "udrv_hl_transolver_medium_lr3e3_seed43"
+   ],
+   "n_cases": 180,
+   "seed_pressure": [
+    0.04373,
+    0.04437
+   ],
+   "mean_pressure": 0.04405,
+   "seed_wss": [
+    0.08555,
+    0.08657
+   ]
+  },
+  "isla_prior": {
+   "runs": [
+    "lad_hl_mt2_medium_seed42",
+    "lad_hl_mt2_medium_seed43"
+   ],
+   "n_cases": 180,
+   "seed_pressure": [
+    0.04781,
+    0.04988
+   ],
+   "mean_pressure": 0.04885,
+   "seed_wss": [
+    0.09039,
+    0.09348
+   ]
+  },
+  "gt_physical": {
+   "runs": [
+    "lad_hl_gt_medium_seed42",
+    "lad_hl_gt_medium_seed43"
+   ],
+   "n_cases": 180,
+   "seed_pressure": [
+    0.05969,
+    0.0517
+   ],
+   "mean_pressure": 0.0557,
+   "seed_wss": [
+    0.11277,
+    0.10042
+   ]
+  },
+  "transolver_physical_lr3e3": {
+   "runs": [
+    "t1_hl_transolver_medium_lr3e3_seed42",
+    "t1_hl_transolver_medium_lr3e3_seed43"
+   ],
+   "n_cases": 180,
+   "seed_pressure": [
+    0.05971,
+    0.05751
+   ],
+   "mean_pressure": 0.05861,
+   "seed_wss": [
+    0.1109,
+    0.10883
+   ]
+  }
+ },
+ "paired_fp32": {
+  "gt_unit_vs_isla_prior": {
+   "n": 180,
+   "lower_first_on": 168,
+   "median_ratio_first_over_second": 0.7557
+  },
+  "transolver_unit_vs_isla_prior": {
+   "n": 180,
+   "lower_first_on": 168,
+   "median_ratio_first_over_second": 0.8835
+  },
+  "gt_unit_vs_gt_physical": {
+   "n": 180,
+   "lower_first_on": 167,
+   "median_ratio_first_over_second": 0.6156
+  },
+  "transolver_unit_vs_transolver_physical": {
+   "n": 180,
+   "lower_first_on": 170,
+   "median_ratio_first_over_second": 0.666
+  }
+ },
+ "ratios_baseline_over_isla_prior": {
+  "gt_unit": 0.8395,
+  "transolver_unit_lr3e3": 0.9017,
+  "gt_physical": 1.1402,
+  "transolver_physical_lr3e3": 1.1998
+ },
+ "verdict": "Prediction holds at the 510-case rung: unit-drive GeoTransolver 0.0410 (0.84x of the prior ISLA 0.0489, lower on 168 of 180 cases) and Transolver 0.0441 (0.90x, lower on 168 of 180). The physical-drive baselines (0.0557, 0.0586) were 1.14x and 1.20x behind ISLA, so the earlier 510-case 'advantage' was the input-scale protocol artifact. Unit drive improves GeoTransolver by 0.62x and Transolver by 0.67x per case (medians). ISLA's reference configuration (relative frame) has not been trained on this rung; the ISLA value is the prior configuration's record."
+}

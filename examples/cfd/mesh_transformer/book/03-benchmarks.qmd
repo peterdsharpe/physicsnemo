@@ -89,6 +89,7 @@ poseB = json.load(open(RP / "campaign_b_pose" / "campaign_b_fp32_2026-09-10.json
 campD = json.load(open(RP / "computational_support" / "campaign_d_verdict_2026-09-10.json"))["per_arm"]
 cost = J("isla_vs_baselines_cost_fastkernel_2026-09-09.json")
 fw = J("farwake_reduction_2026-09-11.json")
+u510 = J("udrvl_510_reduction_2026-09-12.json")
 fs = J("farwake_far_field_shells_2026-09-11.json")["arms"]
 
 # ---- surface rungs: seed lists in float32 -------------------------------
@@ -112,6 +113,12 @@ S["hl210"] = dict(
     paired=(f"{a210['gt_unit_lr1e3']['lower_than_isla_on']} of 180, {a210['transolver_unit_lr3e3']['lower_than_isla_on']} of 180", "results/udrvl_210_reduction_2026-09-10.json"),
     draws=(campA210["gt_over_isla_n210"], campA210["transolver_over_isla_n210"]),
     src="results/udrvl_210_reduction_2026-09-10.json (three-seed addendum)")
+S["hl510"] = dict(
+    title="HiLiftAeroML, 510 training cases (180 validation cases)",
+    gt=u510["arms_fp32"]["gt_unit"]["seed_pressure"], t=u510["arms_fp32"]["transolver_unit_lr3e3"]["seed_pressure"],
+    isla_prior=u510["arms_fp32"]["isla_prior"]["seed_pressure"], isla_ref=None,
+    paired=(f"{u510['paired_fp32']['gt_unit_vs_isla_prior']['lower_first_on']} of 180, {u510['paired_fp32']['transolver_unit_vs_isla_prior']['lower_first_on']} of 180", "results/udrvl_510_reduction_2026-09-12.json"),
+    draws=None, src="results/udrvl_510_reduction_2026-09-12.json")
 S["geo4"] = dict(
     title="HiLiftAeroML, 4 training geometries (18 held-out geometries, 180 cases)",
     gt=fp(fpall, [f"udrv_hl_gt_geometry_super_scarce_seed{s}" for s in (42, 43)]),
@@ -186,7 +193,7 @@ print(": Training cost on one instrument: one GB300 GPU, batch of one case, bflo
 
 ## Surface pressure: every rung on one axis {#sec-scoreboard-surface}
 
-**On seven of seven surface settings the unit-drive baselines match or beat
+**On eight of eight surface settings the unit-drive baselines match or beat
 ISLA; the margin runs from 28% at 35 HiLift cases against the reference
 configuration (20% against the prior one) and 25% at 4 training geometries (the same against the reference and the prior, which are at parity there)
 to parity at the 512-wide, 80,000-cell corner, and it does not close as the
@@ -238,6 +245,7 @@ def add(label, key, against):
 add("HiLift, 35 cases — vs reference ISLA", "hl35", "isla_ref")
 add("HiLift, 35 cases — vs prior configuration", "hl35", "isla_prior")
 add("HiLift, 210 cases", "hl210", "isla_prior")
+add("HiLift, 510 cases", "hl510", "isla_prior")
 add("HiLift, 4 training geometries — vs reference ISLA", "geo4", "isla_ref")
 add("HiLift, 4 training geometries — vs prior configuration", "geo4", "isla_prior")
 add("HiLift, 21 training geometries", "geo21", "isla_prior")
@@ -289,7 +297,7 @@ def rat(b, s, ci):
     return " ‖ ".join(parts)
 out = ("| setting | GeoTransolver | Transolver | ISLA, reference configuration | ISLA, prior configuration | GeoTransolver ÷ ISLA (reference ‖ prior) | Transolver ÷ ISLA (reference ‖ prior) | validation cases where the baseline is lower |\n"
        "|---|---|---|---|---|---:|---:|---|\n")
-for key in ("hl35", "hl210", "geo4", "geo21", "fixed", "dr435", "corner"):
+for key in ("hl35", "hl210", "hl510", "geo4", "geo21", "fixed", "dr435", "corner"):
     s = S[key]
     ref = f"**{fmt(s['isla_ref'])}**" if s["isla_ref"] else "not yet trained on this rung"
     cg, ct = s["draws"] if s["draws"] else (None, None)
@@ -331,7 +339,7 @@ measured (@sec-scoreboard-consistency, @sec-limits-mechanism).
 ```{python}
 #| label: fig-scoreboard-bars
 #| fig-cap: >
-#|   The same seven surface settings as absolute error. Bars are seed means
+#|   The same eight surface settings as absolute error. Bars are seed means
 #|   of surface-pressure relative L2 (lower is better) for GeoTransolver
 #|   (red), Transolver (grey), ISLA's prior constant-gauge configuration
 #|   (light blue) and ISLA's reference configuration (dark blue, where
@@ -343,8 +351,8 @@ measured (@sec-scoreboard-consistency, @sec-limits-mechanism).
 #|   angle), not architecture. Float32. Data: as @tbl-scoreboard-surface.
 #| code-fold: true
 BLUE2 = "#8fb8e8"
-keys = ["hl35", "hl210", "geo4", "geo21", "fixed", "dr435", "corner"]
-short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases", "geo4": "HiLift, 4 geometries",
+keys = ["hl35", "hl210", "hl510", "geo4", "geo21", "fixed", "dr435", "corner"]
+short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases", "hl510": "HiLift, 510 cases", "geo4": "HiLift, 4 geometries",
          "geo21": "HiLift, 21 geometries", "fixed": "HiLift, fixed angle", "dr435": "DrivAerML, 435 cars",
          "corner": "DrivAerML, 512 × 80k"}
 fig, axs = plt.subplots(2, 4, figsize=(12.8, 6.0))
@@ -363,7 +371,6 @@ for ax, key in zip(axs, keys):
     ax.set_title(short[key], loc="left", fontsize=9.5, color=INK)
     ax.set_ylim(0, max(means) * 1.28); ax.grid(axis="x", visible=False)
     ax.tick_params(axis="y", labelsize=8)
-axs[-1].axis("off")
 axs[0].set_ylabel("pressure rel-L2 [–]"); axs[4].set_ylabel("pressure rel-L2 [–]")
 fig.suptitle("Surface-pressure error by architecture on every benchmarked rung (float32, seed means; dots are seeds)", color=INK, fontsize=10.5, x=0.01, ha="left")
 fig.tight_layout()
@@ -619,9 +626,18 @@ frame, not in the attention. Measure weighting in the slice pooling repairs
 the aggregation for the Transolver family at no accuracy cost on DrivAerML
 and 6.5% on the wings; a frame that is a property of the geometry rather
 than of the sample, whether ISLA's relative frame or a Horvitz–Thompson
-centroid in the baselines' datapipe, removes the rest. Which frame the
-baselines stand on in the fair comparison is a ruling still to be made, so
-both are reported here.
+centroid in the baselines' datapipe, removes the rest. The
+Horvitz–Thompson-centred baselines are research variants that locate the
+property; the released GeoTransolver and Transolver keep their plain-mean
+frame and are not modified (ruling of 2026-09-11), so the deployable
+comparison is the released baselines against ISLA's reference frame. On
+the wings the reference frame's convergence is measured on the fixed-angle
+split: from 2,500 to 40,000 cells its area-sampler deviation falls from
++45% to +2.6% and its biased-sampler deviation from +81% to +5.5%,
+converging but not yet at the bias bar at 40,000, while it is the most
+accurate arm under every sampler at every count
+(@sec-nb-relframe-ladder-fixed-angle-bench;
+`results/consistency_bench/consistency_bench_rffa_2026-09-11.json`).
 
 ## What is not yet on the board {#sec-scoreboard-pending}
 

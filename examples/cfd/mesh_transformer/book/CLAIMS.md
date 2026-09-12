@@ -1637,6 +1637,11 @@ interior control @sec-nb-udrv-int-prereg.
   Gauge −0.1% / +2.4% (more consistent at 40k); constant prior +960% / +1385%. Reference is the MOST ACCURATE arm under every sampler at
   every count (unif 40k 0.0364 vs gauge 0.0389; biased 40k 0.0384 vs 0.0399). Write "converging, not yet at the bias bar at 40k on this rung";
   never "the reference is consistent at the fixed angle" without the bias qualification.
+- **UDRV-L 510-case verdict (2026-09-12; fp32, hl_evals_fp32, job 724818; results/udrvl_510_reduction_2026-09-12.json).** Unit-drive GT 0.0410
+  (0.0418/0.0402) = 0.84x of prior ISLA 0.0489 (0.0478/0.0499), lower on 168/180; unit-drive Transolver (lr 3e-3) 0.0441 (0.0437/0.0444) = 0.90x,
+  lower on 168/180. Physical-drive GT 0.0557 (1.14x), T 0.0586 (1.20x) = protocol artifact. Unit vs physical per-case medians 0.62 (GT), 0.67 (T).
+  Prediction holds at SIX OF SEVEN rungs; only 1,260 pending. Case-ladder ratios flat: GT 0.80/0.83/0.84x, T 0.83/0.91/0.90x at 35/210/510.
+  ISLA value = prior configuration (reference not trained on 510). Write "six of seven", not "five of six", from now on.
 - **RELFRAME-LADDER verdict (2026-09-12, fp32; results/frame_reduction_2026-09-11.json hilift_val).** 21 geo reference 0.1048/0.1084 → 0.1066 (+5.2% vs 0.1014;
   +2.2% vs gauge). 210 cases reference 0.0706/0.0726 → 0.0716 (+11.3% vs 0.0643; +9.1% vs gauge 0.0656) → RECURRENCE CONFIRMED
   (≥8% cell). Full ladder reference÷gauge: DrivAerML 1.017, 4geo 0.940, 21geo 1.022, fixed angle 0.965, 35 1.032, 210 1.091. Write "the
