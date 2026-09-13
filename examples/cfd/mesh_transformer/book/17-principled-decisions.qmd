@@ -1,0 +1,107 @@
+# Design decisions and the principle behind them {#sec-principled-decisions}
+
+**Every architectural decision in ISLA was made by one rule: an accuracy
+gain is not accepted when it is known to come from a violation of a
+physical principle.** A surrogate for a boundary-value problem should
+depend on the geometry, the boundary conditions and the physics, and on
+nothing else; when a change improves the score by reading the mesher's cell
+pattern, the sampling density, or a statistic of the drawn sample, the
+improvement is a fit to the discretization, and it will not survive a
+different mesher, a different sampling law, or a geometry the training set
+did not contain. This appendix records each decision of that kind, the
+alternative it rejected, what the alternative would have bought on the
+in-distribution metric, and the evidence that located the gain in the
+discretization rather than in the physics. It exists so that the paper on
+ISLA can say *why* the architecture is what it is, and so that the position
+is stated plainly for others: if the community wants highly generalizable
+physics surrogates, it has to be willing to leave measured accuracy on the
+table when that accuracy is known to be non-physical. Not everything that
+is measured counts, and not everything that counts can be measured.^[The
+aphorism is William Bruce Cameron's (*Informal Sociology*, 1963); it is
+often misattributed to Einstein.]
+
+## The criterion, and how it was audited {#sec-principled-criterion}
+
+The operational form of the principle is consistency in the fine-mesh limit
+(@sec-principle): under uniform refinement of the sampled boundary the
+prediction converges to one field, and a dependence on the sampling
+distribution that does not vanish with refinement is a defect, however much
+it improves a score at a fixed cell count. A falling error with more cells
+is not a defect; a different answer under a different sampler at every
+count is. Two questions were asked of every proposed change, before and
+after it was measured: *why should this work*, in mechanistic terms, and
+would a practitioner of classical CFD look at the construction without
+objecting to what it consumes. Changes that could not answer both were
+run, when they were run at all, as ablations and are labelled so wherever
+they appear. Past changes were audited by the same questions after the rule
+was written (@sec-nb-principle-redirect), and two were reversed as a result.
+
+## The ledger {#sec-principled-ledger}
+
+Each row names the decision as it stands in the reference configuration,
+the rejected alternative, what the alternative measured on the
+in-distribution surface-pressure metric (float32, seed means; a ratio
+below one means the alternative scored better), what the alternative
+consumed that the physics does not provide, and the evidence. Every number
+is stated in the chapters it points to and carries its artifact there.
+
+| Decision (reference) | Rejected alternative | What the alternative would have bought | What it reads that the physics does not provide | Evidence |
+|---|---|---|---|---|
+| Quadrature (measure) weights in the routing softmax | Unweighted routing, the "weights-off" configuration | 8–17% on the HiLift wing rungs, 3% on DrivAerML at 10,000 cells | The number of cells the mesher placed in a region. Under area-proportional sampling the unweighted model's error rises to 0.66–1.29, worse than predicting zero; on the wings its advantage is flat in cell count, the signature of mesh-pattern content | @sec-limits-mechanism, @sec-consistency-bench, @sec-nb-bench-verdict, @sec-nb-overfit-routing-probe |
+| Frame-free relative frame: positions enter only as differences against slice anchors | Constant gauge: centre on the plain mean of the sampled points | Nothing on DrivAerML; 1–5% on never-seen-geometry wing rungs; 11% where validation geometries recur in training; 14.5% at the fixed angle | The mesher's refinement pattern, through the plain mean's offset from the geometric centroid (0.13 body lengths on the wings). Under a 10:1 sampling bias the constant gauge degrades 12–16x; an exact full-geometry frame with every positional seed pays *more* than the frame-free construction (14–16% at 35 cases, 21% at the fixed angle), so the price is the pattern, not positional information | @sec-nb-frame-full-verdict, @sec-nb-frame-full-fixed-angle-verdict, @sec-nb-relframe-ladder-verdict |
+| Frame-free relative frame | Similarity gauge: Horvitz–Thompson centroid and RMS radius estimated from the sample | 3–9% where validation geometries recur (35 and 210 cases); nothing on DrivAerML or at 4 geometries and the fixed angle, where the reference is at parity or better | An absolute position on a wing that recurs between training and deployment; an estimated frame is a sample statistic even when consistent under refinement, and the gain is a fit to a fixed fleet of shapes | @sec-nb-relframe-ladder-verdict, @sec-nb-relframe-verdict |
+| Length unit from the total surface measure, $L=(\sum_i w_i)^{1/2}$ | A constant `reference_length` per dataset | Nothing: the constant-length relative frame pays 22–26% at the fixed angle against the total-measure arm's 10–14.5% | A per-dataset constant that has to be chosen by hand and encodes the fleet's size; the integral of the geometry is consistent under Horvitz–Thompson weights and needs no choice | @sec-nb-relframe-ladder-fixed-angle, @sec-nb-frame-full-fixed-angle-verdict |
+| Uniform interior query law in training | Far-wake oversampling of the training queries with exact inclusion weights | Nothing: every band of every field worse; far-shell eddy viscosity 0.193 against 0.118 | A training query distribution that differs from the deployment one; the interacting decode's prediction depends on the joint query set, so a training-time sampling law is not a deployable remedy | @sec-nb-farwake-verdict, @sec-interior-task |
+| Deploy the interacting decode at the training query count | Query-count augmentation as the flagship | A 40% reduction of the query-count dependence at a 3.7% cost | Nothing non-physical, but the dependence is intrinsic to an interacting decode and is stated rather than papered over; augmentation stays a documented mitigation | @sec-nb-qcount-verdict, @sec-interior-companion |
+| One configuration for every dataset and task | Per-dataset reference configurations chosen by a rung-count rule | Up to 17% on individual wing rungs by picking the discretization-reading configuration where it wins | Knowledge of which dataset a case comes from; a surrogate that changes its construction per dataset has no claim to generalize across them | @sec-principle, @sec-nb-principle-redirect |
+| Report every comparison with matched inputs in float32 | The original protocol: physical freestream velocity for the baselines, bfloat16 scoring | A 2.8x headline advantage at 35 cases and a 3–10% flattering offset everywhere | An input-scale artifact in the baselines' global projector and a precision artifact that fell unevenly across architectures | @sec-part-baseline, @sec-nb-fp32-drivaer-regrade |
+| Present ISLA as a new architecture; leave GeoTransolver and Transolver as released | Back-port measure weighting and the geometric frame into the released baselines | Sampler-consistent baselines at unchanged accuracy (1.03–1.04x under the density bias) | Nothing non-physical; the released architectures are stable and in use, so their measure-consistent variants stay research diagnostics that locate a property, never shipped modifications | @sec-nb-mwaw-verdict, @sec-nb-ruling-released-baselines |
+
+Two rows deserve a sentence each, because they are the ones where the
+principle cost the most.
+
+The **measure weights** are the clearest case. With them, a slice state is
+a quadrature estimate of a surface integral; without them it is a mean over
+whichever points the mesher happened to place, and the network learns the
+mesher. The price on the wings is real and understood: part of it is the
+estimator variance of a quadrature-weighted mean over a heavy-tailed draw
+of cell areas, which shrinks with cell count and is nearly gone at 40,000
+cells on the cars; the rest is mesh-pattern content in the ablation, which
+does not shrink and which collapses the moment the sampling law changes.
+An accuracy table at one cell count cannot tell these apart. The
+consistency benchmark can, and it decided.
+
+The **frame** is the case where the trade was closest, and it is stated
+without softening. Where the same wings recur between training and
+validation, an estimated centre and scale are worth 3–9% against the
+frame-free construction, and at 210 recurring cases the Horvitz–Thompson
+frame meets the accuracy condition this program had set for accepting it.
+It was still declined, because the rungs that test geometries the model has
+never seen favour the frame-free construction, and because an estimated
+frame is a statistic of the sample even when it is a consistent one. For a
+fixed fleet of shapes the gauge is the better instrument; the reference
+configuration is built for the shapes that have not been seen yet.
+
+## What we would ask of the field {#sec-principled-ask}
+
+Three practices follow from the ledger, and none of them is expensive.
+
+- **Measure consistency, not only accuracy.** Score every model under at
+  least two sampling laws and at more than one cell count, and report
+  whether the answers converge to each other. A model that is 10% better at
+  10,000 cells and 10x worse under a different sampler has learned the
+  mesher (@sec-consistency-bench).
+- **Locate every gain before adopting it.** When a change improves the
+  score, run the test that would reveal a discretization dependence, and
+  ask what the change consumes that the physics does not supply. A
+  mechanism that cannot be stated is a hypothesis; a gain whose mechanism
+  is the mesh is not a gain.
+- **Pre-register the bar and keep the refuted configurations runnable.**
+  Every decision above was made against a bar written before the run, and
+  every rejected alternative remains in the code as a labelled ablation so
+  that the price can be re-measured when the data or the metric change.
+
+The accuracy metric is one number about one discretization of one dataset.
+It is necessary and it is not sufficient, and a research programme that
+optimizes it alone will converge on surrogates that know their mesher
+better than their physics.
