@@ -49,12 +49,17 @@ spread at 35 cases and is the uncertainty to read.
 **Which ISLA.** ISLA's reference configuration is the relative frame with
 the total-measure length scale (@sec-mt2-contracts): no centroid, no sample
 statistic anywhere in the frame, so its output does not depend on how the
-surface was sampled, at a stated price of 11% at 35 HiLift cases and none
-on DrivAerML. It has been trained on those two rungs, on the 4-geometry rung, where it matches the prior configuration within 1% (0.2520 against 0.2496; @sec-nb-relframe-ladder-geo4), and on the fixed-angle split, where it pays 10% (0.0384 against 0.0348; @sec-nb-relframe-ladder-fixed-angle). On every other rung
-the ISLA number is the prior configuration's record, the constant gauge
-that centres on the plain mean of the sampled points, and the tables say
-so; the ladder that trains the reference on the remaining rungs is
-running. Two further configurations appear where they inform the reading:
+surface was sampled. It has been trained on every HiLift rung of the
+ladder except 1,260 cases and on DrivAerML at full data, and its price
+against the constant-gauge prior splits by whether the validation
+geometries recur in training: none on DrivAerML, 1% at 4 geometries and
+5% at 21 geometries (never-seen validation geometries), 10% at the fixed
+angle, and 11% at both 35 and 210 cases, where the validation geometries
+recur (@sec-nb-relframe-ladder-verdict). Where a rung has both, the tables
+give the reference and the prior side by side; on the 510-case, 1,260-case
+and corner rungs only the prior configuration, the constant gauge that
+centres on the plain mean of the sampled points, has been trained, and the
+tables say so. Two further configurations appear where they inform the reading:
 the baselines with the surface measure carried in their slice pooling
 (the principled repair of @sec-part-baseline), and ISLA with its measure
 weights off, an ablation that reads the mesh density, is never adopted
@@ -109,7 +114,8 @@ a210 = u210["three_seed_addendum_fp32"]
 S["hl210"] = dict(
     title="HiLiftAeroML, 210 training cases (180 validation cases)",
     gt=a210["gt_unit_lr1e3"]["seed_pressure"], t=a210["transolver_unit_lr3e3"]["seed_pressure"],
-    isla_prior=u210["arms_fp32"]["isla"]["seed_pressure"], isla_ref=None,
+    isla_prior=u210["arms_fp32"]["isla"]["seed_pressure"],
+    isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)],
     paired=(f"{a210['gt_unit_lr1e3']['lower_than_isla_on']} of 180, {a210['transolver_unit_lr3e3']['lower_than_isla_on']} of 180", "results/udrvl_210_reduction_2026-09-10.json"),
     draws=(campA210["gt_over_isla_n210"], campA210["transolver_over_isla_n210"]),
     src="results/udrvl_210_reduction_2026-09-10.json (three-seed addendum)")
@@ -130,7 +136,8 @@ S["geo4"] = dict(
 S["geo21"] = dict(
     title="HiLiftAeroML, 21 training geometries (18 held-out geometries, 180 cases)",
     gt=g21["arms_fp32"]["gt_unit"]["seed_pressure"], t=g21["arms_fp32"]["transolver_unit_lr3e3"]["seed_pressure"],
-    isla_prior=g21["arms_fp32"]["isla_weights_on"]["seed_pressure"], isla_ref=None,
+    isla_prior=g21["arms_fp32"]["isla_weights_on"]["seed_pressure"],
+    isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_geometry_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)],
     paired=(f"{J('udrvl_geo210_reduction_2026-09-10.json')['paired_fp32']['gt_unit_vs_isla']['gt_lower_on']} of 180, {g21['paired_fp32']['transolver_unit_vs_isla_on']['transolver_lower_on']} of 180", "results/geo210_all_arms_2026-09-10.json"),
     draws=None, src="results/geo210_all_arms_2026-09-10.json")
 S["fixed"] = dict(
@@ -244,11 +251,13 @@ def add(label, key, against):
                  (ci[1]["ci90"] if ci and against == "isla_prior" else None)))
 add("HiLift, 35 cases — vs reference ISLA", "hl35", "isla_ref")
 add("HiLift, 35 cases — vs prior configuration", "hl35", "isla_prior")
-add("HiLift, 210 cases", "hl210", "isla_prior")
+add("HiLift, 210 cases — vs reference ISLA", "hl210", "isla_ref")
+add("HiLift, 210 cases — vs prior configuration", "hl210", "isla_prior")
 add("HiLift, 510 cases", "hl510", "isla_prior")
 add("HiLift, 4 training geometries — vs reference ISLA", "geo4", "isla_ref")
 add("HiLift, 4 training geometries — vs prior configuration", "geo4", "isla_prior")
-add("HiLift, 21 training geometries", "geo21", "isla_prior")
+add("HiLift, 21 training geometries — vs reference ISLA", "geo21", "isla_ref")
+add("HiLift, 21 training geometries — vs prior configuration", "geo21", "isla_prior")
 add("HiLift, fixed angle 12° — vs reference ISLA", "fixed", "isla_ref")
 add("HiLift, fixed angle 12° — vs prior configuration", "fixed", "isla_prior")
 add("DrivAerML, 435 cars — vs reference ISLA", "dr435", "isla_ref")
@@ -648,11 +657,11 @@ ledger row UDRV-L in @sec-program-status); against the physical-drive
 GeoTransolver the two are at parity there, which is a measurement of the
 mis-scaled protocol and not a comparison, and it is quoted nowhere in this
 chapter as one. ISLA's
-reference configuration has been trained on four rungs (35 cases,
-DrivAerML at full data, 4 training geometries, where it matches the prior
-within 1%, and the fixed angle, where it pays 10%); the 21-geometry and
-210-case pairs of the ladder are in progress, and until they land those two
-ISLA numbers are the prior configuration's record. The baselines' consistency has been shown with a Horvitz–Thompson
+reference configuration has been trained on six of the eight surface
+rungs; on 510 and 1,260 cases and at the 512-wide corner the ISLA number is
+the prior configuration's record. A fixed-angle full-geometry-frame pair
+and third seeds for the fixed-angle reference arms are training to separate
+the two candidate causes of the reference's 10% price on that split. The baselines' consistency has been shown with a Horvitz–Thompson
 centroid on DrivAerML only, and only as a research variant: the released
 GeoTransolver and Transolver keep their plain-mean frame and will not be
 modified, so the "HT-centred datapipe" rows locate a property, they do not
