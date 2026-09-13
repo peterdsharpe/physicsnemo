@@ -16301,3 +16301,86 @@ to be consistent as for the surface reference. Readings written in
 advance: the surface reference paid nothing on DrivAerML, and the interior
 queries consume positions only through anchor differences and the signed
 distance, so the prediction is "supported". Owner: this session.
+
+## 2026-09-13 — RELINT first attempt void: the interior configuration's boundary measure is not Horvitz–Thompson corrected, so the total-measure length unit was 200x too small and the relative-frame model never learned {#sec-nb-relint-void}
+
+*What happened.* The two RELINT lanes (@sec-nb-relint-prereg) trained to
+completion and evaluated cleanly (job 739032, 48 cars each, zero skipped
+loads), and the result was not a frame price but a non-result: relative L2
+of 0.75 for pressure, 0.75 for velocity and 1.00 for eddy viscosity against
+the similarity-gauge reference's 0.055, 0.080 and 0.111, the level of
+predicting the field mean. The training log shows why the evaluation is
+not the place to look: the training loss sat at 0.073 from the first epoch
+to the last (0.079 at epoch 0, 0.073 at 250 and 499), while the reference
+lanes fell from 0.065 to 0.0009 over the same schedule. The model did not
+learn, from the start.
+
+*Diagnosis.* Local fit tests on a synthetic body with interior queries rule
+out the combination itself: with query tokens, the signed-distance scalar
+and the relative frame with the total-measure scale, the model fits a
+smooth interior field as well as the similarity-gauge model in float32
+and under bfloat16 autocast, with the geometry at the origin or shifted 20
+body lengths away, and with the measure weights scaled down by 10,000
+(length unit 0.087, coordinates up to about 50 length units). The cause is
+in the data pipeline, and it is a violation of the rule the total-measure
+scale was built on. The interior configuration feeds ISLA the boundary's
+raw `cell_areas` after the reader has subsampled the vehicle surface to
+about 365 cells (the token count the interior lanes have always had,
+@sec-interior-task). Those areas are not Horvitz–Thompson corrected: their
+sum is the area of the 365 kept cells, not of the car. On a saved
+evaluation case the sum is $3\times10^{-5}$ in the pipeline's
+nondimensional units, so the length unit $L=(\sum_i w_i)^{1/2}$ is 0.0055,
+the car spans about 100 length units and the interior queries reach 2,100,
+with a median of 59. The similarity gauge, which the interior reference
+uses, normalizes by an RMS radius that is a *normalized* average and does
+not care about the sum, which is why it never noticed. Under bfloat16
+autocast the anchor positions are formed by a half-precision contraction,
+so at coordinates of order 100 to 2,000 the anchor and the point-to-anchor
+differences carry rounding of order 1 to 16 length units, larger than the
+geometry, and every relational invariant is noise. The surface reference
+lanes never met this because the surface pipeline feeds the
+importance-corrected `_target_quadrature_measure`, whose sum is the surface
+area.
+
+*Reading.* The preregistered "fails" band is not reached on its own terms:
+the arm did not test the frame, it tested an uncorrected measure, and the
+verdict on the interior frame is void, not negative. The lesson is the one
+already written in @sec-mt2-forward and now enforced: the total-measure
+scale requires measure weights whose sum is the integral of the geometry,
+which means Horvitz–Thompson-corrected weights on every subsampled
+boundary. The interior pipeline needs that correction before the relative
+frame can be trained on it; the constant-gauge and similarity-gauge
+configurations were insensitive to the omission, which is itself a mark
+against them as instruments.
+
+*What changes.* The RELINT lanes are relaunched once the interior pipeline
+supplies a corrected boundary measure (the full vehicle geometry is present
+in the pipeline before the boundary is dropped, so the correction is the
+ratio of the full area to the subsample's area, an integral of the
+geometry and not a sample statistic). The two void checkpoints are kept
+under their run ids as the record of the defect. The preregistration's
+bars stand unchanged for the relaunch. Owner: this session.
+
+## 2026-09-13 — RELINT preregistration amended for the relaunch: corrected boundary measure, 10,000-cell boundary, reference re-based on the 10,000-cell interior lanes {#sec-nb-relint-amend}
+
+The relaunch (`v0_isla_qtsdfval_relint2_seed42/43`, launcher
+`v0/v0_relint2_aga.sbatch`, recipe copy `recipe_relint`, snapshot
+`code_relint`) changes exactly what @sec-nb-relint-void identified and
+nothing else. The boundary is subsampled by cells with the reader's
+Horvitz–Thompson bookkeeping (the reader settings of the 10,000-cell
+interior lanes, `drivaer_ml_volume_mt10k`), and a new recipe transform,
+`ComposeQuadratureMeasure`, writes the corrected cell measure
+`cell_areas × _measure_weights` to `cell_data.quadrature_measure`, whose
+sum is the surface area; the model reads that field as its measure weights
+(`forward_kwargs.measure_weights=boundaries.vehicle.cell_data.quadrature_measure`).
+Two tests pin the transform: the corrected sum recovers the full area of a
+1-in-4 subsample, and an unsubsampled mesh is returned with its plain
+areas. Because the boundary now carries 10,000 cells, the comparison
+reference is the 10,000-cell similarity-gauge interior lanes rather than
+the 365-cell ones: `v0_isla_qtsdf_surf10k_seed42/43`, float32 0.0572 /
+0.0848 / 0.1187 for pressure / velocity / eddy viscosity
+(`results/udrv_int_reduction_2026-09-09.json`; the 365-cell reference is
+0.0553 / 0.0804 / 0.1109, and the book records that the two agree within
+their seed spread on pressure and velocity, @sec-interior-task). The bars
+are unchanged in form: supported within 3% of that reference on every
+field; pays between 3% and 10%; fails beyond 10%. Owner: this session.
