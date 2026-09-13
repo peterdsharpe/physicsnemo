@@ -16196,3 +16196,67 @@ its 10%: *positional seeds at a fixed drive* if it recovers to within 3% of
 0.0348, *the mesher pattern* if it pays ≥ 7% as the 35-case FRAME-FULL did.
 Third seeds of both fixed-angle reference arms (seed 44) are launched with
 it, because the pair's spreads (11% and 22%) are the widest on the ladder.
+
+## 2026-09-13 — Fixed-angle FRAME-FULL verdict: the exact full-geometry frame with every positional seed pays 21% (0.0422 against 0.0348), more than the frame-free reference, so the fixed-angle price is the mesher pattern, not lost positional information; with a third seed the reference's fixed-angle price is 14.5% and it is at parity with the similarity gauge {#sec-nb-frame-full-fixed-angle-verdict}
+
+The discriminator preregistered in @sec-nb-relframe-ladder-verdict for the
+one rung the recurrence reading did not cover. FRAME-FULL at the fixed
+angle keeps every positional seed and relational invariant of the
+constant-gauge prior and replaces only its frame with the exact geometric
+centroid and root-mean-square radius of the full surface mesh (table
+frame/frame_table_hilift_single_aoa_12.json, 144 cases, 4.1 × 10¹⁰ cells,
+float64; plain-mean displacement 0.132 body lengths, max 0.215). Two lanes
+(ff_hl_mt2_frame_single_aoa_12_seed{42,43}; snapshot code_frame,
+recipe_frame with the frame dataset, no `CenterMesh`), plus third seeds of
+both fixed-angle reference arms (rf_hl_mt2_{ref,meas}_single_aoa_12_seed44),
+all evaluated in float32 under code_eval_frame (job 735994, no loader
+warnings). Artifact `results/frame_reduction_2026-09-11.json`, block hilift_val.
+
+| fixed angle (18 never-seen geometries, float32) | pressure rel-L2 (seeds → mean) | vs constant-gauge prior 0.0348 | vs similarity gauge 0.0398 |
+|---|---|---|---|
+| **FRAME-FULL, exact centroid and scale, all seeds kept** | 0.0429 / 0.0415 → **0.0422** | **+21.2%** | 1.060x |
+| reference (relative frame, total-measure scale), three seeds | 0.0363 / 0.0405 / 0.0427 → **0.0398** | **+14.4%** | 1.000x |
+| relative frame, reference-length scale, three seeds | 0.0389 / 0.0486 / 0.0400 → 0.0425 | +22.1% | 1.068x |
+| similarity gauge (two seeds) | 0.0411 / 0.0385 → 0.0398 | +14.4% | 1 |
+| constant gauge (prior, two seeds) | 0.0342 / 0.0353 → 0.0348 | 1 | 0.874x |
+
+**Against the preregistered readings.** *Recovers* was within 3% of 0.0348;
+*pays* was ≥ 7%. FRAME-FULL **pays 21%**, more than the frame-free
+reference, exactly as it did at 35 cases (@sec-nb-frame-full-verdict,
+14–16% against 11%). Restoring all four positional seeds on an exact,
+zero-variance geometric frame does not recover the constant gauge's
+fixed-angle accuracy; it costs more. The fixed-angle price is therefore not
+positional information lost with the seeds. It is the plain-mean frame's
+content, which on these meshes is the mesher's density pattern (0.132 body
+lengths of displacement from the geometric centroid, a deterministic
+function of where the mesher refined), and no consistent frame can carry it.
+Both FRAME-FULL experiments now agree on the mechanism, on a recurring-
+geometry rung and on a never-seen-geometry rung.
+
+**Third seeds.** The fixed-angle rung has 18 validation cases and the widest
+seed spreads on the ladder. With three seeds the reference reads
+0.0398 (+14.4% against the prior), up from the two-seed 0.0384 (+10.3%),
+and sits at parity with the similarity gauge (1.000x) rather than 3.5%
+ahead; the reference-length arm reads 0.0425 (+22.1%), so the scale
+discriminator still points the same way (the total-measure arm is
+6% better than the reference-length arm; scale normalization is not a
+cost here). The fixed-angle cells of the ladder are updated to the
+three-seed values: reference +14.4%, reference ÷ gauge 1.000. The
+reading of @sec-nb-relframe-ladder-verdict stands with that correction:
+the frame-free reference is the most accurate ISLA on the 4-geometry rung,
+at parity with the gauge on the fixed angle and within 2% on 21 geometries
+and the cars, and 3–9% behind it where geometries recur.
+
+**Why the fixed angle pays when other never-seen rungs do not.** What is
+special about the rung is that every case shares one drive direction, so
+the surface pressure varies across cases only through geometry, and the
+mesher's refinement pattern, which follows the leading edges, flaps and
+slats of every wing in the family, is a geometric cue that does transfer
+across unseen wings of the same family at the same angle; on the
+varied-angle never-seen rungs the harder part of the task is the angle,
+where that cue does not help. This is stated as the reading consistent
+with all six rungs and both FRAME-FULL results, not as a tested claim.
+What the program will not do with it is put the mesher's pattern back into
+the reference: it is the input that collapses 10–15x when the sampler
+changes (@sec-nb-wave4-fixed-angle-bench) and the price of leaving it is
+now stated on every rung.

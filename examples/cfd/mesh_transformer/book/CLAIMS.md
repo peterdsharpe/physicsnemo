@@ -1648,3 +1648,7 @@ interior control @sec-nb-udrv-int-prereg.
   frame-free reference is the most accurate ISLA on never-seen-geometry rungs and loses 3–9% to the gauge where geometries recur; the
   reference stays by the principle (generalization), price stated per rung"; never hide the recurring-rung price. Fixed angle unexplained →
   FF fixed-angle pair (recovers ≤3% → positional seeds; pays ≥7% → mesher pattern) + seed-44 reference arms launched.
+- **Fixed-angle FRAME-FULL verdict (2026-09-13, fp32; results/frame_reduction_2026-09-11.json hilift_val).** FF frame arm 0.0429/0.0415 → 0.0422 (**+21.2%** vs 0.0348) → PAYS
+  (≥7%): fixed-angle price = MESHER PATTERN, not positional seeds (agrees with 35-case FF). Third seeds: reference 0.0363/0.0405/0.0427 →
+  0.0398 (**+14.4%**, 3 seeds; supersedes 2-seed +10.3%), reference÷gauge 1.000 (parity, supersedes 0.965); ref-length 0.0425 (+22.1%).
+  Update the ladder's fixed-angle cell everywhere to the 3-seed values. Write "at parity with the gauge at the fixed angle"; never "3.5% better" after 2026-09-13.
