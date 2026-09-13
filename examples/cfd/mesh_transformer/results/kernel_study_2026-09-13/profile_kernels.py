@@ -43,7 +43,9 @@ def phase_kernel_table(prof):
     ranges.sort()
     corr_phase = {}
     for e in tr:
-        if e.get("cat") == "cuda_runtime" and "correlation" in e.get("args", {}):
+        # aten kernels are launched through the runtime API (cudaLaunchKernel); Triton kernels
+        # from compiled graphs through the driver API (cuLaunchKernelEx), recorded as cuda_driver.
+        if e.get("cat") in ("cuda_runtime", "cuda_driver") and "correlation" in e.get("args", {}):
             ts = e["ts"]
             for a, b, name in ranges:
                 if a <= ts <= b:

@@ -57,7 +57,7 @@ def main():
                 build = lambda: torch.compile(GTWrap().cuda())  # noqa: E731
             else:
                 opt = OPTIONS[name]
-                build = lambda opt=opt: apply_option(bc.make_model(**opt.get("model_kw", {}))[0])  # noqa: E731
+                build = lambda opt=opt: apply_option(bc.make_model(**opt.get("model_kw", {}))[0], opt)  # noqa: E731
             rec = bc.run_config(build, n, batch, prec == "bf16")
             rec["option"] = name
             res["runs"].append(rec)

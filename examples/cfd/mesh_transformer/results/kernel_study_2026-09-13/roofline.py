@@ -137,7 +137,13 @@ def roofline_times(stages, peaks, bf16):
 # ---------------------------------------------------------------- 3. achieved per stage
 def classify(name, dims, N, B):
     l = name.lower()
-    dims = [tuple(d) for d in dims if d]
+    flat = []
+    for d in dims:
+        if d and isinstance(d[0], list):  # aten::cat lists its inputs' shapes one level down
+            flat += [tuple(x) for x in d if x]
+        elif d:
+            flat.append(tuple(d))
+    dims = flat
     def has(shape):
         return any(d == shape for d in dims)
     def has4d_ns():
@@ -180,6 +186,8 @@ def classify(name, dims, N, B):
         return "slice_softmax"
     if any(len(d) == 3 and d[1] == N and d[2] in (7, 3, 1) for d in dims) or "cross" in l or "stack" in l:
         return "head_embed"
+    if any(d[-1] in (H, MLP * H, 2 * H + H // 2) and (len(d) == 2 or (len(d) == 3 and d[1] == N)) for d in dims):
+        return "mlp"  # residual adds, bias-gradient sums, casts of the (B,N,H)/(B,N,4H) activations
     return "other"
 
 

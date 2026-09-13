@@ -32,6 +32,9 @@ OPTIONS = {
     "eager_ckpt": dict(description="reference: eager, geo_checkpoint=True (isla_surface_reference.yaml)", model_kw={}, apply=_identity),
     "eager_nockpt": dict(description="eager, geo_checkpoint=False (store the (B,N,S,.) geometry instead of recomputing it)",
                          model_kw=dict(geo_checkpoint=False), apply=_identity),
+    "eager_ckpt_slow_softmax": dict(description="eager, geo_checkpoint=True, fast_point_softmax=False: the pre-2026-09-10 middle-dimension "
+                                                "point softmax, the configuration behind the book's GB300 '3.7x' matched-memory number",
+                                    model_kw=dict(fast_point_softmax=False), apply=_identity),
     "compile_model_ckpt": dict(description="torch.compile(model) (the recipe's compile: true path), geo_checkpoint=True",
                                model_kw={}, apply=_compile_model()),
     "compile_model_nockpt": dict(description="torch.compile(model), geo_checkpoint=False (Inductor's own min-cut recompute decides what is saved)",

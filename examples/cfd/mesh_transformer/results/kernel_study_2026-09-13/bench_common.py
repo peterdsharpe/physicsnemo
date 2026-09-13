@@ -33,7 +33,9 @@ def load_snapshot():
     try:
         q = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,clocks.sm,clocks.mem,temperature.gpu,power.draw",
                             "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=10).stdout.strip()
-        u, mu, mt, cs, cm, t, p = [x.strip() for x in q.split(",")]
+        lines = q.splitlines()
+        snap["n_gpus_visible_to_nvidia_smi"] = len(lines)
+        u, mu, mt, cs, cm, t, p = [x.strip() for x in lines[0].split(",")]  # first GPU (cuda:0 on multi-GPU nodes)
         snap.update(gpu_util_pct=float(u), gpu_mem_used_mib=float(mu), gpu_mem_total_mib=float(mt), sm_clock_mhz=float(cs),
                     mem_clock_mhz=float(cm), gpu_temp_c=float(t), power_w=float(p))
     except Exception as e:  # noqa: BLE001
@@ -115,7 +117,14 @@ def run_config(build, n, batch, autocast, n_warm=3, n_meas=10, lr=1e-4, seed=0):
 
 
 def env_info():
-    return dict(gpu=torch.cuda.get_device_name(0), torch=torch.__version__, cuda=torch.version.cuda,
+    try:
+        driver = subprocess.run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                                capture_output=True, text=True, timeout=10).stdout.strip().splitlines()[0]
+    except Exception as e:  # noqa: BLE001
+        driver = f"unknown ({e!r})"
+    import platform
+    return dict(gpu=torch.cuda.get_device_name(0), driver=driver, torch=torch.__version__, cuda=torch.version.cuda,
+                python=platform.python_version(), hostname=platform.node(),
                 tf32_matmul=torch.backends.cuda.matmul.allow_tf32,
                 device_props={k: getattr(torch.cuda.get_device_properties(0), k) for k in ("multi_processor_count", "total_memory", "major", "minor")})
 
