@@ -930,3 +930,36 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
     def extra_repr(self) -> str:
         return (f"n_points_expected={self.n_points_expected}, band_edges={self.band_edges}, "
                 f"band_weights={self.band_weights}, sdf_field={self.sdf_field!r}")
+
+
+@register()
+class ComposeQuadratureMeasure(MeshTransform):
+    r"""Write each mesh's Horvitz–Thompson-corrected cell measure to ``cell_data``.
+
+    ``cell_areas`` of a subsampled boundary sum to the area of the kept cells,
+    not of the body: with 10,000 of N cells kept, the sum is ``10,000/N`` of
+    the surface area. The reader records the inverse inclusion probability of
+    every subsampling stage in ``cell_data["_measure_weights"]``
+    (:mod:`physicsnemo.mesh.calculus.measure`), and the effective cell measure
+    ``cell_areas * _measure_weights`` is an unbiased estimate of the full-mesh
+    measure whose sum is the surface area. ISLA's routing softmax and the
+    similarity gauge are invariant to the per-sample factor and never noticed
+    the difference; the total-measure length scale of the reference
+    configuration (``scale_mode="total_measure"``, ``L = sqrt(sum w)``) is not,
+    and needs the corrected measure (notebook #sec-nb-relint-void, 2026-09-13).
+
+    Writes ``cell_data[output_field]`` on every mesh that has cells; meshes
+    without cells (point-cloud interiors) are returned unchanged. Point
+    ``forward_kwargs.measure_weights`` at ``boundaries.<name>.cell_data.<output_field>``.
+    """
+
+    def __init__(self, output_field: str = "quadrature_measure"):
+        self.output_field = output_field
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        if mesh.cells is None or mesh.n_cells == 0:
+            return mesh
+        from physicsnemo.mesh.calculus.measure import cell_measures
+
+        mesh.cell_data[self.output_field] = cell_measures(mesh).to(mesh.points.dtype)
+        return mesh
