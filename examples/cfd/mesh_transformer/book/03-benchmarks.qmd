@@ -53,9 +53,13 @@ surface was sampled. It has been trained on every HiLift rung of the
 ladder except 1,260 cases and on DrivAerML at full data, and its price
 against the constant-gauge prior splits by whether the validation
 geometries recur in training: none on DrivAerML, 1% at 4 geometries and
-5% at 21 geometries (never-seen validation geometries), 10% at the fixed
-angle, and 11% at both 35 and 210 cases, where the validation geometries
-recur (@sec-nb-relframe-ladder-verdict). Where a rung has both, the tables
+5% at 21 geometries (never-seen validation geometries), 11% at both 35 and
+210 cases, where the validation geometries recur, and 14.5% at the fixed
+angle (three seeds), where a single drive direction makes the mesher's
+refinement pattern a reusable cue; on both splits tested with an exact
+full-geometry frame the price is the plain mean's mesher pattern, not
+positional information (@sec-nb-relframe-ladder-verdict,
+@sec-nb-frame-full-fixed-angle-verdict). Where a rung has both, the tables
 give the reference and the prior side by side; on the 510-case, 1,260-case
 and corner rungs only the prior configuration, the constant gauge that
 centres on the plain mean of the sampled points, has been trained, and the
@@ -145,7 +149,7 @@ S["fixed"] = dict(
     gt=fp(fpall, [f"udrv_hl_gt_single_aoa_12_seed{s}" for s in (42, 43)]),
     t=fp(fpall, [f"udrv_hl_transolver_single_aoa_12_lr3e3_seed{s}" for s in (42, 43)]),
     isla_prior=fp(fpall, [f"mech_hl_mt2_single_aoa_12_seed{s}" for s in (42, 43)]),
-    isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_single_aoa_12_seed{s}"]["pressure_l2"] for s in (42, 43)],
+    isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_single_aoa_12_seed{s}"]["pressure_l2"] for s in (42, 43, 44)],
     paired=("18 of 18 geometries, 18 of 18", "results/udrv_reduction_2026-09-09b.json"),
     draws=None, src="results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json (reference configuration, RELFRAME-LADDER)")
 S["dr435"] = dict(
@@ -659,9 +663,7 @@ mis-scaled protocol and not a comparison, and it is quoted nowhere in this
 chapter as one. ISLA's
 reference configuration has been trained on six of the eight surface
 rungs; on 510 and 1,260 cases and at the 512-wide corner the ISLA number is
-the prior configuration's record. A fixed-angle full-geometry-frame pair
-and third seeds for the fixed-angle reference arms are training to separate
-the two candidate causes of the reference's 10% price on that split. The baselines' consistency has been shown with a Horvitz–Thompson
+the prior configuration's record. The baselines' consistency has been shown with a Horvitz–Thompson
 centroid on DrivAerML only, and only as a research variant: the released
 GeoTransolver and Transolver keep their plain-mean frame and will not be
 modified, so the "HT-centred datapipe" rows locate a property, they do not

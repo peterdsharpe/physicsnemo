@@ -16260,3 +16260,44 @@ What the program will not do with it is put the mesher's pattern back into
 the reference: it is the input that collapses 10–15x when the sampler
 changes (@sec-nb-wave4-fixed-angle-bench) and the price of leaving it is
 now stated on every rung.
+
+## 2026-09-13 — Preregistered: RELINT, the interior query-token configuration on the reference frame (one flagship frame for surface and interior) {#sec-nb-relint-prereg}
+
+*Setting.* ISLA's surface reference configuration is the relative frame
+with the total-measure scale (@sec-nb-frame-full-verdict): no centroid
+anywhere in the forward pass, positions entering only as differences against
+slice anchors, the length unit taken from the total quadrature measure. The
+interior configuration that leads GeoTransolver-volume on velocity (query
+tokens with the signed distance, `v0_isla_qtsdfval_seed42/43`) was trained
+before that decision and stands on the similarity gauge, a frame estimated
+from the sample. Peter's ruling of 2026-09-13: one flagship configuration;
+the interior must share the reference frame.
+
+*What is tested.* Whether the interior query-token configuration keeps its
+standing when the similarity gauge is replaced by the relative frame with the
+total-measure scale and nothing else changes. Two seeds
+(`v0_isla_qtsdfval_relint_seed42/43`, launcher `v0/v0_relint_aga.sbatch`),
+the frozen interior protocol of the reference lanes (500 epochs, lr 1e-3,
+10,000 boundary cells and 10,000 interior points, bf16, no augmentation,
+SDF-gradient query normals, SDF query scalar), code snapshot `code_relint`
+taken from the repository head of 2026-09-13 (which also carries the
+keyword-only API and the new defaults; the frame is passed explicitly). The
+contracts of the combination were checked before launch on a random cloud
+in float64: translation invariance without centering, rotation covariance,
+and invariance to a joint geometric rescale (points by $k$, areas by $k^2$,
+query scalars by $k$) all hold to $10^{-15}$.
+
+*Bars (float32, guarded snapshot, two-seed means, the 48 DrivAerML
+validation cars at the training query count of 10,000; three-seed reference
+0.0553 / 0.0804 / 0.1109 for pressure / velocity / eddy viscosity).*
+Supported, and the interior flagship moves to the reference frame, if every
+field is within 3% of the similarity-gauge reference; "pays" if any field
+is worse by more than 3% and none by more than 10%, in which case the
+interior flagship still moves (the ruling is one configuration) and the
+price is stated per field; "fails" if any field is worse by more than 10%,
+which reopens the question of what the interior frame should be. Secondary,
+not a bar: the sample-frame density probe of the surface tokens, expected
+to be consistent as for the surface reference. Readings written in
+advance: the surface reference paid nothing on DrivAerML, and the interior
+queries consume positions only through anchor differences and the signed
+distance, so the prediction is "supported". Owner: this session.
