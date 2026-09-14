@@ -363,4 +363,4 @@ def test_isla_declares_its_legacy_name(tmp_path):
     pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
     drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
     with torch.no_grad():
-        assert torch.allclose(fresh(points=pts, normals=nrm, drive=drv, measure_weights=w), model(points=pts, normals=nrm, drive=drv, measure_weights=w), atol=1e-6)
+        assert torch.allclose(fresh(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), atol=1e-6)

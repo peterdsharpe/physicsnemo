@@ -20,7 +20,7 @@
 # ---------------------------------------------------------------------------
 # Thesis-killer configuration (prereg mt2_stage0, sha c73bf8b6): invariant
 # soft-slice backbone at GT-matched scale (~8.5M params), exact similarity
-# equivariance / drive-degree-1 / measure-aware aggregation by construction
+# equivariance / measure-aware aggregation by construction
 # (contract unit tests gate launch). Consumes the same DomainMesh paths as
 # the GeoTransolver template plus the recorded target quadrature measure.
 input_type: tensors
@@ -29,7 +29,7 @@ output_type: tensors
 forward_kwargs:
   points: interior.points
   normals: boundaries.vehicle.cell_data.normals
-  drive: global_data.U_inf_dir
+  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
   measure_weights: interior.point_data._target_quadrature_measure
 
 model:

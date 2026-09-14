@@ -70,7 +70,7 @@ def setup():
 def _run(m, pts, nrm, drv, w, S, Q):
     sp, sn, ss = S
     q, qn, qs = Q
-    return m(points=pts, normals=nrm, drive=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs,
+    return m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs,
              support_points=sp, support_normals=sn, support_scalars=ss)
 
 
@@ -101,7 +101,7 @@ def test_support_dependence_is_real(setup):
     assert not torch.allclose(a, b, atol=1e-6)
 
 
-def test_se3_covariance_and_drive_degree(setup):
+def test_se3_covariance_and_global_vector_magnitude(setup):
     m, pts, nrm, drv, w, S, Q = setup
     sp, sn, ss = S
     q, qn, qs = Q
@@ -117,7 +117,7 @@ def test_se3_covariance_and_drive_degree(setup):
     p1, v1 = moved[..., :1], moved[..., 1:4]
     assert torch.allclose(p1, p0, atol=1e-10)
     assert torch.allclose(v1, v0 @ R.T, atol=1e-10)
-    assert torch.allclose(scaled_drive, 2.5 * base, atol=1e-10)
+    assert torch.allclose(scaled_drive, base, atol=1e-10)  # unit direction inside; magnitude has no effect
 
 
 def test_measure_scale_and_refinement_invariance(setup):
@@ -187,7 +187,7 @@ def test_option_validation():
     drv = torch.tensor([[0.0, 0.0, 1.0]], dtype=D)
     S, Q = _interior(10, 1), _interior(5, 2)
     with pytest.raises(ValueError):  # support without scalars while n_query_scalars > 0
-        m(points=pts, normals=nrm, drive=drv, measure_weights=w, query_points=Q[0], query_normals=Q[1], query_scalars=Q[2],
+        m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=Q[0], query_normals=Q[1], query_scalars=Q[2],
           support_points=S[0], support_normals=S[1])
 
 
@@ -200,6 +200,6 @@ def test_passive_queries_take_scalars_without_support():
     drv = torch.tensor([[0.0, 0.0, 1.0]], dtype=D)
     q, qn, qs = _interior(30, 2)
     with torch.no_grad():
-        a = m(points=pts, normals=nrm, drive=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs)
-        b = m(points=pts, normals=nrm, drive=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=2 * qs)
+        a = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs)
+        b = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=2 * qs)
     assert a.shape == (1, 30, 4) and not torch.allclose(a, b, atol=1e-6)

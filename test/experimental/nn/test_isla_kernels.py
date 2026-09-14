@@ -43,7 +43,7 @@ def _cloud(n=700, batch=1, seed=0, device="cuda", dtype=torch.float32):
     drv = torch.nn.functional.normalize(torch.randn(batch, 3, generator=g), dim=-1).to(device, dtype)
     w = (torch.rand(batch, n, generator=g) + 0.5).to(device, dtype)
     tgt = torch.randn(batch, n, 4, generator=g).to(device, dtype)
-    return dict(points=pts, normals=nrm, drive=drv, measure_weights=w), tgt
+    return dict(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), tgt
 
 
 def _rel(a, b):
@@ -105,7 +105,9 @@ def test_fused_geo_region_matches_eager_region(relative, dtype):
     def run(fn, *extra):
         for t in leaves:
             t.grad = None
-        outs = fn(lin, logits, r, nh, d.expand(b, n, 3), z, ms, 1e-12, *extra)
+        d_n = d.expand(b, n, 3)
+        ### the eager region takes the K global vectors as (B, N, K, 3); the fused kernel is single-vector (B, N, 3)
+        outs = fn(lin, logits, r, nh, d_n[:, :, None] if fn is _geo_region else d_n, z, ms, 1e-12, *extra)
         sum((o * w).sum() for o, w in zip(outs, wts)).backward()
         return [o.detach() for o in outs], [t.grad.detach().clone() for t in leaves]
 
@@ -136,7 +138,7 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     torch.manual_seed(0)
     lin = torch.nn.Linear(6, 1).cuda()
     with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
-        ref = _geo_region(lin, logits, r, nh, d, z, ms, 1e-12, None, True)
+        ref = _geo_region(lin, logits, r, nh, d[:, :, None], z, ms, 1e-12, None, True)  # eager region takes (B, N, K, 3)
         fused = fused_geo_region(lin, logits, r, nh, d, z, ms, 1e-12, True)
     assert [t.dtype for t in fused] == [t.dtype for t in ref]
     for a, bb in zip(fused, ref):
@@ -194,7 +196,7 @@ def test_fused_geo_kernel_keeps_contracts():
         q[:, 0] = -q[:, 0]
     with torch.no_grad():
         base = m(**inputs)
-        moved = m(points=inputs["points"] @ q.T + 1.5, normals=inputs["normals"] @ q.T, drive=inputs["drive"] @ q.T,
+        moved = m(points=inputs["points"] @ q.T + 1.5, normals=inputs["normals"] @ q.T, global_vectors=inputs["global_vectors"] @ q.T,
                   measure_weights=inputs["measure_weights"])
         scaled = m(**{**inputs, "measure_weights": 2.5 * inputs["measure_weights"]})
     assert torch.allclose(moved[..., :1], base[..., :1], atol=1e-10)

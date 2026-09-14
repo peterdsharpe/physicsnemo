@@ -16,13 +16,18 @@
 
 r"""ISLA: Invariant Slice Attention.
 
-An SE(3)-equivariant soft-slice transformer for boundary-driven PDE
-surrogates. Surface points (position, unit normal, cell area) and a global
-unit drive direction go in; fields at the surface (and, in the interior mode,
-at arbitrary query points) come out. The name states the design principle:
-the attention operates only on invariants of the per-point vector set
-:math:`\{r_i, n_i, d\}` (scaled position, unit normal, unit drive
-direction), and the frame is re-attached only at the vector heads, so exact
+An SE(3)-equivariant soft-slice transformer for steady boundary-value PDE
+surrogates. A boundary sample (positions, unit normals, quadrature measures,
+optional per-cell boundary data) and the problem's *global inputs* -- zero or
+more global vector inputs (``n_global_vectors``; a freestream direction, a
+gravity or applied-field direction) and zero or more global scalar inputs
+(``n_global_scalars``; a diffusivity, a Reynolds number, a modulus) -- go in;
+fields at the boundary (and, in the interior modes, at arbitrary query
+points) come out. The name states the design principle: the attention
+operates only on invariants of the per-point vector set
+:math:`\{r_i, n_i, \hat g_1, \dots, \hat g_K\}` (scaled position, unit
+normal, unit global vector inputs) together with the global scalars, and the
+frame is re-attached only at the vector heads, so exact
 rotation and translation covariance is paid once at the network's edges
 instead of in every layer. By default (``frame_mode="relative"``,
 ``scale_mode="total_measure"``, the reference configuration) positions
@@ -53,6 +58,12 @@ Contracts, all by construction rather than per-layer enforcement:
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
 swapped without positional bookkeeping.
+
+Global vector inputs are normalized to unit directions inside the model
+(a direction is what the invariants consume); a physically meaningful
+magnitude belongs among the global scalar inputs. With one global vector and
+no global scalars (the defaults) the network is parameter-for-parameter the
+former single-vector model, so every saved checkpoint loads unchanged.
 
 ``MeshTransformer2`` is retained as a backward-compatible alias of
 :class:`ISLA`.
@@ -98,24 +109,27 @@ def _softmax_over_points(x: Float[torch.Tensor, "batch tokens slices"], fast: bo
 def _relational_invariants(
     r: Float[torch.Tensor, "batch tokens 3"],
     n_hat: Float[torch.Tensor, "batch tokens 3"],
-    d_hat: Float[torch.Tensor, "batch tokens 3"],
+    g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
     z_pos: Float[torch.Tensor, "batch slices 3"],
     m_s: Float[torch.Tensor, "batch slices 3"],
     eps: float,
     c_s: Float[torch.Tensor, "batch slices 3 3"] | None = None,
     relative: bool = False,
 ) -> Float[torch.Tensor, "batch tokens slices geo"]:
-    """The eight point-anchor invariants (v3b set): distance and its log, the
-    unit relative vector dotted with the drive, the point normal and the anchor
-    normal, the point normal dotted with the anchor normal, the anchor radius
-    and the anchor direction dotted with the drive. Shared by the encoder slice
-    blocks and the passive decoder blocks. With ``c_s`` (the per-slice
-    second-moment tensor about the anchor; MOM2, 2026-09-08) two more
+    """The point-anchor invariants (v3b set, generalized to K global vector
+    inputs): distance and its log, the unit relative vector dotted with each
+    global vector (K terms), with the point normal and with the anchor normal,
+    the point normal dotted with the anchor normal, and (centered frame only)
+    the anchor radius and the anchor direction dotted with each global vector
+    (1 + K terms). Width 5 + K (+ 1 + K centered; + 2 with ``c_s``); for K = 1
+    this is the original 6/8-wide set in its original order. Shared by the
+    encoder slice blocks and the passive decoder blocks. With ``c_s`` (the
+    per-slice second-moment tensor about the anchor; MOM2, 2026-09-08) two more
     invariants are appended: rel_hat^T C_s rel_hat and tr C_s.
 
-    ``relative`` (RELFRAME, 2026-09-10) drops the two invariants that refer to
-    the frame origin, the anchor radius ``|z_s|`` and the anchor direction
-    ``z_hat_s . d``, leaving the six point-anchor terms (plus the second-moment
+    ``relative`` (RELFRAME, 2026-09-10) drops the invariants that refer to the
+    frame origin, the anchor radius ``|z_s|`` and the anchor direction
+    ``z_hat_s . g_k``, leaving the point-anchor terms (plus the second-moment
     pair), which depend on the anchors' positions relative to the point only."""
     ### Anchors are either shared by all points, z_pos (B, S, 3), or gathered per
     ### point for sparse routing (SPARSE, 2026-09-09), z_pos (B, N, k, 3); the
@@ -127,21 +141,23 @@ def _relational_invariants(
     dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
     rel_hat = rel / dist
     n_exp = n_hat[:, :, None, :]
-    d_exp = d_hat[:, :, None, :]
     feats = [
         dist,
         torch.log(dist),
-        (rel_hat * d_exp).sum(-1, keepdim=True),
+        ### Broadcast multiply-and-sum, not einsum: einsum is autocast to bf16 and
+        ### the geometry must stay in the input precision (for K = 1 this is the
+        ### former (rel_hat * d).sum(-1) arithmetic exactly).
+        (rel_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),  # (B, N, S|k, K)
         (rel_hat * n_exp).sum(-1, keepdim=True),
         (rel_hat * m).sum(-1, keepdim=True),
         (n_exp * m).sum(-1, keepdim=True),
     ]
     if not relative:
         z_mag = z.norm(dim=-1, keepdim=True).clamp_min(eps)
-        z_hat = z / z_mag
+        z_hat = (z / z_mag).expand(rel.shape[0], rel.shape[1], -1, 3)
         feats += [
             z_mag.expand(rel.shape[0], rel.shape[1], -1, 1),
-            (z_hat * d_exp).sum(-1, keepdim=True),
+            (z_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),
         ]
     if c_s is not None:
         ### Second-moment channel: the anchor's covariance seen from the point.
@@ -159,14 +175,14 @@ def _relational_invariants(
     return torch.cat(feats, dim=-1)
 
 
-def _geo_region(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, eps: float, c_s=None,
+def _geo_region(lin: nn.Linear, logits_pre, r, n_hat, g_hat, z_pos, m_s, eps: float, c_s=None,
                 relative: bool = False):
     """One recompute region per layer: the per-slice routing bias from the
     invariants and the invariants pooled over slices by the resulting
     point->slice mix. Returns (bias (B,N,S), mix (B,N,S), pooled (B,N,8)); the
     (B,N,S,8) invariants and their (B,N,S,3) intermediates never leave the
     region, so under checkpointing they are rebuilt in backward, not stored."""
-    geo = _relational_invariants(r, n_hat, d_hat, z_pos, m_s, eps, c_s, relative)
+    geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps, c_s, relative)
     bias = lin(geo).squeeze(-1)
     mix = torch.softmax(logits_pre + bias, dim=-1)  # normalized over slices
     return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
@@ -180,7 +196,7 @@ def _fused_geo_region():
     return fused_geo_region
 
 
-def _geo_region_sparse(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, eps: float, c_s, k: int,
+def _geo_region_sparse(lin: nn.Linear, logits_pre, r, n_hat, g_hat, z_pos, m_s, eps: float, c_s, k: int,
                        relative: bool = False):
     """SPARSE (2026-09-09): the recompute region of _geo_region restricted to each
     point's k nearest anchors. Invariants, routing bias and the point->slice mix
@@ -198,7 +214,7 @@ def _geo_region_sparse(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, 
     z_k = z_pos[bidx, idx]  # (B, N, k, 3)
     m_k = m_s[bidx, idx]
     c_k = c_s[bidx, idx] if c_s is not None else None  # (B, N, k, 3, 3)
-    geo = _relational_invariants(r, n_hat, d_hat, z_k, m_k, eps, c_k, relative)  # (B, N, k, geo)
+    geo = _relational_invariants(r, n_hat, g_hat, z_k, m_k, eps, c_k, relative)  # (B, N, k, geo)
     bias_k = lin(geo).squeeze(-1)  # (B, N, k)
     logits_k = torch.gather(logits_pre, -1, idx) + bias_k
     mix_k = torch.softmax(logits_k, dim=-1)
@@ -209,16 +225,22 @@ def _geo_region_sparse(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, 
     return bias_full, mix_full, pooled
 
 
+def _geo_width(n_global_vectors: int, relative: bool, second_moment: bool = False) -> int:
+    """Width of _relational_invariants: dist, log dist, K rel.g_k, rel.n, rel.m,
+    n.m (5 + K); centered adds |z_s| and K zhat_s.g_k; MOM2 adds two. K = 1
+    gives the original 6 (relative) / 8 (centered)."""
+    k = int(n_global_vectors)
+    return 5 + k + (0 if relative else 1 + k) + (2 if second_moment else 0)
+
+
 class _SliceBlock(nn.Module):
     """One pre-LN layer of measure-weighted soft-slice attention + MLP."""
-
-    N_GEO = 8  # v3b: dist, log dist, rel dots (d, n, m_s), n.m_s, |z_s|, zhat_s.d
 
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4,
                  use_relational_geo: bool = True, geo_checkpoint: bool = False,
                  second_moment: bool = False, anchor_topk: int = 0,
                  fast_point_softmax: bool = True, relative_frame: bool = False,
-                 geo_kernel: str = "eager") -> None:
+                 geo_kernel: str = "eager", n_global_vectors: int = 1) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
         self.fast_point_softmax = bool(fast_point_softmax)
@@ -230,7 +252,7 @@ class _SliceBlock(nn.Module):
         ### eager region for sparse routing and the second-moment channel.
         self.geo_kernel = geo_kernel
         ### RELFRAME (2026-09-10): without a frame origin the two origin-referring
-        ### invariants (|z_s|, zhat_s.d) are gone and the geo width is 6 (+2 MOM2).
+        ### invariants (|z_s|, zhat_s.g_k) are gone and the geo width is 5 + K (+2 MOM2).
         self.relative_frame = bool(relative_frame)
         ### SPARSE (2026-09-09): route each point to its anchor_topk nearest
         ### anchors only (0 = dense). The (B, N, S, geo) invariants and their
@@ -243,12 +265,12 @@ class _SliceBlock(nn.Module):
         ### invariants). Restores the transverse arrangement that first-moment
         ### anchors cannot see. Flag-gated; off reproduces the v3b set exactly.
         self.second_moment = bool(second_moment)
-        self.n_geo = self.N_GEO - (2 if self.relative_frame else 0) + (2 if self.second_moment else 0)
+        self.n_geo = _geo_width(n_global_vectors, self.relative_frame, self.second_moment)
         ### Activation recompute (2026-09-07 memory attribution): the per-slice
         ### geometry tensors -- rel (B,N,S,3), rel_hat, dist and two bf16 copies
         ### of the (B,N,S,8) invariants -- are 76% of ISLA's saved activations
         ### at 10k tokens. With geo_checkpoint the invariants are rebuilt from
-        ### (r, n_hat, d_hat, z_pos, m_s) inside backward instead of stored;
+        ### (r, n_hat, g_hat, z_pos, m_s) inside backward instead of stored;
         ### the forward is bitwise unchanged (same ops, same order).
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
@@ -282,7 +304,7 @@ class _SliceBlock(nn.Module):
         log_w: Float[torch.Tensor, "batch tokens 1"],
         r: Float[torch.Tensor, "batch tokens 3"],
         n_hat: Float[torch.Tensor, "batch tokens 3"],
-        d_hat: Float[torch.Tensor, "batch tokens 3"],
+        g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
         eps: float,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         ### Soft assignment of points to slices; measure weights enter as a
@@ -311,11 +333,12 @@ class _SliceBlock(nn.Module):
                 c_s = torch.einsum("bns,bnk->bsk", a, rr).reshape(r.shape[0], -1, 3, 3)
                 c_s = c_s - z_pos[:, :, :, None] * z_pos[:, :, None, :]
             if self.anchor_topk and self.anchor_topk < logits.shape[-1]:
-                region, geo_args = _geo_region_sparse, (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, c_s, self.anchor_topk, self.relative_frame)
+                region, geo_args = _geo_region_sparse, (self.geo_logit, logits, r, n_hat, g_hat, z_pos, m_s, eps, c_s, self.anchor_topk, self.relative_frame)
             elif self.geo_kernel == "fused" and c_s is None:
-                region, geo_args = _fused_geo_region(), (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, self.relative_frame)
+                ### The fused kernel is written for one global vector (enforced at construction).
+                region, geo_args = _fused_geo_region(), (self.geo_logit, logits, r, n_hat, g_hat[:, :, 0], z_pos, m_s, eps, self.relative_frame)
             else:
-                region, geo_args = _geo_region, (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, c_s, self.relative_frame)
+                region, geo_args = _geo_region, (self.geo_logit, logits, r, n_hat, g_hat, z_pos, m_s, eps, c_s, self.relative_frame)
             if self.geo_checkpoint and region is _geo_region:
                 bias, point_mix, pooled = checkpoint(region, *geo_args, use_reentrant=False)
             else:
@@ -342,17 +365,17 @@ class _ReadBlock(nn.Module):
     never write. Removing the write-back is what makes predictions at one
     query independent of every other query (given a fixed source sample)."""
 
-    N_GEO = 8  # v5a2: the full v3b relational-feature set (thin decoder
-    # pipes collapse training -- measured twice now, v3a and v5a-v1)
+    # v5a2: the full v3b relational-feature set (thin decoder pipes collapse
+    # training -- measured twice now, v3a and v5a-v1)
 
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4,
                  geo_checkpoint: bool = False, relative_frame: bool = False,
-                 geo_kernel: str = "eager") -> None:
+                 geo_kernel: str = "eager", n_global_vectors: int = 1) -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
         self.relative_frame = bool(relative_frame)
         self.geo_kernel = geo_kernel  # see _SliceBlock
-        n_geo = self.N_GEO - (2 if self.relative_frame else 0)  # RELFRAME: see _SliceBlock
+        self.n_geo = n_geo = _geo_width(n_global_vectors, self.relative_frame)
         self.norm = nn.LayerNorm(hidden)
         self.assign = nn.Linear(hidden, n_slices)
         self.geo_logit = nn.Linear(n_geo, 1)
@@ -366,15 +389,15 @@ class _ReadBlock(nn.Module):
             nn.Linear(mlp_ratio * hidden, hidden),
         )
 
-    def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, m_s, eps,
+    def forward(self, q_h, q_r, q_n, q_g, z_states, z_pos, m_s, eps,
                 src_r=None, src_h=None, src_w=None, local_rho=None, kernel_logspace=False):
         logits_pre = self.assign(self.norm(q_h))
         if self.geo_kernel == "fused":
-            _, mix, pooled = _fused_geo_region()(self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, self.relative_frame)
+            _, mix, pooled = _fused_geo_region()(self.geo_logit, logits_pre, q_r, q_n, q_g[:, :, 0], z_pos, m_s, eps, self.relative_frame)
         elif self.geo_checkpoint:
-            _, mix, pooled = checkpoint(_geo_region, self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, None, self.relative_frame, use_reentrant=False)
+            _, mix, pooled = checkpoint(_geo_region, self.geo_logit, logits_pre, q_r, q_n, q_g, z_pos, m_s, eps, None, self.relative_frame, use_reentrant=False)
         else:
-            _, mix, pooled = _geo_region(self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, None, self.relative_frame)
+            _, mix, pooled = _geo_region(self.geo_logit, logits_pre, q_r, q_n, q_g, z_pos, m_s, eps, None, self.relative_frame)
         back = torch.einsum("bqs,bsh->bqh", mix, z_states)
         geo_pool = self.geo_feat(pooled)  # pool-then-project (exact)
         q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
@@ -449,6 +472,8 @@ class ISLA(Module):
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
         n_boundary_scalars: int = 0,
+        n_global_vectors: int = 1,
+        n_global_scalars: int = 0,
         parity_fix: bool = False,
         parity_gate_scale: float = 0.0,
         vector_basis: str = "globe7",
@@ -499,6 +524,34 @@ class ISLA(Module):
         if geo_kernel not in ("eager", "fused"):
             raise ValueError(f"geo_kernel must be 'eager' or 'fused', got {geo_kernel!r}")
         self.geo_kernel = geo_kernel
+        ### GLOBAL INPUTS (2026-09-14, ruling: the architecture targets steady
+        ### boundary-value problems in general, so the problem's global data
+        ### are zero or more global VECTOR inputs (each enters as a unit
+        ### direction: one seed term n.g_k per token, one direction cosine
+        ### rel.g_k per point-anchor pair, and the head basis gains g_k with the
+        ### spherical complements of (u, g_k)) and zero or more global SCALAR
+        ### inputs (PDE parameters; appended to every token's seed features).
+        ### n_global_vectors=1, n_global_scalars=0 reproduces the former
+        ### single-vector model parameter-for-parameter, which is why they are
+        ### the defaults: checkpoints store their constructor arguments.
+        self.n_global_vectors = int(n_global_vectors)
+        self.n_global_scalars = int(n_global_scalars)
+        if self.n_global_vectors < 0 or self.n_global_scalars < 0:
+            raise ValueError("n_global_vectors and n_global_scalars must be non-negative")
+        if self.n_global_vectors != 1:
+            one_vector_only = {
+                "geo_kernel='fused'": geo_kernel == "fused",
+                "odd_head": odd_head,
+                "parity_fix": parity_fix,
+                "latent_volume_tokens": latent_volume_tokens,
+                "wake_tokens": wake_tokens,
+            }
+            bad = [k for k, v in one_vector_only.items() if v]
+            if bad:
+                raise ValueError(
+                    f"{', '.join(bad)} are written for exactly one global vector input; "
+                    f"got n_global_vectors={self.n_global_vectors}"
+                )
         ### RELFRAME (2026-09-10, ruling: no sample statistic may enter the
         ### flagship's frame; 2026-09-11: frame_mode="relative" and
         ### scale_mode="total_measure" became the class defaults, the
@@ -507,9 +560,9 @@ class ISLA(Module):
         ### frame_mode="relative" removes the frame origin
         ### altogether: r = points / L with no centering. The six scalars that
         ### referred to the centroid are gone -- the four seed features |r|,
-        ### log|r|, rhat.d, rhat.n (seeds reduce to n.d; the measure enters the
-        ### routing as before) and the two relational invariants |z_s| and
-        ### zhat_s.d (see _relational_invariants). The vector head's radial
+        ### log|r|, rhat.g, rhat.n (seeds reduce to n.g_k; the measure enters the
+        ### routing as before) and the relational invariants |z_s| and
+        ### zhat_s.g_k (see _relational_invariants). The vector head's radial
         ### basis vector rhat becomes the direction from the point's soft slice
         ### anchor (a measure-weighted mean, the same construction as the
         ### relational anchors) so the head stays translation covariant.
@@ -601,7 +654,7 @@ class ISLA(Module):
         ### products (pseudovectors) while the trunk's coefficients are
         ### parity-even, so the vector head violated reflection equivariance.
         ### Gating the e_phi coefficients with the smooth pseudoscalar
-        ### r_hat . (n_hat x d_hat) restores exact parity covariance. Off by
+        ### r_hat . (n_hat x g_hat) restores exact parity covariance. Off by
         ### default so frozen checkpoints keep their trained behavior.
         self.parity_fix = parity_fix
         ### W1' (instrument wave follow-up): the raw pseudoscalar gate p also
@@ -616,18 +669,28 @@ class ISLA(Module):
         ### (not a fraction) so the anchor set cannot depend on the query set,
         ### which is the query-independence contract. 0 disables (v5a3).
         self.n_anchors = int(n_anchors)
-        ### A35b ablations: seed_mode="raw" replaces the five {r,n,d} invariant
-        ### seeds with the raw vectors [r, n, d] (GeoTransolver-style inputs);
+        ### A35b ablations: seed_mode="raw" replaces the {r,n,g_k} invariant
+        ### seeds with the raw vectors [r, n, g_1..g_K] (GeoTransolver-style inputs);
         ### use_relational_geo=False removes anchor geometry from the slices.
         if seed_mode not in ("invariant", "raw"):
             raise ValueError(f"unknown seed_mode {seed_mode!r}")
         self.seed_mode = seed_mode
-        n_base = (1 if self.relative_frame else 5) if seed_mode == "invariant" else 9
-        n_seed = (n_base + (7 * len(self.local_radii) if use_local_features else 0)
+        K = self.n_global_vectors
+        if seed_mode == "invariant":
+            n_base = K if self.relative_frame else 3 + 2 * K
+        else:
+            n_base = 6 + 3 * K
+        n_seed = (n_base + ((5 + 2 * K) * len(self.local_radii) if use_local_features else 0)
                   + self.n_boundary_scalars + (1 if scale_conditioning else 0)
-                  + (6 if raw_coord_channel else 0))
-        ### Seed invariants of {r, n, d}; separation comes from the slice
-        ### blocks' relational anchors (v2), not from these.
+                  + (6 if raw_coord_channel else 0) + self.n_global_scalars)
+        ### With no global inputs and no other seed channel the seed is empty;
+        ### every token then starts from one learned embedding and all
+        ### separation comes from the slice blocks' relational anchors.
+        self.constant_seed = n_seed == 0
+        if self.constant_seed:
+            n_seed = 1
+        ### Seed invariants of {r, n, g_k} plus the global scalars; separation
+        ### comes from the slice blocks' relational anchors (v2), not from these.
         self.embed = nn.Sequential(
             nn.Linear(n_seed, hidden), nn.GELU(), nn.Linear(hidden, hidden)
         )
@@ -646,7 +709,8 @@ class ISLA(Module):
                         geo_checkpoint=geo_checkpoint, second_moment=self.second_moment_features,
                         anchor_topk=self.anchor_topk,
                         fast_point_softmax=self.fast_point_softmax,
-                        relative_frame=self.relative_frame, geo_kernel=geo_kernel)
+                        relative_frame=self.relative_frame, geo_kernel=geo_kernel,
+                        n_global_vectors=K)
             for _ in range(n_layers)
         )
         if self.relative_frame:
@@ -664,27 +728,33 @@ class ISLA(Module):
             )
             self.read_blocks = nn.ModuleList(
                 _ReadBlock(hidden, n_slices, mlp_ratio, geo_checkpoint=geo_checkpoint,
-                           relative_frame=self.relative_frame, geo_kernel=geo_kernel)
+                           relative_frame=self.relative_frame, geo_kernel=geo_kernel,
+                           n_global_vectors=K)
                 for _ in range(n_decoder_layers)
             )
         self.norm_out = nn.LayerNorm(hidden)
-        ### Vector head: coefficients over {d, n, rhat} plus the
-        ### spherical-basis complements of (rhat, n) and (rhat, d) -- the
-        ### GLOBE multi-vector expansion (7 basis vectors).
+        ### Vector head: coefficients over {g_1..g_K, n, rhat} plus the
+        ### spherical-basis complements of (rhat, n) and of each (rhat, g_k) --
+        ### the GLOBE multi-vector expansion (4 + 3K basis vectors; 7 for K = 1).
         ### L2 experiment (2026-09-02): the two e_phi complements are
         ### pseudovectors. "globe7" is the original basis; "true5" drops them
         ### (capacity control); "true7" replaces them with the TRUE vectors
-        ### e_phi_n x d_hat and e_phi_d x n_hat (pseudo x true = true), giving
+        ### e_phi_n x g_hat and e_phi_g x n_hat (pseudo x true = true), giving
         ### exact reflection covariance with no gating and no lost channel.
         if vector_basis not in ("globe7", "true5", "true7"):
             raise ValueError(f"unknown vector_basis {vector_basis!r}")
         self.vector_basis = vector_basis
-        self.n_basis = 5 if vector_basis == "true5" else 7
+        if vector_basis == "true5":
+            self.n_basis = 3 + 2 * K
+        elif vector_basis == "true7":
+            self.n_basis = 3 + 4 * K
+        else:
+            self.n_basis = 4 + 3 * K
         self.head = nn.Linear(hidden, out_scalars + out_vectors * self.n_basis)
-        ### W2 (2026-09-02): odd-coefficient head. {r,n,d} span R^3, so the
+        ### W2 (2026-09-02): odd-coefficient head. {r,n,g} span R^3, so the
         ### e_phi (pseudovector) direction is reachable COVARIANTLY only with a
         ### parity-odd coefficient, and the trunk emits even invariants only.
-        ### Build K pseudoscalars from {r, n, d} and the point's soft slice
+        ### Build pseudoscalars from {r, n, g} and the point's soft slice
         ### anchor (weighted anchor position z and normal m, both true
         ### vectors), and set coeff_phi = sum_k p_k * g_k(h). Exactly
         ### reflection-covariant; not killed where any single p_k vanishes.
@@ -732,9 +802,9 @@ class ISLA(Module):
                 nn.Linear(7, hidden), nn.GELU(), nn.Linear(hidden, hidden)
             )
         ### WAKE TOKENS (2026-09-10, transfer program). K = len(wake_offsets)
-        ### interacting tokens placed on the drive axis through the centering
-        ### point, downstream at c_k * ell, where ell is the measure-weighted RMS
-        ### extent of the surface along the drive (a body half-length that is
+        ### interacting tokens placed on the global vector's axis through the
+        ### centering point, downstream at c_k * ell, where ell is the
+        ### measure-weighted RMS extent of the surface along it (a body half-length that is
         ### invariant to how the surface was sampled, by the Horvitz-Thompson
         ### weights). Mechanism: far from the body every surface anchor is at
         ### nearly the same distance and direction, so a query's relational
@@ -744,8 +814,9 @@ class ISLA(Module):
         ### varies along the wake. Their routing weight is a learned fraction of
         ### the total surface measure (the "source_total" convention), so the
         ### measure-scale and source-refinement contracts hold exactly. Built
-        ### from the drive and the weighted surface geometry alone: covariant,
-        ### query-independent, discretization-invariant. Off by default.
+        ### from the global vector and the weighted surface geometry alone:
+        ### covariant, query-independent, discretization-invariant. Off by
+        ### default; written for one global vector input.
         self.wake_tokens = bool(wake_tokens)
         self.wake_offsets = tuple(float(c) for c in wake_offsets)
         if self.wake_tokens:
@@ -759,7 +830,7 @@ class ISLA(Module):
             )
         ### QUERY TOKENS (boundary->interior exploration, 2026-09-07): interior
         ### query points join the encoder as INTERACTING tokens, carrying the
-        ### same five {q, n_q, d} invariant seeds as the surface tokens (the
+        ### same {q, n_q, g_k} invariant seeds as the surface tokens (the
         ### query normal must be supplied, e.g. the SDF gradient), a learned
         ### measure weight and a learned token-type offset. This is
         ### GeoTransolver's interior mechanism (queries as tokens) on ISLA's
@@ -849,7 +920,7 @@ class ISLA(Module):
         ### (_local_invariants_at), at radii in gauge units, entered
         ### additively through their own embedding. Invariant by
         ### construction (integrals of equivariant vectors projected on the
-        ### query normal and drive), so every covariance contract holds.
+        ### query normal and the global vectors), so every covariance contract holds.
         ### Target: the eddy-viscosity deficit to GeoTransolver-volume, whose
         ### six-radius local features are the one input class ISLA lacked.
         self.query_local_features = bool(query_local_features)
@@ -871,7 +942,7 @@ class ISLA(Module):
         ###     (gauge units), entered as [log(1+c), log(1+c) - log(n_queries)].
         ###     A pure sampling-density (mesh-scale) proxy with no physics.
         ### (b) neighbours: mean over the k nearest other queries of the pair
-        ###     invariants {|dr|, log|dr|, dr_hat.n_q, dr_hat.d, n_j.n_q, n_j.d,
+        ###     invariants {|dr|, log|dr|, dr_hat.n_q, dr_hat.g_k, n_j.n_q, n_j.g_k,
         ###     (s_j - s_q)/gauge if query scalars are given} plus the k-th
         ###     neighbour distance and its log.
         self.query_density_feature = bool(query_density_feature)
@@ -885,7 +956,7 @@ class ISLA(Module):
         if self.query_neighbor_features:
             if not self.query_tokens:
                 raise ValueError("query_neighbor_features requires query_tokens=True")
-            n_nbr = 6 + (1 if self.n_query_scalars else 0) + 2
+            n_nbr = 4 + 2 * K + (1 if self.n_query_scalars else 0) + 2
             self.qt_neighbor_embed = nn.Sequential(nn.Linear(n_nbr, hidden), nn.GELU(), nn.Linear(hidden, hidden))
         if odd_head:
             self.N_ODD = 7
@@ -900,23 +971,40 @@ class ISLA(Module):
             nn.init.zeros_(self.odd_gate.bias)
 
 
-    def _seed_invariants(self, mag, hat, n_hat, d_hat):
-        """The per-token seed invariants of {r, n, d}: |r|, log|r|, rhat.d, rhat.n,
-        n.d -- or n.d alone in the relative frame, where r has no origin."""
+    @staticmethod
+    def _dots(x, g_hat):
+        """x (B, N, 3) against the K unit global vectors g_hat (B, N, K, 3) -> (B, N, K).
+        Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
+        return (x[:, :, None, :] * g_hat).sum(-1)
+
+    def _seed_invariants(self, mag, hat, n_hat, g_hat):
+        """The per-token seed invariants of {r, n, g_k}: |r|, log|r|, rhat.g_k (K),
+        rhat.n, n.g_k (K) -- or the K terms n.g_k alone in the relative frame,
+        where r has no origin (an empty tensor when K = 0)."""
         if self.relative_frame:
-            return (n_hat * d_hat).sum(-1, keepdim=True)
+            return self._dots(n_hat, g_hat)
         return torch.cat(
             [
                 mag,
                 torch.log(mag),
-                (hat * d_hat).sum(-1, keepdim=True),
+                self._dots(hat, g_hat),
                 (hat * n_hat).sum(-1, keepdim=True),
-                (n_hat * d_hat).sum(-1, keepdim=True),
+                self._dots(n_hat, g_hat),
             ],
             dim=-1,
         )
 
-    def _local_invariants_at(self, q_r, q_n, q_d, src_r, src_n, log_w, radii=None,
+    def _with_global_scalars(self, inv, g_scalars, n_tokens: int):
+        """Append the global scalar inputs (B, S) to every token's seed features;
+        substitute the constant seed when the feature set is empty."""
+        b = inv.shape[0]
+        if g_scalars is not None and g_scalars.shape[-1]:
+            inv = torch.cat([inv, g_scalars[:, None, :].expand(b, n_tokens, -1).to(inv.dtype)], dim=-1)
+        if self.constant_seed:
+            inv = inv.new_ones(b, n_tokens, 1)
+        return inv
+
+    def _local_invariants_at(self, q_r, q_n, q_g, src_r, src_n, log_w, radii=None,
                              normalize_weights=False):
         """Query-passive variant: patch integrals of the SOURCE sample
         evaluated at arbitrary query positions (radii default to
@@ -939,15 +1027,15 @@ class ISLA(Module):
                 nbar = torch.einsum("bcn,bnk->bck", k, src_n) / mass
                 delta = (torch.einsum("bcn,bnk->bck", k, src_r) / mass) - ri
                 ni = q_n[:, i0 : i0 + chunk]
-                di = q_d[:, i0 : i0 + chunk]
+                gi = q_g[:, i0 : i0 + chunk]
                 outs.append(
                     torch.cat(
                         [
                             (nbar * ni).sum(-1, keepdim=True),
-                            (nbar * di).sum(-1, keepdim=True),
+                            self._dots(nbar, gi),
                             nbar.norm(dim=-1, keepdim=True),
                             (delta * ni).sum(-1, keepdim=True) / rho,
-                            (delta * di).sum(-1, keepdim=True) / rho,
+                            self._dots(delta, gi) / rho,
                             delta.norm(dim=-1, keepdim=True) / rho,
                             torch.log(mass),
                         ],
@@ -961,14 +1049,15 @@ class ISLA(Module):
         self,
         r: Float[torch.Tensor, "batch tokens 3"],
         n_hat: Float[torch.Tensor, "batch tokens 3"],
-        d_hat: Float[torch.Tensor, "batch tokens 3"],
+        g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
         log_w: Float[torch.Tensor, "batch tokens 1"],
         normalize_weights: bool = False,
     ) -> Float[torch.Tensor, "batch tokens feats"]:
-        """Measure-weighted Gaussian patch integrals at fixed physical radii.
+        """Measure-weighted Gaussian patch integrals at fixed physical radii
+        (5 + 2K invariants per radius; 7 for one global vector).
 
         Exactly equivariant (integrals of equivariant vectors, projected on
-        n_i and d); unbiased under HT sampling via the measure weights;
+        n_i and the g_k); unbiased under HT sampling via the measure weights;
         row-chunked so the pairwise kernel never materializes at full size.
 
         With ``normalize_weights`` the weights are fractions of the total
@@ -995,15 +1084,15 @@ class ISLA(Module):
                 nbar = torch.einsum("bcn,bnk->bck", k, n_hat) / mass
                 delta = (torch.einsum("bcn,bnk->bck", k, r) / mass) - ri
                 ni = n_hat[:, i0 : i0 + chunk]
-                di = d_hat[:, i0 : i0 + chunk]
+                gi = g_hat[:, i0 : i0 + chunk]
                 outs.append(
                     torch.cat(
                         [
                             (nbar * ni).sum(-1, keepdim=True),
-                            (nbar * di).sum(-1, keepdim=True),
+                            self._dots(nbar, gi),
                             nbar.norm(dim=-1, keepdim=True),
                             (delta * ni).sum(-1, keepdim=True) / rho,
-                            (delta * di).sum(-1, keepdim=True) / rho,
+                            self._dots(delta, gi) / rho,
                             delta.norm(dim=-1, keepdim=True) / rho,
                             torch.log(mass),
                         ],
@@ -1013,7 +1102,7 @@ class ISLA(Module):
             feats.append(torch.cat(outs, dim=1))
         return torch.cat(feats, dim=-1)
 
-    def _query_cloud_invariants(self, q_r, q_nhat, q_d, qs_raw=None, chunk: int = 2048):
+    def _query_cloud_invariants(self, q_r, q_nhat, q_g, qs_raw=None, chunk: int = 2048):
         """QTDENS channels from the gauge-normalized query cloud alone (see __init__).
         Returns (density (B,Q,2), neighbours (B,Q,n_nbr)); either may be unused."""
         bq, nq, _ = q_r.shape
@@ -1035,9 +1124,12 @@ class ISLA(Module):
                 rel = nb_r - qi[:, :, None, :]
                 dist = rel.norm(dim=-1, keepdim=True).clamp_min(self.eps)
                 rel_hat = rel / dist
-                nq_e = q_nhat[:, i0:i0 + chunk, None, :]; d_e = q_d[:, i0:i0 + chunk, None, :]
-                feats = [dist, torch.log(dist), (rel_hat * nq_e).sum(-1, keepdim=True), (rel_hat * d_e).sum(-1, keepdim=True),
-                         (nb_n * nq_e).sum(-1, keepdim=True), (nb_n * d_e).sum(-1, keepdim=True)]
+                nq_e = q_nhat[:, i0:i0 + chunk, None, :]
+                g_e = q_g[:, i0:i0 + chunk]  # (B, c, K, 3)
+                feats = [dist, torch.log(dist), (rel_hat * nq_e).sum(-1, keepdim=True),
+                         (rel_hat[:, :, :, None, :] * g_e[:, :, None, :, :]).sum(-1),
+                         (nb_n * nq_e).sum(-1, keepdim=True),
+                         (nb_n[:, :, :, None, :] * g_e[:, :, None, :, :]).sum(-1)]
                 if qs_raw is not None:
                     nb_s = torch.gather(qs_raw[:, None, :, :1].expand(bq, len(ar), nq, 1), 2, idx[..., None])
                     feats.append(nb_s - qs_raw[:, i0:i0 + chunk, None, :1])
@@ -1053,8 +1145,9 @@ class ISLA(Module):
         *,
         points: Float[torch.Tensor, "batch tokens 3"],
         normals: Float[torch.Tensor, "batch tokens 3"],
-        drive: Float[torch.Tensor, "batch 3"] | Float[torch.Tensor, " 3"],
         measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
+        global_vectors: Float[torch.Tensor, "batch vectors 3"] | None = None,
+        global_scalars: Float[torch.Tensor, "batch scalars"] | None = None,
         boundary_scalars: Float[torch.Tensor, "batch tokens n_bscalars"] | None = None,
         query_points: Float[torch.Tensor, "batch queries 3"] | None = None,
         query_normals: Float[torch.Tensor, "batch queries 3"] | None = None,
@@ -1069,15 +1162,43 @@ class ISLA(Module):
             points = points[None]
             normals = normals[None]
         b, n, _ = points.shape
-        ### Tolerate any drive layout the recipe delivers: (3,), (B, 3), or
-        ### collated (B, 1, 3).
-        drive = drive.reshape(-1, 3)
-        if drive.shape[0] != b:
-            drive = drive.expand(b, 3)
-
-        ### Drive-degree-one bypass: backbone sees the direction only.
-        drive_mag = drive.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B,1)
-        d_hat = (drive / drive_mag)[:, None, :].expand(b, n, 3)
+        ### Global vector inputs: (B, K, 3), or any layout with B*K*3 or K*3
+        ### elements ((K, 3), and for K = 1 (B, 3), (B, 1, 3) or (3,)); a
+        ### single set is shared across the batch. Each is normalized to a unit
+        ### direction; the magnitude, if it means anything, is a global scalar.
+        K = self.n_global_vectors
+        if K == 0:
+            if global_vectors is not None and global_vectors.numel():
+                raise ValueError("this model was built with n_global_vectors=0; pass no global_vectors")
+            g_unit = points.new_zeros(b, 0, 3)
+        else:
+            if global_vectors is None:
+                raise ValueError(f"n_global_vectors={K} needs global_vectors of shape (batch, {K}, 3)")
+            if global_vectors.numel() % (3 * K):
+                raise ValueError(
+                    f"global_vectors has {global_vectors.numel()} elements, not a multiple of {K} vectors x 3"
+                )
+            gv = global_vectors.reshape(-1, K, 3).to(points.dtype)
+            if gv.shape[0] == 1 and b != 1:
+                gv = gv.expand(b, K, 3)
+            elif gv.shape[0] != b:
+                raise ValueError(f"global_vectors gives {gv.shape[0]} sets of {K} vectors for a batch of {b}")
+            g_unit = gv / gv.norm(dim=-1, keepdim=True).clamp_min(self.eps)  # (B, K, 3)
+        g_hat = g_unit[:, None].expand(b, n, K, 3)
+        ### Global scalar inputs: (B, S) or (S,) shared across the batch.
+        S = self.n_global_scalars
+        if S == 0:
+            if global_scalars is not None and global_scalars.numel():
+                raise ValueError("this model was built with n_global_scalars=0; pass no global_scalars")
+            g_scalars = None
+        else:
+            if global_scalars is None:
+                raise ValueError(f"n_global_scalars={S} needs global_scalars of shape (batch, {S})")
+            g_scalars = global_scalars.reshape(-1, S).to(points.dtype)
+            if g_scalars.shape[0] == 1 and b != 1:
+                g_scalars = g_scalars.expand(b, S)
+            elif g_scalars.shape[0] != b:
+                raise ValueError(f"global_scalars gives {g_scalars.shape[0]} rows for a batch of {b}")
 
         ### Similarity reduction: center by the plain mean, scale by L_ref.
         if self.similarity_gauge or self.center_mode == "measure":
@@ -1125,12 +1246,12 @@ class ISLA(Module):
                 log_w = log_w * self.measure_weight_power
 
         if self.seed_mode == "raw":
-            invariants = torch.cat([r, n_hat, d_hat], dim=-1)
+            invariants = torch.cat([r, n_hat, g_hat.reshape(b, n, 3 * K)], dim=-1)
         else:
-            invariants = self._seed_invariants(r_mag, r_hat, n_hat, d_hat)
+            invariants = self._seed_invariants(r_mag, r_hat, n_hat, g_hat)
         if self.use_local_features:
             invariants = torch.cat(
-                [invariants, self._local_invariants(r, n_hat, d_hat, log_w,
+                [invariants, self._local_invariants(r, n_hat, g_hat, log_w,
                                                     normalize_weights=self.similarity_gauge)],
                 dim=-1,
             )
@@ -1145,6 +1266,7 @@ class ISLA(Module):
             invariants = torch.cat(
                 [invariants, log_s.expand(b, n, 1)], dim=-1
             )
+        invariants = self._with_global_scalars(invariants, g_scalars, n)
         h = self.embed(invariants)
 
         ### n_boundary counts the SURFACE tokens only: the surface measure
@@ -1168,15 +1290,15 @@ class ISLA(Module):
                 ctok.append(torch.full_like(rho0, c))
                 rtok.append(rho0)
             pos.append(torch.zeros_like(z0[:, :1]))            # centroid token
-            mtok.append(d_hat[:, :1])                          # covariant placeholder normal
+            mtok.append(g_hat[:, :1, 0])                       # covariant placeholder normal (one global vector)
             ctok.append(torch.zeros_like(rho0[:, :1]))
             rtok.append(rho0.mean(dim=1, keepdim=True))
             p_l = torch.cat(pos, dim=1)                        # (B,K,3)
             m_l = torch.cat(mtok, dim=1)
             c_l = torch.cat(ctok, dim=1)[..., None]
             rho_l = torch.cat(rtok, dim=1)[..., None]
-            K = p_l.shape[1]
-            d_l = d_hat[:, :1].expand(b, K, 3)
+            K_l = p_l.shape[1]
+            d_l = g_hat[:, :1, 0].expand(b, K_l, 3)
             p_mag = p_l.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             p_hat = p_l / p_mag
             inv_l = torch.cat(
@@ -1192,7 +1314,7 @@ class ISLA(Module):
             h = torch.cat([h, self.lvt_embed(inv_l)], dim=1)
             r = torch.cat([r, p_l], dim=1)
             n_hat = torch.cat([n_hat, m_l], dim=1)
-            d_hat = torch.cat([d_hat, d_l], dim=1)
+            g_hat = torch.cat([g_hat, d_l[:, :, None]], dim=1)
             lvt_w = self.lvt_logw.to(log_w.dtype)
             if self.query_tokens:
                 ### Query-token mode (2026-09-10): the volume tokens' total weight
@@ -1200,22 +1322,23 @@ class ISLA(Module):
                 ### measure-scale and refinement contracts hold exactly. The
                 ### passive path keeps its original absolute weight so that
                 ### existing checkpoints evaluate unchanged.
-                lvt_w = lvt_w + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True) - math.log(K)
-            log_w = torch.cat([log_w, lvt_w.expand(b, K, 1)], dim=1)
-            n = n + K
+                lvt_w = lvt_w + torch.logsumexp(log_w[:, :n_boundary], dim=1, keepdim=True) - math.log(K_l)
+            log_w = torch.cat([log_w, lvt_w.expand(b, K_l, 1)], dim=1)
+            n = n + K_l
 
         if self.wake_tokens and (self.query_independent or self.query_tokens):
-            ### Wake tokens (see __init__): drive-aligned context downstream of
-            ### the body, built from the surface tokens' weighted geometry.
+            ### Wake tokens (see __init__): context downstream of the body along
+            ### the (single) global vector input, built from the surface tokens'
+            ### weighted geometry.
             r_b, logw_b = r[:, :n_boundary], log_w[:, :n_boundary]
-            d_b = (drive / drive_mag)[:, None, :]  # (B,1,3)
-            s_b = (r_b * d_b).sum(-1, keepdim=True)  # (B,N,1) drive-aligned coordinate
+            d_b = g_unit[:, :1, :]  # (B,1,3) the one global vector
+            s_b = (r_b * d_b).sum(-1, keepdim=True)  # (B,N,1) coordinate along it
             w_b = torch.softmax(logw_b, dim=1)  # normalized measure, scale-free
             s_mean = (w_b * s_b).sum(dim=1, keepdim=True)  # (B,1,1)
             ell = ((w_b * (s_b - s_mean).square()).sum(dim=1, keepdim=True)).sqrt().clamp_min(self.eps)
             Kw = len(self.wake_offsets)
             c_w = torch.tensor(self.wake_offsets, dtype=r.dtype, device=r.device).view(1, Kw, 1)
-            p_w = (s_mean + c_w * ell) * d_b  # (B,Kw,3) on the drive axis
+            p_w = (s_mean + c_w * ell) * d_b  # (B,Kw,3) on the global vector's axis
             m_w = d_b.expand(b, Kw, 3)  # covariant placeholder normal
             d_w = d_b.expand(b, Kw, 3)
             p_mag_w = p_w.norm(dim=-1, keepdim=True).clamp_min(self.eps)
@@ -1233,7 +1356,7 @@ class ISLA(Module):
             h = torch.cat([h, self.wk_embed(inv_w.to(h.dtype))], dim=1)
             r = torch.cat([r, p_w], dim=1)
             n_hat = torch.cat([n_hat, m_w], dim=1)
-            d_hat = torch.cat([d_hat, d_w], dim=1)
+            g_hat = torch.cat([g_hat, d_w[:, :, None]], dim=1)
             ### total wake weight = learned fraction of the total surface measure
             wk_logw = (self.wk_logw.to(log_w.dtype)
                        + torch.logsumexp(logw_b, dim=1, keepdim=True) - math.log(Kw))
@@ -1252,8 +1375,8 @@ class ISLA(Module):
             s_mag = s_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             s_rhat = s_r / s_mag
             s_nhat = support_normals / support_normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            s_d = (drive / drive_mag)[:, None, :].expand(bs_, ns_, 3)
-            s_inv = self._seed_invariants(s_mag, s_rhat, s_nhat, s_d)
+            s_g = g_unit[:, None].expand(bs_, ns_, K, 3)
+            s_inv = self._with_global_scalars(self._seed_invariants(s_mag, s_rhat, s_nhat, s_g), g_scalars, ns_)
             h_s = self.embed(s_inv) + self.sp_type.to(h.dtype)
             if self.n_query_scalars:
                 if support_scalars is None:
@@ -1273,7 +1396,7 @@ class ISLA(Module):
             h = torch.cat([h, h_s], dim=1)
             r = torch.cat([r, s_r], dim=1)
             n_hat = torch.cat([n_hat, s_nhat], dim=1)
-            d_hat = torch.cat([d_hat, s_d], dim=1)
+            g_hat = torch.cat([g_hat, s_g], dim=1)
             log_w = torch.cat([log_w, s_logw.expand(b, ns_, 1)], dim=1)
             n = n + ns_
         qt_active = self.query_tokens and query_points is not None
@@ -1287,8 +1410,8 @@ class ISLA(Module):
             q_mag = q_r.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             q_rhat = q_r / q_mag
             q_nhat = query_normals / query_normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
-            q_d = (drive / drive_mag)[:, None, :].expand(bq, nq, 3)
-            q_inv = self._seed_invariants(q_mag, q_rhat, q_nhat, q_d)
+            q_g = g_unit[:, None].expand(bq, nq, K, 3)
+            q_inv = self._with_global_scalars(self._seed_invariants(q_mag, q_rhat, q_nhat, q_g), g_scalars, nq)
             h_q = self.embed(q_inv) + self.qt_type.to(h.dtype)
             if self.n_query_scalars:
                 if query_scalars is None:
@@ -1304,7 +1427,7 @@ class ISLA(Module):
                 ### Patch integrals of the surface sample around each query
                 ### (surface tokens only: the first n_surface entries).
                 q_loc = self._local_invariants_at(
-                    q_r, q_nhat, q_d, r[:, :n_boundary], n_hat[:, :n_boundary], log_w[:, :n_boundary],
+                    q_r, q_nhat, q_g, r[:, :n_boundary], n_hat[:, :n_boundary], log_w[:, :n_boundary],
                     radii=self.query_local_radii, normalize_weights=True,
                 )
                 h_q = h_q + self.qt_local_embed(q_loc.to(q_inv.dtype)).to(h_q.dtype)
@@ -1312,7 +1435,7 @@ class ISLA(Module):
                 qs_raw = None
                 if self.n_query_scalars and query_scalars is not None:
                     qs_raw = query_scalars.reshape(bq, nq, self.n_query_scalars).to(q_r.dtype) / gauge
-                dens, nbr = self._query_cloud_invariants(q_r, q_nhat, q_d, qs_raw)
+                dens, nbr = self._query_cloud_invariants(q_r, q_nhat, q_g, qs_raw)
                 if self.query_density_feature:
                     h_q = h_q + self.qt_density_embed(dens.to(q_inv.dtype)).to(h_q.dtype)
                 if self.query_neighbor_features:
@@ -1320,7 +1443,7 @@ class ISLA(Module):
             h = torch.cat([h, h_q], dim=1)
             r = torch.cat([r, q_r], dim=1)
             n_hat = torch.cat([n_hat, q_nhat], dim=1)
-            d_hat = torch.cat([d_hat, q_d], dim=1)
+            g_hat = torch.cat([g_hat, q_g], dim=1)
             ### The query tokens' routing weight is learned RELATIVE to the
             ### surface measure (mean surface log-weight), so that rescaling
             ### the geometry (areas x k^2) shifts every token's log-weight by
@@ -1338,20 +1461,21 @@ class ISLA(Module):
 
         if not (self.query_independent and 0 < self.n_anchors < n):
             for block in self.blocks:
-                h = block(h, log_w, r, n_hat, d_hat, self.eps)
+                h = block(h, log_w, r, n_hat, g_hat, self.eps)
 
         ### The odd head builds its slice anchors from the SOURCE tokens
         ### (src_r, src_n, src_logw, and h); the branches below overwrite
-        ### r_hat/n_hat/d_hat/n with the query-side values, so the source
+        ### r_hat/n_hat/g_out/n with the query-side values, so the source
         ### tensors are captured here (audit 2026-09-08: the head used to read
         ### the overwritten n_hat and n and failed whenever the query count
         ### differed from the source count).
         src_r, src_n, src_logw = r, n_hat, log_w
         r_out = r  # positions of the tokens the head reads (RELFRAME radial basis)
+        g_out = g_hat  # the global vectors seen by the tokens the head reads
         if qt_active:
             ### Heads read the query tokens only (surface tokens were context).
             h_out = h[:, n_surface:]
-            r_hat, n_hat, d_hat, b, n = q_rhat, q_nhat, q_d, bq, nq
+            r_hat, n_hat, g_out, b, n = q_rhat, q_nhat, q_g, bq, nq
             r_out = q_r
         elif self.query_independent:
             if 0 < self.n_anchors < n:
@@ -1365,14 +1489,14 @@ class ISLA(Module):
                     idx = torch.arange(n_anchor, device=points.device)
                 h = h[:, idx]
                 r_enc, n_enc = r[:, idx], n_hat[:, idx]
-                d_enc = d_hat[:, idx]
+                g_enc = g_hat[:, idx]
                 log_w_enc = log_w[:, idx]
             else:
-                r_enc, n_enc, d_enc, log_w_enc = r, n_hat, d_hat, log_w
+                r_enc, n_enc, g_enc, log_w_enc = r, n_hat, g_hat, log_w
             ### Final encoder slice states and anchors (read-only for queries).
             if 0 < self.n_anchors < n:
                 for block in self.blocks:
-                    h = block(h, log_w_enc, r_enc, n_enc, d_enc, self.eps)
+                    h = block(h, log_w_enc, r_enc, n_enc, g_enc, self.eps)
             logits = self.final_assign(h)
             a = _softmax_over_points(logits + (log_w_enc if 0 < self.n_anchors < n else log_w), self.fast_point_softmax)
             r_src = r_enc if 0 < self.n_anchors < n else r
@@ -1400,15 +1524,15 @@ class ISLA(Module):
                 q_nrm = torch.einsum("bqs,bsc->bqc", a_q, m_s)
             q_nhat = q_nrm / q_nrm.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             bq, nq, _ = q_pts.shape
-            q_d = (drive / drive_mag)[:, None, :].expand(bq, nq, 3)
+            q_g = g_unit[:, None].expand(bq, nq, K, 3)
             if self.seed_mode == "raw":
-                q_inv = torch.cat([q_r, q_nhat, q_d], dim=-1)
+                q_inv = torch.cat([q_r, q_nhat, q_g.reshape(bq, nq, 3 * K)], dim=-1)
             else:
-                q_inv = self._seed_invariants(q_mag, q_rhat, q_nhat, q_d)
+                q_inv = self._seed_invariants(q_mag, q_rhat, q_nhat, q_g)
             if self.use_local_features:
                 ### Local integrals read the SOURCE sample -- query-passive.
                 q_inv = torch.cat(
-                    [q_inv, self._local_invariants_at(q_r, q_nhat, q_d, r, n_hat, log_w,
+                    [q_inv, self._local_invariants_at(q_r, q_nhat, q_g, r, n_hat, log_w,
                                                       normalize_weights=self.similarity_gauge)],
                     dim=-1,
                 )
@@ -1429,6 +1553,7 @@ class ISLA(Module):
                 q_inv = torch.cat([q_inv, q_r, q_nhat], dim=-1)
             if self.scale_conditioning:
                 q_inv = torch.cat([q_inv, log_s.expand(bq, nq, 1)], dim=-1)
+            q_inv = self._with_global_scalars(q_inv, g_scalars, nq)
             q_h = self.embed(q_inv)
             if self.n_query_scalars:
                 if query_scalars is None:
@@ -1449,11 +1574,11 @@ class ISLA(Module):
             src_w = src_logw.squeeze(-1) if logspace else torch.exp(src_logw.squeeze(-1))
             for rb in self.read_blocks:
                 q_h = rb(
-                    q_h, q_r, q_nhat, q_d, z_states, z_pos, m_s, self.eps,
+                    q_h, q_r, q_nhat, q_g, z_states, z_pos, m_s, self.eps,
                     src_r=r_src, src_h=h, src_w=src_w,
                     local_rho=self.local_readout_rho, kernel_logspace=logspace,
                 )
-            h_out, r_hat, n_hat, d_hat, b, n = q_h, q_rhat, q_nhat, q_d, bq, nq
+            h_out, r_hat, n_hat, g_out, b, n = q_h, q_rhat, q_nhat, q_g, bq, nq
             r_out = q_r
         else:
             h_out = h
@@ -1473,23 +1598,26 @@ class ISLA(Module):
             b, n, self.out_vectors, self.n_basis
         )
         ### GLOBE-style expansion: input vectors + spherical complements of
-        ### the (r_hat, n_hat) and (r_hat, d_hat) pairs. Exactly equivariant;
-        ### non-orthogonal inputs span via the complements.
+        ### the (r_hat, n_hat) pair and of each (r_hat, g_k) pair. Exactly
+        ### equivariant; non-orthogonal inputs span via the complements. For
+        ### K = 1 the stacking order is the original [g, n, r, e_th_n, e_ph_n,
+        ### e_th_g, e_ph_g] (true5/true7 likewise), so trained heads reproduce.
+        gs = [g_out[:, :, k] for k in range(self.n_global_vectors)]
         _, e_th_n, e_ph_n = spherical_basis(r_hat, n_hat, normalize_basis_vectors=False)
-        _, e_th_d, e_ph_d = spherical_basis(r_hat, d_hat, normalize_basis_vectors=False)
+        sb = [spherical_basis(r_hat, g, normalize_basis_vectors=False) for g in gs]
         if self.vector_basis == "true5":
-            basis = torch.stack([d_hat, n_hat, r_hat, e_th_n, e_th_d], dim=-2)
+            basis = gs + [n_hat, r_hat, e_th_n] + [e_th for _, e_th, _ in sb]
         elif self.vector_basis == "true7":
-            t_n = torch.linalg.cross(e_ph_n, d_hat, dim=-1)
-            t_d = torch.linalg.cross(e_ph_d, n_hat, dim=-1)
-            basis = torch.stack(
-                [d_hat, n_hat, r_hat, e_th_n, e_th_d, t_n, t_d], dim=-2
-            )
+            basis = (gs + [n_hat, r_hat, e_th_n] + [e_th for _, e_th, _ in sb]
+                     + [torch.linalg.cross(e_ph_n, g, dim=-1) for g in gs]
+                     + [torch.linalg.cross(e_ph, n_hat, dim=-1) for _, _, e_ph in sb])
         else:
-            basis = torch.stack(
-                [d_hat, n_hat, r_hat, e_th_n, e_ph_n, e_th_d, e_ph_d], dim=-2
-            )  # (B, N, 7, 3)
+            basis = gs + [n_hat, r_hat, e_th_n, e_ph_n]
+            for _, e_th, e_ph in sb:
+                basis += [e_th, e_ph]
+        basis = torch.stack(basis, dim=-2)  # (B, N, n_basis, 3)
         if self.odd_head and self.vector_basis == "globe7":
+            d_hat = gs[0]  # odd head: one global vector (enforced at construction)
             ### per-point soft slice anchor (true vectors, equivariant)
             lg = self.odd_assign(h)
             a_s = _softmax_over_points(lg + src_logw, self.fast_point_softmax)  # slices over source points
@@ -1525,7 +1653,7 @@ class ISLA(Module):
             coeffs[..., 6] = odd_coeff[..., 1]
         if self.parity_fix and self.vector_basis == "globe7":
             p_odd = (
-                r_hat * torch.linalg.cross(n_hat, d_hat, dim=-1)
+                r_hat * torch.linalg.cross(n_hat, gs[0], dim=-1)
             ).sum(-1)[..., None, None]  # (B, N, 1, 1), parity-odd invariant
             if self.parity_gate_scale > 0:
                 p_odd = torch.tanh(p_odd / self.parity_gate_scale)
@@ -1535,11 +1663,9 @@ class ISLA(Module):
             coeffs = coeffs * gate
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
 
-        out_fields = torch.cat(
+        return torch.cat(
             [scalars, vectors.reshape(b, n, self.out_vectors * 3)], dim=-1
         )
-        ### Degree-one contract: every output scales with the drive magnitude.
-        return out_fields * drive_mag[:, None, :]
 
 
 #: Backward-compatible alias for the architecture's previous name.
