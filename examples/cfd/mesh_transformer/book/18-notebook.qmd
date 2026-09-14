@@ -16770,3 +16770,51 @@ does not, the 10% floor is a property of this model size on this family,
 not of the budget), and the blind arm stays worse by a factor between 1.1
 and 1.3 (if the gap closes to parity the scalar is redundant here; if it
 widens past 1.5x the earlier ratio was a budget artifact).
+
+## 2026-09-14 — Verdict, GLOBIN-ACCEPT extension at 9,000 steps: 0.043 and 0.045, the acceptance bar met on both seeds; the scalar input's advantage widened to 1.4x {#sec-nb-globin-accept-extension-verdict}
+
+**Setting.** The preregistered extension of @sec-nb-globin-accept-verdict:
+the same screened-Poisson acceptance experiment (no global vector input,
+$\kappa$ as the one global scalar input, the Dirichlet trace as the boundary
+scalar, random star-shaped bodies, exact interior labels) at three times
+the training budget, 9,000 steps of eight fresh cases per run. Artifact:
+`results/global_inputs_acceptance_screened_poisson_9000steps_2026-09-14.json`
+(commit 2bbdb340, RTX 4090 laptop GPU, 582–663 s per run).
+
+**What we saw** (per-case relative $L^2$ over the interior queries, mean
+over 64 held-out cases):
+
+| Arm | T0 seed 0 | T0 seed 1 | T1 seed 0 | T1 seed 1 |
+|---|---|---|---|---|
+| ISLA, $\kappa$ as global scalar input | 0.043 | 0.045 | 0.086 | 0.083 |
+| ISLA, $\kappa$ withheld | 0.064 | 0.059 | 0.143 | 0.125 |
+
+**Against the bars.** The acceptance bar (T0 at most 0.10 on both seeds) is
+**met with a factor of two to spare**: 0.043 and 0.045, 13x better than
+the nearest-boundary-value predictor (0.555) and 17x better than the
+boundary mean (0.749). The 3,000-step miss was the budget, as the falling
+loss curve had suggested. The conditioning prediction (the blind arm worse
+by 1.1x to 1.3x) is **missed on the high side**: the blind arm is worse by
+1.41x on T0 and 1.58x under extrapolation to $\kappa \in [3, 4]$, and the
+gap widened from 1.19x at 3,000 steps rather than closing. The scalar
+input is used, it helps on every seed and set, and its value grows as the
+model gets better at the rest of the problem; on this family the trace
+still carries most of the information about $\kappa$, so the blind model
+is not helpless, which is why neither the 1.5x prediction of the first
+run nor the 1.1 to 1.3x band of the second was right.
+
+**Why it matters.** This closes the acceptance item that the global-inputs
+generalization opened (@sec-nb-global-inputs): the configuration with no
+global direction, one PDE parameter and prescribed boundary values trains
+and generalizes across geometries, traces and the parameter on a problem
+outside aerodynamics, through the recipe's code path, at 4% relative
+interior error with a 1.9M-parameter model and eleven minutes of laptop
+GPU time per run. It is an acceptance test, not a benchmark: a
+boundary-element method solves this family exactly, and no other
+architecture was run.
+
+**What's next.** Two candidates, neither started: a family in which the
+scalar is *not* identifiable from the trace, so scalar conditioning is
+decisive and its mechanism (seed append) can be stressed against a FiLM
+alternative; and a two-vector problem (a freestream and a gravity
+direction, buoyant flow) once a dataset exists.
