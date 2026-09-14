@@ -16864,3 +16864,57 @@ Script: the same file with `--family sphere_bessel`; artifact
   reach the region where screening matters; either way the test would be
   void, not a result.
 - **Extrapolation** to $\kappa \in [6, 7]$ is reported without a bar.
+
+## 2026-09-14 — Verdict, GLOBIN-DISCRIM: with the trace blind to the parameter, the scalar input carries the answer (0.077 / 0.070) and the blind arm is 3.8x worse {#sec-nb-globin-discrim-verdict}
+
+**Setting.** The preregistration of @sec-nb-globin-discrim-prereg: the
+screened Poisson equation inside a sphere with a prescribed Dirichlet trace
+that is independent of the screening parameter $\kappa \in [0, 6]$ by
+construction, so the interior solution can be predicted only if $\kappa$
+reaches the model through its global scalar input. Two arms (the scalar
+given; the scalar withheld), two seeds, 6,000 steps of eight fresh cases,
+float32 evaluation on 64 held-out cases per set. Before the run the
+generator was checked: the finite-difference PDE residual is $10^{-6}$ of
+the source term, the $\kappa = 0$ limit reproduces the power law $(r/R)^l$,
+and the same generator seed gives identical traces and interiors that
+differ by 72% between $\kappa = 0$ and $\kappa = 6$. Artifact:
+`results/global_inputs_discrim_sphere_bessel_2026-09-14.json` (commit
+8ab498d2, RTX 4090 laptop GPU, 343–361 s per run).
+
+**What we saw** (per-case relative $L^2$ over the interior queries, mean
+over cases; T0 is $\kappa \in [0, 6]$, T1 is $\kappa \in [6, 7]$):
+
+| Arm | T0 seed 0 | T0 seed 1 | T1 seed 0 | T1 seed 1 |
+|---|---|---|---|---|
+| ISLA, $\kappa$ as global scalar input | 0.077 | 0.070 | 0.119 | 0.110 |
+| ISLA, $\kappa$ withheld | 0.273 | 0.286 | 0.563 | 0.572 |
+| Boundary mean of the trace | 0.936 | | 1.512 | |
+| Nearest boundary value | 1.024 | | 2.019 | |
+
+**Against the bars.** Both preregistered predictions hold. The scalar arm
+is under the 0.10 bar on both seeds (0.077 and 0.070), so the seed-append
+route is strong enough to carry a decisive scalar through the slice
+attention; no stronger conditioning is called for by this test. The blind
+arm is **3.8x worse** on T0 (bar: at least 2x) and 5.0x worse under
+extrapolation, where it reaches 0.57, close to predicting nothing. This is
+the structural result the source family could not give: there the trace
+leaked the parameter and the blind arm trailed by 1.4x; here the leak is
+closed and the blind arm collapses to the parameter-averaged interior. The
+trivial predictors are useless on this family (relative error near one)
+because the prescribed traces have little mean and the interior decays
+away from the boundary.
+
+**Why it matters.** Together with @sec-nb-globin-accept-extension-verdict
+this closes the question the global-inputs generalization opened: a
+scalar PDE parameter supplied as a global scalar input is consumed, is
+decisive where the boundary data cannot substitute for it, and needs no
+architecture beyond what ships. The mechanism is stated and measured: the
+scalar enters every token's seed, the slice states integrate it with the
+geometry, and the interior decay rate follows it. Extrapolation one unit
+past the training range costs about 1.5x for the scalar arm, which is the
+expected price of conditioning on a value the model has not seen.
+
+**What is not shown.** One parameter, one equation, a sphere; the
+conditioning route has not been stressed with several scalars of very
+different scales, where a learned normalization of the scalar inputs may
+be needed, nor on a problem where the parameter changes the equation type.
