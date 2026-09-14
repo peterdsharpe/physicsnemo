@@ -55,6 +55,7 @@ from utils import (
 from physicsnemo.metrics.general.relative_error import relative_l2, relative_mse
 
 from physicsnemo.datapipes.keys import as_nested_key
+from physicsnemo.metrics.general.relative_error import relative_mse
 
 _LOGGER = logging.getLogger("training.loss")
 
@@ -283,6 +284,21 @@ class LossCalculator:
                 f"Unknown loss_type {loss_type!r}; expected one of "
                 f"{valid_loss_types!r}."
             )
+        if loss_type == "rmse":
+            ### FutureWarning rather than DeprecationWarning: this is a
+            ### user-facing config value, and DeprecationWarning is hidden
+            ### by default outside ``__main__``.
+            warnings.warn(
+                'loss_type="rmse" is a deprecated misnomer: the quantity it '
+                "computes is the target-normalized relative MSE (no square "
+                'root). Use "relative_mse", which computes the same quantity '
+                "for any target with nonzero energy (only the denominator "
+                "floor for an all-zero target differs). The alias will be "
+                "removed.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            loss_type = "relative_mse"
         ### `target_config` values are required to be lowercase per the
         ### `FieldType` contract; we copy the dict verbatim so callers can
         ### mutate their original without affecting us.

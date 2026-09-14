@@ -35,7 +35,6 @@ from typing import (
 )
 
 import torch
-import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import NonTensorData, TensorDict, tensorclass
 
@@ -70,6 +69,12 @@ from physicsnemo.mesh.utilities._scatter_ops import scatter_aggregate
 from physicsnemo.mesh.utilities.mesh_repr import format_mesh_repr
 from physicsnemo.mesh.validation import validate
 from physicsnemo.mesh.visualization.draw_mesh import draw
+from physicsnemo.nn.functional import safe_normalize
+
+### slice_points remaps cells through a full-mesh lookup table unless the mesh
+### has more than this many points per cell-vertex entry, in which case it
+### binary-searches the kept ids instead (see slice_points for the measurement).
+_SEARCH_REMAP_RATIO = 64
 
 ### slice_points remaps cells through a full-mesh lookup table unless the mesh
 ### has more than this many points per cell-vertex entry, in which case it
@@ -1087,7 +1092,7 @@ class Mesh:
         )
 
         ### Normalize to get unit normals
-        return F.normalize(accumulated_normals, dim=-1)
+        return safe_normalize(accumulated_normals, dim=-1)
 
     @property
     def gaussian_curvature_vertices(self) -> torch.Tensor:
@@ -1351,9 +1356,10 @@ class Mesh:
             Indices or mask to select points. Supports:
 
             - ``int``: Single point index
-            - ``slice``: Python slice object
+            - ``slice``: Python slice object with a positive step
             - ``Ellipsis`` or ``None``: Keep all points (returns self)
-            - ``torch.Tensor``: Integer indices or boolean mask
+            - ``torch.Tensor``: One-dimensional int32/int64 indices or a
+              boolean mask of length ``n_points`` (uint8 masks are also accepted)
             - ``Sequence[int | bool]``: List/tuple of indices or boolean mask
 
         Returns
@@ -1392,23 +1398,45 @@ class Mesh:
         if indices is None or indices is ...:
             return self
 
-        ### Normalize indices to a 1D tensor of point indices to keep. Nothing
-        ### here is sized by n_points: a boolean mask becomes its nonzero
-        ### positions and a slice expands to its own range, so slicing a huge
-        ### (possibly memory-mapped) mesh costs what is kept, not what exists.
+        ### Normalize indices to a 1D tensor of point indices to keep. For
+        ### integer indices and slices nothing here is sized by n_points (a
+        ### slice expands to its own range), so slicing a huge, possibly
+        ### memory-mapped mesh costs what is kept, not what exists. A boolean
+        ### mask is necessarily n_points long and is scanned once by nonzero().
         device = self.points.device
         n_points = self.n_points
         if isinstance(indices, int):
             kept_indices = torch.tensor([indices], device=device)
         elif isinstance(indices, slice):
-            kept_indices = torch.arange(*indices.indices(n_points), device=device)
+            start, stop, step = indices.indices(n_points)
+            if step < 0:
+                raise ValueError("step must be greater than zero")
+            kept_indices = torch.arange(start, max(start, stop), step, device=device)
         else:
             # Tensor (int or bool) or Sequence of ints / bools
-            idx = torch.as_tensor(indices, device=device)
-            if idx.dtype == torch.bool:
+            idx = (
+                torch.empty(0, dtype=torch.long, device=device)
+                if not isinstance(indices, torch.Tensor) and len(indices) == 0
+                else torch.as_tensor(indices, device=device)
+            )
+            if idx.ndim != 1:
+                raise IndexError("point indices or masks must be one-dimensional")
+            if idx.dtype in (torch.bool, torch.uint8):
+                if idx.numel() != n_points:
+                    raise IndexError(
+                        f"point mask must have length {n_points}, got {idx.numel()}"
+                    )
                 kept_indices = idx.nonzero().squeeze(-1)
             else:
-                kept_indices = idx.reshape(-1).long()
+                if idx.dtype not in (torch.int32, torch.int64):
+                    raise IndexError("point indices must have dtype int32 or int64")
+                kept_indices = idx.long()
+
+        ### Gather using the original indices so native indexing rejects
+        ### out-of-range negative values before normalization. This also avoids
+        ### scalar min/max reductions or extra copies for memory-mapped fields.
+        new_points = self.points[kept_indices]
+        new_point_data = cast(TensorDict, self.point_data[kept_indices])
         kept_indices = torch.where(
             kept_indices < 0, kept_indices + n_points, kept_indices
         )
@@ -1417,21 +1445,30 @@ class Mesh:
         ### algorithms with the same result, chosen by mesh shape:
         ###  * a full-mesh old->new lookup table (two n_points-long tensors,
         ###    then one gather over the cell connectivity) when the mesh is not
-        ###    much larger than its connectivity -- the usual full-mesh slice;
+        ###    much larger than its connectivity -- the usual full-mesh slice --
+        ###    or when most points are kept, since the search's sort of the
+        ###    kept ids would then cost more than filling the table;
         ###  * a sort of the kept ids plus a binary search per cell vertex when
-        ###    the connectivity is small next to n_points -- e.g. a reader that
-        ###    keeps a block of 10k cells out of a mesh with 10^8 vertices,
-        ###    where the table's allocation and fill dominated everything.
+        ###    the connectivity and the kept set are both small next to
+        ###    n_points -- e.g. a reader that keeps a block of 10k cells out of
+        ###    a mesh with 10^8 vertices, where the table's allocation and fill
+        ###    dominated everything.
         ### Measured crossover on synthetic meshes: the search wins from about
-        ### n_points ~ 300 x cells.numel(); the table is faster below ~ 30 x.
+        ### n_points ~ 300 x cells.numel(); the table is faster below ~ 30 x,
+        ### and from n_kept ~ n_points / 30 upwards regardless of connectivity.
+        ### Remapped connectivity is always int64, as before this choice existed.
         n_kept = kept_indices.numel()
         cells = self.cells
-        if n_kept == 0:
+        if n_kept == 0 or cells.numel() == 0:
+            # Nothing to remap: no points kept, or a point cloud without cells.
             valid_cells_mask = torch.zeros(
                 cells.shape[0], dtype=torch.bool, device=device
             )
-            new_cells = cells[valid_cells_mask]
-        elif n_points <= _SEARCH_REMAP_RATIO * cells.numel():
+            new_cells = cells.new_empty((0, cells.shape[1]), dtype=torch.long)
+        elif (
+            n_points <= _SEARCH_REMAP_RATIO * cells.numel()
+            or n_kept * _SEARCH_REMAP_RATIO >= n_points
+        ):
             old_to_new = torch.full((n_points,), -1, dtype=torch.long, device=device)
             old_to_new[kept_indices] = torch.arange(
                 n_kept, dtype=torch.long, device=device

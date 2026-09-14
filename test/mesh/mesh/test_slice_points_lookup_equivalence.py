@@ -89,7 +89,15 @@ def _random_mesh(n_points: int = 60, n_cells: int = 80) -> Mesh:
         torch.tensor([7, 7, 20, 20, 1]),  # duplicates: last position wins
         torch.tensor([-1, -2, 4]),  # negative indices
         torch.tensor([], dtype=torch.long),  # nothing kept
+        [],
         slice(10, 50, 3),
+        slice(50, 10),  # empty forward slice with reversed bounds
+        slice(-1, 0),
+        slice(100, 200),  # clipped to an empty range
+        slice(-100, -80),
+        slice(5, 5),
+        slice(-100, 100, 7),
+        torch.tensor([5, 3, 40], dtype=torch.int32),
         [2, 9, 4],
         4,
     ],
@@ -111,6 +119,109 @@ def test_matches_lookup_table_for_boolean_mask():
     _assert_same_mesh(
         mesh.slice_points(mask.tolist()), _reference_slice_points(mesh, mask)
     )
+
+
+def test_byte_mask_keeps_mask_semantics():
+    """Legacy uint8 masks remain masks rather than becoming integer IDs."""
+    mesh = _random_mesh()
+    mask = torch.zeros(mesh.n_points, dtype=torch.uint8)
+    mask[[0, 2, 4]] = 1
+    with pytest.warns(UserWarning, match="uint8"):
+        expected = _reference_slice_points(mesh, mask)
+    _assert_same_mesh(mesh.slice_points(mask), expected)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        torch.tensor([1.5, 2.5]),
+        torch.tensor([], dtype=torch.float32),
+        torch.tensor([1, 2], dtype=torch.int8),
+        torch.tensor([1, 2], dtype=torch.int16),
+        torch.tensor([1 + 0j, 2 + 0j]),
+        torch.tensor([True, False]),
+        torch.ones(61, dtype=torch.bool),
+        torch.tensor([1, 0], dtype=torch.uint8),
+    ],
+)
+def test_rejects_invalid_tensor_indices_like_native_indexing(indices):
+    """Invalid tensor dtypes and mask lengths cannot silently select points."""
+    mesh = _random_mesh()
+    with pytest.raises(IndexError):
+        torch.arange(mesh.n_points)[indices]
+    with pytest.raises(IndexError):
+        mesh.slice_points(indices)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        torch.ones(2, 30, dtype=torch.bool),
+        torch.tensor([[1, 2]], dtype=torch.long),
+    ],
+)
+def test_rejects_multidimensional_selections(indices):
+    """Point selection requires a single row-index or mask dimension."""
+    with pytest.raises(IndexError, match="one-dimensional"):
+        _random_mesh().slice_points(indices)
+
+
+@pytest.mark.parametrize("indices", [60, -61, [0, 60], [0, -61]])
+def test_rejects_out_of_range_indices(indices):
+    """Negative normalization must not turn invalid indices into valid ones."""
+    mesh = _random_mesh()
+    with pytest.raises(IndexError):
+        _reference_slice_points(mesh, indices)
+    with pytest.raises(IndexError):
+        mesh.slice_points(indices)
+
+
+@pytest.mark.parametrize("indices", [slice(None, None, -1), slice(5, 1, -2)])
+def test_rejects_negative_slice_steps_like_native_indexing(indices):
+    """PyTorch's positive-step slice contract is retained."""
+    mesh = _random_mesh()
+    with pytest.raises(ValueError, match="step must be greater than zero"):
+        _reference_slice_points(mesh, indices)
+    with pytest.raises(ValueError, match="step must be greater than zero"):
+        mesh.slice_points(indices)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        [0, 1, 2],  # lookup table or search, by the forced ratio
+        slice(100, 200),  # nothing kept: the empty branch
+    ],
+)
+def test_int32_connectivity_remaps_to_int64_on_every_branch(indices):
+    """Remapped connectivity is int64 whatever the input dtype, in all three
+    branches, as the lookup table always produced."""
+    mesh = _random_mesh()
+    mesh = Mesh(
+        points=mesh.points,
+        cells=mesh.cells.to(torch.int32),
+        point_data=mesh.point_data,
+        cell_data=mesh.cell_data,
+    )
+    assert mesh.cells.dtype == torch.int32
+    got = mesh.slice_points(indices)
+    want = _reference_slice_points(mesh, indices)
+    assert got.cells.dtype == torch.int64
+    assert want.cells.dtype == torch.int64
+    _assert_same_mesh(got, want)
+
+
+def test_point_cloud_skips_the_remap():
+    """A mesh without cells keeps its empty connectivity; only points are sliced."""
+    torch.manual_seed(0)
+    cloud = Mesh(points=torch.randn(50, 3), point_data={"f": torch.randn(50)})
+    kept = torch.tensor([7, 3, 3, 40])
+    got = cloud.slice_points(kept)
+    assert got.n_points == 4
+    assert got.n_cells == 0
+    assert got.cells.shape == (0, 1)
+    assert got.cells.dtype == torch.int64
+    _assert_same_mesh(got, _reference_slice_points(cloud, kept))
 
 
 def test_matches_lookup_table_on_random_selections():
