@@ -55,7 +55,8 @@ of the two rates run.
 :::
 
 **ISLA** receives position, unit normal and cell area per point and the unit
-freestream direction as its only global input, consumed through invariants
+freestream direction as its only global input in this book's datasets,
+consumed through invariants
 and equivariant anchors only (@sec-mt2): 12 layers, hidden 192, 256 slices,
 8.9M parameters.
 
@@ -70,8 +71,8 @@ DrivAerML. Coordinates and fields are nondimensionalized; this one global
 vector is not. GeoTransolver's global-context projector applies linear maps
 and a slice softmax to it directly, and its conditioning depends on the
 magnitude: with the production projector dimensions and untrained weights,
-the entropy-equivalent number of occupied slices per head is 191–232 at drive
-magnitude 1, 1.0–3.8 at 38.9 and 1.00–1.02 at 2,679.5, while the maximum
+the entropy-equivalent number of occupied slices per head is 191–232 at
+freestream magnitude 1, 1.0–3.8 at 38.9 and 1.00–1.02 at 2,679.5, while the maximum
 context magnitude rises from 0.66 to 22.7 to 1,530
 (results/geotransolver_drive_conditioning_2026-09-08.json); Transolver
 concatenates the raw vector into every point's features. Training can in
@@ -84,26 +85,26 @@ cases, seeds, budget and learning rates in both arms (GeoTransolver 1e-3,
 Transolver 3e-3): surface-pressure relative L2 on the 180 shared validation
 cases is 0.124 for GeoTransolver fed the unit direction against 0.381 fed
 the physical velocity (three seeds 0.374, 0.409, 0.359), and 0.115 for
-Transolver against 0.404. Each unit-drive baseline is lower than its
+Transolver against 0.404. Each unit-direction baseline is lower than its
 physical-velocity twin on 180 of 180 cases, by a median factor of 3.4
 (GeoTransolver) and 3.8 (Transolver); velocity and wall shear move the same
 way (GeoTransolver 0.145 and 0.229 against ISLA's 0.168 and 0.256,
 Transolver 0.140 and 0.216;
 results/udrv_reduction_2026-09-09.json; @sec-nb-udrv-verdict). At its best
-learning rate (3e-3 at this rung) the unit-drive GeoTransolver reaches 0.111.
+learning rate (3e-3 at this rung) the unit-direction GeoTransolver reaches 0.111.
 Against ISLA's reference configuration (0.1529) and its constant-gauge
-variant (0.1377) the unit-drive baselines are ahead: GeoTransolver 0.73x and
+variant (0.1377) the unit-direction baselines are ahead: GeoTransolver 0.73x and
 0.80x, Transolver 0.75x and 0.83x, and GeoTransolver at 1e-3 is lower than
 the constant-gauge variant on 130 of 180 cases, Transolver on 152
 (@sec-de-result). The 3.4–3.8x factor is a statement about what
 GeoTransolver and Transolver do when fed a vector of magnitude 2,679.5 at
-small data, and nothing else; at 1,260 cases the physical-drive GeoTransolver
+small data, and nothing else; at 1,260 cases the physical-velocity GeoTransolver
 reaches parity with ISLA regardless (@sec-data-efficiency).
 
 Three rules follow. First, every architecture receives the freestream as a
 unit direction, and a comparison against a baseline fed the physical
 velocity is reported as a measurement of the input scale, never as a
-comparison of architectures. Second, the unit-drive baseline is the
+comparison of architectures. Second, the unit-direction baseline is the
 reference baseline on every rung; the 35-, 210- and 510-case rungs, the 4-
 and 21-geometry rungs and the fixed-angle split each have one, and the
 1,260-case rung does not yet (@sec-data-efficiency, @sec-program-status).
@@ -115,7 +116,8 @@ is smaller and its trained effect is nil: at 38.9 m/s the projector's collapse
 at initialization is partial, and GeoTransolver trained on the physical
 velocity scores 0.0498 against 0.0503 on the unit direction at 435 cars
 (float32; @sec-full-data). GeoTransolver's volume configuration on the
-interior task changes by under 2% on every field between the two drives, so
+interior task changes by under 2% on every field between the two freestream
+inputs, so
 the interior ordering is not an input-scale effect (@sec-nb-udrv-int-verdict).
 
 | architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at 10k tokens |
@@ -171,7 +173,7 @@ Datasets and splits are defined in @sec-problem, the metric in @sec-metrics.
    nondimensionalize global inputs, and a raw physical velocity of
    2,679.5 in/s costs GeoTransolver and Transolver 3.4–3.8x at 35
    HiLiftAeroML cases (@sec-part-baseline). A number produced with the
-   physical velocity is labelled physical-drive and is a measurement of the
+   physical velocity is labelled physical-velocity and is a measurement of the
    input scale, not a comparison of architectures.
 5. **Two or more seeds per cell, reported individually.** Seed spread is
    the only noise estimate at 48 or 180 validation cases; every ratio is
@@ -367,7 +369,7 @@ equivariance; the pose contract is scored as a contract.
 What the contract still buys is generality. Canonicalization needs a known
 freestream direction at inference and a principal frame whose sign can be
 resolved; both hold for every vehicle and wing dataset here. They fail for a
-PDE surrogate with no distinguished drive direction, for bodies whose
+PDE surrogate with no distinguished global direction, for bodies whose
 transverse inertia tensor is degenerate or whose third moment vanishes (a
 symmetry the estimator cannot break), and for assemblies of parts in mixed
 orientations, where no single frame canonicalizes every component. ISLA needs
@@ -400,7 +402,7 @@ across both rates and both seeds span
 0.040–0.049^[`results/highlift_wave_reduction.json`]. The HiLiftAeroML grid
 fed GeoTransolver the physical velocity (@sec-part-baseline); its instability
 at the higher rate with the unit direction is not yet measured
-(@sec-program-status), so that figure is a physical-drive measurement.
+(@sec-program-status), so that figure is a physical-velocity measurement.
 
 Two consequences are built into the protocol. First, because GeoTransolver's
 best rate differs between datasets (3e-3 on DrivAerML, 1e-3 on HiLiftAeroML),

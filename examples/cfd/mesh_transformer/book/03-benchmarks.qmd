@@ -33,7 +33,7 @@ bfloat16 number appears here.
 
 **The inputs are matched.** Every model receives the freestream as a unit
 direction, the protocol requirement of @sec-fair-comparison; no
-physical-drive baseline appears below. Tokens per case (10,000 sampled
+physical-velocity baseline appears below. Tokens per case (10,000 sampled
 cells unless a row says otherwise), epochs (500), split and validation
 cases are identical across architectures in every row; each architecture
 runs at its own best learning rate.
@@ -54,7 +54,7 @@ variant (@sec-mt2-variants) splits by whether the validation geometries
 recur in training: none on DrivAerML, 1% at 4 geometries and 5% at 21
 geometries (never-seen validation geometries), 11% at both 35 and 210
 cases, where the validation geometries recur, and 14.5% at the fixed angle
-(three seeds), where a single drive direction makes the mesher's refinement
+(three seeds), where a single freestream direction makes the mesher's refinement
 pattern a reusable cue; on both splits tested with an exact full-geometry
 frame the price is the plain mean's mesher pattern, not positional
 information (@sec-nb-frame-full-verdict,
@@ -213,7 +213,7 @@ print(": Training cost of the three architectures on one instrument and one exec
 
 ## Surface pressure: every rung on one axis {#sec-scoreboard-surface}
 
-**On eight of eight surface settings the unit-drive baselines match or beat
+**On eight of eight surface settings the unit-direction baselines match or beat
 ISLA; the margin runs from 28% at 35 HiLift cases against the reference
 configuration (20% against the constant-gauge variant) and 25% at 4
 training geometries (the same against the reference configuration and the
@@ -282,7 +282,7 @@ add("DrivAerML, 512 wide × 80k cells — vs constant-gauge variant", "corner", 
 pB = poseB["arms"]
 rows.append(("DrivAerML, every case in a random pose", pB["gt_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"],
              pB["transolver_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"], False, None, None))
-# interior: GeoTransolver-volume (unit drive) ÷ ISLA query tokens + SDF, two seeds, fp32
+# interior: GeoTransolver-volume (unit direction) ÷ ISLA query tokens + SDF, two seeds, fp32
 def intf(keys, f): return mean(fp(fpint, keys, f))
 gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]
 # filled marker: ISLA's interior reference configuration (relative frame, total-measure scale; relint2 artifact);
@@ -333,7 +333,7 @@ for key in ("hl35", "hl210", "hl510", "geo4", "geo21", "fixed", "dr435", "corner
 print(out)
 print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed values in "
       "parentheses; the corner row lists seed means of two seeds) on every rung where the "
-      "unit-drive baselines and ISLA are both measured. The ratio columns give baseline ÷ ISLA "
+      "unit-direction baselines and ISLA are both measured. The ratio columns give baseline ÷ ISLA "
       "against the reference configuration in bold on the six rungs where it is measured (35 and "
       "210 HiLift cases, 4 and 21 training geometries, the fixed angle, 435 DrivAerML cars) and "
       "against the constant-gauge variant on every rung; brackets are the 90% interval of the "
@@ -343,7 +343,7 @@ print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed va
       "The corner row is width 512 and 80,000 cells per car for all three (ISLA with the fast "
       "point-softmax kernel, constant-gauge variant; 60.2M, 35.9M and 23.9M parameters), evaluated "
       "at 80,000 cells. The 1,260-case HiLift rung and the 27–218-car DrivAerML ladder have no "
-      "unit-drive baseline measurement and are not listed. Data: "
+      "unit-direction baseline measurement and are not listed. Data: "
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
 ```
 
@@ -431,7 +431,7 @@ deployment count (@sec-nb-qcount-verdict).
 #|   Interior relative L2 on the 48 DrivAerML validation cars for the three
 #|   interior fields (panels), 10,000 interior queries per car, float32,
 #|   two seeds (dots). Red: GeoTransolver-volume (27.6M parameters, unit
-#|   drive). Dark blue, second bar: ISLA's interior reference configuration
+#|   direction). Dark blue, second bar: ISLA's interior reference configuration
 #|   (query tokens with the signed distance on the relative frame with the
 #|   total-measure scale and the Horvitz–Thompson-corrected boundary
 #|   measure, 8.9M; @sec-nb-relint-verdict). Light blue: the
@@ -486,11 +486,11 @@ rfd = {f: ri2["relint2"][f]["seeds"] for f, _ in fields}
 isd = {f: fp(fpint, isq, f) for f, _ in fields}
 h3 = {f: [h344[s][f] for s in ("42", "43")] for f, _ in fields}
 out = "| arm, 435 training cars | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
-out += row("GeoTransolver-volume, 27.6M, unit drive", gtd)
+out += row("GeoTransolver-volume, 27.6M, unit direction", gtd)
 out += row("ISLA, reference configuration, query tokens + signed distance, 8.9M (GeoTransolver-volume ÷ ISLA)", rfd, gtd)
 out += row("ISLA, similarity-gauge variant, query tokens + signed distance, 8.9M (ratio)", isd, gtd)
 out += row("ISLA, similarity-gauge variant, hidden 344, 27.6M (ratio)", h3, gtd)
-out += "| *small-data ladder, similarity-gauge variant (GeoTransolver-volume with the physical velocity; its unit-drive twin changes every field by under 2%)* | | | |\n"
+out += "| *small-data ladder, similarity-gauge variant (GeoTransolver-volume with the physical velocity; its unit-direction twin changes every field by under 2%)* | | | |\n"
 for n in (54, 109):
     g = {f: fp(fpint, [f"v0l_gt_vol_n{n}_seed{s}" for s in (42, 43)], f) for f, _ in fields}
     i = {f: fp(fpint, [f"v0l_isla_qtsdfval_n{n}_seed{s}" for s in (42, 43)], f) for f, _ in fields}
@@ -536,7 +536,7 @@ for label, c, a in rows:
             f"| {a['pressure_mean']/A['isla']['pressure_mean']:.2f} |\n")
 print(out)
 print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, float32. The canonical "
-      "column is each architecture's unit-drive reference in the dataset's native frame (three seeds "
+      "column is each architecture's unit-direction reference in the dataset's native frame (three seeds "
       "for GeoTransolver and ISLA, two for Transolver); the posed column trains and validates with "
       "every case rotated by its own random SO(3) element (two seeds each). GeoTransolver without "
       "augmentation scores 0.0631 in random poses and ISLA with augmentation 0.0578 (one seed each; "
@@ -592,8 +592,8 @@ items = [  # (label, sample-frame factor, pool-frame factor or None, color, hatc
     ("ISLA, similarity gauge (lr 1e-3)", R["isla_similarity_gauge_lr1e3"]["density_factor"], None, BLUE, ""),
     ("GeoTransolver, measure-weighted pooling, HT-centred datapipe", mwaw["runs"]["mwaw_dr_gt_unit_lr1e3"]["probe_sfht"]["ratio_mean"], None, RED, ""),
     ("Transolver, measure-weighted pooling, HT-centred datapipe", mwaw["runs"]["mwaw_dr_transolver_unit_lr3e3"]["probe_sfht"]["ratio_mean"], None, GREY, ""),
-    ("GeoTransolver, unit drive", R["geotransolver_unit"]["density_factor"], R["geotransolver_unit"]["density_factor_pipeline_frame"], RED, ""),
-    ("Transolver, unit drive", R["transolver_unit"]["density_factor"], R["transolver_unit"]["density_factor_pipeline_frame"], GREY, ""),
+    ("GeoTransolver, unit direction", R["geotransolver_unit"]["density_factor"], R["geotransolver_unit"]["density_factor_pipeline_frame"], RED, ""),
+    ("Transolver, unit direction", R["transolver_unit"]["density_factor"], R["transolver_unit"]["density_factor_pipeline_frame"], GREY, ""),
     ("GeoTransolver, measure-weighted pooling", R["geotransolver_unit_mw"]["density_factor"], R["geotransolver_unit_mw"]["density_factor_pipeline_frame"], RED, ""),
     ("Transolver, measure-weighted pooling", R["transolver_unit_mw"]["density_factor"], R["transolver_unit_mw"]["density_factor_pipeline_frame"], GREY, ""),
     ("ISLA, constant-gauge variant (plain-mean centring)", R["isla_reference_constant_gauge"]["density_factor"], None, BLUE, ""),
@@ -643,8 +643,8 @@ rows = [
     ("ISLA, similarity gauge (lr 3e-3)", "in-model, HT centroid and scale", (B0, "iw_mt2_gauge"), None),
     ("ISLA, constant-gauge variant", "in-model, plain mean", (B0, "iw_mt2_lr1e3"), (B0, "lad_hl_mt2_super_scarce")),
     ("ISLA, measure weights off (ablation)", "in-model, plain mean", (B0, "now_mt2_lr1e3"), (B0, "a35_hl_mt2_noweights")),
-    ("GeoTransolver, unit drive", "pipeline pool mean (unbiased)", (B0, "uw_gt_unit_lr1e3"), (B0, "udrv_hl_gt_super_scarce_lr3e3")),
-    ("Transolver, unit drive", "pipeline pool mean (unbiased)", (B0, "uw_transolver_unit_lr3e3"), (B0, "udrv_hl_transolver_super_scarce_lr3e3")),
+    ("GeoTransolver, unit direction", "pipeline pool mean (unbiased)", (B0, "uw_gt_unit_lr1e3"), (B0, "udrv_hl_gt_super_scarce_lr3e3")),
+    ("Transolver, unit direction", "pipeline pool mean (unbiased)", (B0, "uw_transolver_unit_lr3e3"), (B0, "udrv_hl_transolver_super_scarce_lr3e3")),
     ("GeoTransolver, measure-weighted pooling", "pipeline pool mean (unbiased)", (Bmw, "mw_dr_gt_unit_lr1e3"), (Bmw, "mw_hl_gt_super_scarce_lr3e3")),
     ("Transolver, measure-weighted pooling", "pipeline pool mean (unbiased)", (Bmw, "mw_dr_transolver_unit_lr3e3"), (Bmw, "mw_hl_transolver_super_scarce_lr3e3")),
 ]
@@ -688,7 +688,7 @@ accurate arm under every sampler at every count
 ## What is not yet on the board {#sec-scoreboard-pending}
 
 Three measurements are not yet made, and one line is closed
-(@sec-program-status). The 1,260-case HiLift rung has no unit-drive
+(@sec-program-status). The 1,260-case HiLift rung has no unit-direction
 baseline measurement, so it carries no comparison in this chapter. ISLA's
 reference configuration is not yet measured on 510 or 1,260 HiLift cases or
 at the 512-wide, 80,000-cell corner; on those rungs the ISLA value is the
@@ -720,4 +720,4 @@ interacting decode on one query law and scores it on another, so it
 settles the deployable question and not the mechanism, and it has no
 baseline twin, which is why it is a closed line here and not a row above.
 No row above depends on the weights-off ablation, on a bfloat16
-evaluation, or on a physical-drive baseline.
+evaluation, or on a physical-velocity baseline.

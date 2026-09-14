@@ -4,18 +4,20 @@ ISLA (Invariant Slice Attention; the code class is `ISLA`) is a soft-slice
 transformer for steady boundary-value problems whose backbone never sees a
 coordinate. Every learned operation acts on rotation- and
 translation-invariant scalars built from the boundary geometry and the
-problem's global condition vectors, and vector outputs are assembled at the
-very end from an equivariant basis. In every experiment of this book the
-problem is external aerodynamics and the one global vector is the freestream
-direction; the architecture itself knows only that a global unit vector was
-supplied. The result is a surrogate whose
+problem's global inputs, and vector outputs are assembled at the
+very end from an equivariant basis. The architecture accepts zero or more
+global vector inputs and zero or more global scalar inputs. In every
+experiment of this book the problem is external aerodynamics, there is one
+global vector input, the freestream direction, and no global scalar input;
+the architecture itself knows only that a global direction was supplied.
+The result is a surrogate whose
 rotation and translation covariance is exact by algebraic construction
 rather than learned (verified to roundoff in float64; the residual of the
 bf16 training path is a measured quantity, @sec-mt2-contracts), whose
 parameter count matches GeoTransolver's (8.9M vs 9.0M), whose training step
 on the path the recipe runs costs 1.05x GeoTransolver's at 10,000 tokens in
 half the memory (@sec-mt2-cost), and whose in-distribution accuracy is at or
-below that of the unit-drive GeoTransolver and Transolver on every surface
+below that of the unit-direction GeoTransolver and Transolver on every surface
 rung measured (@sec-scoreboard). What it adds is a set of exact contracts
 and a reference frame that reads nothing from the sample, so that its
 prediction is consistent under a change of surface sampling where every
@@ -36,7 +38,7 @@ boundary-integral kernels, fails on separated 3D flow
 
 ## What goes in and what comes out {#sec-mt2-architecture}
 
-**ISLA maps a sampled boundary plus the problem's global condition vector
+**ISLA maps a sampled boundary plus the problem's global inputs
 to fields at query points, and every field it produces transforms with the
 input under rigid motions.** The inputs, per case, are:
 
@@ -45,15 +47,24 @@ input under rigid motions.** The inputs, per case, are:
 - the unit outward normal $n_i$ at each point;
 - a measure weight $w_i > 0$ per point: the surface area the point
   stands for, so that $\sum_i w_i f(x_i)$ approximates $\int f \, dA$;
-- one global condition vector $d \in \mathbb{R}^3$, called the *drive*: a
-  direction that belongs to the problem rather than to any boundary cell.
-  In this book's external-aerodynamics datasets it is the freestream
-  direction; for a buoyant flow it would be the gravity direction. The
-  current implementation takes exactly one such vector and requires it;
-  problems with no global direction (steady conduction with pinned
-  temperatures) or with several are outside what the shipped code accepts
-  today, and generalizing the drive to a list of zero or more global vectors
-  is the engineering step that would admit them (@sec-limits);
+- zero or more global vector inputs $g_k \in \mathbb{R}^3$, $k = 1, \dots,
+  K$ (`global_vectors`, shape (batch, $K$, 3); the count is the constructor
+  argument `n_global_vectors`): directions that belong to the problem
+  rather than to any boundary cell. In this book's external-aerodynamics
+  datasets $K = 1$ and $g_1$ is the freestream direction; for a buoyant flow
+  $g_1$ would be the gravity direction, and a magnetized flow would add the
+  applied-field direction. Each is normalized to a unit direction $\hat g_k$
+  inside the model. A magnitude with physical content (a speed, $\lvert g
+  \rvert$) is supplied as a global scalar input when it matters. Steady
+  conduction with pinned temperatures has $K = 0$;
+- zero or more global scalar inputs $\sigma \in \mathbb{R}^S$
+  (`global_scalars`, shape (batch, $S$); `n_global_scalars`): the parameters
+  of the PDE, such as a thermal or momentum diffusivity, an isotropic
+  Young's modulus, a Reynolds number or a freestream speed. They are appended
+  to the seed features of every token (boundary tokens, support tokens, query
+  tokens and passive queries), so they condition every token embedding. A
+  scalar is an invariant, so no covariance contract changes. $S = 0$ in every
+  experiment of this book;
 - optionally, per-cell boundary data (`boundary_scalars`), the channel for
   whatever a boundary condition prescribes at each cell, and per-query
   scalars (`query_scalars`), used in this book for the signed distance to
@@ -66,6 +77,14 @@ surface sample itself and each point receives its own prediction. With
 the passive decoder enabled (`query_independent=True`), queries may be
 any positions, on or off the surface, and the prediction at one query
 does not depend on which other queries are evaluated.
+
+The constructor defaults are `n_global_vectors=1` and `n_global_scalars=0`,
+so every saved checkpoint keeps its shapes; with $K = 1$ and $S = 0$ the
+network is parameter-for-parameter and bit-for-bit the model behind every
+number in this book. Five options remain one-vector only and raise
+otherwise: the fused Triton geometry kernel (`geo_kernel="fused"`,
+@sec-mt2-cost), `odd_head`, `parity_fix`, `latent_volume_tokens` and
+`wake_tokens`.
 
 Three properties hold by construction, independent of training:
 
@@ -100,16 +119,16 @@ flowchart TB
     classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
     classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
 
-    A["boundary sample<br/>positions x_i, normals n_i, areas w_i<br/>global condition vector d (the drive)"]:::data
+    A["boundary sample<br/>positions x_i, normals n_i, areas w_i<br/>global vector inputs g_k, k = 1..K (K = 1 here: the freestream direction)<br/>global scalar inputs (none here)"]:::data
     B["length scale<br/>L = sqrt(sum_i w_i), the total surface measure<br/>r_i = x_i / L (no centre)"]:::fixed
-    C["invariant seed<br/>n_i.d (positions enter only relative to anchors)"]:::fixed
+    C["invariant seed<br/>n_i.g_k per global vector, then the global scalars<br/>(positions enter only relative to anchors)"]:::fixed
     D["embed MLP -> h_i"]:::learned
-    E["slice layer x 12<br/>measure-weighted routing a_is<br/>anchors z_s, m_s<br/>6 relational invariants g_is<br/>slice states Z_s, read-back"]:::learned
+    E["slice layer x 12<br/>measure-weighted routing a_is<br/>anchors z_s, m_s<br/>5+K relational invariants xi_is (6 here)<br/>slice states Z_s, read-back"]:::learned
     F["encoder state<br/>h_i, final slices Z_s, anchors z_s, m_s"]:::data
     Q["query points x_q (and normals n_q)"]:::data
     R["passive read block x 4<br/>read slices, anchors, local kernel<br/>never write back"]:::learned
-    H["heads<br/>scalars; 7 coefficients per vector"]:::learned
-    V["equivariant basis<br/>d, n, u, e_theta(u,n), e_phi(u,n), e_theta(u,d), e_phi(u,d)<br/>u = direction from the token's soft anchor"]:::fixed
+    H["heads<br/>scalars; 4+3K coefficients per vector (7 here)"]:::learned
+    V["equivariant basis<br/>g_1..g_K, n, u, e_theta(u,n), e_phi(u,n), e_theta(u,g_k), e_phi(u,g_k)<br/>u = direction from the token's soft anchor"]:::fixed
     O["scalar and vector fields at queries"]:::out
 
     A --> B --> C --> D --> E --> F
@@ -135,21 +154,22 @@ swapped without positional bookkeeping.
 
 | symbol | code | meaning |
 |---|---|---|
-| $x_i, n_i, w_i, d$ | `points`, `normals`, `measure_weights`, `drive` | inputs: positions, unit normals, cell areas, the global condition vector (the freestream direction in this book's datasets) |
+| $x_i, n_i, w_i, g_k$ | `points`, `normals`, `measure_weights`, `global_vectors` | inputs: positions, unit normals, cell areas, the global vector inputs ($k = 1, \dots, K$; $K = 1$ in every dataset of this book, where $g_1$ is the freestream direction) |
+| $\sigma$ | `global_scalars` | the $S$ global scalar inputs, appended to every token's seed ($S = 0$ in this book) |
 | $L$ | `gauge` | length scale: the square root of the total quadrature measure of the sample |
-| $r_i, \hat n_i, \hat d$ | `r`, `n_hat`, `d_hat` | scaled position (used only in differences), and unit directions of normal and drive |
+| $r_i, \hat n_i, \hat g_k$ | `r`, `n_hat`, `g_hat` | scaled position (used only in differences), and unit directions of the normal and of each global vector input |
 | $\ell_i$ | `log_w` | log measure weight, the bias that makes routing quadrature-weighted |
-| $s_i$ | `invariants` | the invariant seed per point, $\hat n_i\cdot\hat d$ |
+| $s_i$ | `invariants` | the invariant seed per point: $\hat n_i\cdot\hat g_k$ for each $k$ (one scalar in this book), then the global scalars |
 | $h_i$ | `h` | hidden state per point, width 192 |
 | $\lambda_{is}$ | `logits` | routing logit of point $i$ to slice $s$; $S = 256$ slices |
 | $a_{is}$ | `a` | routing weight, normalized over points for each slice |
 | $z_s, m_s$ | `z_pos`, `m_s` | equivariant anchors: weighted mean position and mean normal of slice $s$ |
-| $g_{is}$ | `geo` | the six relational invariants of point $i$ against anchor $s$ |
+| $\xi_{is}$ | `geo` | the $5 + K$ relational invariants of point $i$ against anchor $s$ (six in this book); not to be confused with the global vector inputs $\hat g_k$ |
 | $Z_s$ | `z` | slice state: the measure-weighted mean of $h$ over the slice |
 | $\pi_{is}$ | `point_mix` | read-back weight, normalized over slices for each point |
 | $b_i, \gamma_i$ | `back`, `geo_pool` | what a point reads back: slice states and pooled relational invariants |
 | $\hat u_i$ | `r_hat` (head) | unit direction from the token's soft slice anchor to the token, the radial basis vector of the vector head |
-| $e_\theta, e_\phi$ | `spherical_basis` | tangential basis vectors completing $\{\hat d, \hat n, \hat u\}$ |
+| $e_\theta, e_\phi$ | `spherical_basis` | tangential basis vectors completing $\{\hat g_1, \dots, \hat g_K, \hat n, \hat u\}$ |
 
 ### Frame and length scale
 
@@ -170,19 +190,26 @@ exactly and translation invariance holds without centering. A uniform
 rescale of the geometry (points by $k$, areas by $k^2$) scales $L$ by $k$
 and leaves every $r_i - z_s$ unchanged, which is the scale contract of
 @sec-mt2-contracts. Unit directions are $\hat n_i = n_i/\lvert n_i\rvert$
-and $\hat d = d/\lvert d\rvert$.
+and $\hat g_k = g_k/\lvert g_k\rvert$ for each global vector input; the
+magnitude $\lvert g_k\rvert$ is discarded here, and a speed or field
+strength that matters enters as a global scalar input.
 
 ### Invariant seed
 
-Each point enters the backbone as one scalar,
+Each point enters the backbone as one scalar per global vector input,
+followed by the global scalars,
 
 $$
-s_i = \hat n_i\!\cdot\!\hat d, \qquad h_i^{(0)} = \mathrm{MLP}_{\mathrm{embed}}(s_i),
+s_i = \big[\,\hat n_i\!\cdot\!\hat g_1,\ \dots,\ \hat n_i\!\cdot\!\hat g_K,\ \sigma\,\big], \qquad
+h_i^{(0)} = \mathrm{MLP}_{\mathrm{embed}}(s_i),
 $$
 
-the orientation of its normal relative to the drive: the only rotation
-invariant of $\{\hat n_i, \hat d\}$ that does not refer to a position. A
-point's location is supplied entirely by the slice layers, which measure
+the orientation of its normal relative to each global direction: the $K$
+rotation invariants of $\{\hat n_i, \hat g_1, \dots, \hat g_K\}$ that do
+not refer to a position. In this book $K = 1$ and $S = 0$, so the seed is the
+single scalar $\hat n_i\cdot\hat g_1$. With $K = 0$ and $S = 0$ the seed is
+a constant and every token separation comes from the relational invariants
+below. A point's location is supplied entirely by the slice layers, which measure
 it against anchors. The measure weight enters as a log-space bias,
 $\ell_i = \log w_i$ (zero if weights are absent or
 `use_measure_weights=False`).
@@ -223,23 +250,26 @@ rather than by coordinates in any frame.
 ### Relational invariants, routing refinement and read-back
 
 For every point–anchor pair, with $\rho_{is} = r_i - z_s$ and
-$\hat\rho_{is} = \rho_{is}/\lvert\rho_{is}\rvert$, the layer forms six
+$\hat\rho_{is} = \rho_{is}/\lvert\rho_{is}\rvert$, the layer forms $5 + K$
 invariants:
 
 $$
-g_{is} = \big[\,
+\xi_{is} = \big[\,
 \lvert\rho_{is}\rvert,\ \log\lvert\rho_{is}\rvert,\
-\hat\rho_{is}\!\cdot\!\hat d,\ \hat\rho_{is}\!\cdot\!\hat n_i,\
+\hat\rho_{is}\!\cdot\!\hat g_1,\ \dots,\ \hat\rho_{is}\!\cdot\!\hat g_K,\
+\hat\rho_{is}\!\cdot\!\hat n_i,\
 \hat\rho_{is}\!\cdot\! m_s,\ \hat n_i\!\cdot\! m_s
 \,\big].
 $$
 
-All six are relational: the distance to the anchor, the direction cosines
-of the separation against the drive, the point's normal and the anchor's
-normal, and the alignment of the two normals. Because $\rho_{is}$ is a
+All of them are relational: the distance to the anchor, the direction
+cosines of the separation against each global vector input, the point's
+normal and the anchor's normal, and the alignment of the two normals. With
+$K = 1$ these are the six invariants behind every number in this book.
+Because $\rho_{is}$ is a
 difference of positions, a common shift of the sample cancels here
-exactly. A linear map of $g_{is}$ to one scalar refines the routing,
-$\lambda'_{is} = \lambda_{is} + w_g\!\cdot g_{is} + b_g$, and the routing
+exactly. A linear map of $\xi_{is}$ to one scalar refines the routing,
+$\lambda'_{is} = \lambda_{is} + w_g\!\cdot \xi_{is} + b_g$, and the routing
 weights are recomputed with the same measure-weighted softmax. The slice
 state is the routed mean of the hidden states, passed through a
 per-slice MLP:
@@ -254,7 +284,7 @@ point is choosing where to read, not how much it weighs):
 $$
 \pi_{is} = \frac{\exp(\lambda'_{is})}{\sum_t \exp(\lambda'_{it})}, \qquad
 b_i = \sum_s \pi_{is}\, Z_s, \qquad
-\gamma_i = W_f \Big(\sum_s \pi_{is}\, g_{is}\Big) + b_f,
+\gamma_i = W_f \Big(\sum_s \pi_{is}\, \xi_{is}\Big) + b_f,
 $$
 
 $$
@@ -305,14 +335,15 @@ $z_s$ applied to the anchor normals $m_s$; explicitly supplied
 ### Scalar and vector heads
 
 A single linear head on the normalized final state produces the scalar
-outputs and, for each vector output, seven coefficients:
+outputs and, for each vector output, $4 + 3K$ coefficients (seven in this
+book):
 
 $$
 [\,p_i;\ c_{i}\,] = W_h\, \mathrm{LN}(h_i), \qquad
-v_i = \sum_{k=1}^{7} c_{ik}\, B_{ik}, \qquad
-B_i = \big\{\hat d,\ \hat n_i,\ \hat u_i,\
+v_i = \sum_{j=1}^{4+3K} c_{ij}\, B_{ij}, \qquad
+B_i = \big\{\hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
 e_\theta(\hat u_i, \hat n_i),\ e_\phi(\hat u_i, \hat n_i),\
-e_\theta(\hat u_i, \hat d),\ e_\phi(\hat u_i, \hat d)\big\}.
+e_\theta(\hat u_i, \hat g_k),\ e_\phi(\hat u_i, \hat g_k)\ \text{for } k = 1, \dots, K\big\}.
 $$
 
 The radial basis vector $\hat u_i$ is the unit direction from the token's
@@ -324,13 +355,14 @@ stays translation covariant without a centre. Here $e_\theta(\hat u,
 \hat a)$ is the component of $-\hat a$ orthogonal to $\hat u$ and $e_\phi =
 \hat u \times e_\theta$, both left unnormalized so that they vanish
 smoothly where $\hat u \parallel \hat a$ and no direction field on the
-sphere has to be combed. The three input directions already span
-$\mathbb{R}^3$ generically; the four complements make the expansion well
-conditioned when they are nearly coplanar. All coefficients are invariants
-and all basis vectors are covariant, so $v_i$ rotates with the input.
-Finally the whole output is multiplied by $\lvert d\rvert$; the recipe
-supplies a unit direction, so this factor is identically one and carries
-no physical content.
+sphere has to be combed. The $2 + K$ input directions already span
+$\mathbb{R}^3$ generically; the $2 + 2K$ complements make the expansion well
+conditioned when they are nearly coplanar. With $K = 1$ the basis is
+$\{\hat g_1, \hat n_i, \hat u_i\}$ plus four complements, seven vectors.
+All coefficients are invariants and all basis vectors are covariant, so
+$v_i$ rotates with the input. Nothing multiplies the output by a global
+vector's magnitude: each $g_k$ enters only through its unit direction, and a
+magnitude with physical content is a global scalar input.
 
 ### The gauge variants {#sec-mt2-variants}
 
@@ -341,15 +373,19 @@ the forward pass.** They share one centred construction, which subtracts a
 centre $c$ before scaling, $r_i = (x_i - c)/L$, and differs from the
 reference in three places:
 
-- the seed is five scalars instead of one, the complete rotation
-  invariants of $\{r_i, \hat n_i, \hat d\}$ up to parity,
-  $[\lvert r_i\rvert, \log\lvert r_i\rvert, \hat r_i\cdot\hat d,
-  \hat r_i\cdot\hat n_i, \hat n_i\cdot\hat d]$ with
-  $\hat r_i = r_i/\lvert r_i\rvert$; the four that refer to the centre are
-  what the reference removes;
-- the relational invariants are eight instead of six: two that describe
-  the anchor's position relative to the centre, $\lvert z_s\rvert$ and
-  $\hat z_s\cdot\hat d$ with $\hat z_s = z_s/\lvert z_s\rvert$, are
+- the seed is $3 + 2K$ scalars instead of $K$ (five instead of one in this
+  book), the rotation invariants of $\{r_i, \hat n_i, \hat g_k\}$ up to
+  parity (the complete set for $K = 1$),
+  $[\lvert r_i\rvert, \log\lvert r_i\rvert, \hat r_i\cdot\hat g_k,
+  \hat r_i\cdot\hat n_i, \hat n_i\cdot\hat g_k]$ with
+  $\hat r_i = r_i/\lvert r_i\rvert$ and one $\hat r_i\cdot\hat g_k$ and
+  one $\hat n_i\cdot\hat g_k$ per global vector input, followed by the
+  global scalars; the $3 + K$ that refer to the centre (four in this book)
+  are what the reference removes;
+- the relational invariants are $6 + 2K$ instead of $5 + K$ (eight instead
+  of six in this book): $1 + K$ more that describe the anchor's position
+  relative to the centre, $\lvert z_s\rvert$ and $\hat z_s\cdot\hat g_k$
+  for each global vector input, with $\hat z_s = z_s/\lvert z_s\rvert$, are
   broadcast to every point and carry the centre into the routing;
 - the head's radial basis vector is $\hat r_i$, the direction from the
   centre, instead of the direction from the token's soft anchor.
@@ -390,11 +426,14 @@ geometric rescale and remains a frame estimated from the sample.
 **Each contract is a property of the code, verified in double precision
 on random weights and a random anisotropic point cloud, not a property
 of a trained checkpoint.** The tests live in
-`test/experimental/nn/test_isla.py` (46 tests, several parametrized; the
+`test/experimental/nn/test_isla.py` (72 tests counting parametrizations; the
 tests of the gauge variants pass `frame_mode="centered"` explicitly and
-`test_default_is_relative_total_measure` pins the default). The fixture is
+`test_default_is_relative_total_measure` pins the default) and
+`test_isla_global_inputs.py` (15 tests: zero and two global vector inputs,
+global scalar inputs, magnitude invariance, the parameter layout of the
+one-vector model, and the one-vector-only options refusing other counts). The fixture is
 a 3-layer, 32-slice, width-64 model in fp64 on 500 points with random
-normals, drive and weights; tolerances are absolute.
+normals, global vector input and weights; tolerances are absolute.
 
 | test | assertion | tolerance |
 |---|---|---|
@@ -403,14 +442,13 @@ normals, drive and weights; tolerances are absolute.
 | `test_relative_frame_contracts` | reference configuration: shifting all points by a constant leaves every output unchanged with no centering; rotation covariance; points $\times 2.5$ with areas $\times 2.5^2$ leave every output unchanged while areas alone do not (the total measure *is* the length unit); one seed and six relational invariants; the excluded combinations raise | $10^{-12}$ / $10^{-10}$ |
 | `test_default_is_relative_total_measure` | `ISLA()` with no frame arguments is the relative frame with the total-measure scale | exact |
 | `test_measure_weight_scale_invariance` | gauge variants: multiplying all $w_i$ by 137 leaves every output unchanged | $10^{-9}$ |
-| `test_drive_degree_one` ($k \in \{0.5, 2, 4\}$) | scaling $d$ by $k$ scales every output by $k$ | $10^{-10}$ |
-| `test_collated_input_shapes` | drive as $(B,1,3)$ or $(3,)$ gives the same output as $(B,3)$ | $10^{-12}$ |
+| `test_collated_input_shapes` | `global_vectors` as $(B,1,3)$, $(1,3)$ or $(3,)$ gives the same output as $(B,3)$ when $K = 1$ | $10^{-12}$ |
 | `test_query_set_independence` | passive decoder: same source, 50 queries alone vs the same 50 plus 100 others; the shared predictions agree | $10^{-12}$, rtol 0 |
-| `test_qi_rotation_equivariance`, `test_qi_drive_degree_one` | rotation and drive contracts hold in the passive-decoder configuration | $10^{-10}$ |
+| `test_qi_rotation_equivariance` | the rotation contract holds in the passive-decoder configuration | $10^{-10}$ |
 | `test_anchor_conditioned_decode_query_independence` | with a fixed interacting anchor subset (`n_anchors`), query independence and rotation covariance both hold | $10^{-12}$ / $10^{-10}$ |
 | `test_interior_queries_contracts` | off-surface queries with no normals: rotation covariance, translation invariance, query independence, finite outputs | $10^{-10}$ / $10^{-12}$ |
 | `test_similarity_gauge_geometric_scale_equivariance` | similarity-gauge variant: points $\times k$, areas $\times k^2$ and a shift leave the output unchanged ($k = 2.7$); the constant-gauge variant changes its output by more than $10^{-3}$ under the same rescale | $10^{-10}$ |
-| `test_local_rotation_equivariance`, `test_local_drive_degree_one`, `test_boundary_scalar_channel_contracts`, `test_scale_conditioning_rotation_equivariance`, `test_latent_volume_tokens_contracts` | the optional feature channels (local patch integrals, boundary scalars, scale conditioning, latent volume tokens) preserve the rotation and translation contracts | $10^{-10}$ |
+| `test_local_rotation_equivariance`, `test_boundary_scalar_channel_contracts`, `test_scale_conditioning_rotation_equivariance`, `test_latent_volume_tokens_contracts` | the optional feature channels (local patch integrals, boundary scalars, scale conditioning, latent volume tokens) preserve the rotation and translation contracts | $10^{-10}$ |
 | `test_geo_pool_then_project_is_exact` | pooling the relational invariants over slices then projecting equals projecting then pooling, for both block types | $10^{-12}$, rtol 0 |
 | `test_geo_checkpoint_is_exact` | rebuilding the per-slice geometry inside the backward pass gives the same outputs and gradients as storing it | exact (outputs) / $10^{-11}$ (gradients) |
 | `test_all_parameters_receive_gradients` (5 configurations) | every parameter receives a gradient (a requirement of distributed data parallel) | exact |
@@ -421,14 +459,15 @@ The rotation test uses a proper rotation ($\det Q = +1$). Under a
 *reflection* the picture is asymmetric, and the tests say so
 explicitly. Every invariant in the backbone is a norm or a dot product,
 so scalar outputs are exactly invariant under reflections as well.
-Two of the seven basis vectors, $e_\phi(\hat u,\hat n)$ and
-$e_\phi(\hat u,\hat d)$, are cross products and therefore flip sign
+The $e_\phi$ basis vectors, $e_\phi(\hat u,\hat n)$ and
+$e_\phi(\hat u,\hat g_k)$ (two of the seven in this book), are cross
+products and therefore flip sign
 under a mirror while their coefficients do not; the default vector head
 is covariant under rotations and translations only, and
 `test_parity_fix_reflection_equivariance` asserts that it is *not*
 mirror-covariant. Three alternative heads are exactly O(3)-covariant
 and verified as such (`parity_fix`, which gates the $e_\phi$
-coefficients with the pseudoscalar $\hat u\cdot(\hat n\times\hat d)$;
+coefficients with the pseudoscalar $\hat u\cdot(\hat n\times\hat g_1)$;
 `vector_basis="true5"` and `"true7"`, which drop or replace the
 pseudovectors; `odd_head`, which builds parity-odd coefficients from
 triple products against the slice anchors). None is the reference head;
@@ -444,14 +483,14 @@ What is not a contract:
   gauge variants have the opposite pair: invariant to a uniform weight
   rescale; invariant to a geometric rescale only with the similarity gauge.
 - **Reflection covariance of vectors**, as above.
-- **Drive degree.** The output scales linearly with $\lvert d\rvert$ and a
-  test confirms it, but the recipe feeds a unit direction, so the factor
-  is one in every training and evaluation run. It is a normalization
-  detail, not a physical law: in the aerodynamic instance a pressure
-  coefficient is degree zero in the freestream speed and a dimensional
-  pressure is degree two, and a gravity vector's magnitude would enter a
-  buoyant problem through a dimensionless number, not this factor. ISLA has
-  no drive-magnitude contract.
+- **Magnitude of a global vector input.** Each $g_k$ is normalized inside
+  the model, so the output does not depend on $\lvert g_k\rvert$ at all. No
+  fixed power of the magnitude would be a physical law: in the aerodynamic
+  instance a pressure coefficient is degree zero in the freestream speed and
+  a dimensional pressure is degree two, and a gravity vector's magnitude
+  enters a buoyant problem through a dimensionless number. A magnitude that
+  matters is supplied as a global scalar input and learned like any other
+  parameter.
 - **Query independence in the reference configuration.** Without the
   passive decoder, every surface point is an interacting token, so the
   prediction at a point depends on the rest of the sample. On DrivAerML
@@ -495,17 +534,17 @@ What is not a contract:
   first moments (measure-weighted mean position and mean normal) of the
   points routed to a slice, and the seeds and relational invariants are
   built from them. Two arrangements whose transverse first moments about
-  the drive vanish can therefore be indistinguishable to every layer even
-  when they are not congruent: five equal spherical components at azimuths
-  {0, 120, 240, 27, 207}° and {0, 120, 240, 43, 223}° about an axial drive
-  have different pairwise-distance profiles and no rotation carrying one to
+  the global vector input vanish can therefore be indistinguishable to every
+  layer even when they are not congruent: five equal spherical components
+  at azimuths {0, 120, 240, 27, 207}° and {0, 120, 240, 43, 223}° about the
+  global vector input as axis have different pairwise-distance profiles and no rotation carrying one to
   the other, and ISLA's outputs on the common component agree to 4e-15
   (reference and similarity-gauge configurations, two seeds); the optional
   local-distance channel separates them (0.039–0.063), as does a
   second-moment channel (`second_moment_features`, 2.41 against 1.99)
   (`results/isla_first_moment_collision_2026-09-08.json`). Rotational
-  symmetry about the drive is thus sufficient but not necessary for the
-  collision. Either channel removes it at a known cost
+  symmetry about the global vector input is thus sufficient but not
+  necessary for the collision. Either channel removes it at a known cost
   (@sec-nb-mom2-verdict); it is a documented representation limitation and
   is not established as the cause of any measured deficit on cars or wings.
 - **Finite-precision residual on the deployed path.** The contract tests
@@ -558,9 +597,9 @@ activations at 10,000 tokens are per-slice geometry: the (points × slices
 × 3) separation vectors and their unit versions, the (points × slices ×
 6) invariants, and the (points × slices) distances and routing softmaxes;
 the token path (hidden states, MLP activations) is the remaining quarter.
-Every geometric tensor is a cheap elementwise function of five small
-inputs: the point positions, normals and drive direction (points × 3 each)
-and the anchor positions and normals (slices × 3). The recipe therefore
+Every geometric tensor is a cheap elementwise function of a few small
+inputs: the point positions and normals (points × 3 each), the global vector
+inputs (K × 3) and the anchor positions and normals (slices × 3). The recipe therefore
 rebuilds them inside the backward pass instead of storing them
 (`geo_checkpoint`, one recompute region per layer covering the routing bias
 and the pooled invariants). The forward output and every gradient are
@@ -572,7 +611,7 @@ token path and the (points × slices) routing softmaxes themselves, which
 are the one per-slice quantity the backward pass genuinely needs.
 
 Why the ordering of two operations decides the footprint. Each slice layer
-holds the pairwise invariants $g_{is}$, a tensor of shape $(B, N, S, 6)$,
+holds the pairwise invariants $\xi_{is}$, a tensor of shape $(B, N, S, 6)$,
 and uses them twice: once mapped to one routing logit per pair, once
 pooled over slices with $\pi_{is}$ and mapped to a width-96 feature per
 point. ISLA pools before projecting. The alternative ordering, projecting
@@ -583,7 +622,7 @@ layer, or 5.9 GB across 12 layers. The projection is affine and $\pi_{is}$
 sums to one over slices, so
 
 $$
-\sum_s \pi_{is}\,(W_f\, g_{is} + b_f) \;=\; W_f \sum_s \pi_{is}\, g_{is} \;+\; b_f ,
+\sum_s \pi_{is}\,(W_f\, \xi_{is} + b_f) \;=\; W_f \sum_s \pi_{is}\, \xi_{is} \;+\; b_f ,
 $$
 
 and pooling first produces the identical tensor while saving only
@@ -694,13 +733,13 @@ channels, are listed once here so the results chapters can name them.
 
 | flag (default) | what it changes |
 |---|---|
-| `frame_mode` (`"relative"`) | `"relative"` is the reference: positions enter only as point-to-anchor differences, one seed, six relational invariants, no centering. `"centered"` selects the gauge variants of @sec-mt2-variants (five seeds, eight relational invariants, a centre). Checkpoints store their constructor arguments, so a saved model loads in the configuration that trained it |
+| `frame_mode` (`"relative"`) | `"relative"` is the reference: positions enter only as point-to-anchor differences, $K$ seeds plus the global scalars, $5 + K$ relational invariants (one and six in this book), no centering. `"centered"` selects the gauge variants of @sec-mt2-variants ($3 + 2K$ seeds, $6 + 2K$ relational invariants, a centre). Checkpoints store their constructor arguments, so a saved model loads in the configuration that trained it |
 | `scale_mode` (`"total_measure"`) | `"total_measure"` divides positions by the square root of the total quadrature measure of the sample; `"reference_length"` uses the constant `reference_length` (the constant-gauge variant); `"global"` reads a supplied `frame_scale` (the full-geometry-frame diagnostic) |
 | `center_mode` (`"plain"`) | under `frame_mode="centered"` only: `"plain"` centres on the plain mean of the sampled points, `"measure"` on the Horvitz–Thompson mean, `"global"` on a supplied `frame_center` (the full-geometry-frame diagnostic) |
 | `similarity_gauge` (off) | the similarity-gauge variant: measure-weighted centroid and RMS-radius reference length; requires `frame_mode="centered"` |
 | `use_measure_weights` (on) | log-measure bias in the routing softmax |
 | `use_relational_geo` (on) | anchor-relational invariants in routing and read-back |
-| `seed_mode` (`"invariant"`) | `"raw"` feeds $[r_i, \hat n_i, \hat d]$ instead of the invariant seed(s); gauge variants only |
+| `seed_mode` (`"invariant"`) | `"raw"` feeds $[r_i, \hat n_i, \hat g_k]$ instead of the invariant seed(s); gauge variants only |
 | `raw_coord_channel` (off) | appends $r_i$ and $\hat n_i$ to the seeds |
 | `query_independent`, `n_decoder_layers` (off, 4) | passive decoder with read blocks and local kernel readout |
 | `n_anchors` (0) | interacting core restricted to a fixed-size anchor subset; all points decode passively |
@@ -708,6 +747,8 @@ channels, are listed once here so the results chapters can name them.
 | `latent_volume_tokens` (off) | equivariant off-surface tokens along anchor normals; requires the passive decoder |
 | `use_local_features`, `local_radii` (off) | seven measure-weighted patch-integral invariants per radius appended to the seeds |
 | `second_moment_features` (off) | second-moment invariants of each slice at the query, which separate the first-moment collision of @sec-mt2-contracts |
+| `n_global_vectors` (1) | number $K$ of global vector inputs; each adds one seed cosine, one relational direction cosine and three head basis vectors; $K = 0$ is allowed |
+| `n_global_scalars` (0) | number $S$ of global scalar inputs, appended to every token's seed |
 | `n_boundary_scalars` (0) | extra per-point scalar inputs (boundary-condition traces), pass-through to the seeds |
 | `scale_conditioning` (off) | appends the log raw cloud radius, deliberately breaking scale equivariance |
 | `geo_checkpoint` (on in the recipe), `geo_kernel` (`"eager"`) | rebuild the per-slice geometry in the backward pass; `"fused"` selects the exact fused geometry kernel of @sec-mt2-cost |

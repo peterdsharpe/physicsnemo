@@ -15,11 +15,12 @@ input is a closed boundary surface (in 2D, a closed curve) given as a mesh
 of cells, each carrying its position, its outward unit normal, its
 measure (area in 3D, length in 2D) and whatever data its boundary condition
 prescribes (a Dirichlet value, an inflow velocity, a wall temperature),
-together with the problem's global conditions: zero or more global vectors
-that belong to no boundary (a gravity or body-force direction, an applied
-magnetic field, or, in external aerodynamics, the freestream direction
-$\hat d$) and dimensionless scalars such as a Reynolds number or a
-screening constant. A steady heat-conduction problem with pinned boundary
+together with the problem's global inputs: zero or more global vector
+inputs that belong to no boundary (a gravity or body-force direction, an
+applied magnetic field, or, in external aerodynamics, the freestream
+direction $\hat g_1$) and zero or more global scalar inputs, the parameters
+of the PDE: a thermal diffusivity, a momentum diffusivity (viscosity), an
+isotropic Young's modulus, a Reynolds number or a screening constant. A steady heat-conduction problem with pinned boundary
 temperatures has no global vector at all; a buoyant flow has a gravity
 vector and an inlet face carrying its own velocity data; a flow through a
 spiralling duct has an inlet and an outlet and no direction that is global
@@ -41,9 +42,9 @@ initial state, and nothing to advance in time.
 #|   The mapping this book studies, drawn on the simplest member of the
 #|   problem class (ideal flow around a lifting Joukowski airfoil, exact
 #|   closed form). Left, the input: boundary cells with outward normals
-#|   (gray) and measures, plus the one global condition this instance
+#|   (gray) and measures, plus the one global vector input this instance
 #|   has, the unit freestream direction; the problem class admits none or
-#|   several. Right, the output: the surface pressure coefficient along
+#|   several, together with global scalar inputs. Right, the output: the surface pressure coefficient along
 #|   the boundary and the interior pressure field — the fluid domain
 #|   outside the airfoil — at bare query points (black dots). How to read
 #|   this: the figure shows what enters and
@@ -118,7 +119,7 @@ axl.quiver(mid[sel, 0], mid[sel, 1], nrm[sel, 0], nrm[sel, 1], color=MUTED,
 axl.plot(mid[sel, 0], mid[sel, 1], "o", ms=3, color=INK)
 axl.annotate("", xy=(-1.9 + 0.9 * np.cos(alpha), 1.3 + 0.9 * np.sin(alpha)),
              xytext=(-1.9, 1.3), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.8))
-axl.text(-1.9, 1.5, r"global condition (this instance): unit direction $\hat d$", color=INK2, fontsize=9)
+axl.text(-1.9, 1.5, r"global vector input (this instance): unit freestream direction $\hat g_1$", color=INK2, fontsize=9)
 axl.text(0.5, -0.08, "boundary cells: position $x_j$, normal $n_j$, measure $w_j$",
          color=INK2, fontsize=8.5, ha="center", transform=axl.transAxes)
 axl.set_title("input", color=INK, fontsize=11, loc="left")
@@ -194,7 +195,7 @@ distinguished direction, the operator, its viscosity and the boundary data
 commute with rigid motions, reflections and, once lengths are measured in
 units of a reference length carried with the geometry, with positive
 scalings; the map may then depend on the geometry only through the joint
-invariants of $\{x-y,\ n_y,\ \hat d\}$ — magnitudes and pairwise angles —
+invariants of $\{x-y,\ n_y,\ \hat g_1\}$ — magnitudes and pairwise angles —
 never on absolute position or orientation, and dimensionless scalars
 (the Reynolds number among them) may modulate everything freely because a
 scalar breaks no symmetry. Any change to that list (a ground plane, a second
@@ -211,19 +212,22 @@ Transolver; none of the three requires knowing the PDE.
 ### Parametric and boundary-condition-driven families {#sec-parametric}
 
 A dataset in this book is a family of cases, and the families differ in
-what varies. The single global vector of these datasets, the freestream direction, is
-called the *drive* throughout this book; it is the external-aerodynamics
-instance of a global condition vector, and nothing in the architectures
+what varies. This book's name for a direction that belongs to the problem
+rather than to any boundary cell is the *global vector input*. The
+freestream direction, the single global vector input of these datasets, is
+its external-aerodynamics instance, and nothing in the architectures
 requires it to be a freestream. On DrivAerML and SHIFT-SUV only the geometry
-varies: every car sits in the same freestream, so the drive is a constant
-and the operator is learned as a function of shape alone. On HiLiftAeroML
-the drive is itself a variable: each of the 180 wing geometries is simulated at ten angles of
-attack, so the freestream direction $\hat d$ changes from case to case and
+varies: every car sits in the same freestream, so the global vector input is
+a constant and the operator is learned as a function of shape alone. On
+HiLiftAeroML the global vector input is itself a variable: each of the 180
+wing geometries is simulated at ten angles of attack, so the freestream
+direction $\hat g_1$ changes from case to case and
 the model has to represent how the field depends on it, across a range that
 runs from attached flow through stall. Coordinates enter only in
 nondimensional form, scaled by the dataset's per-case reference length $L$,
 so learned weights never see units; no architecture receives the Reynolds
-number, and no architecture is told how the field depends on the drive —
+number, and no architecture is told how the field depends on the global
+vector input —
 that dependence is learned. Because HiLiftAeroML is a full geometry-by-angle
 grid, its axes of variation — how many cases, which angles, which
 geometries — can each be held out separately (@sec-splits).
@@ -271,7 +275,7 @@ per case per step. The surface task predicts pressure and wall shear at
 those points (@sec-full-data); the interior task predicts pressure,
 velocity and turbulent viscosity at 10,000 interior query points from the
 surface alone (@sec-interior). The freestream direction is the same for
-every car: the geometry varies, the drive does not.
+every car: the geometry varies, the global vector input does not.
 
 ### SHIFT-SUV {#sec-shift-suv}
 

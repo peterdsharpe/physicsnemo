@@ -18,8 +18,9 @@ on the full split), 3e-3 for Transolver where stated.
 
 - **ISLA**: SE(3)-equivariant soft-slice transformer.
   Inputs per surface point: position, unit normal, cell area (measure
-  weight); global unit freestream direction d. Seeds are invariants
-  {|r|/L, r̂·d, r̂·n, n·d} relative to a gauge (centroid; reference length L,
+  weight); global vector inputs ĝ_k, k = 1..K (K = 1 in this book: the unit
+  freestream direction ĝ_1), and global scalar inputs (S = 0 in this book).
+  Seeds are invariants {|r|/L, r̂·ĝ_k, r̂·n, n·ĝ_k} relative to a gauge (centroid; reference length L,
   constant 8.0 by default or the measure-weighted RMS radius with the
   similarity gauge on). Encoder: 12 pre-LN soft-slice layers, 256 slices,
   hidden 192; each layer routes points to slices by softmax over points with
@@ -63,7 +64,7 @@ on the full split), 3e-3 for Transolver where stated.
   kernels (the double-layer member and the single-layer member) with learned
   coefficients;
   ~82k–104k parameters in the synthetic suites; larger industrial variants.
-  Contracts: similarity equivariance with an intrinsic gauge; drive
+  Contracts: similarity equivariance with an intrinsic gauge; freestream
   linearity when declared; parity-typed channels. Its accuracy on separated
   3D aerodynamics is governed by the failure of the potential-flow prior
   (below).
@@ -77,15 +78,15 @@ on the full split), 3e-3 for Transolver where stated.
   function-identical implementation (fp64 max difference 4e-15), so no
   result depended on the extra memory.
 
-## HiLiftAeroML data efficiency (chapter 5) — PHYSICAL-DRIVE MEASUREMENTS (see "UDRV verdict 2026-09-09" below)
+## HiLiftAeroML data efficiency (chapter 5) — PHYSICAL-VELOCITY MEASUREMENTS (see "UDRV verdict 2026-09-09" below)
 
 **Every GeoTransolver and Transolver number in this section was produced
 with the physical freestream velocity (2,679.5 in/s) as the global input;
 ISLA received the unit direction. UDRV showed this input scale is what
-produced the baselines' deficit (unit-drive GeoTransolver 0.124, Transolver
+produced the baselines' deficit (unit-direction GeoTransolver 0.124, Transolver
 0.115 at 35 cases, both below ISLA's 0.138). The numbers below remain valid
-as measurements of the physical-drive protocol and are quoted only with that
-label; none is a comparison of architectures. The unit-drive reruns of the
+as measurements of the physical-velocity protocol and are quoted only with that
+label; none is a comparison of architectures. The unit-direction reruns of the
 higher rungs are UDRV-L.**
 
 Dataset: 1,800 cases = 180 high-lift wing geometries (LHC-sampled flap/slat
@@ -143,7 +144,7 @@ Artifacts: `results/hilift_ladder_reduction_2026-09-03.json`,
   0.122 (0.88x); similarity gauge on 0.149 (1.08x); invariant seeds
   replaced by raw [r, n, d] 0.137 (0.99x); relational routing off 0.160
   (1.16x). No single ingredient carries it. Every ISLA variant retains an
-  invariant path; the baselines never had drive-relative invariants. The
+  invariant path; the baselines never had global-vector-relative invariants. The
   transplant test (baselines + [n·d, r̂·d, |r|/L] as per-cell inputs at 35
   cases, 2 seeds, each at its better lr) is DONE: Transolver 0.294/0.301
   (from 0.402; 1.35x better, still 2.15x behind ISLA), GeoTransolver
@@ -324,7 +325,7 @@ stops". Present-tense, no chronology. Key current statements:
   soft-slice and moment-decoder arms), extrapolates amplitude exactly under
   a declared linearity contract (undeclared linearity costs 4.5–12x), and
   its two zero-parameter exact members match eight learned kernels.
-- Nonlinear suites: implicit drive-degree is diagnosed then declared;
+- Nonlinear suites: implicit freestream-degree is diagnosed then declared;
   fragility ladders as in chapter 06 Part II.
 - AirFRANS and DrivAerML MT1 results: keep the measured facts (trace
   formulation dominates the DrivAerML gain; kernel dictionary contributes
@@ -341,10 +342,10 @@ stops". Present-tense, no chronology. Key current statements:
   baseline error ÷ ISLA error, so > 1 favours ISLA. HiLift full split:
   GeoTransolver/ISLA = 1.02 (0.042/0.041). DrivAerML full: GeoTransolver/ISLA
   = 0.92 (ISLA is 1.085x behind; write "ISLA 8.5% behind"). At 35 HiLift cases
-  the physical-drive-protocol factor is **2.8x** (0.392/0.138 = 2.84;
+  the physical-velocity-protocol factor is **2.8x** (0.392/0.138 = 2.84;
   three-seed 2.76) — write 2.8x, not 2.9x, and always with the label
-  "against physical-drive baselines"; the comparison figures at 35 cases are
-  **0.90** (unit-drive GeoTransolver ÷ ISLA) and **0.83** (unit-drive
+  "against physical-velocity baselines"; the comparison figures at 35 cases are
+  **0.90** (unit-direction GeoTransolver ÷ ISLA) and **0.83** (unit-direction
   Transolver ÷ ISLA).
 - **Memory — state the current model, not its history:** ISLA's peak training
   memory at 10,000 tokens is **1.5 GB** (forward+backward, bf16, RTX 4090,
@@ -468,7 +469,7 @@ stops". Present-tense, no chronology. Key current statements:
   similarity gauge on; default is a constant reference length).
 - That ISLA is "measure-complete" as a general property (true only with the
   gauge on; state the measured density robustness instead).
-- The "drive-degree" contract for ISLA (vacuous on unit-direction inputs).
+- Any degree-one or magnitude contract for ISLA (global vectors are normalized inside the model; magnitudes are global scalar inputs).
 - A 1.6x accuracy dividend from equivariance (canonicalized GeoTransolver
   is pose-invariant at 1.01x).
 - That the DrivAerML ISLA–GeoTransolver gap is explained by label noise.
@@ -478,18 +479,18 @@ stops". Present-tense, no chronology. Key current statements:
   (the exact-kernel decoder does).
 - Locality as the carrier of cross-family transfer (refuted).
 - Any "provisional" tag on the data-efficiency result (controls are in).
-- "2.9x" (write 2.8x, physical-drive label attached); "2.7–3.9x" (write
+- "2.9x" (write 2.8x, physical-velocity label attached); "2.7–3.9x" (write
   3.0–3.7x); "360 pairs"; "trains in less memory" without the as-trained
   figure; "most density-robust" without naming the gauge configuration.
 - Any of 2.8x / 2.2x / 5.0x / 1.8x / 1.4x / "180 of 180" / "6x data
   multiplier" / "3% vs 8–17% forces" / "a large improvement in one regime"
-  as an ISLA advantage; each is a physical-drive-protocol measurement and is
+  as an ISLA advantage; each is a physical-velocity-protocol measurement and is
   written only with that label (see "UDRV verdict 2026-09-09").
 - "ISLA is more accurate than GeoTransolver (or Transolver) on HiLiftAeroML"
-  in any tense without "physical-drive" attached; "ISLA's data-efficiency
+  in any tense without "physical-velocity" attached; "ISLA's data-efficiency
   advantage"; "ISLA turns training geometries into accuracy where
   GeoTransolver does not" as a comparison (the GeoTransolver half is
-  physical-drive; ISLA's response to geometry count stands as a fact about
+  physical-velocity; ISLA's response to geometry count stands as a fact about
   ISLA).
 - "The mechanism is located at the level of the dataset" (superseded: the
   carrier at 35 cases is the baselines' input scale).
@@ -521,27 +522,27 @@ where the interior chapter needs it.
   else".) Chapters support or bound clauses of it; no chapter offers a
   competing verdict paragraph.
 - **Calibration words:** SUPERSEDED for the HiLift small-data regime ("a
-  large improvement" is never written again: the physical-drive advantage
+  large improvement" is never written again: the physical-velocity advantage
   was a protocol artifact). Still valid: "parity" at full data on HiLift
-  (against the physical-drive GeoTransolver, rerun pending); "behind" on
+  (against the physical-velocity GeoTransolver, rerun pending); "behind" on
   DrivAerML (surface 1.2–1.3x below full data, 8.5% at full data, lower
   bounds on GeoTransolver's lead; interior eddy viscosity 1.29x); "no new
   capability" because regime extrapolation and cross-family transfer fail
   for every architecture.
 - **Data multiplier:** SUPERSEDED. The "GeoTransolver needs about 6x as
   many training cases as ISLA" reading compared ISLA at 35 cases with the
-  physical-drive GeoTransolver at 210; the unit-drive GeoTransolver at 35
+  physical-velocity GeoTransolver at 210; the unit-direction GeoTransolver at 35
   cases (0.124) is already below ISLA (0.138), so the multiplier is ≤ 1 and
   is never written as an ISLA advantage. `tbl-data-multiplier`, if kept,
-  is labelled a physical-drive-protocol table.
+  is labelled a physical-velocity-protocol table.
 - **Both margins, always:** the rule survives with the new content: every
-  statement about the 35-case rung names both unit-drive baselines
+  statement about the 35-case rung names both unit-direction baselines
   (GeoTransolver 0.90, Transolver 0.83, baseline ÷ ISLA). Never headline
   2.8x anywhere as a comparison.
 - **Mechanism status wording:** SUPERSEDED. The carrier of the
-  physical-drive gap at 35 cases is identified: the baselines' input scale.
+  physical-velocity gap at 35 cases is identified: the baselines' input scale.
   Write "answered at 35 cases (input scale), open above it pending UDRV-L".
-  HLREG is DONE and read as localization against the physical-drive
+  HLREG is DONE and read as localization against the physical-velocity
   GeoTransolver (near ÷ rest 0.72); it is never written as a finding about
   an ISLA advantage, since none remains at 35 cases.
 - **Chapter structure:** regime extrapolation is a section of chapter 6
@@ -631,7 +632,7 @@ Rules from the independent audit, verified in-session by the coordinator
   velocity, 2679.5 in/s on HiLiftAeroML and 38.9 m/s on DrivAerML, which the
   pipelines do not normalize. GeoTransolver's global-context projector,
   untrained, at production dimensions, collapses from 191–232 effective
-  occupied slices per head at drive magnitude 1 to 1.0–3.8 at 38.9 and
+  occupied slices per head at freestream magnitude 1 to 1.0–3.8 at 38.9 and
   1.00–1.02 at 2679.5 (max context magnitude 0.66 → 22.7 → 1530;
   results/geotransolver_drive_conditioning_2026-09-08.json); Transolver
   concatenates the raw vector into every token's features. The training
@@ -673,12 +674,12 @@ Rules from the independent audit, verified in-session by the coordinator
   The plain reference surface configuration is unaffected. State these where
   the optional channels are listed as contracts.
 - **First-moment limitation:** two non-congruent five-component arrangements
-  with zero transverse first moment about the drive give identical ISLA
+  with zero transverse first moment about the global vector input give identical ISLA
   outputs to 4e-15 (default and similarity gauge, two seeds); the
   local-distance channel separates them (0.039–0.063), a second-moment
   contraction distinguishes them (2.41 vs 1.99)
   (results/isla_first_moment_collision_2026-09-08.json). Anchor collapse does
-  NOT require rotational symmetry about the drive. Write "not established as
+  NOT require rotational symmetry about the global vector input. Write "not established as
   the cause on cars" for the relationship to any benchmark deficit; never
   "refuted on cars". A documented representation limitation, not a
   demonstrated cause of any measured deficit (benchmark: node MOM2,
@@ -688,7 +689,7 @@ Rules from the independent audit, verified in-session by the coordinator
   0.102 change both training composition and evaluation population: write
   "supports a geometry-generalization advantage", never "only geometry
   count". (b) Plain Transolver differs from GeoTransolver in depth (8 vs 12
-  layers), parameters (6M vs 9M), drive injection and learning rate; the
+  layers), parameters (6M vs 9M), freestream injection and learning rate; the
   ~2/5 encoder / ~3/5 backbone split is a numerical decomposition of the
   log-gap, not a causal attribution to the geometry encoder. (c) Passive ISLA
   decodes through a separate four-block read decoder while query-token ISLA
@@ -766,22 +767,22 @@ interior control @sec-nb-udrv-int-prereg.
 - **The verdict sentence (one place, @sec-verdict):** "ISLA has no measured
   accuracy advantage over GeoTransolver or plain Transolver once every model
   receives the freestream at unit scale: at 35 HiLiftAeroML cases the
-  unit-drive baselines are 1.1–1.2x more accurate than ISLA, the DrivAerML
+  unit-direction baselines are 1.1–1.2x more accurate than ISLA, the DrivAerML
   surface ordering favours GeoTransolver, and the higher HiLift rungs are
   being re-measured (UDRV-L). Its contribution is contracts (exact
   covariance, query-independent passive decode) and the interior
   configuration's lead pending UDRV-INT."
 - **The result.** Surface-pressure rel-L2, 180 validation cases (118
   geometries), two-seed means, seeds in parentheses. GeoTransolver unit
-  drive **0.124** (0.124, 0.125) vs physical 0.381 (three seeds 0.374,
+  direction **0.124** (0.124, 0.125) vs physical 0.381 (three seeds 0.374,
   0.409, 0.359) vs ISLA 0.138 (0.135, 0.141, 0.138); velocity 0.145 vs ISLA
-  0.168; wall shear 0.229 vs 0.256. Transolver unit drive **0.115** (0.117,
+  0.168; wall shear 0.229 vs 0.256. Transolver unit direction **0.115** (0.117,
   0.113) vs physical 0.404 vs ISLA 0.138; velocity 0.140, wall shear 0.216.
   Ratios baseline ÷ ISLA: **0.90** (GeoTransolver), **0.83** (Transolver).
   Paired per case (seed-mean errors): GeoTransolver lower than ISLA on
   130/180 cases (84/118 geometries; median ISLA ÷ GeoTransolver 1.09, 10–90%
   0.90–1.43; sign test p = 2e-9); Transolver lower on 152/180 (102/118;
-  median 1.17, 0.98–1.58; p = 8e-22). Unit vs physical drive: lower on
+  median 1.17, 0.98–1.58; p = 8e-22). Unit vs physical velocity: lower on
   180/180 for both (median 3.4x GeoTransolver, 3.8x Transolver).
   Preregistered bars: supported if GeoTransolver ≤ 0.27 / Transolver ≤ 0.29;
   both far past. Learning rates unchanged (GeoTransolver 1e-3, Transolver
@@ -791,11 +792,11 @@ interior control @sec-nb-udrv-int-prereg.
   advantage shrank" (there is none at 35 cases); never "the baselines were
   broken" (they were fed a mis-scaled input by the protocol); never
   "conditioning explains the trained gap" as speculation (it is measured).
-- **"Unit-drive" is the reference baseline.** Every comparison names the
-  baseline's drive: "unit-drive GeoTransolver" (the valid comparison) or
-  "physical-drive GeoTransolver" (a protocol measurement). A bare
-  "GeoTransolver" on HiLift means unit-drive.
-- **Physical-drive measurements, labelled so and never quoted as an ISLA
+- **"Unit-direction" is the reference baseline.** Every comparison names the
+  baseline's freestream input: "unit-direction GeoTransolver" (the valid comparison) or
+  "physical-velocity GeoTransolver" (a protocol measurement). A bare
+  "GeoTransolver" on HiLift means unit-direction.
+- **Physical-velocity measurements, labelled so and never quoted as an ISLA
   advantage:** 2.8x (35), 2.2x (210), 1.3x Transolver (210), parity 1.02
   (1,260), 1.8x (4 geometries), 1.4x (21 geometries), 5.0x and 2.55x (fixed
   angle), 180/180 and 118/118 wins, 172/180 and 18/18, the 6x data
@@ -803,8 +804,8 @@ interior control @sec-nb-udrv-int-prereg.
   12%/8%), every CTRL/T1/INV steel-man, the HLREG ratios (2.0x/3.0x), the
   regime-extrapolation ordering (1.29/1.06) and the HiLift learning-rate
   instability of GeoTransolver at 3e-3.
-- **Fixed-angle 5.0x:** "measured against physical-drive baselines;
-  unit-drive rerun pending" (four lanes at about epoch 200 of 500). Never
+- **Fixed-angle 5.0x:** "measured against physical-velocity baselines;
+  unit-direction rerun pending" (four lanes at about epoch 200 of 500). Never
   "the advantage is largest at a fixed angle".
 - **UDRV-L (running; lanes 8–15 launched, 16–17 at 1,260 cases queued):**
   GeoTransolver and Transolver at 210 cases; GeoTransolver at 4 and 21
@@ -813,8 +814,8 @@ interior control @sec-nb-udrv-int-prereg.
   (≥ 12/18 geometries on the geometry rungs); parity 0.95–1.05; baseline
   ahead ≤ 0.90; between, "a small difference in the stated direction".
   Prediction: baselines match or beat ISLA at every rung. Until it lands,
-  every HiLift comparison above 35 cases is "against physical-drive
-  baselines; not a valid comparison until the unit-drive rerun".
+  every HiLift comparison above 35 cases is "against physical-velocity
+  baselines; not a valid comparison until the unit-direction rerun".
 - **UDRV-INT (GeoTransolver-volume with U_inf_dir; running):** the interior
   comparison inherits the confound at 38.9 m/s, 69x smaller in magnitude.
   Bars: confound present if pressure ≤ 0.0589 or velocity ≤ 0.1267 or ν_t
@@ -827,7 +828,7 @@ interior control @sec-nb-udrv-int-prereg.
   projector collapses from ~200 effective slices per head at unit magnitude
   to one slice at 2,679.5 (context max 1,530); Transolver concatenates the
   raw vector into every token's features; both still learn slowly from that
-  input at small data, and at 1,260 cases the physical-drive GeoTransolver
+  input at small data, and at 1,260 cases the physical-velocity GeoTransolver
   reached parity anyway.
 - **What stands unchanged:** every ISLA-internal number (ablations, gauge
   cost, memory, step time, contracts, query-independence price, geometry
@@ -859,10 +860,10 @@ interior control @sec-nb-udrv-int-prereg.
   never "ISLA ignores the surface" (a zero-surface control was not run). The 365-cell
   numbers remain the chapter's headline numbers; the 10k numbers are the confirmation.
 
-- **UDRV fixed angle (2026-09-09).** Unit-drive GeoTransolver 0.0291 (0.0294/0.0289) and
+- **UDRV fixed angle (2026-09-09).** Unit-direction GeoTransolver 0.0291 (0.0294/0.0289) and
   Transolver 0.0317 (0.0318/0.0316) vs ISLA 0.0358 at 126 geometries, 12°; each ahead on
   18/18 held-out geometries (median per-geometry ISLA÷GT 1.24, ISLA÷T 1.13; p = 8e-6).
-  Write "ISLA behind, 0.81x / 0.89x"; the 5.0x is a physical-drive measurement only and is
+  Write "ISLA behind, 0.81x / 0.89x"; the 5.0x is a physical-velocity measurement only and is
   never quoted as an ISLA advantage. Artifact results/udrv_reduction_2026-09-09b.json.
 
 - **MEAS-METRIC (2026-09-09).** Under the area-weighted metric the unweighted ISLA is still
@@ -870,16 +871,16 @@ interior control @sec-nb-udrv-int-prereg.
   under either metric; the variance reading stands (cell areas span 400x)". Never write that
   the metric explains the gap. Reference configuration unchanged until NOW-L lands.
 
-- **UDRV-INT (2026-09-09).** Unit-drive GeoTransolver-volume 0.0617 / 0.1310 / 0.0936 vs
+- **UDRV-INT (2026-09-09).** Unit-direction GeoTransolver-volume 0.0617 / 0.1310 / 0.0936 vs
   physical 0.0620 / 0.1334 / 0.0939: null (all within 3%). Write "the interior ordering is
   not an input-scale artifact"; the interior ratios (0.91x / 0.64x / 1.29x) may be quoted
   against either baseline version. The verdict sentence's interior clause reads "lead on
   pressure and velocity survives that control".
 
-- **UDRV-L geo40 (2026-09-09).** Unit-drive GeoTransolver 0.1888 (both seeds) vs ISLA 0.2498 at
+- **UDRV-L geo40 (2026-09-09).** Unit-direction GeoTransolver 0.1888 (both seeds) vs ISLA 0.2498 at
   4 training geometries: ratio 0.76 by the mean; per case 96/180, per geometry 9/18 (median 1.03,
   10–90% 0.78–2.06). Write "ISLA behind by the mean, even by geometry"; the 1.8x is
-  physical-drive only. Never write that ISLA generalizes across geometries from few samples.
+  physical-velocity only. Never write that ISLA generalizes across geometries from few samples.
 - **Passive-decode caveat (2026-09-09, transfer-program fork).** The legacy passive readout
   (`_kernel_readout`, mass clamped at eps, rho = local_readout_rho = 0.02 gauge units) makes
   queries far from every source scale with absolute source weights (a 4.2x weight rescale moved
@@ -893,8 +894,8 @@ interior control @sec-nb-udrv-int-prereg.
   until the ladder rule (persists at ≥ 4 of 6 rungs) is decided. results/nowt_reduction_2026-09-09.json.
 
 - **510-case rung (2026-09-09).** ISLA 0.0495 (0.0486/0.0504). ISLA ladder 0.138 / 0.065 / 0.0495 /
-  0.041 (slopes 0.42, 0.31, 0.21). Physical-drive GT 0.0568 and Transolver 0.0656 are
-  measurements of that protocol only (never an ISLA advantage); unit-drive baselines at 510 are
+  0.041 (slopes 0.42, 0.31, 0.21). Physical-velocity GT 0.0568 and Transolver 0.0656 are
+  measurements of that protocol only (never an ISLA advantage); unit-direction baselines at 510 are
   training (udrv_hl_gt_medium_*, udrv_hl_transolver_medium_lr3e3_*).
 - **Interior step times after 2026-09-09.** Every DrivAerML interior lane launched or resumed on
   or after 2026-09-09 runs with `dataloader.pin_memory=false` (+35% step time: 0.388 s vs
@@ -922,7 +923,7 @@ interior control @sec-nb-udrv-int-prereg.
   31–51%; results/isla_checkpoint_snapshot_discrepancy_2026-09-09.json), most plausibly different
   sampled validation points through the changed reader path. Until the snapshot ladder lands, draw
   no new comparison between arms evaluated under different code snapshots. Verified safe: the
-  35-case HiLift arms (ISLA weighted/unweighted, unit- and physical-drive GT and Transolver) were
+  35-case HiLift arms (ISLA weighted/unweighted, unit- and physical-velocity GT and Transolver) were
   evaluated on bit-identical sampled points (results/measure_metric_35_2026-09-09.json asserts it).
 
 - **Cross-snapshot hold NARROWED (2026-09-09).** results/eval_points_identity_2026-09-09.md: the
@@ -933,14 +934,14 @@ interior control @sec-nb-udrv-int-prereg.
   (`code_perf`); no book number uses it. Rule: a new snapshot's evaluations may be compared with
   existing ones only after an identity check of sampled points against a frozen-snapshot artifact.
 
-- **DrivAerML unit-drive baselines (2026-09-09, WAVE-3 arm 5).** Unit-drive GT 0.0556
+- **DrivAerML unit-direction baselines (2026-09-09, WAVE-3 arm 5).** Unit-direction GT 0.0556
   (0.0553/0.0561/0.0554) vs physical 0.0548: null (+1.5%). Transolver (first DrivAerML lanes)
   0.0563 at lr 3e-3 (0.0593 at 1e-3). vs ISLA weighted 0.0577: 0.96x / 0.98x (parity band; GT
   lower on 36/48 cars). vs ISLA weights-off 0.0561: 0.99x / 1.00x. Write "parity within 4% at
   full DrivAerML data, within 1% with ISLA's weights off"; retire "8.5% behind" and "lower
-  bound". The 27–218-car ladder stays physical-drive and stands (not a handicap here).
+  bound". The 27–218-car ladder stays physical-velocity and stands (not a handicap here).
 
-- **35-case unit-drive numbers, final (2026-09-09, three seeds; results/udrv_reduction_2026-09-09d.json).**
+- **35-case unit-direction numbers, final (2026-09-09, three seeds; results/udrv_reduction_2026-09-09d.json).**
   GT unit lr 1e-3 0.1235 (0.1236/0.1253/0.1215); GT unit lr 3e-3 0.1105 (0.1119/0.1092) → by the
   best-rate rule GT's 35-case number is **0.111**; Transolver unit lr 3e-3 0.1145
   (0.1172/0.1126/0.1137), lr 1e-3 0.1269 (worse). ISLA weights on 0.138 (three seeds); ISLA
@@ -990,15 +991,15 @@ interior control @sec-nb-udrv-int-prereg.
 
 - **INTERIOR, float32 re-grade (2026-09-10; transfer session same-snapshot fp32 re-eval,
   research/transfer_program/studies/computational_support/ref_reeval_fp32_2026-09-10.json; FP32-EVAL
-  group 4 to confirm).** ISLA QT+SDF 0.0547 / 0.0796 / 0.1116; GT-volume (physical drive) 0.0515 /
+  group 4 to confirm).** ISLA QT+SDF 0.0547 / 0.0796 / 0.1116; GT-volume (physical velocity) 0.0515 /
   0.1088 / 0.0879 → ISLA ÷ GT 1.06 / 0.73 / 1.27. bf16 inflated GT-volume 20–23% and ISLA 4–7%.
   Write "ISLA leads on interior velocity (27%) and trails on pressure (6%) and eddy viscosity
   (27%)"; RETIRE "leads on pressure and velocity" and the 0.91x pressure figure except as a labelled
   bf16 number. Interior ladder, h256, surf10k, density ratios stay bf16-labelled until group 4.
 
 - **Interior family, float32 (2026-09-10; results/fp32_reeval/fp32_shift_interior_2026-09-09.json;
-  unit-drive GT-volume from the transfer session's same-snapshot re-eval).** Reference row:
-  GeoTransolver-volume 0.0513 / 0.1070 / 0.0879 (unit drive; physical 0.0514 / 0.1088 / 0.0879).
+  unit-direction GT-volume from the transfer session's same-snapshot re-eval).** Reference row:
+  GeoTransolver-volume 0.0513 / 0.1070 / 0.0879 (unit direction; physical 0.0514 / 0.1088 / 0.0879).
   ISLA ÷ GT-volume (p/u/ν_t): QT+SDF 1.06 / 0.73 / 1.27; surf10k 1.07 / 0.74 / 1.30; h256 1.02 /
   0.72 / 1.17 (INCONCLUSIVE band, not falsified); +local features 1.09 / 0.75 / 1.36 (falsified);
   QT no-SDF 1.19 / 1.28 / 1.61; passive 3.68, passive+SDF 3.06 (write "3.1x", never "2.6x"
@@ -1014,7 +1015,7 @@ interior control @sec-nb-udrv-int-prereg.
   float32); 1,260 GT-physical÷ISLA 1.021 → 1.007 (parity stands); 210 and 510 Transolver-physical
   1.34 → 1.20 (measurements only); geometry rungs unchanged. Protocol sentences: the offset is
   neither a fixed percentage nor a fixed absolute (an additive floor within a dataset, growing as
-  the error falls across the campaign, largest for Transolver's physical-drive HiLift checkpoints);
+  the error falls across the campaign, largest for Transolver's physical-velocity HiLift checkpoints);
   every close comparison moved toward the baselines (max counter-move 0.01); per-case maxima
   5–25% for the baselines → per-case statistics from fp32 everywhere.
 
@@ -1023,7 +1024,7 @@ interior control @sec-nb-udrv-int-prereg.
   0.4528. Write "baselines ahead by the mean, even by geometry"; weights off −17% persists here.
 - **Few-shot transfer (2026-09-10, transfer session campaign C T3, float32; research/transfer_program
   #sec-nb-campc-t3-verdict).** Fine-tuning on 20 labelled fastback cases (1,000 steps, lr 1e-3):
-  GeoTransolver from the unit-drive DrivAerML checkpoint 0.128 vs 0.186 from scratch (31% better);
+  GeoTransolver from the unit-direction DrivAerML checkpoint 0.128 vs 0.186 from scratch (31% better);
   ISLA from mt2_v3c (lr 3e-3 checkpoint) 0.187 vs 0.198 (6%). RESOLVED 2026-09-10: the frozen-init
   lane (camp-c-28: source loaded through the fine-tuning hook, one epoch at lr 0, re-evaluated)
   scores 0.9791 / wss 1.3956, identical to the source evaluated under `code`, so the fine-tune
@@ -1118,7 +1119,7 @@ interior control @sec-nb-udrv-int-prereg.
   reducers must treat a repeated identical error across checkpoints as an artifact, never a value.
 - **Campaign C T2, matched-count diversity (2026-09-10, float32, seed means; `research/transfer_program/studies/campaign_c_transfer/campaign_c_t2_2026-09-10.json`).**
   435 cases = 218 DrivAerML + 217 estate vs all-DrivAerML: ISLA fastback zero-shot 0.788 → 0.128
-  (−84%), DrivAerML in-family 0.0557 → 0.0737 (+32%); unit-drive GeoTransolver fastback 0.612 →
+  (−84%), DrivAerML in-family 0.0557 → 0.0737 (+32%); unit-direction GeoTransolver fastback 0.612 →
   0.115 (−81%), DrivAerML 0.0504 → 0.0598 (+19%); fastback drag rel. MAE >150% → 16% / 13%. Bar
   (≥30% drop at ≤10% in-family cost) NOT met on cost for either → write "a trade: half the label
   budget on the sibling family buys the target family almost entirely and costs a fifth to a
@@ -1131,7 +1132,7 @@ interior control @sec-nb-udrv-int-prereg.
   "pays 33% (0.074 vs 0.056)" preview.
 - **Weights-off fixed-angle rung (2026-09-10, float32, two seeds; results/now_single12_reduction_2026-09-10.json).**
   ISLA weights off 0.03106 (0.03164/0.03047) vs weights on 0.03476 → 0.894x, lower on 17/18
-  held-out geometries: PERSISTS (bar ≤ 0.0330). Against the unit-drive baselines in float32: GT
+  held-out geometries: PERSISTS (bar ≤ 0.0330). Against the unit-direction baselines in float32: GT
   0.02697 (0.87x of ISLA-off; GT lower on 18/18), Transolver 3e-3 0.0298 (0.96x; lower on 14/18).
   Write "weights off closes a third of ISLA's fixed-angle deficit to GeoTransolver (0.78x → 0.87x)
   and reaches the parity band with Transolver (0.96x), still behind both". Ladder tally: persists at
@@ -1148,7 +1149,7 @@ interior control @sec-nb-udrv-int-prereg.
   query-neighbour channel (read sample density). Baselines' density dependence (GT 9.5x, Transolver
   3.9x, GT-volume ball queries) is a first-class comparison axis, stated beside every accuracy claim.
   See @sec-principle.
-- **Interior GT-volume unit-drive, third seed (2026-09-10, fp32).** Seed 44: 0.0509 / 0.1061 / 0.0877;
+- **Interior GT-volume unit-direction, third seed (2026-09-10, fp32).** Seed 44: 0.0509 / 0.1061 / 0.0877;
   three-seed means 0.0513 / 0.1070 / 0.0876 (spreads 0.7% / 3.6% / 0.2%). Reference numbers unchanged.
 - **Consistency, not invariance (2026-09-10, Peter).** "Discretization invariance" means invariance in
   the fine-mesh limit: under uniform refinement the prediction converges to a single field, and two
@@ -1227,7 +1228,7 @@ interior control @sec-nb-udrv-int-prereg.
   deduplicate by sample_id before averaging; state "48 cars" not the row count.
 - **Campaign D verdict (2026-09-10, fp32, code_eval, 48 cars, two seeds; `research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json`).**
   ISLA QT+SDF hidden 344 (27.6M, exact recompute): 0.0497 (0.0497/0.0498) / 0.0729 (0.0736/0.0721) /
-  0.1033 (0.1058/0.1008) vs hidden-256 reference 0.0547/0.0796/0.1116 (deduped two-seed) and unit-drive
+  0.1033 (0.1058/0.1008) vs hidden-256 reference 0.0547/0.0796/0.1116 (deduped two-seed) and unit-direction
   GT-volume 0.0513/0.1070/0.0879. Ratios vs GT-volume 0.97x / 0.68x / 1.18x → ν_t BETWEEN (bars ≤1.10
   closes, ≥1.25 fails). Write "at matched parameters ISLA leads GeoTransolver-volume on pressure by 3%
   and velocity by 32% and trails on eddy viscosity by 18%; the float32 interior-pressure ordering is a
@@ -1238,15 +1239,15 @@ interior control @sec-nb-udrv-int-prereg.
   (query_normals = sdf_normals, query_scalars = sdf), and GT-volume's local embedding is coords + sdf +
   sdf_normals + six radii, so at matched parameters both models receive the same per-point geometry;
   the 18% ν_t gap is a difference in how the query consumes it (raw channels through a per-point MLP vs
-  invariant products with anchors and drive), not an input difference. Never write "give ISLA the SDF
+  invariant products with anchors and the global vector input), not an input difference. Never write "give ISLA the SDF
   gradient". Next principled step (transfer session): wall-distance band decomposition of the saved
   float32 predictions (sdf < 0.01 L / 0.01–0.05 L / ≥ 0.05 L); if near-wall, candidate arm = local
   readout with kernel radius ∝ query SDF (wall-distance scaling of the closure), discretization-invariant.
-- **21-geometry rung, unit drive (2026-09-10, fp32, two seeds; results/udrvl_geo210_reduction_2026-09-10.json).** Unit GT 0.0933 (0.0965/0.0900)
+- **21-geometry rung, unit direction (2026-09-10, fp32, two seeds; results/udrvl_geo210_reduction_2026-09-10.json).** Unit GT 0.0933 (0.0965/0.0900)
   vs ISLA 0.1014 (0.1002/0.1026) → 0.920, GT lower on 136/180 cases (median GT÷ISLA 0.897): BETWEEN band
   (parity 0.0963–0.1065; baseline ahead ≤ 0.0913), baseline direction. Physical GT 0.1422 (1.48x behind
-  ISLA by the median case). Write "unit-drive GeoTransolver 0.92x of ISLA at 21 geometries, lower on 136
-  of 180 cases"; RETIRE "1.4x on never-seen geometries" as an ISLA advantage (physical-drive measurement).
+  ISLA by the median case). Write "unit-direction GeoTransolver 0.92x of ISLA at 21 geometries, lower on 136
+  of 180 cases"; RETIRE "1.4x on never-seen geometries" as an ISLA advantage (physical-velocity measurement).
   Caveats: 180 cases = 18 geometries (case count descriptive); GT seed spread 7%. UDRV-L tally: 4
   geometries baseline ahead (0.76x), fixed angle baseline ahead (0.78x), 21 geometries between (0.92x);
   210 and 1,260 pending.
@@ -1259,7 +1260,7 @@ interior control @sec-nb-udrv-int-prereg.
   close and GeoTransolver-volume where it is far". Band 'all' values differ from the recipe metric by a
   constant factor (0.092 vs 0.1033); quote ratios or the recipe metric, never mix. Candidate (prereg
   pending): flow-organized far-field anchors (latent_volume_tokens, offsets 0.5/1.0/2.0 L along the
-  drive) — NOTE the option currently requires query_independent=True (model.py ~596), so the QT+SDF
+  freestream) — NOTE the option currently requires query_independent=True (model.py ~596), so the QT+SDF
   configuration needs a flag-gated relaxation first.
 - **SCALE DrivAerML synthesis (2026-09-10, scaling session; #sec-nb-scale-drivaer-synthesis; fp32, 48 cars,
   two seeds, 512 wide × 80,000 cells).** GeoTransolver 0.0419 (0.211 s/step, 41.5 GB, 12.7 GPU-h; reduced values, 52 logs, zero skips), ISLA
@@ -1281,14 +1282,14 @@ interior control @sec-nb-udrv-int-prereg.
   legacy `code` readings of the references at 80k (0.814 / 0.892, job 700105) were a metric-aggregation
   artifact of that snapshot and are STRUCK; never quote them. Write "converges up in count; does not
   generalize down", never "collapse".
-- **210-case rung, unit drive (2026-09-10, fp32; results/udrvl_210_reduction_2026-09-10.json).** Unit GT 1e-3 0.0533 (0.0532/0.0535) vs
+- **210-case rung, unit direction (2026-09-10, fp32; results/udrvl_210_reduction_2026-09-10.json).** Unit GT 1e-3 0.0533 (0.0532/0.0535) vs
   ISLA 0.0643 (three seeds 0.0617/0.0661/0.0652) → 0.829x, GT lower on 162/180 (median 0.775): BASELINE
   AHEAD (bar ≤ 0.0579). Unit Transolver 3e-3 0.0582 (0.0582/0.0582; per-case distinct) → 0.905x, lower on
   145/180: BETWEEN, baseline direction. Physical GT 0.141 (3-seed; 2.19x behind ISLA by the mean, 2.67x by
   the median case) = the ladder's 2.2x; unit GT is 3.4x better than physical GT on 178/180 cases; physical
   Transolver 3e-3 0.0771 (1.20x behind ISLA), unit 1.5x better on 170/180. RETIRE "2.2x at 210 cases" as an
   ISLA advantage. UDRV-L prediction (baselines match or beat ISLA at every rung) held at 5 of 6 rungs (35,
-  210, geo4, geo21, fixed angle); 1,260 pending (epochs 80–90, I/O-throttled). Write "unit-drive
+  210, geo4, geo21, fixed angle); 1,260 pending (epochs 80–90, I/O-throttled). Write "unit-direction
   GeoTransolver 0.83x of ISLA at 210 cases, lower on 162 of 180 cases".
 - **D1 computational support (2026-09-10, transfer session, fp32, code_eval, 48 cars, 2 seeds; research/transfer_program/studies/computational_support/d1_verdict_2026-09-10.json).**
   SUPPORT-12 (5k interacting support + SDF, 5k passive queries, 12 read blocks) 0.0781 (0.0774/0.0788) /
@@ -1418,7 +1419,7 @@ interior control @sec-nb-udrv-int-prereg.
 - **XFAM H1 closed (2026-09-10).** Rate-matched gauge (lr 1e-3) zero-shot fastback 1.068 / 0.768 → 0.918 (spread 0.30). No arm ≤ 0.70; XFAM final: distributed. Ops: AGA `sacct --starttime` parses cluster-local time (UTC−7); a future local time makes it fail silently.
 - **21-geometry rung, all arms (2026-09-10, fp32, two seeds; results/geo210_all_arms_2026-09-10.json).** Unit Transolver 3e-3 0.0941 (0.0922/0.0960) vs
   ISLA 0.1014 → 0.928x, lower on 135/180: BETWEEN (baseline direction), beside unit GT 0.920x. Weights-off ablation
-  0.0905 (0.0909/0.0901) → 0.892x of weighted, 146/180: PERSISTS (bar ≤ 0.0963); at parity with both unit-drive baselines
+  0.0905 (0.0909/0.0901) → 0.892x of weighted, 146/180: PERSISTS (bar ≤ 0.0963); at parity with both unit-direction baselines
   (GT ÷ off 1.03, GT lower 78/180; Transolver ÷ off 1.04, 71/180). Write "the ablation prices the measure semantics at
   11% at 21 geometries"; never a configuration. Ablation tally: persists 35 / 210 / geo4 / geo21 / fixed angle; fades
   DrivAerML; pending 1,260, deflection.
@@ -1432,7 +1433,7 @@ interior control @sec-nb-udrv-int-prereg.
   units" applies only to the passive query_independent decoder (_ReadBlock, local_readout_rho); the QT+SDF
   configuration has no kernel or radius — never write it as a candidate for query tokens. Mechanism reading from
   the code: far queries' eight relational invariants stop discriminating slices; the seed features are blind to
-  azimuth about the drive axis (GT reads raw position). Candidate = second_moment_features (MOM2) at hidden 344,
+  azimuth about the freestream axis (GT reads raw position). Candidate = second_moment_features (MOM2) at hidden 344,
   after a distance-shell / azimuth decomposition of saved predictions (transfer session). Flags stay gated.
 - **Far-wake diagnostics (2026-09-10, transfer session; research/transfer_program/studies/computational_support/far_field_shells_2026-09-10.json; routing_mass/*.json).** ν_t ISLA h344 vs GT-volume by shell:
   0.05–0.1 L 0.047 vs 0.067; 0.1–0.2 L 0.042 vs 0.053; 0.2–0.4 L 0.038 vs 0.038; ≥0.4 L 0.108 vs 0.071 (2.2% of points);
@@ -1493,7 +1494,7 @@ interior control @sec-nb-udrv-int-prereg.
   running.
 - **WAVE-4 fixed-angle rung (2026-09-11, fp32, rate-matched lr 1e-3).** Similarity gauge 0.0411/0.0385 → 0.0398 vs
   constant gauge 0.0342/0.0353 → 0.0348: **+14.4%**, top of the 5–15% "known price" band; largest on the ladder
-  (35 cases +7.6%, 4 geometries +7.4%, DrivAerML −2.5%). vs unit-drive GT 0.0270 → 1.47x; Transolver 0.0298 → 1.33x.
+  (35 cases +7.6%, 4 geometries +7.4%, DrivAerML −2.5%). vs unit-direction GT 0.0270 → 1.47x; Transolver 0.0298 → 1.33x.
   Constant gauge at fixed angle collapses under BENCH (D_area +960%, D_biased +1385% at 40k); gauge BENCH lanes
   708692/708718 pending. Scale-normalization hypothesis is a HYPOTHESIS (discriminator: mcenter / RELFRAME-ref at fixed
   angle, not launched). Never write "the gauge is free on HiLift".
@@ -1624,7 +1625,7 @@ interior control @sec-nb-udrv-int-prereg.
   invariant to weight rescale alone; centered construction is the reverse. Interior config still similarity gauge (centered) — no relative-frame
   interior lane trained yet. Write "the centered construction" / "the prior configuration" for the old default, never "the default gauge".
 - **ENGINEERING 2026-09-11: ISLA API is keyword-only** (#sec-nb-kwargs-only; Peter's request). `ISLA(*, ...)` and `forward(self, *, points, normals,
-  drive, measure_weights=None, ...)`. Never write positional ISLA calls in scripts, notebooks or chapters; the recipe's `+model.<frame key>=` append
+  measure_weights=None, global_vectors=None, global_scalars=None, ...)` (2026-09-14: `drive` renamed `global_vectors`). Never write positional ISLA calls in scripts, notebooks or chapters; the recipe's `+model.<frame key>=` append
   overrides must become plain `model.<key>=` now that the configs state frame_mode/scale_mode. Tests: 109 passed (ISLA+checkpoint), 252 passed (recipe).
 - **RELFRAME-LADDER fixed-angle rung (2026-09-11, fp32; results/frame_reduction_2026-09-11.json hilift_val).** Reference (meas) 0.0363/0.0405 → 0.0384 vs prior 0.0348 →
   **+10.3%** (known band); vs gauge 0.0398 → 0.964x; vs unit GT 0.0270 → 1.42x, Transolver 0.0298 → 1.29x. Ref-length arm 0.0389/0.0486 → 0.0437
@@ -1637,9 +1638,9 @@ interior control @sec-nb-udrv-int-prereg.
   Gauge −0.1% / +2.4% (more consistent at 40k); constant prior +960% / +1385%. Reference is the MOST ACCURATE arm under every sampler at
   every count (unif 40k 0.0364 vs gauge 0.0389; biased 40k 0.0384 vs 0.0399). Write "converging, not yet at the bias bar at 40k on this rung";
   never "the reference is consistent at the fixed angle" without the bias qualification.
-- **UDRV-L 510-case verdict (2026-09-12; fp32, hl_evals_fp32, job 724818; results/udrvl_510_reduction_2026-09-12.json).** Unit-drive GT 0.0410
-  (0.0418/0.0402) = 0.84x of prior ISLA 0.0489 (0.0478/0.0499), lower on 168/180; unit-drive Transolver (lr 3e-3) 0.0441 (0.0437/0.0444) = 0.90x,
-  lower on 168/180. Physical-drive GT 0.0557 (1.14x), T 0.0586 (1.20x) = protocol artifact. Unit vs physical per-case medians 0.62 (GT), 0.67 (T).
+- **UDRV-L 510-case verdict (2026-09-12; fp32, hl_evals_fp32, job 724818; results/udrvl_510_reduction_2026-09-12.json).** Unit-direction GT 0.0410
+  (0.0418/0.0402) = 0.84x of prior ISLA 0.0489 (0.0478/0.0499), lower on 168/180; unit-direction Transolver (lr 3e-3) 0.0441 (0.0437/0.0444) = 0.90x,
+  lower on 168/180. Physical-velocity GT 0.0557 (1.14x), T 0.0586 (1.20x) = protocol artifact. Unit vs physical per-case medians 0.62 (GT), 0.67 (T).
   Prediction holds at SIX OF SEVEN rungs; only 1,260 pending. Case-ladder ratios flat: GT 0.80/0.83/0.84x, T 0.83/0.91/0.90x at 35/210/510.
   ISLA value = prior configuration (reference not trained on 510). Write "six of seven", not "five of six", from now on.
 - **RELFRAME-LADDER verdict (2026-09-12, fp32; results/frame_reduction_2026-09-11.json hilift_val).** 21 geo reference 0.1048/0.1084 → 0.1066 (+5.2% vs 0.1014;
@@ -1675,9 +1676,16 @@ interior control @sec-nb-udrv-int-prereg.
   #sec-mt2-variants (ch2), #sec-de-result replaces #sec-de-unit-drive (removed), fig-hilift-data-efficiency + tbl-hilift-ladder (ch5),
   fig-ladder-unit-drive (ch12; fig-slope-extrapolation removed), tbl-mt2-cost (ch2).
 - **FRAMING RULE (2026-09-14, Peter).** ISLA targets steady boundary-value PDE problems in general. The "freestream direction" is this book's
-  external-aerodynamics INSTANCE of a global condition vector ("the drive": a direction belonging to the problem, not to a boundary cell);
-  other instances: gravity/body force, applied field; none in steady conduction; inlet velocities are boundary data, not a freestream. Say
-  "boundary" for the problem class ("surface" only for the aero datasets' vehicle/wing surfaces); introduce the freestream only as the instance.
-  Current code limitation, stated honestly: exactly one required global vector; zero/several global vectors and per-cell boundary data
-  (boundary_scalars channel exists) are the generalization step (ch12 engineering). Never write the architecture's inputs as "surface +
-  freestream direction".
+  external-aerodynamics INSTANCE of a global vector input (a direction belonging to the problem, not to a boundary cell); other instances:
+  gravity/body force, applied field; none in steady conduction; inlet velocities are boundary data, not a freestream. Global scalar inputs are
+  the PDE's parameters (thermal diffusivity, viscosity, isotropic Young's modulus, Reynolds number, a speed). Say "boundary" for the problem
+  class ("surface" only for the aero datasets' vehicle/wing surfaces); introduce the freestream only as the instance. The architecture accepts
+  zero or more global vector inputs (`n_global_vectors`, default 1) and zero or more global scalar inputs (`n_global_scalars`, default 0);
+  K = 1, S = 0 is bit-for-bit the former model. One-vector-only options (raise otherwise): geo_kernel="fused", odd_head, parity_fix,
+  latent_volume_tokens, wake_tokens. Never write that the model requires exactly one vector. Never write the architecture's inputs as
+  "surface + freestream direction". Open item: no non-aerodynamic dataset trained yet (Laplace/conduction acceptance case).
+- **TERMINOLOGY RULE (2026-09-14, Peter).** "global inputs" = "global vector input(s)" + "global scalar input(s)". Never "drive".
+  "unit-direction baselines" for the udrv protocol (GeoTransolver/Transolver fed the freestream as a unit direction, matching ISLA's input);
+  "physical-velocity" for the counterpart. Degree-one contract is gone: vectors are normalized inside the model; magnitudes are scalar
+  inputs. Symbol: ĝ_k (k = 1..K) for the global vector inputs, ĝ_1 = the freestream direction in this book; the relational invariants keep
+  xi_is (two indices; renamed from g_is on 2026-09-14 to avoid the clash). Artifact names (udrv_*, geotransolver_drive_conditioning_*, fig-ladder-unit-drive) stay as written.

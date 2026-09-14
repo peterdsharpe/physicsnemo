@@ -16545,3 +16545,76 @@ with the total-measure scale and the corrected boundary measure; the recipe
 gains a reference interior config and the corrected-measure dataset
 variant; chapters 3, 8 and 12 and the index carry the new interior
 standings; the RELINT node is DONE. Owner: this session.
+
+## 2026-09-14 — Global inputs: ISLA now takes zero or more global vector inputs and zero or more global scalar inputs; "drive" retired {#sec-nb-global-inputs}
+
+**Setting.** ISLA (Invariant Slice Attention) is the equivariant slice
+transformer this book develops as a surrogate for steady boundary-value
+problems. Until today its forward pass took exactly one required global
+unit vector, called the *drive*, and every dataset in this book supplied
+the freestream direction for it. Peter's ruling of 2026-09-14: the
+architecture targets steady PDEs in general, where the problem-level
+data are zero or more global vectors (a freestream, a gravity or an
+applied-field direction; none in steady conduction with pinned boundary
+values) and zero or more global scalars (a thermal or momentum
+diffusivity, an isotropic Young's modulus, a Reynolds number). The term
+"drive" is retired: it locks the reader into a single vector and is not
+familiar to newcomers. The vocabulary is now *global inputs*, *global
+vector input(s)* and *global scalar input(s)*.
+
+**What changed in the code.** The constructor gained `n_global_vectors`
+(default 1) and `n_global_scalars` (default 0); the forward pass takes
+`global_vectors` of shape (batch, $K$, 3) and `global_scalars` of shape
+(batch, $S$) as keyword arguments, and the `drive` argument is gone. Each
+global vector enters as a unit direction: one seed term
+$\hat n_i\cdot\hat g_k$ per token and per vector (the relative-frame seed is
+exactly these $K$ terms; with $K = 0$ and no other seed channel every
+token starts from one learned embedding and all separation comes from the
+relational anchors), one direction cosine $\hat\rho_{is}\cdot\hat g_k$ per
+point-anchor pair (the relational invariants are $5 + K$ wide, plus $1 + K$
+in the centered variant), and the vector head's basis is
+$\{\hat g_1,\dots,\hat g_K, \hat n, \hat u\}$ with the spherical complements
+of $(\hat u,\hat n)$ and of each $(\hat u,\hat g_k)$, $4 + 3K$ vectors. Global
+scalars are appended to every token's seed features, boundary, support,
+interacting-query and passive-query tokens alike, so they condition every
+token embedding; as invariants they change no covariance contract. The
+old degree-one rule, output proportional to the vector's magnitude, is
+removed: a magnitude with physical content is a scalar input.
+
+**Compatibility, verified.** With $K = 1$ and $S = 0$ the feature orderings
+reproduce the former model's exactly, so every saved checkpoint keeps its
+parameter layout. The pre-change file was loaded alongside the new one
+with identical weights on fourteen configurations (reference; centered;
+centered with local features; raw seeds; the true5 and true7 bases;
+second-moment channel; sparse routing; passive decode; interacting query
+tokens with the neighbour and density channels; odd head; parity fix;
+similarity gauge; support tokens) and the outputs are **bitwise identical**
+for unit vectors (script `equiv_check.py` in the session's job directory;
+with a non-unit vector the two differ by the retired magnitude factor
+only). One implementation detail mattered: the new dot products are
+broadcast multiply-and-sum, not `einsum`, because autocast runs `einsum`
+in bfloat16 and the geometry must stay in the input precision. The fused
+Triton kernel, `odd_head`, `parity_fix`, `latent_volume_tokens` and
+`wake_tokens` are written for one vector and refuse other counts at
+construction.
+
+**Tests.** The three degree-one tests became magnitude-invariance tests.
+A new file, `test_isla_global_inputs.py`, adds fifteen tests: SE(3)
+covariance for $K = 0$ and $K = 2$ in both frames, on the passive and
+interacting query paths too; measure-scale invariance where the length
+unit is constant; magnitude invariance of every vector; scalar inputs that
+change the output, reach the query side and preserve every contract; the
+one-vector parameter layout (seed 1/5, geometry 6/8, basis 7/5/7); the
+legacy (3,), (B, 3) and (B, 1, 3) layouts; and the one-vector-only options
+refusing $K \ne 1$. ISLA suites: 136 passed, 8 skipped (GPU-only kernel
+tests run and pass on this machine's GPU); recipe suite: 260 passed. The
+recipe's five ISLA configurations now map `global_vectors` to the unit
+freestream direction.
+
+**What is not done.** No non-aerodynamic problem has been trained; a
+Laplace or conduction case with $K = 0$ and one scalar parameter is the
+open acceptance item for the generalization (@sec-future). The book's
+terminology was overhauled in the same pass (@sec-mt2, @sec-problem):
+"unit-direction baselines" replaces the old protocol label, the symbol for
+the global vector inputs is $\hat g_k$, and the relational invariants are
+now written $\xi_{is}$ to avoid the clash.

@@ -9,7 +9,7 @@ Transolver's is 0.75x, 0.81x, 0.77x, 0.88x and 0.75x on the same rungs.
 Against ISLA's constant-gauge variant the ratios run 0.76–0.92x for
 GeoTransolver and 0.77–0.93x for Transolver, including 0.84x and 0.90x at
 510 cases, where that variant is the only ISLA. The 1,260-case rung has no
-unit-drive baseline and is not yet measured as a comparison. What stands
+unit-direction baseline and is not yet measured as a comparison. What stands
 about ISLA alone is that its error responds to the number of distinct
 training geometries, tracks the flow physics case by case, and comes with a
 usable per-case uncertainty signal from 35 cases. On DrivAerML the ordering
@@ -62,7 +62,7 @@ velocity of 2,679.5 in/s instead, GeoTransolver's global-context projector
 collapses to one occupied slice per head and both baselines lose 3.4–3.8x
 at 35 cases. The mechanism, the control that established it and the
 resulting rule are in @sec-part-baseline; the numbers in this chapter are
-the unit-drive ones.
+the unit-direction ones.
 
 ISLA appears in two configurations. The reference configuration is the
 relative frame with the total-measure scale (@sec-mt2): no centroid, no
@@ -75,7 +75,7 @@ tables say so.
 
 ## The ladder {#sec-de-result}
 
-**Both unit-drive baselines are more accurate than ISLA on every rung:
+**Both unit-direction baselines are more accurate than ISLA on every rung:
 baseline ÷ ISLA lies between 0.68 and 0.88 against the reference
 configuration and between 0.76 and 0.93 against the constant-gauge
 variant.** @fig-hilift-data-efficiency and
@@ -180,7 +180,7 @@ axs[0].set_yticklabels(["0.03", "0.05", "0.10", "0.20", "0.30"])
 axs[0].set_ylim(0.024, 0.32)
 axs[0].set_ylabel("Surface pressure error, rel-L2 [–]  (float32, log)", color=INK2)
 fig.legend(loc="upper left", ncol=4, fontsize=8.8, bbox_to_anchor=(0.01, 0.995), handlelength=2.4, columnspacing=1.4)
-fig.suptitle("HiLiftAeroML ladders: unit-drive baselines against ISLA (points: seeds; lines: seed means)",
+fig.suptitle("HiLiftAeroML ladders: unit-direction baselines against ISLA (points: seeds; lines: seed means)",
              x=0.01, y=0.925, ha="left", color=INK, fontsize=10.5)
 fig.tight_layout(rect=(0, 0, 1, 0.9))
 plt.show()
@@ -285,7 +285,7 @@ The 1,260-case rung is the one place the ladder is incomplete. The
 constant-gauge ISLA scores 0.041 there (two seeds 0.040 / 0.043;
 results/hilift_ladder_reduction_2026-09-03.json), its curve running 0.138,
 0.065, 0.049, 0.041 with log-log slopes 0.42, 0.31 and 0.21 over the three
-segments; neither unit-drive baseline nor the reference configuration is
+segments; neither unit-direction baseline nor the reference configuration is
 trained at this rung, so the full-split comparison on HiLiftAeroML is not
 yet measured (@sec-program-status).
 
@@ -388,7 +388,7 @@ label integrated on the *same* 10,000 sampled cells as the prediction
 full-surface force, and because prediction and label share the quadrature,
 the sampling error of a 10,000-cell integral cancels in them. How far a
 10,000-cell integral sits from the full-surface force is not measured
-(@sec-program-status). The unit-drive baselines' force coefficients are not
+(@sec-program-status). The unit-direction baselines' force coefficients are not
 reduced, so no force comparison between architectures is made; the 3%
 figure says that a few-dozen-run design-of-experiments budget yields a
 force surrogate of usable accuracy from ISLA, not that ISLA is the only
@@ -404,7 +404,7 @@ disagreement no longer predicts error (@sec-shared-floor). Two-seed
 ensembles gain only 1–5% at any rung, and only the ranking is tested, not
 calibration.^[`results/hilift_ensemble_uq_{35,210,1260}_2026-09-06.json`.]
 A two-seed ISLA therefore ships with a usable per-case confidence flag from
-35 cases. The same signal is not measured for the unit-drive baselines, so
+35 cases. The same signal is not measured for the unit-direction baselines, so
 no comparison with them is made.
 
 ## What each ingredient costs ISLA {#sec-mechanism}
@@ -460,7 +460,7 @@ subsets of the 435-car training split, 14, 27, 54, 109 and 218 cars, under
 the frozen protocol of that ladder, learning rate 3e-3 for both, 500
 epochs, 10,000 tokens, two seeds, scored on the 48-car validation split.
 GeoTransolver's DrivAerML ladder lanes received the freestream as a
-physical velocity of 38.9 m/s; at 435 cars the unit-drive GeoTransolver
+physical velocity of 38.9 m/s; at 435 cars the unit-direction GeoTransolver
 scores 0.0503 against 0.0498 in float32, inside the null band, so on this
 dataset the input scale is not a handicap and the ladder ordering is read
 as it stands (@sec-nb-uw-verdict, @sec-nb-fp32-drivaer-regrade).
