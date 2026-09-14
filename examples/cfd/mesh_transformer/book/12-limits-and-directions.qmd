@@ -68,8 +68,9 @@ home section; this chapter adds only the limits.
 - Interior accuracy: ISLA's reference configuration, query tokens with the
   signed distance, leads GeoTransolver-volume on interior velocity by 27%
   at a third of the parameters and trails on pressure (7%) and eddy
-  viscosity (14%) in float32; the passive, query-independent decode trails
-  by 3.1x (@sec-interior). GeoTransolver-volume fed the unit direction
+  viscosity (14%) in float32 (GeoTransolver-volume ÷ ISLA 0.93 / 1.37 /
+  0.87); GeoTransolver-volume is 3.1x more accurate than the passive,
+  query-independent decode (0.33; @sec-interior). GeoTransolver-volume fed the unit direction
   instead of the physical velocity changes by under 2% on every field, so
   the ordering stands against either (@sec-nb-udrv-int-verdict).
 - Regime extrapolation: nothing tested generalizes across a flow-regime
@@ -447,20 +448,20 @@ GeoTransolver's smaller ratio, and no mechanism for it has been isolated.
 Because ISLA has the lower absolute error on both sides of the boundary,
 there is no transfer advantage to explain and the thread is closed.
 
-### Interior accuracy: ahead on velocity, behind on pressure and eddy viscosity; the passive decode trails by 3.1x {#sec-limits-interior}
+### Interior accuracy: ahead on velocity, behind on pressure and eddy viscosity; GeoTransolver-volume is 3.1x more accurate than the passive decode {#sec-limits-interior}
 
 **On the boundary → interior task, ISLA's reference configuration, query
 tokens with the signed distance on the relative frame, is more accurate
-than GeoTransolver-volume on interior velocity (0.73x in float32) and less
-accurate on interior pressure (1.07x) and eddy viscosity (1.14x) at a
-third of the parameters; the similarity-gauge interior variant matches it
-on pressure and velocity and trails on eddy viscosity (1.27x, three
-seeds); at matched parameters (hidden 344, 27.6M) that variant leads on
-pressure (0.97x) and velocity (0.68x) and trails on eddy viscosity
-(1.18x); without the signed distance it trails on every field (1.2x, 1.3x,
-1.6x); ISLA's passive, query-independent decode trails by 3.1x on
-pressure, and that deficit ratio grows with distance from the wall**
-(@sec-interior). The setting is DrivAerML volume fields at 10,000 interior
+than GeoTransolver-volume on interior velocity (GeoTransolver-volume ÷ ISLA
+1.37 in float32) and less accurate on interior pressure (0.93) and eddy
+viscosity (0.87) at a third of the parameters; the similarity-gauge
+interior variant matches it on pressure and velocity and trails on eddy
+viscosity (0.79, three seeds); at matched parameters (hidden 344, 27.6M)
+that variant leads on pressure (1.03) and velocity (1.47) and trails on
+eddy viscosity (0.85); without the signed distance it trails on every field
+(0.83, 0.77, 0.62); GeoTransolver-volume is 3.1x more accurate on pressure
+than ISLA's passive, query-independent decode (0.33), and that lead grows
+with distance from the wall** (@sec-interior). The setting is DrivAerML volume fields at 10,000 interior
 query points; ISLA predicts them from the surface sample and the queries'
 signed distances, GeoTransolver-volume from the interior points themselves
 as interacting tokens carrying the signed distance, at 27.6M parameters
@@ -469,13 +470,14 @@ freestream velocity instead of the unit direction changes by under 2% on
 every field (@sec-nb-udrv-int-verdict), so the interior ratios are not an
 input-scale artifact, and the comparison is not resource-matched
 (@sec-interior-task). The full-data standings only partly extend to small
-data: at 54 and 109 training cars GeoTransolver-volume leads the
-query-token configuration without the signed distance by 1.3x on interior
-pressure, wider than the 1.2x by which it leads ISLA on the DrivAerML
-surface below full data; with the signed distance the pressure deficit is
-1.19x at 54 cars and 1.18x at 109, velocity is an ISLA lead from 109 cars
-up (0.94x at 54, 0.83x at 109, 0.73x at 435), and eddy viscosity stays
-1.3–1.5x in GeoTransolver-volume's favour throughout (@sec-interior-open).
+data: at 54 and 109 training cars GeoTransolver-volume is 1.3x more
+accurate than the query-token configuration without the signed distance on
+interior pressure, a wider margin than the 1.2x by which it leads ISLA on
+the DrivAerML surface below full data; with the signed distance the
+pressure ratio is 0.84 at 54 cars and 0.85 at 109, velocity is an ISLA lead
+from 109 cars up (1.07 at 54, 1.20 at 109, 1.37 at 435), and eddy viscosity
+stays at 0.65–0.77 throughout, GeoTransolver-volume 1.3–1.5x more accurate
+(@sec-interior-open).
 The interacting decode's prediction depends on the joint query set: on the
 similarity-gauge variant, pressure error is 0.0753 at 2,000 queries,
 0.0547 at the training count of 10,000 and 0.0531 at 20,000, training over
@@ -487,12 +489,12 @@ cost of the complete passive configuration as built, a separate four-block
 read decoder without the signed-distance input; a passive decode at
 matched depth and inputs (twelve read blocks, an interacting support set
 carrying the signed distance) costs 1.43x on pressure and 2.41x on eddy
-viscosity, so query independence itself has a measured price on this task
-(@sec-interior-query-independence). For the passive decode, the deficit
-ratio is 2.5x near the wall and 3.3–5.4x in the far bands, while 95% of the
-excess squared error on the sampled points lies within 5 cm of the wall, so
-the ratio's growth does not identify a missing mechanism
-(@sec-interior-distance). Equivariant latent tokens placed off each slice
+viscosity against the interacting ISLA, so query independence itself has a
+measured price on this task (@sec-interior-query-independence). Over the
+passive decode GeoTransolver-volume is 2.5x more accurate near the wall and
+3.3–5.4x in the far bands, while 95% of the passive decode's excess squared
+error on the sampled points lies within 5 cm of the wall, so the growth of
+that lead does not identify a missing mechanism (@sec-interior-distance). Equivariant latent tokens placed off each slice
 anchor along its mean normal make the passive decode worse by 1.43x, and
 an exact boundary-integral prior is not an option either: on DrivAerML a
 potential-flow oracle scores worse than predicting each case's mean
@@ -514,12 +516,12 @@ separate under-sampling from the query-distribution swap it introduces
 (@sec-nb-farwake-verdict), surface-patch local features on the query
 tokens and query-density or query-neighbour channels do not close it and
 the latter two read the discretization and are excluded by @sec-principle,
-and a width increase to 256 narrows it to 1.17x without closing it. The
+and a width increase to 256 narrows it to 0.85 without closing it. The
 single-car test identifies the gap as a capacity limit: with the data fixed
-the eddy-viscosity ratio widens to 1.64x, so more training cars will not
-close it (@sec-nb-overfit-interior). The reference frame with the
-corrected boundary measure narrows it from 1.27x to 1.14x while leaving
-pressure and velocity unchanged; the two changes were made together and
+the eddy-viscosity ratio GeoTransolver-volume ÷ ISLA falls to 0.61, so
+more training cars will not close it (@sec-nb-overfit-interior). The
+reference frame with the corrected boundary measure narrows it from 0.79
+to 0.87 while leaving pressure and velocity unchanged; the two changes were made together and
 the gain is not attributed between them (@sec-nb-relint-verdict). Two
 facts bound the query-token configuration itself: its query weights scale
 with the geometric mean of the surface weights, so refining the surface
@@ -899,11 +901,12 @@ arbitrary poses, on the interior at matched parameters, or where memory at
 scale binds. Its learning-rate robustness on DrivAerML (1.55x degradation
 at 1e-2 against 4–14x for GeoTransolver, @sec-robustness-lr) is a fact
 about training, not an accuracy claim. On the interior, ISLA's reference
-configuration leads GeoTransolver-volume on velocity (0.73x) at a third of
-the parameters and trails on pressure (1.07x) and eddy viscosity (1.14x),
-at or above the training query count (@sec-interior); the
-similarity-gauge interior variant at matched parameters leads on pressure
-as well (0.97x) and trails only on eddy viscosity (1.18x); the unit-drive
+configuration leads GeoTransolver-volume on velocity (GeoTransolver-volume
+÷ ISLA 1.37) at a third of the parameters and trails on pressure (0.93)
+and eddy viscosity (0.87), at or above the training query count
+(@sec-interior); the similarity-gauge interior variant at matched
+parameters leads on pressure as well (1.03) and trails only on eddy
+viscosity (0.85); the unit-drive
 control of GeoTransolver-volume changed nothing (@sec-nb-udrv-int-verdict).
 GeoTransolver-volume is the choice where eddy viscosity is the target
 field, or where the training set is small and pressure is the target. Two
@@ -921,13 +924,13 @@ rungs already fix the recommendation for every training-set size below
 1,260 cases.
 
 **The interior recommendation becomes unconditional for ISLA** only if a
-principled configuration closes the eddy-viscosity gap (within 1.10x of
-GeoTransolver-volume) at the reference width without moving pressure or
+principled configuration closes the eddy-viscosity gap (GeoTransolver-volume
+÷ ISLA at least 0.91) at the reference width without moving pressure or
 velocity by more than 5%. The single-car test identifies the gap as
 capacity (@sec-nb-overfit-interior), the far wake beyond 0.4 body lengths
 carries the whole of it, and anchor geometry, training-time sampling and
 query-side inputs do not close it (@sec-interior-open); a width increase to
-27.6M parameters leaves it at 1.18x, so at matched parameters the
+27.6M parameters leaves it at 0.85, so at matched parameters the
 recommendation is already ISLA on pressure and velocity and
 GeoTransolver-volume on eddy viscosity.
 
