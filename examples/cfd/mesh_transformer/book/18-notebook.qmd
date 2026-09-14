@@ -16918,3 +16918,47 @@ expected price of conditioning on a value the model has not seen.
 conditioning route has not been stressed with several scalars of very
 different scales, where a learned normalization of the scalar inputs may
 be needed, nor on a problem where the parameter changes the equation type.
+
+## 2026-09-14 — Preregistration, KERNEL-NEUTRAL: the fused geometry kernel as the only change to the DrivAerML reference lanes {#sec-nb-kernel-neutral-prereg}
+
+**Setting.** The kernel study (@sec-nb-kernel-study) showed that the exact
+fused Triton geometry kernel brings ISLA's compiled 40,000-token step from
+119 ms to 52 ms at less than half the memory, with outputs matching the
+eager region to $10^{-6}$ and gradients to $10^{-5}$. It ships opt-in
+(`geo_kernel="fused"`) because a numerics gate on random weights is not a
+training-neutrality result: the kernel evaluates the routing bias, the
+point-to-slice mix and the pooled invariants in one pass with its own
+accumulation order under bfloat16 autocast, and a systematic difference
+that is invisible at $10^{-6}$ per step could still move a 500-epoch run.
+The rule set for the row-parallel softmax kernel applies: a kernel becomes
+the default only after a training run on the reference configuration
+lands within the seed noise of the eager reference.
+
+**The lanes.** The two DrivAerML surface reference runs
+(`rf_dr_mt2_meas_seed42`, `rf_dr_mt2_meas_seed43`: relative frame,
+total-measure scale, width 192, twelve layers, 256 slices, no geometry
+checkpointing, compile off, bfloat16, learning rate $10^{-3}$, 500 epochs,
+10,000 tokens, no augmentation) re-run from the current repository head
+with one change, `geo_kernel=fused`, as `kf_dr_isla_fused_seed42` and
+`kf_dr_isla_fused_seed43` (launcher `kernel/fused_train_aga.sbatch`, code
+snapshot `code_globin`, recipe snapshot `recipe_globin`; one GB300 node per
+lane, four-hour chain links). The code head also carries the global-inputs
+generalization, which is bitwise the former model at one vector, so the
+kernel is the only arithmetic change. Evaluation with the float32
+instrument on the sealed validation split, as for every reference number.
+
+**Predictions and bars, written before the run.**
+
+- **Neutral.** The fused lanes' float32 surface-pressure relative $L^2$ lies
+  within **3%** of the eager reference on the seed mean (the bar the softmax
+  kernel met at +1.8%), and neither seed differs from its eager twin by
+  more than the two eager seeds differ from each other plus 3%. Meeting it
+  makes `geo_kernel="fused"` the recommended default on CUDA, with eager
+  kept as the reference implementation.
+- **Not neutral.** A shift beyond 3% in either direction is a finding about
+  bfloat16 accumulation in the fused region, not a speed result, and the
+  kernel stays opt-in until the accumulation is made to match (float32
+  accumulation of the pooled invariants is the first suspect).
+- **Speed, reported.** Epoch time from the training logs against the eager
+  reference's; at 10,000 tokens and compile off the study predicts a small
+  gain only, the large gain being at 40,000 tokens under compile.
