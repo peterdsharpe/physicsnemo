@@ -16818,3 +16818,49 @@ scalar is *not* identifiable from the trace, so scalar conditioning is
 decisive and its mechanism (seed append) can be stressed against a FiLM
 alternative; and a two-vector problem (a freestream and a gravity
 direction, buoyant flow) once a dataset exists.
+
+## 2026-09-14 — Preregistration, GLOBIN-DISCRIM: a family where the scalar cannot be read from the trace, so scalar conditioning must be decisive {#sec-nb-globin-discrim-prereg}
+
+**Setting.** On the source-generated screened-Poisson family
+(@sec-nb-globin-accept-extension-verdict) the model without the scalar
+input was only 1.4x worse than the model with it, because the boundary
+trace carries most of the information about the screening parameter. That
+result says the scalar input is used; it cannot say whether the way it
+enters, appended to every token's seed features, is adequate when the
+scalar is the only route to the answer. This entry preregisters the
+discriminating family.
+
+**Problem.** The same equation, $\nabla^2 u - \kappa^2 u = 0$, inside a
+sphere of radius $R \in [0.8, 1.2]$, with the Dirichlet trace prescribed
+directly as a random combination of real spherical harmonics up to order
+three (coefficients decaying with degree, RMS normalized to one). The exact
+interior solution separates: each harmonic of degree $l$ is carried inward
+by the ratio $i_l(\kappa r)/i_l(\kappa R)$ of modified spherical Bessel
+functions, which is $(r/R)^l$ at $\kappa = 0$ and decays sharply toward the
+centre as $\kappa$ grows. **The trace is independent of $\kappa$ by
+construction**; the interior is not. $\kappa \in [0, 6]$ in training and
+T0, $[6, 7]$ in T1. The geometry is fixed to a sphere on purpose: the
+question is conditioning, and nothing else should vary. Everything else
+follows the acceptance experiment: 1,024 boundary points, 256 volume-uniform
+queries, query tokens, width 128, six layers, 64 slices, 6,000 steps of
+eight fresh cases, two seeds, float32 evaluation on 64 held-out cases.
+Script: the same file with `--family sphere_bessel`; artifact
+`results/global_inputs_discrim_sphere_bessel_2026-09-14.json`.
+
+**Predictions and bars, written before the run.**
+
+- **The scalar arm solves it.** T0 mean relative $L^2$ at most 0.10 on
+  both seeds. Failing this says the seed-append route is too weak to carry
+  a decisive scalar through the slice attention, and a stronger
+  conditioning (a FiLM modulation of the slice states, or the scalar in
+  the routing bias) becomes the next engineering item.
+- **The blind arm cannot.** The $\kappa$-withheld arm is **at least 2x
+  worse** than the scalar arm on T0 (seed means). Its floor is the error of
+  the $\kappa$-averaged interior against the true one; over $\kappa \in
+  [0, 6]$ the degree-zero mode alone ranges from constant to $\sinh(\kappa
+  r)/(\ldots)$-shaped decay, so the average is far from every member. If
+  the blind arm is within 2x, the trace is not as $\kappa$-independent as
+  the construction claims (a bug in the generator), or the queries do not
+  reach the region where screening matters; either way the test would be
+  void, not a result.
+- **Extrapolation** to $\kappa \in [6, 7]$ is reported without a bar.

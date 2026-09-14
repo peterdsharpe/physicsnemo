@@ -39,6 +39,16 @@ in-range cases; T1 kappa in [3, 4] (parameter extrapolation, reported, not
 part of the acceptance bar).
 
 Run:  python screened_poisson_acceptance.py --steps 3000 --out <json>
+
+Second family (``--family sphere_bessel``, the conditioning DISCRIMINATOR of
+#sec-nb-globin-discrim-prereg): the same equation inside a sphere of radius
+R in [0.8, 1.2] with the Dirichlet trace g = sum_k a_k Y_k(d) prescribed
+directly (real harmonics up to order three). The exact interior solution is
+u = sum_k a_k [i_l(kappa r) / i_l(kappa R)] Y_k(d) with i_l the modified
+spherical Bessel function of the first kind, so the trace carries NO
+information about kappa while the interior depends on it strongly (kappa in
+[0, 6]); a model without the scalar input can at best predict the
+kappa-averaged interior.
 """
 
 from __future__ import annotations
@@ -50,7 +60,9 @@ import subprocess
 import time
 from pathlib import Path
 
+import numpy as np
 import torch
+from scipy.special import spherical_in
 
 from physicsnemo.experimental.nn.isla import ISLA
 
@@ -130,6 +142,42 @@ def make_cases(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, 
                 query_points=xq, query_normals=nq, target=(uq / scale)[..., None])
 
 
+_L_OF_BASIS = [0] + [1] * 3 + [2] * 5 + [3] * 7  # harmonic degree of [1, Y_1.., Y_2.., Y_3..]
+
+
+def _bessel_ratio(l: int, kappa: torch.Tensor, r: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
+    """i_l(kappa r) / i_l(kappa R) for kappa (B,), r (B, M), R (B,); (r/R)^l at kappa = 0."""
+    k = kappa[:, None].expand_as(r)
+    kr = (k * r).double().cpu().numpy(); kR = (k * R[:, None].expand_as(r)).double().cpu().numpy()
+    with np.errstate(all="ignore"):
+        num = spherical_in(l, kr); den = spherical_in(l, kR)
+        ratio = np.where(kR > 1e-6, num / np.where(den == 0, 1.0, den), (r / R[:, None]).double().cpu().numpy() ** l)
+    return torch.as_tensor(ratio, dtype=r.dtype, device=r.device)
+
+
+def make_cases_sphere(b: int, n_boundary: int, n_query: int, kappa_range: tuple[float, float], gen: torch.Generator):
+    """The discriminator family: sphere, prescribed trace, exact Bessel interior."""
+    R = 0.8 + 0.4 * torch.rand(b, generator=gen, device=DEV)
+    d = sample_directions(b, n_boundary, gen)
+    x = R[:, None, None] * d
+    w = (4 * math.pi * R.square() / n_boundary)[:, None].expand(b, n_boundary)
+    dq = sample_directions(b, n_query, gen)
+    sq = torch.rand(b, n_query, generator=gen, device=DEV).pow(1 / 3) * 0.95
+    xq = (sq * R[:, None])[..., None] * dq
+    ### trace coefficients, decaying with degree; the constant term included
+    a = torch.randn(b, 16, generator=gen, device=DEV) / torch.tensor([1.0 + l for l in _L_OF_BASIS], device=DEV)
+    kappa = kappa_range[0] + (kappa_range[1] - kappa_range[0]) * torch.rand(b, generator=gen, device=DEV)
+    Yb = torch.cat([torch.ones(b, n_boundary, 1, device=DEV), _real_sh_basis(d)], dim=-1)  # (B, N, 16)
+    Yq = torch.cat([torch.ones(b, n_query, 1, device=DEV), _real_sh_basis(dq)], dim=-1)
+    ub = (a[:, None, :] * Yb).sum(-1)
+    rq = xq.norm(dim=-1)
+    ratios = torch.stack([_bessel_ratio(l, kappa, rq, R) for l in range(4)], dim=-1)  # (B, M, 4)
+    uq = (a[:, None, :] * Yq * ratios[..., _L_OF_BASIS]).sum(-1)
+    scale = ub.square().mean(-1, keepdim=True).sqrt().clamp_min(1e-6)
+    return dict(points=x, normals=d, weights=w, trace=(ub / scale)[..., None], kappa=kappa[:, None],
+                query_points=xq, query_normals=dq, target=(uq / scale)[..., None])
+
+
 # ----------------------------------------------------------------------------- model / arms
 def build(arm: str, seed: int) -> ISLA:
     torch.manual_seed(seed)
@@ -174,16 +222,20 @@ def main() -> None:
     ap.add_argument("--arms", nargs="+", default=["isla_scalar", "isla_noscalar"])
     ap.add_argument("--eval-cases", type=int, default=64)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--family", choices=["sources", "sphere_bessel"], default="sources")
+    ap.add_argument("--kappa-max", type=float, default=None, help="training/T0 kappa range upper end (default 3, or 6 for sphere_bessel)")
     args = ap.parse_args()
+    kmax = args.kappa_max if args.kappa_max is not None else (6.0 if args.family == "sphere_bessel" else 3.0)
+    cases = make_cases_sphere if args.family == "sphere_bessel" else make_cases
 
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     gen_eval = torch.Generator(device=DEV).manual_seed(12345)
     tests = {
-        "T0_in_range": make_cases(args.eval_cases, args.n_boundary, args.n_query, (0.0, 3.0), gen_eval),
-        "T1_kappa_3_4": make_cases(args.eval_cases, args.n_boundary, args.n_query, (3.0, 4.0), gen_eval),
+        "T0_in_range": cases(args.eval_cases, args.n_boundary, args.n_query, (0.0, kmax), gen_eval),
+        "T1_kappa_3_4": cases(args.eval_cases, args.n_boundary, args.n_query, (kmax, kmax + 1.0), gen_eval),
     }
     out = {"commit": commit, "device": torch.cuda.get_device_name(0) if DEV == "cuda" else "cpu",
-           "config": vars(args) | {"out": str(args.out)}, "trivial": {}, "arms": {}}
+           "config": vars(args) | {"out": str(args.out), "kappa_max": kmax}, "trivial": {}, "arms": {}}
     for name, c in tests.items():
         out["trivial"][name] = {k: {"mean": v.mean().item(), "median": v.median().item()} for k, v in trivial_predictors(c).items()}
     print("trivial:", json.dumps(out["trivial"]), flush=True)
@@ -198,7 +250,7 @@ def main() -> None:
             gen = torch.Generator(device=DEV).manual_seed(1000 + seed)
             t0 = time.time(); losses = []
             for step in range(args.steps):
-                c = make_cases(args.batch, args.n_boundary, args.n_query, (0.0, 3.0), gen)
+                c = cases(args.batch, args.n_boundary, args.n_query, (0.0, kmax), gen)
                 with torch.autocast("cuda", dtype=torch.bfloat16, enabled=DEV == "cuda"):
                     pred = forward(m, c, arm)
                 loss = rel_l2(pred.float(), c["target"]).mean()
