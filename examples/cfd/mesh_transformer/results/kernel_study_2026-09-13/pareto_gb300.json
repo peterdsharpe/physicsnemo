@@ -1,0 +1,738 @@
+{
+ "env": {
+  "gpu": "NVIDIA GB300",
+  "driver": "580.167.08",
+  "torch": "2.12.0+cu130",
+  "cuda": "13.0",
+  "python": "3.13.14",
+  "hostname": "nvl72d199-T08",
+  "tf32_matmul": false,
+  "device_props": {
+   "multi_processor_count": 152,
+   "total_memory": 297020948480,
+   "major": 10,
+   "minor": 3
+  }
+ },
+ "gt_kw": {
+  "out_dim": 4,
+  "functional_dim": 6,
+  "geometry_dim": 3,
+  "global_dim": 3,
+  "n_layers": 12,
+  "dropout": 0.0,
+  "n_head": 8,
+  "act": "gelu",
+  "mlp_ratio": 4,
+  "slice_num": 256,
+  "use_te": false,
+  "plus": false,
+  "include_local_features": false,
+  "radii": [
+   0.1,
+   0.5,
+   2.0
+  ],
+  "neighbors_in_radius": [
+   16,
+   32,
+   64
+  ],
+  "n_hidden_local": 32,
+  "state_mixing_mode": "weighted",
+  "n_hidden": 256
+ },
+ "reference": {
+  "out_scalars": 1,
+  "out_vectors": 1,
+  "hidden": 192,
+  "n_layers": 12,
+  "n_slices": 256,
+  "mlp_ratio": 4,
+  "frame_mode": "relative",
+  "scale_mode": "total_measure",
+  "geo_checkpoint": true,
+  "fast_point_softmax": true
+ },
+ "options": {
+  "eager_ckpt": "reference: eager, geo_checkpoint=True (isla_surface_reference.yaml)",
+  "eager_nockpt": "eager, geo_checkpoint=False (store the (B,N,S,.) geometry instead of recomputing it)",
+  "eager_ckpt_slow_softmax": "eager, geo_checkpoint=True, fast_point_softmax=False: the pre-2026-09-10 middle-dimension point softmax, the configuration behind the book's GB300 '3.7x' matched-memory number",
+  "compile_model_ckpt": "torch.compile(model) (the recipe's compile: true path), geo_checkpoint=True",
+  "compile_model_nockpt": "torch.compile(model), geo_checkpoint=False (Inductor's own min-cut recompute decides what is saved)",
+  "compile_blocks_ckpt": "torch.compile on each _SliceBlock.forward only (embed/head eager), geo_checkpoint=True",
+  "compile_model_dynamic": "torch.compile(model, dynamic=True): one kernel set for every token count",
+  "compile_model_maxautotune": "torch.compile(model, mode='max-autotune-no-cudagraphs'), geo_checkpoint=False",
+  "compile_model_cudagraphs": "torch.compile(model, mode='reduce-overhead') (CUDA graphs), geo_checkpoint=False",
+  "fused_geo_eager": "geo_kernel='fused' (Triton fused geometry region, recompute built in), rest eager",
+  "fused_geo_compile_model": "geo_kernel='fused' + torch.compile(model) (fused region is an opaque custom op inside the compiled graph)"
+ },
+ "runs": [
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:40:16",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     3.94,
+     5.59,
+     6.48
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    244.0965409987257,
+    243.92901999817695,
+    244.13801299670013,
+    243.8042840003618,
+    244.41519800166134,
+    243.9487960000406,
+    243.84242800442735,
+    244.0110690004076,
+    244.14172500109999,
+    243.93727599817794
+   ],
+   "step_ms_median": 243.9799325002241,
+   "step_ms_min": 243.8042840003618,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 1636908032,
+   "incremental_peak_bytes": 1426568704,
+   "reserved_bytes": 1855979520,
+   "peak_allocated_gib": 1.524489402770996,
+   "incremental_peak_gib": 1.3285956382751465,
+   "status": "ok",
+   "option": "eager_ckpt_slow_softmax"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:40:32",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     3.87,
+     5.49,
+     6.43
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    85.41973499814048,
+    86.88457199605182,
+    87.1674840018386,
+    87.5831660014228,
+    87.91497500351397,
+    87.35951799462782,
+    88.33731200138573,
+    84.5651400013594,
+    85.87704900128301,
+    87.05474800080992
+   ],
+   "step_ms_median": 87.11111600132426,
+   "step_ms_min": 84.5651400013594,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 1634547712,
+   "incremental_peak_bytes": 1424208384,
+   "reserved_bytes": 1855979520,
+   "peak_allocated_gib": 1.5222911834716797,
+   "incremental_peak_gib": 1.32639741897583,
+   "status": "ok",
+   "option": "eager_ckpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:40:34",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     3.87,
+     5.49,
+     6.43
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    66.71173799986718,
+    66.99228299839888,
+    66.43378500302788,
+    66.00610299938126,
+    65.28155699925264,
+    65.58354199660243,
+    66.09179900260642,
+    65.28014899959089,
+    66.64818600256694,
+    66.44856899947627
+   ],
+   "step_ms_median": 66.26279200281715,
+   "step_ms_min": 65.28014899959089,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 3406715392,
+   "incremental_peak_bytes": 3196376064,
+   "reserved_bytes": 3625975808,
+   "peak_allocated_gib": 3.172750949859619,
+   "incremental_peak_gib": 2.9768571853637695,
+   "status": "ok",
+   "option": "eager_nockpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:40:36",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     3.8,
+     5.45,
+     6.41
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    44.79646700201556,
+    45.56229300214909,
+    45.280787999217864,
+    44.925073998456355,
+    45.05697899730876,
+    45.19275599886896,
+    45.193555000878405,
+    45.169043994974345,
+    44.808786995417904,
+    44.945490000827704
+   ],
+   "step_ms_median": 45.11301149614155,
+   "step_ms_min": 44.79646700201556,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 1396932608,
+   "incremental_peak_bytes": 1186593280,
+   "reserved_bytes": 1805647872,
+   "peak_allocated_gib": 1.300994873046875,
+   "incremental_peak_gib": 1.1051011085510254,
+   "status": "ok",
+   "option": "compile_model_ckpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:41:24",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.1,
+     5.51,
+     6.38
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    37.98486100276932,
+    38.46662200521678,
+    38.73683100391645,
+    38.440892996732146,
+    38.911968003958464,
+    38.25567699823296,
+    38.27890899992781,
+    38.597662998654414,
+    38.37244500027737,
+    38.149277002958115
+   ],
+   "step_ms_median": 38.406668998504756,
+   "step_ms_min": 37.98486100276932,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 2079195648,
+   "incremental_peak_bytes": 1868856320,
+   "reserved_bytes": 2348810240,
+   "peak_allocated_gib": 1.9364018440246582,
+   "incremental_peak_gib": 1.7405080795288086,
+   "status": "ok",
+   "option": "compile_model_nockpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:42:05",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.79,
+     5.83,
+     6.45
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    62.66596500063315,
+    63.645712994912174,
+    63.33627099957084,
+    63.01051000627922,
+    62.83031799830496,
+    59.78800400043838,
+    60.726502000761684,
+    61.5756259940099,
+    61.63856999773998,
+    60.9773510004743
+   ],
+   "step_ms_median": 62.152267499186564,
+   "step_ms_min": 59.78800400043838,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 1525212160,
+   "incremental_peak_bytes": 1314872832,
+   "reserved_bytes": 1765801984,
+   "peak_allocated_gib": 1.4204645156860352,
+   "incremental_peak_gib": 1.2245707511901855,
+   "status": "ok",
+   "option": "fused_geo_eager"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:42:09",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.79,
+     5.83,
+     6.45
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    40.79456599720288,
+    40.9005179972155,
+    39.95462699822383,
+    40.13881900027627,
+    38.8472959966748,
+    39.34003299946198,
+    40.0278429951868,
+    40.30502800014801,
+    40.34493199287681,
+    40.07433899823809
+   ],
+   "step_ms_median": 40.10657899925718,
+   "step_ms_min": 38.8472959966748,
+   "resident_bytes": 210339328,
+   "peak_allocated_bytes": 1360296960,
+   "incremental_peak_bytes": 1149957632,
+   "reserved_bytes": 1658847232,
+   "peak_allocated_gib": 1.2668752670288086,
+   "incremental_peak_gib": 1.070981502532959,
+   "status": "ok",
+   "option": "fused_geo_compile_model"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:42:44",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.67,
+     5.88,
+     6.44
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    64.84638799884124,
+    64.49064399930649,
+    63.37601500126766,
+    63.77956899814308,
+    64.53685200540349,
+    64.93195700022625,
+    63.99940900155343,
+    64.90690100326901,
+    64.34888299554586,
+    64.3903549935203
+   ],
+   "step_ms_median": 64.4404994964134,
+   "step_ms_min": 63.37601500126766,
+   "resident_bytes": 212395520,
+   "peak_allocated_bytes": 4372739584,
+   "incremental_peak_bytes": 4160344064,
+   "reserved_bytes": 4955570176,
+   "peak_allocated_gib": 4.0724310874938965,
+   "incremental_peak_gib": 3.874622344970703,
+   "status": "ok",
+   "option": "geotransolver_eager"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:42:51",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.41,
+     5.85,
+     6.43
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    40.52259599848185,
+    41.02323899860494,
+    40.7018930054619,
+    40.270307996252086,
+    40.47949300002074,
+    40.0296670050011,
+    39.59264199511381,
+    39.538434000860434,
+    40.17565099638887,
+    39.49571399425622
+   ],
+   "step_ms_median": 40.22297949632048,
+   "step_ms_min": 39.49571399425622,
+   "resident_bytes": 212395520,
+   "peak_allocated_bytes": 2901620736,
+   "incremental_peak_bytes": 2689225216,
+   "reserved_bytes": 3160408064,
+   "peak_allocated_gib": 2.7023448944091797,
+   "incremental_peak_gib": 2.5045361518859863,
+   "status": "ok",
+   "option": "geotransolver_compiled"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:42:55",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.21,
+     5.82,
+     6.41
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    1279.5435849984642,
+    1283.464621999883,
+    1282.7611329994397,
+    1282.7788599970518,
+    1279.5876819945988,
+    1282.4280439963331,
+    1280.8453500038013,
+    1282.9195659942343,
+    1281.182535996777,
+    1281.5943770037848
+   ],
+   "step_ms_median": 1282.011210500059,
+   "step_ms_min": 1279.5435849984642,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 5904786432,
+   "incremental_peak_bytes": 5693127680,
+   "reserved_bytes": 6643777536,
+   "peak_allocated_gib": 5.499260902404785,
+   "incremental_peak_gib": 5.302138328552246,
+   "status": "ok",
+   "option": "eager_ckpt_slow_softmax"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:43:13",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.99,
+     5.8,
+     6.39
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    134.58575399999972,
+    134.60418499744264,
+    134.43672900029924,
+    134.56044100166764,
+    134.55660099862143,
+    134.58312900183955,
+    134.60751400270965,
+    134.67624899931252,
+    134.48181699641282,
+    134.59074599813903
+   ],
+   "step_ms_median": 134.58444150091964,
+   "step_ms_min": 134.43672900029924,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 5904786432,
+   "incremental_peak_bytes": 5693127680,
+   "reserved_bytes": 6643777536,
+   "peak_allocated_gib": 5.499260902404785,
+   "incremental_peak_gib": 5.302138328552246,
+   "status": "ok",
+   "option": "eager_ckpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:43:16",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.99,
+     5.8,
+     6.39
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    105.03285699815024,
+    105.03970400168328,
+    105.05346499849111,
+    104.9644079976133,
+    105.05522399762413,
+    104.97519199998351,
+    104.96268000133568,
+    105.22191299969563,
+    104.95266399811953,
+    104.98011999879964
+   ],
+   "step_ms_median": 105.00648849847494,
+   "step_ms_min": 104.95266399811953,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 12910180864,
+   "incremental_peak_bytes": 12698522112,
+   "reserved_bytes": 13883146240,
+   "peak_allocated_gib": 12.023542881011963,
+   "incremental_peak_gib": 11.826420307159424,
+   "status": "ok",
+   "option": "eager_nockpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:43:19",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.99,
+     5.8,
+     6.39
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    113.71262899774592,
+    115.51045899977908,
+    115.6289559949073,
+    115.17394599650288,
+    115.57686000014655,
+    115.81676400237484,
+    116.16124499414582,
+    115.68946800252888,
+    115.78601200017147,
+    114.36594399856403
+   ],
+   "step_ms_median": 115.60290799752693,
+   "step_ms_min": 113.71262899774592,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 5085787648,
+   "incremental_peak_bytes": 4874128896,
+   "reserved_bytes": 5993660416,
+   "peak_allocated_gib": 4.736508846282959,
+   "incremental_peak_gib": 4.53938627243042,
+   "status": "ok",
+   "option": "compile_model_ckpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:44:09",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.42,
+     6.17,
+     6.48
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    101.4158529942506,
+    103.21704299713019,
+    102.15598299691919,
+    102.02423999726307,
+    103.06235399912111,
+    102.83326600620057,
+    103.21954000391997,
+    102.93691400147509,
+    102.7694260046701,
+    102.62110499752453
+   ],
+   "step_ms_median": 102.80134600543533,
+   "step_ms_min": 101.4158529942506,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 7659306496,
+   "incremental_peak_bytes": 7447647744,
+   "reserved_bytes": 8250195968,
+   "peak_allocated_gib": 7.133285045623779,
+   "incremental_peak_gib": 6.93616247177124,
+   "status": "ok",
+   "option": "compile_model_nockpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:44:52",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.99,
+     5.96,
+     6.39
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    60.369414000888355,
+    60.829000001831446,
+    61.18077700375579,
+    61.309673998039216,
+    61.464074002287816,
+    61.047817005601246,
+    60.86368799878983,
+    61.450025998055935,
+    61.38480999652529,
+    60.74435899790842
+   ],
+   "step_ms_median": 61.11429700467852,
+   "step_ms_min": 60.369414000888355,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 5487885824,
+   "incremental_peak_bytes": 5276227072,
+   "reserved_bytes": 6341787648,
+   "peak_allocated_gib": 5.110991954803467,
+   "incremental_peak_gib": 4.913869380950928,
+   "status": "ok",
+   "option": "fused_geo_eager"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:44:55",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     5.75,
+     5.91,
+     6.38
+    ]
+   },
+   "n_params": 8912796,
+   "step_ms": [
+    43.86580800201045,
+    43.524304004677106,
+    43.79102399980184,
+    42.98814100184245,
+    43.193262004933786,
+    43.64894399623154,
+    43.10033399815438,
+    43.05822100286605,
+    42.93610999593511,
+    43.50833500211593
+   ],
+   "step_ms_median": 43.35079850352486,
+   "step_ms_min": 42.93610999593511,
+   "resident_bytes": 211658752,
+   "peak_allocated_bytes": 4830847488,
+   "incremental_peak_bytes": 4619188736,
+   "reserved_bytes": 5408555008,
+   "peak_allocated_gib": 4.499077320098877,
+   "incremental_peak_gib": 4.301954746246338,
+   "status": "ok",
+   "option": "fused_geo_compile_model"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:45:30",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.53,
+     6.1,
+     6.43
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    103.4443079988705,
+    103.89954200218199,
+    103.73915700620273,
+    101.96097600419307,
+    103.30882000562269,
+    103.73083699960262,
+    103.98190999694634,
+    103.8110939989565,
+    103.73915699892677,
+    103.61573300178861
+   ],
+   "step_ms_median": 103.7349969992647,
+   "step_ms_min": 101.96097600419307,
+   "resident_bytes": 213714944,
+   "peak_allocated_bytes": 16843326464,
+   "incremental_peak_bytes": 16629611520,
+   "reserved_bytes": 17603493888,
+   "peak_allocated_gib": 15.686570167541504,
+   "incremental_peak_gib": 15.487532615661621,
+   "status": "ok",
+   "option": "geotransolver_eager"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:45:32",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.53,
+     6.1,
+     6.43
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    45.70085399609525,
+    45.270005000929814,
+    45.612022004206665,
+    45.81627900188323,
+    45.60943000251427,
+    45.35595699417172,
+    45.161301000916865,
+    45.20568500447553,
+    44.98507599782897,
+    45.54114200436743
+   ],
+   "step_ms_median": 45.448549499269575,
+   "step_ms_min": 44.98507599782897,
+   "resident_bytes": 213714944,
+   "peak_allocated_bytes": 10772228096,
+   "incremental_peak_bytes": 10558513152,
+   "reserved_bytes": 15191769088,
+   "peak_allocated_gib": 10.032419204711914,
+   "incremental_peak_gib": 9.833381652832031,
+   "status": "ok",
+   "option": "geotransolver_compiled"
+  }
+ ]
+}

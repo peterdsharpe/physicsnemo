@@ -172,6 +172,14 @@ def _geo_region(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, eps: fl
     return bias, mix, torch.einsum("bns,bnsg->bng", mix, geo)
 
 
+def _fused_geo_region():
+    """The Triton-fused dense geometry region (geo_kernel="fused"); imported lazily so
+    that the module loads without triton and the eager path never touches it."""
+    from .geo_kernel import fused_geo_region
+
+    return fused_geo_region
+
+
 def _geo_region_sparse(lin: nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, eps: float, c_s, k: int,
                        relative: bool = False):
     """SPARSE (2026-09-09): the recompute region of _geo_region restricted to each
@@ -209,10 +217,18 @@ class _SliceBlock(nn.Module):
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4,
                  use_relational_geo: bool = True, geo_checkpoint: bool = False,
                  second_moment: bool = False, anchor_topk: int = 0,
-                 fast_point_softmax: bool = True, relative_frame: bool = False) -> None:
+                 fast_point_softmax: bool = True, relative_frame: bool = False,
+                 geo_kernel: str = "eager") -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
         self.fast_point_softmax = bool(fast_point_softmax)
+        ### KERNEL STUDY (2026-09-13): "fused" evaluates the dense geometry region
+        ### (invariants -> routing bias -> point->slice mix -> pooled invariants) in
+        ### one Triton kernel per direction that never materializes a (B,N,S,.)
+        ### tensor (see geo_kernel.py); same arithmetic as _geo_region, recompute
+        ### built in, so geo_checkpoint is moot on that path. Falls back to the
+        ### eager region for sparse routing and the second-moment channel.
+        self.geo_kernel = geo_kernel
         ### RELFRAME (2026-09-10): without a frame origin the two origin-referring
         ### invariants (|z_s|, zhat_s.d) are gone and the geo width is 6 (+2 MOM2).
         self.relative_frame = bool(relative_frame)
@@ -296,9 +312,11 @@ class _SliceBlock(nn.Module):
                 c_s = c_s - z_pos[:, :, :, None] * z_pos[:, :, None, :]
             if self.anchor_topk and self.anchor_topk < logits.shape[-1]:
                 region, geo_args = _geo_region_sparse, (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, c_s, self.anchor_topk, self.relative_frame)
+            elif self.geo_kernel == "fused" and c_s is None:
+                region, geo_args = _fused_geo_region(), (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, self.relative_frame)
             else:
                 region, geo_args = _geo_region, (self.geo_logit, logits, r, n_hat, d_hat, z_pos, m_s, eps, c_s, self.relative_frame)
-            if self.geo_checkpoint:
+            if self.geo_checkpoint and region is _geo_region:
                 bias, point_mix, pooled = checkpoint(region, *geo_args, use_reentrant=False)
             else:
                 bias, point_mix, pooled = region(*geo_args)
@@ -328,10 +346,12 @@ class _ReadBlock(nn.Module):
     # pipes collapse training -- measured twice now, v3a and v5a-v1)
 
     def __init__(self, hidden: int, n_slices: int, mlp_ratio: int = 4,
-                 geo_checkpoint: bool = False, relative_frame: bool = False) -> None:
+                 geo_checkpoint: bool = False, relative_frame: bool = False,
+                 geo_kernel: str = "eager") -> None:
         super().__init__()
         self.geo_checkpoint = bool(geo_checkpoint)
         self.relative_frame = bool(relative_frame)
+        self.geo_kernel = geo_kernel  # see _SliceBlock
         n_geo = self.N_GEO - (2 if self.relative_frame else 0)  # RELFRAME: see _SliceBlock
         self.norm = nn.LayerNorm(hidden)
         self.assign = nn.Linear(hidden, n_slices)
@@ -349,11 +369,12 @@ class _ReadBlock(nn.Module):
     def forward(self, q_h, q_r, q_n, q_d, z_states, z_pos, m_s, eps,
                 src_r=None, src_h=None, src_w=None, local_rho=None, kernel_logspace=False):
         logits_pre = self.assign(self.norm(q_h))
-        geo_args = (self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, None, self.relative_frame)
-        if self.geo_checkpoint:
-            _, mix, pooled = checkpoint(_geo_region, *geo_args, use_reentrant=False)
+        if self.geo_kernel == "fused":
+            _, mix, pooled = _fused_geo_region()(self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, self.relative_frame)
+        elif self.geo_checkpoint:
+            _, mix, pooled = checkpoint(_geo_region, self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, None, self.relative_frame, use_reentrant=False)
         else:
-            _, mix, pooled = _geo_region(*geo_args)
+            _, mix, pooled = _geo_region(self.geo_logit, logits_pre, q_r, q_n, q_d, z_pos, m_s, eps, None, self.relative_frame)
         back = torch.einsum("bqs,bsh->bqh", mix, z_states)
         geo_pool = self.geo_feat(pooled)  # pool-then-project (exact)
         q_h = q_h + self.broadcast(torch.cat([q_h, back, geo_pool], dim=-1))
@@ -464,9 +485,20 @@ class ISLA(Module):
         center_mode: str = "plain",
         frame_mode: str = "relative",
         scale_mode: str = "total_measure",
+        geo_kernel: str = "eager",
         eps: float = 1e-12,
     ) -> None:
         super().__init__(meta=self.MetaData())
+        ### KERNEL STUDY (2026-09-13): geo_kernel selects the implementation of the
+        ### per-layer geometry region, not its arithmetic. "eager" is the PyTorch
+        ### region (with geo_checkpoint deciding whether its (B,N,S,.) intermediates
+        ### are stored or rebuilt in backward); "fused" is the Triton kernel of
+        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
+        ### mix once per direction, with the recompute built in (CUDA only; the
+        ### sparse-routing and second-moment variants stay eager).
+        if geo_kernel not in ("eager", "fused"):
+            raise ValueError(f"geo_kernel must be 'eager' or 'fused', got {geo_kernel!r}")
+        self.geo_kernel = geo_kernel
         ### RELFRAME (2026-09-10, ruling: no sample statistic may enter the
         ### flagship's frame; 2026-09-11: frame_mode="relative" and
         ### scale_mode="total_measure" became the class defaults, the
@@ -614,7 +646,7 @@ class ISLA(Module):
                         geo_checkpoint=geo_checkpoint, second_moment=self.second_moment_features,
                         anchor_topk=self.anchor_topk,
                         fast_point_softmax=self.fast_point_softmax,
-                        relative_frame=self.relative_frame)
+                        relative_frame=self.relative_frame, geo_kernel=geo_kernel)
             for _ in range(n_layers)
         )
         if self.relative_frame:
@@ -632,7 +664,7 @@ class ISLA(Module):
             )
             self.read_blocks = nn.ModuleList(
                 _ReadBlock(hidden, n_slices, mlp_ratio, geo_checkpoint=geo_checkpoint,
-                           relative_frame=self.relative_frame)
+                           relative_frame=self.relative_frame, geo_kernel=geo_kernel)
                 for _ in range(n_decoder_layers)
             )
         self.norm_out = nn.LayerNorm(hidden)
