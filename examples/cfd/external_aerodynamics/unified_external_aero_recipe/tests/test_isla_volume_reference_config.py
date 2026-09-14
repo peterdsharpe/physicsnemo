@@ -26,9 +26,10 @@ def test_isla_volume_reference_composes_with_the_corrected_measure_dataset():
     assert m.frame_mode == "relative" and m.scale_mode == "total_measure"
     assert m.query_tokens is True and m.n_query_scalars == 1
     assert cfg.model.forward_kwargs.measure_weights == "boundaries.vehicle.cell_data.quadrature_measure"
-    targets = [t["_target_"] for t in ds.pipeline.transforms]
-    assert targets[-1].endswith("ComposeQuadratureMeasure"), targets
-    assert targets[-2].endswith("DropDegenerateCells")
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)  # ${dp:...} nodes kept as strings
+    targets = [t["_target_"] for t in raw]
+    assert "ComposeQuadratureMeasure" in targets[-1], targets
+    assert "DropDegenerateCells" in targets[-2], targets
     assert ds.pipeline.reader.boundary_subsample == "cells"
 
 
