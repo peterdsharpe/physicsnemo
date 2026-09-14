@@ -1,0 +1,554 @@
+{
+ "env": {
+  "gpu": "NVIDIA GB300",
+  "driver": "580.167.08",
+  "torch": "2.12.0+cu130",
+  "cuda": "13.0",
+  "python": "3.13.14",
+  "hostname": "nvl72d136-T17",
+  "tf32_matmul": true,
+  "device_props": {
+   "multi_processor_count": 152,
+   "total_memory": 297020948480,
+   "major": 10,
+   "minor": 3
+  }
+ },
+ "option": "fused_geo_compile_model",
+ "description": "geo_kernel='fused' + torch.compile(model) (fused region is an opaque custom op inside the compiled graph)",
+ "model_kw": {
+  "out_scalars": 1,
+  "out_vectors": 1,
+  "hidden": 192,
+  "n_layers": 12,
+  "n_slices": 256,
+  "mlp_ratio": 4,
+  "frame_mode": "relative",
+  "scale_mode": "total_measure",
+  "geo_checkpoint": true,
+  "fast_point_softmax": true,
+  "geo_kernel": "fused"
+ },
+ "tokens": 40000,
+ "batch": 1,
+ "precision": "bf16_autocast",
+ "load": {
+  "time": "2026-09-13 12:35:57",
+  "n_gpus_visible_to_nvidia_smi": 4,
+  "gpu_util_pct": 0.0,
+  "gpu_mem_used_mib": 3139.0,
+  "gpu_mem_total_mib": 284208.0,
+  "sm_clock_mhz": 2070.0,
+  "mem_clock_mhz": 3996.0,
+  "gpu_temp_c": 28.0,
+  "power_w": 246.42,
+  "loadavg": [
+   14.69,
+   10.86,
+   7.86
+  ]
+ },
+ "timing": {
+  "step_ms": [
+   43.6829540412873,
+   44.790225801989436,
+   44.85464212484658,
+   44.13582105189562,
+   43.89220383018255,
+   43.784138979390264,
+   42.85968397744,
+   42.98666212707758,
+   43.396583991125226,
+   43.47268119454384
+  ],
+  "step_ms_median": 43.73354651033878,
+  "step_ms_min": 42.85968397744,
+  "resident_bytes": 211658752,
+  "peak_allocated_bytes": 4831728128,
+  "incremental_peak_bytes": 4620069376,
+  "reserved_bytes": 5349834752,
+  "peak_allocated_gib": 4.499897480010986,
+  "incremental_peak_gib": 4.302774906158447
+ },
+ "kernels_by_phase": {
+  "forward": {
+   "total_ms": 6.0098713333333444,
+   "n_distinct_kernels": 69,
+   "n_launches": 624.0,
+   "top_kernels": [
+    {
+     "kernel": "_geo_fwd_kernel",
+     "ms": 0.9646776666666665,
+     "pct": 16.051552739842318
+    },
+    {
+     "kernel": "void cutlass::Kernel2<cutlass_75_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_nn_align1>(cutlass_75_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_nn_align1::Params)",
+     "ms": 0.5241746666666667,
+     "pct": 8.721894988988655
+    },
+    {
+     "kernel": "triton_poi_fused_gelu_view_33",
+     "ms": 0.38911100000000004,
+     "pct": 6.474531290575594
+    },
+    {
+     "kernel": "nvjet_sm103_tst_192x96_64x5_1x4_h_bz_bias_TNT",
+     "ms": 0.362198,
+     "pct": 6.026718042882105
+    },
+    {
+     "kernel": "triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_view_19",
+     "ms": 0.3171753333333333,
+     "pct": 5.277572775545822
+    },
+    {
+     "kernel": "triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_view_14",
+     "ms": 0.289367,
+     "pct": 4.814861815677243
+    },
+    {
+     "kernel": "triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_view_12",
+     "ms": 0.27063733333333334,
+     "pct": 4.503213435406873
+    },
+    {
+     "kernel": "triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_view_18",
+     "ms": 0.26371500000000003,
+     "pct": 4.388030714356939
+    },
+    {
+     "kernel": "triton_poi_fused__softmax__to_copy_add_bmm_clamp_min_log_permute_transpose_unsqueeze_view_20",
+     "ms": 0.23291933333333334,
+     "pct": 3.875612644840864
+    },
+    {
+     "kernel": "nvjet_sm103_tst_128x160_64x8_2x1_2cta_v_bz_bias_TNT",
+     "ms": 0.2096336666666667,
+     "pct": 3.4881556532491427
+    },
+    {
+     "kernel": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplit",
+     "ms": 0.16566433333333336,
+     "pct": 2.756537106118851
+    },
+    {
+     "kernel": "nvjet_sm103_tst_32x64_64x16_1x2_2cta_h_bz_splitK_NTN",
+     "ms": 0.1570353333333333,
+     "pct": 2.6129566611908555
+    },
+    {
+     "kernel": "triton_poi_fused__softmax__to_copy_add_bmm_clamp_min_log_permute_transpose_unsqueeze_view_35",
+     "ms": 0.15048566666666666,
+     "pct": 2.503974849378357
+    },
+    {
+     "kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_bf16_128x128_64x3_tn_align2>(cutlass_80_tensorop_bf16_s16816gemm_bf16_128x128_64x3_tn_align2::Params)",
+     "ms": 0.14683833333333332,
+     "pct": 2.443285807449894
+    },
+    {
+     "kernel": "triton_per_fused__to_copy_add_bmm_cat_native_layer_norm_permute_view_34",
+     "ms": 0.1398093333333333,
+     "pct": 2.3263282286575806
+    },
+    {
+     "kernel": "triton_per_fused__to_copy_add_native_layer_norm_view_32",
+     "ms": 0.13315366666666664,
+     "pct": 2.215582651963593
+    },
+    {
+     "kernel": "triton_poi_fused__to_copy_25",
+     "ms": 0.11925366666666663,
+     "pct": 1.9842965024098644
+    },
+    {
+     "kernel": "nvjet_sm103_tst_128x192_64x7_2x2_2cta_h_bz_bias_TNT",
+     "ms": 0.10556933333333329,
+     "pct": 1.756598893354008
+    },
+    {
+     "kernel": "triton_poi_fused__to_copy_22",
+     "ms": 0.09425066666666662,
+     "pct": 1.568264301165845
+    },
+    {
+     "kernel": "nvjet_sm103_tst_192x96_64x5_1x4_h_bz_NNT",
+     "ms": 0.08991000000000002,
+     "pct": 1.4960386839119215
+    },
+    {
+     "kernel": "triton_poi_fused_bmm_cat_permute_view_29",
+     "ms": 0.06404266666666668,
+     "pct": 1.0656245885241895
+    },
+    {
+     "kernel": "triton_poi_fused__to_copy_8",
+     "ms": 0.06156833333333334,
+     "pct": 1.0244534353314478
+    },
+    {
+     "kernel": "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, float, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, ",
+     "ms": 0.05962700000000002,
+     "pct": 0.9921510244201552
+    },
+    {
+     "kernel": "void gemv2N_kernel<long, long, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, float, 128, 1, 2, 2, 1, false, cublasGemvParamsEx<int, cublasGemvTensorStridedBatched<__nv_bfloat16 const>, cublasGemvTensor",
+     "ms": 0.05518933333333334,
+     "pct": 0.9183113959067549
+    },
+    {
+     "kernel": "triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_view_13",
+     "ms": 0.05472000000000004,
+     "pct": 0.910502021840289
+    }
+   ]
+  },
+  "backward": {
+   "total_ms": 16.102093999999965,
+   "n_distinct_kernels": 89,
+   "n_launches": 989.0,
+   "top_kernels": [
+    {
+     "kernel": "_geo_bwd_kernel",
+     "ms": 8.298434666666667,
+     "pct": 51.53636953471197
+    },
+    {
+     "kernel": "void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float",
+     "ms": 0.929849,
+     "pct": 5.774708556539306
+    },
+    {
+     "kernel": "triton_poi_fused_gelu_gelu_backward_view_23",
+     "ms": 0.5342669999999999,
+     "pct": 3.3179970257284617
+    },
+    {
+     "kernel": "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()",
+     "ms": 0.5026483333333335,
+     "pct": 3.1216333312507962
+    },
+    {
+     "kernel": "void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16, false, float, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, ",
+     "ms": 0.38979399999999964,
+     "pct": 2.4207658954170834
+    },
+    {
+     "kernel": "void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_64x128_tn_align1>(cutlass_75_tensorop_bf16_s1688gemm_bf16_64x128_tn_align1::Params)",
+     "ms": 0.3467213333333334,
+     "pct": 2.1532685955834943
+    },
+    {
+     "kernel": "nvjet_sm103_tst_128x64_64x10_2x1_2cta_v_bz_splitK_NTT",
+     "ms": 0.27481900000000004,
+     "pct": 1.7067283298681564
+    },
+    {
+     "kernel": "triton_per_fused__to_copy_add_bmm_native_layer_norm_native_layer_norm_backward_permute_slice_squeeze_view_48",
+     "ms": 0.273016,
+     "pct": 1.6955310284488498
+    },
+    {
+     "kernel": "triton_red_fused_sum_view_22",
+     "ms": 0.2549453333333334,
+     "pct": 1.5833054591119264
+    },
+    {
+     "kernel": "nvjet_sm103_tst_96x64_64x13_1x2_2cta_h_bz_splitK_NTN",
+     "ms": 0.23637433333333324,
+     "pct": 1.4679726334558334
+    },
+    {
+     "kernel": "nvjet_sm103_tst_192x96_64x5_1x4_h_bz_NTT",
+     "ms": 0.23094533333333342,
+     "pct": 1.4342565217501146
+    },
+    {
+     "kernel": "nvjet_sm103_tst_192x96_64x5_1x4_h_bz_NNT",
+     "ms": 0.22535566666666668,
+     "pct": 1.3995426102137223
+    },
+    {
+     "kernel": "triton_poi_fused__softmax_backward_data__to_copy_add_bmm_permute_squeeze_transpose_view_51",
+     "ms": 0.22154766666666667,
+     "pct": 1.3758935121523148
+    },
+    {
+     "kernel": "triton_per_fused__to_copy_add_native_layer_norm_native_layer_norm_backward_view_26",
+     "ms": 0.21198099999999998,
+     "pct": 1.3164809496205923
+    },
+    {
+     "kernel": "nvjet_sm103_tst_32x64_64x16_1x2_2cta_h_bz_splitK_NTN",
+     "ms": 0.20655099999999998,
+     "pct": 1.2827586275424825
+    },
+    {
+     "kernel": "nvjet_sm103_tst_64x64_64x16_2x1_2cta_v_bz_splitK_NTT",
+     "ms": 0.20568699999999998,
+     "pct": 1.2773928657974574
+    },
+    {
+     "kernel": "nvjet_sm103_tst_128x160_64x8_2x1_2cta_v_bz_NNT",
+     "ms": 0.18970699999999996,
+     "pct": 1.178151115004051
+    },
+    {
+     "kernel": "nvjet_sm103_tst_32x64_64x16_1x2_2cta_h_bz_splitK_NNN",
+     "ms": 0.17298399999999994,
+     "pct": 1.0742950575248182
+    },
+    {
+     "kernel": "void at::native::reduce_kernel<256, 2, at::native::ReduceOp<float, at::native::func_wrapper_t<float, at::native::sum_functor<float, float, float>::operator()(at::TensorIterator&)::{lambda(float, float",
+     "ms": 0.17228833333333332,
+     "pct": 1.069974708465456
+    },
+    {
+     "kernel": "nvjet_sm103_tst_256x192_64x4_2x2_2cta_h_bz_NNT",
+     "ms": 0.14836466666666667,
+     "pct": 0.9213998295294201
+    },
+    {
+     "kernel": "triton_red_fused__softmax_backward_data__to_copy_bmm_permute_squeeze_transpose_view_14",
+     "ms": 0.128151,
+     "pct": 0.7958654321605642
+    },
+    {
+     "kernel": "nvjet_sm103_tst_176x128_64x8_1x2_2cta_h_bz_TNN",
+     "ms": 0.12402333333333337,
+     "pct": 0.7702310850584629
+    },
+    {
+     "kernel": "triton_red_fused__softmax_backward_data__to_copy_add_bmm_permute_squeeze_transpose_view_46",
+     "ms": 0.11849666666666665,
+     "pct": 0.7359084269826454
+    },
+    {
+     "kernel": "triton_red_fused_gelu_gelu_backward_sum_view_27",
+     "ms": 0.10245333333333334,
+     "pct": 0.6362733526045343
+    },
+    {
+     "kernel": "triton_poi_fused__softmax_backward_data__to_copy_bmm_expand_isla_geo_region_bwd_mm_permute_squeeze_transpose_view_35",
+     "ms": 0.09289666666666667,
+     "pct": 0.5769228937967128
+    }
+   ]
+  },
+  "optimizer": {
+   "total_ms": 0.18931333333333333,
+   "n_distinct_kernels": 7,
+   "n_launches": 8.0,
+   "top_kernels": [
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<1>, at::native::(anonymous namespace)::BinaryOpScalarFunctor<float, 1, 1, 0>, st",
+     "ms": 0.041973333333333335,
+     "pct": 22.171356129168576
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarListMetadata<float, 3>, at::native::(anonymous namespace)::PointwiseOpScalarListFun",
+     "ms": 0.03384566666666667,
+     "pct": 17.878120928267073
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::TernaryOpScalarFunctor<float, 2, 2, 0>, a",
+     "ms": 0.02911,
+     "pct": 15.376624291298377
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<float, 2, 1, 1>, at::nativ",
+     "ms": 0.024042666666666664,
+     "pct": 12.699933091523752
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<3>, at::native::(anonymous namespace)::PointwiseOpScalarFunctor<float, 3, 3, 0>,",
+     "ms": 0.02386133333333333,
+     "pct": 12.604148325527342
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListScalarListMetadata<float, 1>, at::native::(anonymous namespace)::BinaryOpScalarListFuncto",
+     "ms": 0.01904,
+     "pct": 10.057400429622849
+    },
+    {
+     "kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<1>, at::native::(anonymous namespace)::BinaryOpScalarFunctor<float, 1, 1, 0>, st",
+     "ms": 0.017440333333333335,
+     "pct": 9.212416804592035
+    }
+   ]
+  }
+ },
+ "cuda_ms_by_kernel_kind": {
+  "other": 43.539779333333485,
+  "optimizer": 3.066600999999976,
+  "inductor_poi": 2.816124666666515,
+  "inductor_red": 2.1639103333332335,
+  "gemm": 1.797887333333344,
+  "reduce": 1.1731456666667741,
+  "inductor_per": 1.0382486666666697,
+  "elementwise_copy": 0.5096993333333303
+ },
+ "total_cuda_ms_per_step": 56.105396333333324,
+ "top_ops_by_device_memory_allocated": [
+  {
+   "op": "## Call CompiledFxGraph fjnzgouzntnz4kb7fafgvczw5aby5aywkg7xfsi2b2nf7bxglmiv ##",
+   "gib_per_step": 3.595085620880127,
+   "calls_per_step": 1.0
+  },
+  {
+   "op": "aten::empty",
+   "gib_per_step": 1.6476483345031738,
+   "calls_per_step": 136.0
+  },
+  {
+   "op": "aten::empty_strided",
+   "gib_per_step": 0.2644166946411133,
+   "calls_per_step": 287.0
+  },
+  {
+   "op": "aten::sum",
+   "gib_per_step": 0.00012874603271484375,
+   "calls_per_step": 99.0
+  }
+ ],
+ "memory_at_peak": {
+  "peak_live_bytes": 4621931660,
+  "peak_live_gib": 4.3045092932879925,
+  "n_live_blocks": 431,
+  "buckets": [
+   {
+    "site": "model.py:335 forward",
+    "bytes": 1854117888,
+    "gib": 1.7267818450927734,
+    "pct": 40.11564913532278,
+    "n_blocks": 96
+   },
+   {
+    "site": "model.py:327 forward",
+    "bytes": 738459648,
+    "gib": 0.687744140625,
+    "pct": 15.977294826553104,
+    "n_blocks": 36
+   },
+   {
+    "site": "model.py:294 forward",
+    "bytes": 697041536,
+    "gib": 0.6491705179214478,
+    "pct": 15.081173571484612,
+    "n_blocks": 26
+   },
+   {
+    "site": "model.py:334 forward",
+    "bytes": 651171840,
+    "gib": 0.6064510345458984,
+    "pct": 14.088737954208522,
+    "n_blocks": 60
+   },
+   {
+    "site": "model.py:322 forward",
+    "bytes": 251520000,
+    "gib": 0.23424625396728516,
+    "pct": 5.441880549138193,
+    "n_blocks": 24
+   },
+   {
+    "site": "model.py:329 forward",
+    "bytes": 184320000,
+    "gib": 0.171661376953125,
+    "pct": 3.987942997841729,
+    "n_blocks": 12
+   },
+   {
+    "site": "model.py:1467 forward",
+    "bytes": 61441024,
+    "gib": 0.057221412658691406,
+    "pct": 1.3293364878527867,
+    "n_blocks": 3
+   },
+   {
+    "site": "model.py:1465 forward",
+    "bytes": 61440000,
+    "gib": 0.057220458984375,
+    "pct": 1.3293143326139096,
+    "n_blocks": 2
+   },
+   {
+    "site": "model.py:1469 forward",
+    "bytes": 46240000,
+    "gib": 0.04306435585021973,
+    "pct": 1.0004475055349478,
+    "n_blocks": 3
+   },
+   {
+    "site": "model.py:1148 forward",
+    "bytes": 30873728,
+    "gib": 0.02875339984893799,
+    "pct": 0.6679832215433492,
+    "n_blocks": 4
+   },
+   {
+    "site": "model.py:290 forward",
+    "bytes": 21659648,
+    "gib": 0.020172119140625,
+    "pct": 0.468627612724157,
+    "n_blocks": 13
+   },
+   {
+    "site": "model.py:328 forward",
+    "bytes": 18891264,
+    "gib": 0.017593860626220703,
+    "pct": 0.4087309244204619,
+    "n_blocks": 83
+   },
+   {
+    "site": "model.py:1489 forward",
+    "bytes": 4560000,
+    "gib": 0.004246830940246582,
+    "pct": 0.09866004812368862,
+    "n_blocks": 4
+   },
+   {
+    "site": "model.py:1464 forward",
+    "bytes": 98304,
+    "gib": 9.1552734375e-05,
+    "pct": 0.0021269029321822554,
+    "n_blocks": 1
+   },
+   {
+    "site": "model.py:296 forward",
+    "bytes": 36864,
+    "gib": 3.4332275390625e-05,
+    "pct": 0.0007975885995683458,
+    "n_blocks": 12
+   },
+   {
+    "site": "model.py:1051 forward",
+    "bytes": 27648,
+    "gib": 2.574920654296875e-05,
+    "pct": 0.0005981914496762594,
+    "n_blocks": 27
+   },
+   {
+    "site": "model.py:295 forward",
+    "bytes": 18432,
+    "gib": 1.71661376953125e-05,
+    "pct": 0.0003987942997841729,
+    "n_blocks": 12
+   },
+   {
+    "site": "model.py:331 forward",
+    "bytes": 13824,
+    "gib": 1.2874603271484375e-05,
+    "pct": 0.0002990957248381297,
+    "n_blocks": 12
+   },
+   {
+    "site": "model.py:1080 forward",
+    "bytes": 12,
+    "gib": 1.1175870895385742e-08,
+    "pct": 2.596317055886542e-07,
+    "n_blocks": 1
+   }
+  ]
+ }
+}

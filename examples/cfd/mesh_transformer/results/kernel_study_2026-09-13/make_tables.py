@@ -126,10 +126,14 @@ def roofline_section(r):
 def profile_section(name, d):
     if d is None:
         return f"## Profile {name}\n\n(missing)\n"
+    kern = sum(t["total_ms"] for t in d["kernels_by_phase"].values())
+    launches = sum(t["n_launches"] for t in d["kernels_by_phase"].values())
     lines = [f"## Profile: {d['option']} ({d['tokens']:,} tokens, batch {d['batch']}, {d['precision']})", "",
-             f"Artifact: `{name}`. {env_line(d['env'], d['load'])}. Step {d['timing']['step_ms_median']:.1f} ms, "
-             f"peak {d['timing']['peak_allocated_gib']:.2f} GiB; CUDA kernel time {d['total_cuda_ms_per_step']:.1f} ms per step.", "",
-             "CUDA ms per step by kernel kind: " + ", ".join(f"{k} {v:.1f}" for k, v in d["cuda_ms_by_kernel_kind"].items()), ""]
+             f"Artifact: `{name}`. {env_line(d['env'], d['load'])}. Step {d['timing']['step_ms_median']:.1f} ms wall, "
+             f"peak {d['timing']['peak_allocated_gib']:.2f} GiB; GPU kernel time {kern:.1f} ms per step over {launches:.0f} kernel launches "
+             f"(from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).", "",
+             "Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): "
+             + ", ".join(f"{k} {v:.1f}" for k, v in d["cuda_ms_by_kernel_kind"].items()), ""]
     for ph in ("forward", "backward", "optimizer"):
         t = d["kernels_by_phase"].get(ph)
         if not t:

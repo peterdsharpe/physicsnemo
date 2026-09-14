@@ -1,0 +1,458 @@
+{
+ "env": {
+  "gpu": "NVIDIA GB300",
+  "driver": "580.167.08",
+  "torch": "2.12.0+cu130",
+  "cuda": "13.0",
+  "python": "3.13.14",
+  "hostname": "nvl72d199-T08",
+  "tf32_matmul": false,
+  "device_props": {
+   "multi_processor_count": 152,
+   "total_memory": 297020948480,
+   "major": 10,
+   "minor": 3
+  }
+ },
+ "gt_kw": {
+  "out_dim": 4,
+  "functional_dim": 6,
+  "geometry_dim": 3,
+  "global_dim": 3,
+  "n_layers": 12,
+  "dropout": 0.0,
+  "n_head": 8,
+  "act": "gelu",
+  "mlp_ratio": 4,
+  "slice_num": 256,
+  "use_te": false,
+  "plus": false,
+  "include_local_features": false,
+  "radii": [
+   0.1,
+   0.5,
+   2.0
+  ],
+  "neighbors_in_radius": [
+   16,
+   32,
+   64
+  ],
+  "n_hidden_local": 32,
+  "state_mixing_mode": "weighted",
+  "n_hidden": 256
+ },
+ "reference": {
+  "out_scalars": 1,
+  "out_vectors": 1,
+  "hidden": 192,
+  "n_layers": 12,
+  "n_slices": 256,
+  "mlp_ratio": 4,
+  "frame_mode": "relative",
+  "scale_mode": "total_measure",
+  "geo_checkpoint": true,
+  "fast_point_softmax": true
+ },
+ "options": {
+  "eager_ckpt": "reference: eager, geo_checkpoint=True (isla_surface_reference.yaml)",
+  "eager_nockpt": "eager, geo_checkpoint=False (store the (B,N,S,.) geometry instead of recomputing it)",
+  "eager_ckpt_slow_softmax": "eager, geo_checkpoint=True, fast_point_softmax=False: the pre-2026-09-10 middle-dimension point softmax, the configuration behind the book's GB300 '3.7x' matched-memory number",
+  "compile_model_ckpt": "torch.compile(model) (the recipe's compile: true path), geo_checkpoint=True",
+  "compile_model_nockpt": "torch.compile(model), geo_checkpoint=False (Inductor's own min-cut recompute decides what is saved)",
+  "compile_blocks_ckpt": "torch.compile on each _SliceBlock.forward only (embed/head eager), geo_checkpoint=True",
+  "compile_model_dynamic": "torch.compile(model, dynamic=True): one kernel set for every token count",
+  "compile_model_maxautotune": "torch.compile(model, mode='max-autotune-no-cudagraphs'), geo_checkpoint=False",
+  "compile_model_cudagraphs": "torch.compile(model, mode='reduce-overhead') (CUDA graphs), geo_checkpoint=False",
+  "fused_geo_eager": "geo_kernel='fused' (Triton fused geometry region, recompute built in), rest eager",
+  "fused_geo_compile_model": "geo_kernel='fused' + torch.compile(model) (fused region is an opaque custom op inside the compiled graph)"
+ },
+ "runs": [
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:31",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.5,
+     7.43,
+     7.14
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_ckpt_slow_softmax"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:32",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.5,
+     7.43,
+     7.14
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_ckpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:33",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.5,
+     7.43,
+     7.14
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_nockpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:33",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.5,
+     7.43,
+     7.14
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "compile_model_ckpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:34",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.5,
+     7.43,
+     7.14
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "compile_model_nockpt"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:35",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.14,
+     7.35,
+     7.12
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "fused_geo_eager"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:36",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.14,
+     7.35,
+     7.12
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "fused_geo_compile_model"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:36",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.14,
+     7.35,
+     7.12
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    61.882941001385916,
+    62.079966002784204,
+    62.3617910023313,
+    60.70290500065312,
+    60.607097002503,
+    61.35356400045566,
+    59.62203699891688,
+    62.11814299604157,
+    62.53110299439868,
+    62.56767999730073
+   ],
+   "step_ms_median": 61.98145350208506,
+   "step_ms_min": 59.62203699891688,
+   "resident_bytes": 212395520,
+   "peak_allocated_bytes": 4372567552,
+   "incremental_peak_bytes": 4160172032,
+   "reserved_bytes": 4913627136,
+   "peak_allocated_gib": 4.07227087020874,
+   "incremental_peak_gib": 3.874462127685547,
+   "status": "ok",
+   "option": "geotransolver_eager"
+  },
+  {
+   "tokens": 10000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:35:55",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     6.17,
+     7.12,
+     7.05
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    40.283728994836565,
+    41.119923000223935,
+    40.78753800422419,
+    40.33297600108199,
+    40.43377600464737,
+    41.26081999856979,
+    40.86811500019394,
+    41.204147004464176,
+    40.49240099993767,
+    40.482096999767236
+   ],
+   "step_ms_median": 40.63996950208093,
+   "step_ms_min": 40.283728994836565,
+   "resident_bytes": 212395520,
+   "peak_allocated_bytes": 2891692032,
+   "incremental_peak_bytes": 2679296512,
+   "reserved_bytes": 3256877056,
+   "peak_allocated_gib": 2.6930980682373047,
+   "incremental_peak_gib": 2.4952893257141113,
+   "status": "ok",
+   "option": "geotransolver_compiled"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:33",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.9,
+     7.65,
+     7.23
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_ckpt_slow_softmax"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:34",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.51,
+     7.59,
+     7.21
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_ckpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:36",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.51,
+     7.59,
+     7.21
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "eager_nockpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:37",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.51,
+     7.59,
+     7.21
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "compile_model_ckpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:38",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.51,
+     7.59,
+     7.21
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "compile_model_nockpt"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:40",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.07,
+     7.52,
+     7.19
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "fused_geo_eager"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:41",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.07,
+     7.52,
+     7.19
+    ]
+   },
+   "status": "error",
+   "error": "Traceback (most recent call last):\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_common.py\", line 101, in run_config\n    model = build()\n  File \"/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-09-13-isla-kernel-study/study/bench_pareto.py\", line 60, in <lambda>\n    build = lambda opt=opt: apply_option(bc.make_model(**opt.get(\"model_kw\", {}))[0])  # noqa: E731\n                            ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: apply_option() missing 1 required positional argument: 'opt'\n",
+   "option": "fused_geo_compile_model"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:42",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     8.07,
+     7.52,
+     7.19
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    104.25227700034156,
+    104.08091700082878,
+    103.20481800590642,
+    103.47630700562149,
+    103.40667400305392,
+    103.80395600077463,
+    102.88785600278061,
+    101.89639699819963,
+    102.91716800566064,
+    102.26561499439413
+   ],
+   "step_ms_median": 103.30574600448017,
+   "step_ms_min": 101.89639699819963,
+   "resident_bytes": 213714944,
+   "peak_allocated_bytes": 16840868864,
+   "incremental_peak_bytes": 16627153920,
+   "reserved_bytes": 17595105280,
+   "peak_allocated_gib": 15.684281349182129,
+   "incremental_peak_gib": 15.485243797302246,
+   "status": "ok",
+   "option": "geotransolver_eager"
+  },
+  {
+   "tokens": 40000,
+   "batch": 1,
+   "precision": "bf16_autocast",
+   "load": {
+    "time": "2026-09-13 07:36:45",
+    "nvidia_smi_error": "ValueError('too many values to unpack (expected 7)')",
+    "loadavg": [
+     7.66,
+     7.44,
+     7.16
+    ]
+   },
+   "n_params": 9046016,
+   "step_ms": [
+    44.11305499525042,
+    43.7812770032906,
+    43.40524300641846,
+    43.32111500116298,
+    43.23705100250663,
+    43.83990200585686,
+    41.46123599639395,
+    42.945722001604736,
+    42.74325699952897,
+    43.02159499638947
+   ],
+   "step_ms_median": 43.279083001834806,
+   "step_ms_min": 41.46123599639395,
+   "resident_bytes": 213714944,
+   "peak_allocated_bytes": 10768295936,
+   "incremental_peak_bytes": 10554580992,
+   "reserved_bytes": 15405678592,
+   "peak_allocated_gib": 10.028757095336914,
+   "incremental_peak_gib": 9.829719543457031,
+   "status": "ok",
+   "option": "geotransolver_compiled"
+  }
+ ]
+}

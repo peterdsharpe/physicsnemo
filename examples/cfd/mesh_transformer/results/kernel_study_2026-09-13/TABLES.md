@@ -8,31 +8,181 @@ The book's cost section quotes 3.7x from `matched_memory_isla_gt_2026-09-08.json
 
 | configuration (ISLA vs GeoTransolver) | NVIDIA GeForce RTX 4090 Laptop GPU: ISLA / GT ms | ratio | NVIDIA GB300: ISLA / GT ms | ratio |
 |---|---|---|---|---|
-| eager, original (middle-dim) point softmax, geo_checkpoint on -- the book's configuration | 311.9 / 145.2 | 2.15x | 244.0 / 64.4 | 3.79x |
-| eager, fast point softmax, geo_checkpoint on (isla_surface_reference.yaml, run eager) | 154.1 / 145.2 | 1.06x | 87.1 / 64.4 | 1.35x |
-| eager, fast point softmax, geo_checkpoint off | 121.9 / 145.2 | 0.84x | 66.3 / 64.4 | 1.03x |
-| eager + fused Triton geometry region (geo_kernel='fused') | 95.8 / 145.2 | 0.66x | 62.2 / 64.4 | 0.96x |
-| torch.compile(model) both (the recipe's compile: true), geo_checkpoint on | 60.7 / 72.0 | 0.84x | 45.1 / 40.2 | 1.12x |
-| torch.compile(model) both, geo_checkpoint off | 54.6 / 72.0 | 0.76x | 38.4 / 40.2 | 0.95x |
-| torch.compile(model) both + fused geometry region | 50.8 / 72.0 | 0.71x | 40.1 / 40.2 | 1.00x |
+| eager, original (middle-dim) point softmax, geo_checkpoint on -- the book's configuration | 311.9 / 145.2 | 2.15x | 244.7 / 67.8 | 3.61x |
+| eager, fast point softmax, geo_checkpoint on (isla_surface_reference.yaml, run eager) | 154.1 / 145.2 | 1.06x | 86.7 / 67.8 | 1.28x |
+| eager, fast point softmax, geo_checkpoint off | 121.9 / 145.2 | 0.84x | 67.0 / 67.8 | 0.99x |
+| eager + fused Triton geometry region (geo_kernel='fused') | 95.8 / 145.2 | 0.66x | 69.3 / 67.8 | 1.02x |
+| torch.compile(model) both (the recipe's compile: true), geo_checkpoint on | 60.7 / 72.0 | 0.84x | 47.3 / 45.2 | 1.05x |
+| torch.compile(model) both, geo_checkpoint off | 54.6 / 72.0 | 0.76x | 39.0 / 45.2 | 0.86x |
+| torch.compile(model) both + fused geometry region | 50.8 / 72.0 | 0.71x | 45.3 / 45.2 | 1.00x |
 
 GB300 at 40,000 tokens, batch 1, bf16 (same artifact):
 
 | option | step ms | peak GiB |
 |---|---|---|
-| eager_ckpt_slow_softmax | 1282.0 | 5.50 |
-| eager_ckpt | 134.6 | 5.50 |
-| eager_nockpt | 105.0 | 12.02 |
-| compile_model_ckpt | 115.6 | 4.74 |
-| compile_model_nockpt | 102.8 | 7.13 |
-| fused_geo_eager | 61.1 | 5.11 |
-| fused_geo_compile_model | 43.4 | 4.50 |
-| geotransolver_eager | 103.7 | 15.69 |
-| geotransolver_compiled | 45.4 | 10.03 |
+| eager_ckpt | 135.4 | 5.50 |
+| eager_ckpt_slow_softmax | 1284.2 | 5.50 |
+| eager_nockpt | 105.5 | 12.02 |
+| compile_model_ckpt | 118.7 | 4.74 |
+| compile_model_nockpt | 108.1 | 7.13 |
+| compile_blocks_ckpt | 115.7 | 4.35 |
+| compile_model_dynamic | 107.1 | 7.14 |
+| compile_model_maxautotune | 41.2 | 7.15 |
+| compile_model_cudagraphs | 98.6 | 0.14 |
+| fused_geo_eager | 71.4 | 5.11 |
+| fused_geo_compile_model | 52.1 | 4.50 |
+| geotransolver_eager | 108.3 | 15.69 |
+| geotransolver_compiled | 52.8 | 10.03 |
 
-## Roofline
+## Roofline of the reference configuration (`roofline_gb300.json`)
 
-(artifact roofline.json missing)
+Artifact: `roofline.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 3.0 MiB used before the run, loadavg [4.36, 5.09, 5.41].
+
+Measured peaks on this GPU: bf16 GEMM 1924.9 TFLOP/s, fp32 GEMM 68.5 TFLOP/s (TF32 997.9), streaming bandwidth 7135 GB/s (1 GiB fp32 add).
+
+### N10000 B1 bf16 -- measured eager step 91.1 ms (33.8 ms of CUDA kernels), peak 1.52 GiB
+
+Totals: 404 GFLOP per step; eager traffic 62 GB -> roofline 8.8 ms; fused traffic 15 GB -> roofline 2.1 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 4.9 | 38.15 | 3.32 | memory | 5.35 | 0.47 | 15.52 | 34 | 0.0 |
+| geo_linear | 2.0 | 6.14 | 1.72 | memory | 0.86 | 0.24 | 3.94 | 22 | 0.0 |
+| point_softmax | 0.9 | 4.42 | 1.47 | memory | 0.62 | 0.21 | 1.00 | 62 | 0.0 |
+| layernorm_gelu | 2.9 | 2.76 | 2.21 | memory | 0.39 | 0.31 | 2.22 | 17 | 0.1 |
+| slice_softmax | 0.7 | 2.46 | 0.98 | memory | 0.34 | 0.14 | 0.83 | 41 | 0.0 |
+| geo_pool | 1.5 | 2.46 | 1.72 | memory | 0.34 | 0.24 | 1.60 | 21 | 0.0 |
+| mlp | 278.7 | 1.73 | 1.73 | memory | 0.24 | 0.24 | 1.36 | 18 | 10.7 |
+| slice_states_readback | 76.2 | 1.66 | 0.92 | memory | 0.23 | 0.13 | 0.09 | 254 | 43.2 |
+| assign | 35.4 | 1.52 | 0.65 | memory | 0.21 | 0.09 | - | - | - |
+| anchors | 1.1 | 0.92 | 0.18 | memory | 0.13 | 0.03 | 0.15 | 85 | 0.4 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.0 |
+
+### N10000 B1 fp32 -- measured eager step 105.4 ms (30.3 ms of CUDA kernels), peak 2.09 GiB
+
+Totals: 404 GFLOP per step; eager traffic 72 GB -> roofline 14.7 ms; fused traffic 23 GB -> roofline 8.0 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 4.9 | 38.15 | 3.32 | memory | 5.35 | 0.47 | 13.83 | 39 | 0.5 |
+| geo_linear | 2.0 | 9.34 | 3.44 | memory | 1.31 | 0.48 | 3.65 | 36 | 0.8 |
+| point_softmax | 0.9 | 4.42 | 1.47 | memory | 0.62 | 0.21 | 0.92 | 67 | 1.5 |
+| geo_pool | 1.5 | 4.42 | 3.44 | memory | 0.62 | 0.48 | 1.34 | 46 | 1.6 |
+| layernorm_gelu | 2.9 | 3.87 | 3.32 | memory | 0.54 | 0.47 | 2.25 | 24 | 1.9 |
+| mlp | 278.7 | 3.46 | 3.46 | compute | 4.07 | 4.07 | 1.42 | 34 | 287.1 |
+| slice_states_readback | 76.2 | 2.58 | 1.84 | compute | 1.11 | 1.11 | 0.12 | 305 | 937.3 |
+| slice_softmax | 0.7 | 2.46 | 0.98 | memory | 0.34 | 0.14 | 0.87 | 40 | 1.2 |
+| assign | 35.4 | 1.84 | 0.65 | compute | 0.52 | 0.52 | - | - | - |
+| anchors | 1.1 | 1.47 | 0.37 | memory | 0.21 | 0.05 | 0.13 | 164 | 12.8 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.8 |
+
+### N10000 B2 bf16 -- measured eager step 111.7 ms (72.0 ms of CUDA kernels), peak 2.86 GiB
+
+Totals: 809 GFLOP per step; eager traffic 125 GB -> roofline 17.5 ms; fused traffic 30 GB -> roofline 4.2 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 9.8 | 76.31 | 6.64 | memory | 10.70 | 0.93 | 34.53 | 31 | 0.0 |
+| geo_linear | 4.1 | 12.29 | 3.44 | memory | 1.72 | 0.48 | 8.36 | 21 | 0.0 |
+| point_softmax | 1.8 | 8.85 | 2.95 | memory | 1.24 | 0.41 | 1.68 | 74 | 0.1 |
+| layernorm_gelu | 5.8 | 5.53 | 4.42 | memory | 0.78 | 0.62 | 4.03 | 19 | 0.1 |
+| slice_softmax | 1.5 | 4.92 | 1.97 | memory | 0.69 | 0.28 | 1.33 | 52 | 0.1 |
+| geo_pool | 2.9 | 4.92 | 3.44 | memory | 0.69 | 0.48 | 3.49 | 20 | 0.0 |
+| mlp | 557.4 | 3.46 | 3.46 | memory | 0.48 | 0.48 | 2.37 | 20 | 12.2 |
+| slice_states_readback | 152.4 | 3.32 | 1.84 | memory | 0.47 | 0.26 | - | - | - |
+| assign | 70.8 | 3.04 | 1.29 | memory | 0.43 | 0.18 | - | - | - |
+| anchors | 2.2 | 1.84 | 0.37 | memory | 0.26 | 0.05 | 0.05 | 504 | 2.2 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.0 |
+
+### N10000 B2 fp32 -- measured eager step 104.4 ms (63.7 ms of CUDA kernels), peak 4.01 GiB
+
+Totals: 809 GFLOP per step; eager traffic 144 GB -> roofline 29.4 ms; fused traffic 45 GB -> roofline 16.0 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 9.8 | 76.31 | 6.64 | memory | 10.70 | 0.93 | 30.92 | 35 | 0.5 |
+| geo_linear | 4.1 | 18.68 | 6.88 | memory | 2.62 | 0.96 | 7.37 | 36 | 0.8 |
+| point_softmax | 1.8 | 8.85 | 2.95 | memory | 1.24 | 0.41 | 1.54 | 80 | 1.7 |
+| geo_pool | 2.9 | 8.85 | 6.88 | memory | 1.24 | 0.96 | 2.78 | 45 | 1.6 |
+| layernorm_gelu | 5.8 | 7.74 | 6.64 | memory | 1.09 | 0.93 | 4.14 | 26 | 2.1 |
+| mlp | 557.4 | 6.91 | 6.91 | compute | 8.14 | 8.14 | 2.40 | 40 | 338.8 |
+| slice_states_readback | 152.4 | 5.16 | 3.69 | compute | 2.23 | 2.23 | - | - | - |
+| slice_softmax | 1.5 | 4.92 | 1.97 | memory | 0.69 | 0.28 | 1.45 | 48 | 1.5 |
+| assign | 70.8 | 3.69 | 1.29 | compute | 1.03 | 1.03 | - | - | - |
+| anchors | 2.2 | 2.95 | 0.74 | memory | 0.41 | 0.10 | 0.04 | 976 | 76.3 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.8 |
+
+### N40000 B1 bf16 -- measured eager step 135.3 ms (130.6 ms of CUDA kernels), peak 5.50 GiB
+
+Totals: 1601 GFLOP per step; eager traffic 249 GB -> roofline 34.9 ms; fused traffic 60 GB -> roofline 8.4 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 19.7 | 152.62 | 13.27 | memory | 21.39 | 1.86 | 71.23 | 30 | 0.0 |
+| geo_linear | 8.1 | 24.58 | 6.88 | memory | 3.44 | 0.96 | 17.35 | 20 | 0.0 |
+| point_softmax | 3.7 | 17.69 | 5.90 | memory | 2.48 | 0.83 | 3.54 | 70 | 0.1 |
+| layernorm_gelu | 11.6 | 11.06 | 8.85 | memory | 1.55 | 1.24 | 8.70 | 18 | 0.1 |
+| slice_softmax | 2.9 | 9.83 | 3.93 | memory | 1.38 | 0.55 | 2.50 | 55 | 0.1 |
+| geo_pool | 5.9 | 9.83 | 6.88 | memory | 1.38 | 0.96 | 7.18 | 19 | 0.0 |
+| mlp | 1114.8 | 6.91 | 6.91 | memory | 0.97 | 0.97 | 3.74 | 26 | 15.5 |
+| slice_states_readback | 288.6 | 6.64 | 3.69 | memory | 0.93 | 0.52 | 0.20 | 469 | 75.6 |
+| assign | 141.6 | 6.08 | 2.58 | memory | 0.85 | 0.36 | - | - | - |
+| anchors | 4.4 | 3.69 | 0.74 | memory | 0.52 | 0.10 | 0.28 | 187 | 0.8 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.0 |
+
+### N40000 B1 fp32 -- measured eager step 123.8 ms (118.7 ms of CUDA kernels), peak 7.78 GiB
+
+Totals: 1601 GFLOP per step; eager traffic 288 GB -> roofline 58.6 ms; fused traffic 89 GB -> roofline 31.8 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 19.7 | 152.62 | 13.27 | memory | 21.39 | 1.86 | 64.03 | 33 | 0.4 |
+| geo_linear | 8.1 | 37.36 | 13.76 | memory | 5.24 | 1.93 | 14.95 | 35 | 0.8 |
+| point_softmax | 3.7 | 17.69 | 5.90 | memory | 2.48 | 0.83 | 3.34 | 74 | 1.6 |
+| geo_pool | 5.9 | 17.69 | 13.76 | memory | 2.48 | 1.93 | 5.46 | 45 | 1.6 |
+| layernorm_gelu | 11.6 | 15.48 | 13.27 | memory | 2.17 | 1.86 | 8.93 | 24 | 1.9 |
+| mlp | 1114.8 | 13.82 | 13.82 | compute | 16.28 | 16.28 | 4.11 | 47 | 396.5 |
+| slice_states_readback | 288.6 | 10.32 | 7.37 | compute | 4.22 | 4.22 | 0.12 | 1204 | 3507.2 |
+| slice_softmax | 2.9 | 9.83 | 3.93 | memory | 1.38 | 0.55 | 2.92 | 47 | 1.5 |
+| assign | 141.6 | 7.37 | 2.58 | compute | 2.07 | 2.07 | - | - | - |
+| anchors | 4.4 | 5.90 | 1.47 | memory | 0.83 | 0.21 | 0.18 | 453 | 35.4 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.18 | 19 | 0.8 |
+
+### N40000 B2 bf16 -- measured eager step 276.2 ms (274.8 ms of CUDA kernels), peak 10.77 GiB
+
+Totals: 3203 GFLOP per step; eager traffic 498 GB -> roofline 69.8 ms; fused traffic 119 GB -> roofline 16.7 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 39.3 | 305.23 | 26.54 | memory | 42.78 | 3.72 | 142.07 | 30 | 0.0 |
+| geo_linear | 16.2 | 49.15 | 13.76 | memory | 6.89 | 1.93 | 36.02 | 19 | 0.0 |
+| point_softmax | 7.4 | 35.39 | 11.80 | memory | 4.96 | 1.65 | 7.67 | 65 | 0.0 |
+| layernorm_gelu | 23.2 | 22.12 | 17.69 | memory | 3.10 | 2.48 | 7.09 | 44 | 0.2 |
+| slice_softmax | 5.9 | 19.66 | 7.86 | memory | 2.76 | 1.10 | 5.27 | 52 | 0.1 |
+| geo_pool | 11.8 | 19.66 | 13.76 | memory | 2.76 | 1.93 | 14.26 | 19 | 0.0 |
+| mlp | 2229.5 | 13.82 | 13.82 | memory | 1.94 | 1.94 | 7.16 | 27 | 16.2 |
+| slice_states_readback | 577.1 | 13.27 | 7.37 | memory | 1.86 | 1.03 | - | - | - |
+| assign | 283.1 | 12.17 | 5.16 | memory | 1.71 | 0.72 | - | - | - |
+| anchors | 8.8 | 7.37 | 1.47 | memory | 1.03 | 0.21 | 0.19 | 530 | 2.4 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.0 |
+
+### N40000 B2 fp32 -- measured eager step 239.5 ms (238.3 ms of CUDA kernels), peak 15.31 GiB
+
+Totals: 3203 GFLOP per step; eager traffic 576 GB -> roofline 117.1 ms; fused traffic 179 GB -> roofline 63.5 ms.
+
+| stage | GFLOP | eager GB | fused GB | bound | roofline ms (eager) | roofline ms (fused) | achieved ms | % of BW peak (eager traffic) | % of FLOP peak |
+|---|---|---|---|---|---|---|---|---|---|
+| invariants | 39.3 | 305.23 | 26.54 | memory | 42.78 | 3.72 | 127.86 | 33 | 0.4 |
+| geo_linear | 16.2 | 74.71 | 27.53 | memory | 10.47 | 3.86 | 29.40 | 36 | 0.8 |
+| point_softmax | 7.4 | 35.39 | 11.80 | memory | 4.96 | 1.65 | 7.33 | 68 | 1.5 |
+| geo_pool | 11.8 | 35.39 | 27.53 | memory | 4.96 | 3.86 | 10.85 | 46 | 1.6 |
+| layernorm_gelu | 23.2 | 30.97 | 26.54 | memory | 4.34 | 3.72 | 7.38 | 59 | 4.6 |
+| mlp | 2229.5 | 27.65 | 27.65 | compute | 32.57 | 32.57 | 8.30 | 47 | 392.6 |
+| slice_states_readback | 577.1 | 20.64 | 14.75 | compute | 8.43 | 8.43 | - | - | - |
+| slice_softmax | 5.9 | 19.66 | 7.86 | memory | 2.76 | 1.10 | 6.06 | 45 | 1.4 |
+| assign | 283.1 | 14.75 | 5.16 | compute | 4.14 | 4.14 | - | - | - |
+| anchors | 8.8 | 11.80 | 2.95 | memory | 1.65 | 0.41 | 0.16 | 1041 | 81.3 |
+| optimizer | 0.1 | 0.24 | 0.24 | memory | 0.03 | 0.03 | 0.19 | 18 | 0.8 |
 
 ## Roofline of the reference configuration (`roofline.json`)
 
@@ -186,9 +336,82 @@ Totals: 3203 GFLOP per step; eager traffic 576 GB -> roofline 1178.3 ms; fused t
 
 ## Profile: compile_model_ckpt (10,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_compile_model_ckpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 26.0%, 1871.0 MiB used before the run, loadavg [9.1, 7.6, 7.83]. Step 80.7 ms, peak 1.25 GiB; CUDA kernel time 102.0 ms per step.
+Artifact: `profile_compile_model_ckpt_10000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 47.0%, 1251.0 MiB used before the run, loadavg [5.31, 5.22, 5.44]. Step 43.4 ms wall, peak 1.33 GiB; GPU kernel time 30.2 ms per step over 1851 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: other 46.7, inductor_red 18.3, inductor_poi 15.8, gemm 15.4, optimizer 4.3, inductor_per 1.4, elementwise_copy 0.2, reduce 0.0
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 30.7, inductor_red 20.1, inductor_poi 4.0, optimizer 2.9, gemm 1.9, inductor_per 0.6, elementwise_copy 0.1, reduce 0.0
+
+### forward: 4.5 ms, 707 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_poi_fused_bmm_cat_clamp_min_div_expand_linalg_vector_norm_log_mul_permute_sub_sum_u | 0.57 | 13 |
+| nvjet_sm103_tst_512x8_64x3_2x1_v_badd_TNT | 0.48 | 11 |
+| nvjet_sm103_tst_64x8_64x16_1x1_h_bz_NNT | 0.39 | 9 |
+| triton_poi_fused__to_copy_addmm_view_17 | 0.28 | 6 |
+| void cutlass::Kernel2<cutlass_75_tensorop_s1688gemm_bf16_64x64_nn_align1>(cutlass_75_tenso | 0.21 | 5 |
+| triton_poi_fused_bmm_permute_view_25 | 0.17 | 4 |
+| triton_red_fused__softmax__to_copy_add_bmm_clamp_min_log_permute_prepare_softmax_online_sq | 0.16 | 4 |
+| nvjet_sm103_tst_192x72_64x6_1x4_h_bz_bias_TNT | 0.15 | 3 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.12 | 3 |
+| triton_poi_fused_gelu_view_37 | 0.11 | 2 |
+
+### backward: 25.6 ms, 1136 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_red_fused__softmax__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_ | 17.81 | 70 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 0.68 | 3 |
+| triton_poi_fused__softmax__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_ | 0.64 | 3 |
+| triton_red_fused_add_bmm_div_eq_ge_masked_fill_mul_neg_permute_scalar_tensor_sub_sum_unsqu | 0.64 | 3 |
+| nvjet_sm103_tst_512x8_64x3_2x1_v_badd_TNT | 0.48 | 2 |
+| nvjet_sm103_tst_64x8_64x16_1x1_h_bz_NNT | 0.40 | 2 |
+| triton_poi_fused__softmax__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_ | 0.34 | 1 |
+| triton_poi_fused__to_copy_bmm_permute_view_32 | 0.33 | 1 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.22 | 1 |
+| void dot_kernel<float, 128, 0, cublasDotParams<cublasGemvTensorStridedBatched<__nv_bfloat1 | 0.22 | 1 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 23 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (1.16 GiB, 399 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 0.401 | 34 | 94 |
+| model.py:327 forward | 0.168 | 14 | 35 |
+| model.py:294 forward | 0.158 | 14 | 23 |
+| model.py:334 forward | 0.153 | 13 | 61 |
+| model.py:172 _geo_region | 0.095 | 8 | 3 |
+| model.py:137 _relational_invariants | 0.067 | 6 | 2 |
+| model.py:170 _geo_region | 0.048 | 4 | 6 |
+| model.py:329 forward | 0.039 | 3 | 11 |
+| model.py:328 forward | 0.018 | 2 | 83 |
+| model.py:1148 forward | 0.007 | 1 | 4 |
+| model.py:290 forward | 0.006 | 1 | 13 |
+| model.py:1466 forward | 0.004 | 0 | 1 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| ## Call CompiledFxGraph f3bqmngdqfvr75n5m4eoiisglszg5rj3ckr4m5pdygnpdi | 1.04 | 1 |
+| aten::empty | 0.11 | 28 |
+| aten::empty_strided | 0.03 | 275 |
+
+## Profile: compile_model_ckpt (10,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_compile_model_ckpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 26.0%, 1871.0 MiB used before the run, loadavg [9.1, 7.6, 7.83]. Step 80.7 ms wall, peak 1.25 GiB; GPU kernel time 52.1 ms per step over 1714 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 46.7, inductor_red 18.3, inductor_poi 15.8, gemm 15.4, optimizer 4.3, inductor_per 1.4, elementwise_copy 0.2, reduce 0.0
 
 ### forward: 5.0 ms, 162 kernel launches per step
 
@@ -259,9 +482,82 @@ CUDA ms per step by kernel kind: other 46.7, inductor_red 18.3, inductor_poi 15.
 
 ## Profile: compile_model_nockpt (10,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_compile_model_nockpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 10.0%, 1874.0 MiB used before the run, loadavg [8.85, 7.67, 7.85]. Step 75.4 ms, peak 1.89 GiB; CUDA kernel time 84.1 ms per step.
+Artifact: `profile_compile_model_nockpt_10000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 3017.0 MiB used before the run, loadavg [9.43, 6.75, 5.97]. Step 38.9 ms wall, peak 1.94 GiB; GPU kernel time 24.5 ms per step over 1752 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: other 38.7, inductor_red 17.2, gemm 11.7, inductor_poi 8.9, optimizer 6.2, inductor_per 1.2, elementwise_copy 0.1, reduce 0.0
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 34.8, inductor_red 16.6, optimizer 3.2, inductor_poi 2.6, gemm 1.9, inductor_per 0.6, elementwise_copy 0.1, reduce 0.0
+
+### forward: 4.3 ms, 718 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_poi_fused_bmm_clamp_min_div_expand_linalg_vector_norm_log_mul_permute_sum_unsqueeze | 0.50 | 12 |
+| nvjet_sm103_tst_512x8_64x3_2x1_v_badd_TNT | 0.48 | 11 |
+| nvjet_sm103_tst_64x8_64x16_1x1_h_bz_NNT | 0.41 | 10 |
+| void cutlass::Kernel2<cutlass_75_tensorop_s1688gemm_bf16_64x64_nn_align1>(cutlass_75_tenso | 0.21 | 5 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.20 | 5 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.18 | 4 |
+| triton_poi_fused__to_copy_addmm_bmm_permute_view_20 | 0.17 | 4 |
+| nvjet_sm103_tst_192x72_64x6_1x4_h_bz_bias_TNT | 0.15 | 3 |
+| triton_poi_fused__to_copy_17 | 0.13 | 3 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.12 | 3 |
+
+### backward: 20.0 ms, 1026 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 13.37 | 67 |
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 0.87 | 4 |
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_eq_expand_linalg_vector | 0.86 | 4 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 0.68 | 3 |
+| triton_poi_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 0.34 | 2 |
+| void dot_kernel<float, 128, 0, cublasDotParams<cublasGemvTensorStridedBatched<__nv_bfloat1 | 0.22 | 1 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.22 | 1 |
+| nvjet_sm103_tst_64x32_64x16_2x2_2cta_h_bz_splitK_NTT | 0.21 | 1 |
+| nvjet_sm103_tst_32x64_64x16_2x2_2cta_h_bz_splitK_NTN | 0.18 | 1 |
+| triton_poi_fused_gelu_gelu_backward_view_24 | 0.15 | 1 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 23 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (1.76 GiB, 452 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 0.437 | 25 | 96 |
+| model.py:170 _geo_region | 0.401 | 23 | 24 |
+| model.py:126 _relational_invariants | 0.315 | 18 | 11 |
+| model.py:294 forward | 0.163 | 9 | 25 |
+| model.py:334 forward | 0.153 | 9 | 60 |
+| model.py:327 forward | 0.120 | 7 | 25 |
+| model.py:172 _geo_region | 0.060 | 3 | 48 |
+| model.py:329 forward | 0.043 | 2 | 12 |
+| model.py:1467 forward | 0.029 | 2 | 4 |
+| model.py:328 forward | 0.018 | 1 | 72 |
+| model.py:1469 forward | 0.011 | 1 | 3 |
+| model.py:1148 forward | 0.007 | 0 | 4 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| ## Call CompiledFxGraph f573to5umzhr2aevdzut3hnh7cunqhqbnxzew7o5dkw64i | 1.77 | 1 |
+| aten::empty | 0.06 | 16 |
+| aten::empty_strided | 0.03 | 275 |
+
+## Profile: compile_model_nockpt (10,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_compile_model_nockpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 10.0%, 1874.0 MiB used before the run, loadavg [8.85, 7.67, 7.85]. Step 75.4 ms wall, peak 1.89 GiB; GPU kernel time 40.1 ms per step over 1663 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 38.7, inductor_red 17.2, gemm 11.7, inductor_poi 8.9, optimizer 6.2, inductor_per 1.2, elementwise_copy 0.1, reduce 0.0
 
 ### forward: 4.0 ms, 162 kernel launches per step
 
@@ -330,11 +626,165 @@ CUDA ms per step by kernel kind: other 38.7, inductor_red 17.2, gemm 11.7, induc
 | aten::empty | 0.06 | 16 |
 | aten::empty_strided | 0.03 | 275 |
 
+## Profile: compile_model_nockpt (40,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_compile_model_nockpt_40000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 1323.0 MiB used before the run, loadavg [11.4, 9.49, 7.22]. Step 105.2 ms wall, peak 7.13 GiB; GPU kernel time 95.0 ms per step over 1751 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): inductor_red 72.3, other 28.6, inductor_poi 8.3, gemm 5.3, inductor_per 1.4, reduce 0.6, optimizer 0.4, elementwise_copy 0.2
+
+### forward: 12.3 ms, 718 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_poi_fused_bmm_clamp_min_div_expand_linalg_vector_norm_log_mul_permute_sum_unsqueeze | 1.90 | 15 |
+| nvjet_sm103_tst_512x8_64x3_2x1_v_badd_TNT | 1.81 | 15 |
+| nvjet_sm103_tst_64x8_64x16_1x1_h_bz_NNT | 1.50 | 12 |
+| triton_poi_fused__to_copy_addmm_bmm_permute_view_20 | 0.77 | 6 |
+| triton_poi_fused__to_copy_17 | 0.66 | 5 |
+| void cutlass::Kernel2<cutlass_75_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_nn_align1> | 0.52 | 4 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.52 | 4 |
+| triton_poi_fused_gelu_view_36 | 0.39 | 3 |
+| nvjet_sm103_tst_192x96_64x5_1x4_h_bz_bias_TNT | 0.36 | 3 |
+| triton_per_fused__softmax__to_copy_add_clamp_min_log_prepare_softmax_online_transpose_unsq | 0.30 | 2 |
+
+### backward: 82.4 ms, 1025 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 56.24 | 68 |
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_eq_expand_linalg_vector | 7.51 | 9 |
+| triton_red_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 6.20 | 8 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 2.61 | 3 |
+| triton_poi_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_expand_linalg_vector_no | 1.29 | 2 |
+| std::enable_if<!(false), void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, floa | 0.84 | 1 |
+| triton_poi_fused__to_copy__unsafe_view_add_bmm_clamp_min_clone_div_ge_linalg_vector_norm_m | 0.63 | 1 |
+| triton_poi_fused_gelu_gelu_backward_view_24 | 0.53 | 1 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrappe | 0.44 | 1 |
+| triton_red_fused__softmax__softmax_backward_data__to_copy_add_bmm_clone_permute_squeeze_tr | 0.43 | 1 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 22 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (6.96 GiB, 452 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 1.727 | 25 | 96 |
+| model.py:170 _geo_region | 1.373 | 20 | 12 |
+| model.py:126 _relational_invariants | 1.259 | 18 | 11 |
+| model.py:327 forward | 0.917 | 13 | 48 |
+| model.py:294 forward | 0.649 | 9 | 25 |
+| model.py:334 forward | 0.606 | 9 | 60 |
+| model.py:329 forward | 0.172 | 2 | 12 |
+| model.py:1467 forward | 0.057 | 1 | 3 |
+| model.py:1465 forward | 0.057 | 1 | 2 |
+| model.py:1469 forward | 0.043 | 1 | 3 |
+| model.py:1148 forward | 0.029 | 0 | 4 |
+| model.py:1051 forward | 0.023 | 0 | 52 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| ## Call CompiledFxGraph fvkoqlx2kpx5rvtofuakrjqasgkqgobyqgrf5lo3v4ubsi | 6.94 | 1 |
+| aten::empty | 0.23 | 16 |
+| aten::empty_strided | 0.03 | 275 |
+| aten::sum | 0.00 | 63 |
+
 ## Profile: eager_ckpt (10,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_eager_ckpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 23.0%, 1742.0 MiB used before the run, loadavg [7.25, 7.15, 7.7]. Step 161.2 ms, peak 1.48 GiB; CUDA kernel time 209.2 ms per step.
+Artifact: `profile_eager_ckpt_10000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 3.0 MiB used before the run, loadavg [4.36, 5.09, 5.41]. Step 90.0 ms wall, peak 1.52 GiB; GPU kernel time 33.9 ms per step over 3224 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: elementwise_copy 95.6, other 75.3, gemm 18.8, reduce 11.6, optimizer 4.3, layernorm 2.5, softmax 1.1
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 66.1, elementwise_copy 16.2, gemm 7.6, reduce 5.9, optimizer 3.3, layernorm 1.9, softmax 0.5
+
+### forward: 10.5 ms, 1087 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrappe | 1.38 | 13 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 1.31 | 12 |
+| void at::native::vectorized_elementwise_kernel<8, at::native::bfloat16_copy_kernel_cuda(at | 1.00 | 9 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 0.94 | 9 |
+| void at::native::(anonymous namespace)::CatArrayBatchedCopy_alignedK_contig<at::native::(a | 0.94 | 9 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 0.88 | 8 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFu | 0.61 | 6 |
+| void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<float, float, false>( | 0.42 | 4 |
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::NormTwoOps< | 0.36 | 3 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 0.30 | 3 |
+
+### backward: 23.2 ms, 2129 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 2.55 | 11 |
+| void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::Tenso | 2.12 | 9 |
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrappe | 1.78 | 8 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 1.53 | 7 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 1.31 | 6 |
+| void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_32x1_nt_align2> | 1.18 | 5 |
+| void at::native::(anonymous namespace)::GammaBetaBackwardCUDAKernelTemplate<float, float,  | 1.17 | 5 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::fun | 1.13 | 5 |
+| void at::native::(anonymous namespace)::CatArrayBatchedCopy_alignedK_contig<at::native::(a | 0.94 | 4 |
+| void gemmk1_kernel<int, float, 256, 5, false, false, false, false, cublasGemvTensorStrided | 0.93 | 4 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 24 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (1.35 GiB, 489 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 0.475 | 35 | 98 |
+| model.py:95 _softmax_over_points | 0.219 | 16 | 23 |
+| model.py:290 forward | 0.188 | 14 | 72 |
+| unknown | 0.183 | 14 | 35 |
+| model.py:334 forward | 0.100 | 7 | 22 |
+| model.py:327 forward | 0.052 | 4 | 11 |
+| model.py:329 forward | 0.052 | 4 | 11 |
+| model.py:126 _relational_invariants | 0.029 | 2 | 1 |
+| model.py:127 _relational_invariants | 0.019 | 1 | 2 |
+| model.py:328 forward | 0.018 | 1 | 99 |
+| model.py:1148 forward | 0.011 | 1 | 5 |
+| model.py:172 _geo_region | 0.001 | 0 | 11 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| aten::mul | 5.58 | 257 |
+| aten::empty_strided | 4.80 | 1187 |
+| aten::div | 2.20 | 153 |
+| aten::cat | 1.48 | 38 |
+| aten::sum | 1.04 | 264 |
+| aten::mm | 0.76 | 201 |
+| aten::bmm | 0.75 | 176 |
+| aten::sub | 0.70 | 28 |
+| aten::neg | 0.70 | 42 |
+| aten::add | 0.68 | 138 |
+
+## Profile: eager_ckpt (10,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_eager_ckpt_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 23.0%, 1742.0 MiB used before the run, loadavg [7.25, 7.15, 7.7]. Step 161.2 ms wall, peak 1.48 GiB; GPU kernel time 130.5 ms per step over 3224 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): elementwise_copy 95.6, other 75.3, gemm 18.8, reduce 11.6, optimizer 4.3, layernorm 2.5, softmax 1.1
 
 ### forward: 36.6 ms, 1036 kernel launches per step
 
@@ -412,9 +862,89 @@ CUDA ms per step by kernel kind: elementwise_copy 95.6, other 75.3, gemm 18.8, r
 
 ## Profile: eager_ckpt (40,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_eager_ckpt_40k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 15.0%, 2012.0 MiB used before the run, loadavg [5.12, 6.75, 7.5]. Step 721.8 ms, peak 5.45 GiB; CUDA kernel time 933.3 ms per step.
+Artifact: `profile_eager_ckpt_40000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 1321.0 MiB used before the run, loadavg [12.78, 9.45, 7.12]. Step 135.4 ms wall, peak 5.50 GiB; GPU kernel time 130.6 ms per step over 3308 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: elementwise_copy 535.1, other 216.0, gemm 88.2, reduce 64.9, softmax 14.9, layernorm 12.2, optimizer 1.9
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): elementwise_copy 65.5, other 60.6, gemm 31.2, reduce 21.0, layernorm 7.7, optimizer 3.1, softmax 1.9
+
+### forward: 42.5 ms, 1087 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::CatArrayBatchedCopy_alignedK_contig<at::native::(a | 8.10 | 19 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 6.15 | 14 |
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrappe | 5.66 | 13 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 4.61 | 11 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 3.73 | 9 |
+| void at::native::vectorized_elementwise_kernel<8, at::native::bfloat16_copy_kernel_cuda(at | 2.30 | 5 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFu | 2.08 | 5 |
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::NormTwoOps< | 1.46 | 3 |
+| void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<float, float, false>( | 1.39 | 3 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 1.08 | 3 |
+
+### backward: 87.9 ms, 2213 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 10.19 | 12 |
+| void at::native::(anonymous namespace)::CatArrayBatchedCopy_alignedK_contig<at::native::(a | 8.16 | 9 |
+| void at::native::reduce_kernel<512, 1, at::native::ReduceOp<float, at::native::func_wrappe | 7.09 | 8 |
+| void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::Tenso | 6.30 | 7 |
+| std::enable_if<true, void>::type internal::gemvx::kernel<int, int, __nv_bfloat16, __nv_bfl | 6.15 | 7 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 6.07 | 7 |
+| void at::native::(anonymous namespace)::GammaBetaBackwardCUDAKernelTemplate<float, float,  | 5.49 | 6 |
+| void cutlass::Kernel2<cutlass_80_wmma_tensorop_bf16_s161616gemm_bf16_16x16_32x1_nt_align2> | 4.63 | 5 |
+| void gemmk1_kernel<int, float, 256, 5, false, false, false, false, cublasGemvTensorStrided | 3.78 | 4 |
+| void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std: | 3.54 | 4 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 24 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (5.31 GiB, 491 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 1.883 | 35 | 98 |
+| model.py:95 _softmax_over_points | 0.877 | 17 | 23 |
+| model.py:290 forward | 0.749 | 14 | 72 |
+| model.py:334 forward | 0.395 | 7 | 22 |
+| model.py:159 _relational_invariants | 0.229 | 4 | 1 |
+| model.py:327 forward | 0.210 | 4 | 11 |
+| model.py:329 forward | 0.210 | 4 | 11 |
+| model.py:172 _geo_region | 0.138 | 3 | 13 |
+| model.py:170 _geo_region | 0.134 | 3 | 4 |
+| model.py:126 _relational_invariants | 0.114 | 2 | 1 |
+| model.py:128 _relational_invariants | 0.114 | 2 | 1 |
+| model.py:127 _relational_invariants | 0.076 | 1 | 2 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| aten::mul | 22.14 | 257 |
+| aten::empty_strided | 18.77 | 1187 |
+| aten::div | 8.73 | 153 |
+| aten::cat | 5.93 | 38 |
+| aten::sum | 4.16 | 264 |
+| aten::bmm | 2.93 | 176 |
+| aten::mm | 2.93 | 201 |
+| aten::neg | 2.76 | 42 |
+| aten::sub | 2.76 | 28 |
+| aten::add | 2.69 | 138 |
+
+## Profile: eager_ckpt (40,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_eager_ckpt_40k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 15.0%, 2012.0 MiB used before the run, loadavg [5.12, 6.75, 7.5]. Step 721.8 ms wall, peak 5.45 GiB; GPU kernel time 716.3 ms per step over 3308 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): elementwise_copy 535.1, other 216.0, gemm 88.2, reduce 64.9, softmax 14.9, layernorm 12.2, optimizer 1.9
 
 ### forward: 212.0 ms, 1087 kernel launches per step
 
@@ -492,9 +1022,83 @@ CUDA ms per step by kernel kind: elementwise_copy 535.1, other 216.0, gemm 88.2,
 
 ## Profile: fused_geo_compile_model (10,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_fused_geo_compile_model_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 26.0%, 1984.0 MiB used before the run, loadavg [7.59, 7.49, 7.78]. Step 52.7 ms, peak 1.22 GiB; CUDA kernel time 49.8 ms per step.
+Artifact: `profile_fused_geo_compile_model_10000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 1187.0 MiB used before the run, loadavg [13.92, 8.69, 6.72]. Step 41.5 ms wall, peak 1.27 GiB; GPU kernel time 8.8 ms per step over 1610 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: other 30.2, gemm 8.6, optimizer 4.3, inductor_red 2.7, inductor_poi 2.4, inductor_per 1.0, elementwise_copy 0.4, reduce 0.3
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 35.3, optimizer 3.1, inductor_poi 1.3, inductor_red 1.2, gemm 1.0, inductor_per 0.5, reduce 0.3, elementwise_copy 0.2
+
+### forward: 2.6 ms, 624 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| _geo_fwd_kernel | 0.27 | 10 |
+| void cutlass::Kernel2<cutlass_75_tensorop_s1688gemm_bf16_64x64_nn_align1>(cutlass_75_tenso | 0.21 | 8 |
+| nvjet_sm103_tst_192x72_64x6_1x4_h_bz_bias_TNT | 0.15 | 6 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.12 | 5 |
+| triton_poi_fused_gelu_view_33 | 0.11 | 4 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.10 | 4 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.10 | 4 |
+| triton_poi_fused__to_copy_22 | 0.09 | 4 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.09 | 4 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.09 | 3 |
+
+### backward: 6.0 ms, 978 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| _geo_bwd_kernel | 2.24 | 37 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrappe | 0.23 | 4 |
+| nvjet_sm103_tst_64x32_64x16_2x2_2cta_h_bz_splitK_NTT | 0.21 | 4 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.19 | 3 |
+| nvjet_sm103_tst_32x64_64x16_2x2_2cta_h_bz_splitK_NTN | 0.18 | 3 |
+| triton_poi_fused_gelu_gelu_backward_view_23 | 0.16 | 3 |
+| triton_red_fused__to_copy_native_layer_norm_native_layer_norm_backward_view_27 | 0.16 | 3 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native: | 0.15 | 2 |
+| triton_red_fused__to_copy_native_layer_norm_backward_view_11 | 0.14 | 2 |
+| void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_64x64_tn_align1>(cutlass_75_ | 0.14 | 2 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 23 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (1.10 GiB, 431 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 0.437 | 40 | 96 |
+| model.py:327 forward | 0.173 | 16 | 36 |
+| model.py:294 forward | 0.163 | 15 | 26 |
+| model.py:334 forward | 0.153 | 14 | 60 |
+| model.py:322 forward | 0.059 | 5 | 24 |
+| model.py:329 forward | 0.043 | 4 | 12 |
+| model.py:1467 forward | 0.029 | 3 | 4 |
+| model.py:328 forward | 0.018 | 2 | 83 |
+| model.py:1469 forward | 0.011 | 1 | 3 |
+| model.py:1148 forward | 0.007 | 1 | 4 |
+| model.py:290 forward | 0.006 | 1 | 13 |
+| model.py:1489 forward | 0.001 | 0 | 4 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| ## Call CompiledFxGraph f4r72wegqqan6cdaufdumcpqwzyacnd25mcphxjys3xdyf | 0.92 | 1 |
+| aten::empty | 0.41 | 136 |
+| aten::empty_strided | 0.09 | 287 |
+| aten::sum | 0.00 | 48 |
+
+## Profile: fused_geo_compile_model (10,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_fused_geo_compile_model_10k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 26.0%, 1984.0 MiB used before the run, loadavg [7.59, 7.49, 7.78]. Step 52.7 ms wall, peak 1.22 GiB; GPU kernel time 20.8 ms per step over 1545 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 30.2, gemm 8.6, optimizer 4.3, inductor_red 2.7, inductor_poi 2.4, inductor_per 1.0, elementwise_copy 0.4, reduce 0.3
 
 ### forward: 2.6 ms, 126 kernel launches per step
 
@@ -566,9 +1170,83 @@ CUDA ms per step by kernel kind: other 30.2, gemm 8.6, optimizer 4.3, inductor_r
 
 ## Profile: fused_geo_compile_model (40,000 tokens, batch 1, bf16_autocast)
 
-Artifact: `profile_fused_geo_compile_model_40k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 50.0%, 2018.0 MiB used before the run, loadavg [6.97, 7.02, 7.56]. Step 103.7 ms, peak 4.46 GiB; CUDA kernel time 123.5 ms per step.
+Artifact: `profile_fused_geo_compile_model_40000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 3139.0 MiB used before the run, loadavg [14.69, 10.86, 7.86]. Step 43.7 ms wall, peak 4.50 GiB; GPU kernel time 22.3 ms per step over 1621 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
 
-CUDA ms per step by kernel kind: other 53.2, gemm 33.9, inductor_poi 14.0, inductor_red 9.4, inductor_per 5.4, reduce 2.9, elementwise_copy 2.7, optimizer 2.0
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 43.5, optimizer 3.1, inductor_poi 2.8, inductor_red 2.2, gemm 1.8, reduce 1.2, inductor_per 1.0, elementwise_copy 0.5
+
+### forward: 6.0 ms, 624 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| _geo_fwd_kernel | 0.96 | 16 |
+| void cutlass::Kernel2<cutlass_75_wmma_tensorop_bf16_s161616gemm_bf16_32x32_32x1_nn_align1> | 0.52 | 9 |
+| triton_poi_fused_gelu_view_33 | 0.39 | 6 |
+| nvjet_sm103_tst_192x96_64x5_1x4_h_bz_bias_TNT | 0.36 | 6 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.32 | 5 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.29 | 5 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.27 | 5 |
+| triton_red_fused__softmax_add_clamp_min_log_prepare_softmax_online_transpose_unsqueeze_vie | 0.26 | 4 |
+| triton_poi_fused__softmax__to_copy_add_bmm_clamp_min_log_permute_transpose_unsqueeze_view_ | 0.23 | 4 |
+| nvjet_sm103_tst_128x160_64x8_2x1_2cta_v_bz_bias_TNT | 0.21 | 3 |
+
+### backward: 16.1 ms, 989 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| _geo_bwd_kernel | 8.30 | 52 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrappe | 0.93 | 6 |
+| triton_poi_fused_gelu_gelu_backward_view_23 | 0.53 | 3 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native: | 0.50 | 3 |
+| void cublasLt::splitKreduce_kernel<32, 16, int, float, __nv_bfloat16, float, __nv_bfloat16 | 0.39 | 2 |
+| void cutlass::Kernel2<cutlass_75_tensorop_bf16_s1688gemm_bf16_64x128_tn_align1>(cutlass_75 | 0.35 | 2 |
+| nvjet_sm103_tst_128x64_64x10_2x1_2cta_v_bz_splitK_NTT | 0.27 | 2 |
+| triton_per_fused__to_copy_add_bmm_native_layer_norm_native_layer_norm_backward_permute_sli | 0.27 | 2 |
+| triton_red_fused_sum_view_22 | 0.25 | 2 |
+| nvjet_sm103_tst_96x64_64x13_1x2_2cta_h_bz_splitK_NTN | 0.24 | 1 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 22 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 15 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 13 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (4.30 GiB, 431 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 1.727 | 40 | 96 |
+| model.py:327 forward | 0.688 | 16 | 36 |
+| model.py:294 forward | 0.649 | 15 | 26 |
+| model.py:334 forward | 0.606 | 14 | 60 |
+| model.py:322 forward | 0.234 | 5 | 24 |
+| model.py:329 forward | 0.172 | 4 | 12 |
+| model.py:1467 forward | 0.057 | 1 | 3 |
+| model.py:1465 forward | 0.057 | 1 | 2 |
+| model.py:1469 forward | 0.043 | 1 | 3 |
+| model.py:1148 forward | 0.029 | 1 | 4 |
+| model.py:290 forward | 0.020 | 0 | 13 |
+| model.py:328 forward | 0.018 | 0 | 83 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| ## Call CompiledFxGraph fjnzgouzntnz4kb7fafgvczw5aby5aywkg7xfsi2b2nf7b | 3.60 | 1 |
+| aten::empty | 1.65 | 136 |
+| aten::empty_strided | 0.26 | 287 |
+| aten::sum | 0.00 | 99 |
+
+## Profile: fused_geo_compile_model (40,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_fused_geo_compile_model_40k_bf16.json`. NVIDIA GeForce RTX 4090 Laptop GPU, driver 595.71, torch 2.12.0+cu130 (CUDA 13.0), host NV-pds; load snapshot: GPU util 50.0%, 2018.0 MiB used before the run, loadavg [6.97, 7.02, 7.56]. Step 103.7 ms wall, peak 4.46 GiB; GPU kernel time 93.0 ms per step over 1532 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 53.2, gemm 33.9, inductor_poi 14.0, inductor_red 9.4, inductor_per 5.4, reduce 2.9, elementwise_copy 2.7, optimizer 2.0
 
 ### forward: 27.6 ms, 624 kernel launches per step
 
@@ -637,6 +1315,236 @@ CUDA ms per step by kernel kind: other 53.2, gemm 33.9, inductor_poi 14.0, induc
 | aten::empty | 1.65 | 136 |
 | aten::empty_strided | 0.27 | 287 |
 | aten::sum | 0.00 | 99 |
+
+## Profile: fused_geo_eager (10,000 tokens, batch 1, bf16_autocast)
+
+Artifact: `profile_fused_geo_eager_10000_bf16_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 1257.0 MiB used before the run, loadavg [10.94, 7.57, 6.3]. Step 61.8 ms wall, peak 1.42 GiB; GPU kernel time 13.5 ms per step over 2132 kernel launches (from the trace; the wall time in excess of the kernel time is host-side launch and Python/autograd overhead).
+
+Profiler key_averages device time by kernel kind (this total also counts runtime events, so it exceeds the trace kernel time): other 46.2, elementwise_copy 4.4, optimizer 3.2, layernorm 1.9, reduce 1.6, gemm 1.0, softmax 0.3
+
+### forward: 3.7 ms, 799 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::vectorized_elementwise_kernel<8, at::native::bfloat16_copy_kernel_cuda(at | 0.61 | 17 |
+| void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<float, float, false>( | 0.42 | 11 |
+| void at::native::elementwise_kernel<128, 2, at::native::gpu_kernel_impl_nocast<at::native: | 0.30 | 8 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl<at::native::CUDAFu | 0.26 | 7 |
+| _geo_fwd_kernel | 0.26 | 7 |
+| void cutlass::Kernel2<cutlass_75_tensorop_s1688gemm_bf16_64x64_nn_align1>(cutlass_75_tenso | 0.20 | 6 |
+| void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::Tenso | 0.20 | 5 |
+| void at::native::(anonymous namespace)::cunn_SoftMaxForwardSmem<4, float, float, float, at | 0.17 | 5 |
+| nvjet_sm103_tst_192x72_64x6_1x4_h_bz_bias_TNT | 0.14 | 4 |
+| void at::native::vectorized_elementwise_kernel<8, at::native::GeluCUDAKernelImpl(at::Tenso | 0.14 | 4 |
+
+### backward: 9.7 ms, 1325 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| _geo_bwd_kernel | 2.24 | 23 |
+| void at::native::(anonymous namespace)::GammaBetaBackwardCUDAKernelTemplate<float, float,  | 1.16 | 12 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<c10::BFloat16, at::native::fun | 1.14 | 12 |
+| void at::native::unrolled_elementwise_kernel<at::native::direct_copy_kernel_cuda(at::Tenso | 1.02 | 11 |
+| void at::native::(anonymous namespace)::layer_norm_grad_input_kernel_vectorized<float, flo | 0.27 | 3 |
+| void at::native::reduce_kernel<128, 4, at::native::ReduceOp<float, at::native::func_wrappe | 0.24 | 2 |
+| void at::native::vectorized_elementwise_kernel<8, at::native::bfloat16_copy_kernel_cuda(at | 0.22 | 2 |
+| void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native: | 0.22 | 2 |
+| nvjet_sm103_tst_64x32_64x16_2x2_2cta_h_bz_splitK_NTT | 0.21 | 2 |
+| void at::native::vectorized_elementwise_kernel<8, at::native::GeluBackwardCUDAKernelImpl(a | 0.20 | 2 |
+
+### optimizer: 0.2 ms, 8 kernel launches per step
+
+| kernel | ms/step | % of phase |
+|---|---|---|
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.04 | 24 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 18 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.03 | 16 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 12 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 11 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 10 |
+| void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous n | 0.02 | 9 |
+
+### Live allocations at the peak (1.25 GiB, 492 blocks), by allocating source line
+
+| allocation site | GiB | % of peak | blocks |
+|---|---|---|---|
+| model.py:335 forward | 0.522 | 42 | 108 |
+| model.py:95 _softmax_over_points | 0.238 | 19 | 25 |
+| model.py:290 forward | 0.188 | 15 | 72 |
+| model.py:334 forward | 0.109 | 9 | 24 |
+| model.py:327 forward | 0.057 | 5 | 12 |
+| model.py:329 forward | 0.057 | 5 | 12 |
+| unknown | 0.032 | 3 | 11 |
+| model.py:328 forward | 0.020 | 2 | 108 |
+| model.py:1148 forward | 0.011 | 1 | 5 |
+| model.py:1466 forward | 0.010 | 1 | 1 |
+| model.py:322 forward | 0.001 | 0 | 12 |
+| model.py:294 forward | 0.001 | 0 | 24 |
+
+### Operators by device memory allocated per step (profiler self_device_memory_usage)
+
+| operator | GiB allocated/step | calls/step |
+|---|---|---|
+| aten::empty_strided | 1.56 | 983 |
+| aten::empty | 1.02 | 413 |
+| aten::mm | 0.41 | 177 |
+| aten::add | 0.39 | 90 |
+| aten::addmm | 0.36 | 89 |
+| aten::bmm | 0.34 | 128 |
+| aten::mul | 0.25 | 65 |
+| aten::gelu | 0.18 | 25 |
+| aten::gelu_backward | 0.18 | 25 |
+| aten::cat | 0.11 | 14 |
+
+## Pareto: GB300, all options (aga2 job 738400)
+
+Artifact: `pareto_gb300_full_bf16.json + pareto_gb300_full_fp32.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 693.0 MiB used before the run, loadavg [4.36, 5.09, 5.41].
+
+Step = zero_grad, forward, MSE, backward, AdamW; median of 10 cuda-synchronized steps after 3 warm-ups; peak = max_memory_allocated over the measured steps (total, including the resident model + optimizer state).
+
+### 10,000 tokens, batch 1, bf16_autocast
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 86.7 | 1.52 | 1.33 | 1.28 | 1.92 |
+| eager_ckpt_slow_softmax | 244.7 | 1.52 | 1.33 | 3.61 | 5.42 |
+| eager_nockpt | 67.0 | 3.17 | 2.98 | 0.99 | 1.48 |
+| compile_model_ckpt | 47.3 | 1.30 | 1.11 | 0.70 | 1.05 |
+| compile_model_nockpt | 39.0 | 1.94 | 1.74 | 0.57 | 0.86 |
+| compile_blocks_ckpt | 50.4 | 1.18 | 0.99 | 0.74 | 1.12 |
+| compile_model_dynamic | 50.4 | 1.94 | 1.74 | 0.74 | 1.12 |
+| compile_model_maxautotune | 33.3 | 1.93 | 1.74 | 0.49 | 0.74 |
+| compile_model_cudagraphs | 26.0 | 0.13 | 0.03 | 0.38 | 0.58 |
+| fused_geo_eager | 69.3 | 1.42 | 1.22 | 1.02 | 1.54 |
+| fused_geo_compile_model | 45.3 | 1.27 | 1.07 | 0.67 | 1.00 |
+| geotransolver_eager | 67.8 | 4.07 | 3.87 | 1.00 | 1.50 |
+| geotransolver_compiled | 45.2 | 2.70 | 2.50 | 0.67 | 1.00 |
+
+### 10,000 tokens, batch 1, fp32
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 74.9 | 2.09 | 1.90 | 1.17 | 1.86 |
+| eager_ckpt_slow_softmax | 250.3 | 2.09 | 1.89 | 3.91 | 6.23 |
+| eager_nockpt | 56.0 | 3.50 | 3.31 | 0.87 | 1.39 |
+| compile_model_ckpt | 46.7 | 1.89 | 1.69 | 0.73 | 1.16 |
+| compile_model_nockpt | 39.0 | 2.88 | 2.68 | 0.61 | 0.97 |
+| compile_blocks_ckpt | 53.1 | 1.75 | 1.55 | 0.83 | 1.32 |
+| compile_model_dynamic | 38.0 | 2.87 | 2.68 | 0.59 | 0.94 |
+| compile_model_maxautotune | 33.9 | 2.88 | 2.68 | 0.53 | 0.84 |
+| compile_model_cudagraphs | 29.7 | 0.13 | 0.03 | 0.46 | 0.74 |
+| fused_geo_eager | 57.3 | 1.99 | 1.79 | 0.89 | 1.43 |
+| fused_geo_compile_model | 41.1 | 1.97 | 1.77 | 0.64 | 1.02 |
+| geotransolver_eager | 64.1 | 5.24 | 5.04 | 1.00 | 1.59 |
+| geotransolver_compiled | 40.2 | 4.98 | 4.78 | 0.63 | 1.00 |
+
+### 10,000 tokens, batch 2, bf16_autocast
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 103.3 | 2.86 | 2.66 | 1.31 | 1.89 |
+| eager_ckpt_slow_softmax | 338.6 | 2.86 | 2.66 | 4.30 | 6.19 |
+| eager_nockpt | 74.0 | 6.11 | 5.91 | 0.94 | 1.35 |
+| compile_model_ckpt | 67.3 | 2.48 | 2.28 | 0.85 | 1.23 |
+| compile_model_nockpt | 54.0 | 3.68 | 3.48 | 0.69 | 0.99 |
+| compile_blocks_ckpt | 72.9 | 2.29 | 2.09 | 0.92 | 1.33 |
+| compile_model_dynamic | 53.6 | 3.67 | 3.47 | 0.68 | 0.98 |
+| compile_model_maxautotune | 37.9 | 3.68 | 3.48 | 0.48 | 0.69 |
+| compile_model_cudagraphs | 41.9 | 0.13 | 0.03 | 0.53 | 0.77 |
+| fused_geo_eager | 67.9 | 2.68 | 2.48 | 0.86 | 1.24 |
+| fused_geo_compile_model | 47.9 | 2.37 | 2.17 | 0.61 | 0.88 |
+| geotransolver_eager | 78.8 | 8.80 | 8.60 | 1.00 | 1.44 |
+| geotransolver_compiled | 54.7 | 5.14 | 4.94 | 0.69 | 1.00 |
+
+### 10,000 tokens, batch 2, fp32
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 92.0 | 4.01 | 3.81 | 1.10 | 1.70 |
+| eager_ckpt_slow_softmax | 350.6 | 4.01 | 3.81 | 4.19 | 6.49 |
+| eager_nockpt | 76.0 | 6.80 | 6.60 | 0.91 | 1.41 |
+| compile_model_ckpt | 81.3 | 3.62 | 3.43 | 0.97 | 1.51 |
+| compile_model_nockpt | 69.6 | 5.56 | 5.36 | 0.83 | 1.29 |
+| compile_blocks_ckpt | 81.1 | 3.34 | 3.15 | 0.97 | 1.50 |
+| compile_model_dynamic | 53.5 | 5.55 | 5.36 | 0.64 | 0.99 |
+| compile_model_maxautotune | 39.3 | 5.57 | 5.38 | 0.47 | 0.73 |
+| compile_model_cudagraphs | 66.7 | 0.13 | 0.03 | 0.80 | 1.24 |
+| fused_geo_eager | 60.3 | 3.81 | 3.61 | 0.72 | 1.12 |
+| fused_geo_compile_model | 43.4 | 3.76 | 3.57 | 0.52 | 0.80 |
+| geotransolver_eager | 83.6 | 12.02 | 11.83 | 1.00 | 1.55 |
+| geotransolver_compiled | 54.0 | 9.70 | 9.50 | 0.65 | 1.00 |
+
+### 40,000 tokens, batch 1, bf16_autocast
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 135.4 | 5.50 | 5.30 | 1.25 | 2.56 |
+| eager_ckpt_slow_softmax | 1284.2 | 5.50 | 5.30 | 11.86 | 24.30 |
+| eager_nockpt | 105.5 | 12.02 | 11.83 | 0.97 | 2.00 |
+| compile_model_ckpt | 118.7 | 4.74 | 4.54 | 1.10 | 2.25 |
+| compile_model_nockpt | 108.1 | 7.13 | 6.94 | 1.00 | 2.05 |
+| compile_blocks_ckpt | 115.7 | 4.35 | 4.15 | 1.07 | 2.19 |
+| compile_model_dynamic | 107.1 | 7.14 | 6.94 | 0.99 | 2.03 |
+| compile_model_maxautotune | 41.2 | 7.15 | 6.95 | 0.38 | 0.78 |
+| compile_model_cudagraphs | 98.6 | 0.14 | 0.03 | 0.91 | 1.87 |
+| fused_geo_eager | 71.4 | 5.11 | 4.92 | 0.66 | 1.35 |
+| fused_geo_compile_model | 52.1 | 4.50 | 4.30 | 0.48 | 0.99 |
+| geotransolver_eager | 108.3 | 15.69 | 15.49 | 1.00 | 2.05 |
+| geotransolver_compiled | 52.8 | 10.03 | 9.83 | 0.49 | 1.00 |
+
+### 40,000 tokens, batch 1, fp32
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 157.8 | 7.78 | 7.58 | 1.00 | 1.52 |
+| eager_ckpt_slow_softmax | 1311.5 | 7.78 | 7.58 | 8.34 | 12.62 |
+| eager_nockpt | 129.6 | 13.39 | 13.20 | 0.82 | 1.25 |
+| compile_model_ckpt | 148.5 | 7.01 | 6.82 | 0.94 | 1.43 |
+| compile_model_nockpt | 132.9 | 10.92 | 10.72 | 0.84 | 1.28 |
+| compile_blocks_ckpt | 149.6 | 6.46 | 6.26 | 0.95 | 1.44 |
+| compile_model_dynamic | 131.8 | 10.91 | 10.71 | 0.84 | 1.27 |
+| compile_model_maxautotune | 54.6 | 10.93 | 10.73 | 0.35 | 0.53 |
+| compile_model_cudagraphs | 130.0 | 0.14 | 0.03 | 0.83 | 1.25 |
+| fused_geo_eager | 71.4 | 7.43 | 7.24 | 0.45 | 0.69 |
+| fused_geo_compile_model | 56.9 | 7.33 | 7.13 | 0.36 | 0.55 |
+| geotransolver_eager | 157.3 | 20.43 | 20.23 | 1.00 | 1.51 |
+| geotransolver_compiled | 103.9 | 19.23 | 19.03 | 0.66 | 1.00 |
+
+### 40,000 tokens, batch 2, bf16_autocast
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 277.1 | 10.77 | 10.58 | 1.50 | 5.37 |
+| eager_ckpt_slow_softmax | 2005.3 | 10.77 | 10.58 | 10.83 | 38.90 |
+| eager_nockpt | 216.8 | 23.69 | 23.50 | 1.17 | 4.21 |
+| compile_model_ckpt | 216.7 | 9.29 | 9.09 | 1.17 | 4.20 |
+| compile_model_nockpt | 176.7 | 14.07 | 13.87 | 0.95 | 3.43 |
+| compile_blocks_ckpt | 207.7 | 8.52 | 8.32 | 1.12 | 4.03 |
+| compile_model_dynamic | 181.1 | 14.04 | 13.84 | 0.98 | 3.51 |
+| compile_model_maxautotune | 67.2 | 14.09 | 13.89 | 0.36 | 1.30 |
+| compile_model_cudagraphs | 172.9 | 0.14 | 0.03 | 0.93 | 3.35 |
+| fused_geo_eager | 91.6 | 9.99 | 9.79 | 0.49 | 1.78 |
+| fused_geo_compile_model | 54.7 | 8.82 | 8.62 | 0.30 | 1.06 |
+| geotransolver_eager | 185.1 | 34.56 | 34.36 | 1.00 | 3.59 |
+| geotransolver_compiled | 51.6 | 19.85 | 19.65 | 0.28 | 1.00 |
+
+### 40,000 tokens, batch 2, fp32
+
+| option | step ms | peak GiB | incremental GiB | x GT eager | x GT compiled |
+|---|---|---|---|---|---|
+| eager_ckpt | 330.9 | 15.31 | 15.11 | 1.18 | 1.90 |
+| eager_ckpt_slow_softmax | 2080.0 | 15.31 | 15.11 | 7.44 | 11.92 |
+| eager_nockpt | 274.2 | 26.39 | 26.19 | 0.98 | 1.57 |
+| compile_model_ckpt | 321.1 | 13.76 | 13.56 | 1.15 | 1.84 |
+| compile_model_nockpt | 299.7 | 21.48 | 21.29 | 1.07 | 1.72 |
+| compile_blocks_ckpt | 320.3 | 12.65 | 12.45 | 1.15 | 1.83 |
+| compile_model_dynamic | 197.3 | 21.48 | 21.29 | 0.71 | 1.13 |
+| compile_model_maxautotune | 122.8 | 21.56 | 21.36 | 0.44 | 0.70 |
+| compile_model_cudagraphs | 295.3 | 0.14 | 0.03 | 1.06 | 1.69 |
+| fused_geo_eager | 157.0 | 14.49 | 14.29 | 0.56 | 0.90 |
+| fused_geo_compile_model | 144.1 | 14.31 | 14.11 | 0.52 | 0.83 |
+| geotransolver_eager | 279.6 | 47.30 | 47.10 | 1.00 | 1.60 |
+| geotransolver_compiled | 174.6 | 38.12 | 37.92 | 0.62 | 1.00 |
 
 ## Pareto: GB300, reconciliation set (aga2 jobs 736338, 736352)
 
@@ -885,13 +1793,81 @@ fp32 roundoff floor of the reference itself (eager fp32 vs eager fp64, same weig
 | fused_geo_eager | 5.3e-07 | 8.8e-08 | 9.6e-06 | 9.1e-16 | 2.1e-16 | pass |
 | fused_geo_compile_model | 5.5e-07 | 9.8e-08 | 1.0e-05 | 9.2e-16 | 2.0e-16 | FAIL |
 
-## Numerics numerics_fused_10k_gb300.json
+## Numerics gate (10,000 tokens, batch 1, fp32, TF32 off)
 
-(missing)
+Artifact: `numerics_fused_10k_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17. Reference: eager, geo_checkpoint=True, fast_point_softmax=True.
 
-## Fused kernel launch sweep
+fp32 roundoff floor of the reference itself (eager fp32 vs eager fp64, same weights): output rel L2 6.24e-07, gradient rel L2 1.40e-07.
 
-(missing)
+| option | fp32 out rel L2 (bar 1e-6) | fp32 grad rel L2 (bar 1e-5) | worst param grad rel L2 | fp64 out rel L2 | fp64 grad rel L2 | bars |
+|---|---|---|---|---|---|---|
+| fused_geo_eager | 5.4e-07 | 1.1e-07 | 9.8e-06 | 1.1e-15 | 1.7e-16 | pass |
+| fused_geo_compile_model | 5.6e-07 | 1.0e-07 | 9.7e-06 | 1.1e-15 | 1.8e-16 | pass |
+
+## Fused geometry region: kernel-level timing and launch sweep
+
+Artifact: `tune_fused_kernel_gb300.json`. NVIDIA GB300, driver 580.167.08, torch 2.12.0+cu130 (CUDA 13.0), host nvl72d136-T17; load snapshot: GPU util 0.0%, 1255.0 MiB used before the run, loadavg [11.28, 7.58, 6.3].
+
+| region implementation | tokens | precision | forward ms | backward ms | fwd+bwd incremental peak GiB |
+|---|---|---|---|---|---|
+| eager | 10000 | bf16 autocast | 0.70 | 1.20 | 0.265 |
+| compiled | 10000 | bf16 autocast | 0.43 | 2.09 | 0.125 |
+| eager | 10000 | fp32 | 0.57 | 1.16 | 0.280 |
+| compiled | 10000 | fp32 | 0.40 | 2.08 | 0.134 |
+| eager | 40000 | bf16 autocast | 2.87 | 3.73 | 0.974 |
+| compiled | 40000 | bf16 autocast | 0.73 | 11.67 | 0.498 |
+| eager | 40000 | fp32 | 2.31 | 3.72 | 1.112 |
+| compiled | 40000 | fp32 | 0.78 | 11.78 | 0.536 |
+| fused (block_n 2, warps 2) | 10000 | bf16 autocast | 0.21 | 0.48 | 0.078 |
+| fused (block_n 2, warps 4) | 10000 | bf16 autocast | 0.21 | 0.47 | 0.078 |
+| fused (block_n 2, warps 8) | 10000 | bf16 autocast | 0.22 | 0.48 | 0.078 |
+| fused (block_n 4, warps 2) | 10000 | bf16 autocast | 0.22 | 0.49 | 0.049 |
+| fused (block_n 4, warps 4) | 10000 | bf16 autocast | 0.24 | 0.51 | 0.049 |
+| fused (block_n 4, warps 8) | 10000 | bf16 autocast | 0.21 | 0.50 | 0.049 |
+| fused (block_n 8, warps 2) | 10000 | bf16 autocast | 0.21 | 0.71 | 0.034 |
+| fused (block_n 8, warps 4) | 10000 | bf16 autocast | 0.23 | 0.55 | 0.034 |
+| fused (block_n 8, warps 8) | 10000 | bf16 autocast | 0.22 | 0.47 | 0.034 |
+| fused (block_n 16, warps 2) | 10000 | bf16 autocast | 0.20 | 1.21 | 0.023 |
+| fused (block_n 16, warps 4) | 10000 | bf16 autocast | 0.22 | 0.80 | 0.023 |
+| fused (block_n 16, warps 8) | 10000 | bf16 autocast | 0.20 | 0.45 | 0.023 |
+| fused (block_n 2, warps 2) | 10000 | fp32 | 0.21 | 0.49 | 0.088 |
+| fused (block_n 2, warps 4) | 10000 | fp32 | 0.21 | 0.49 | 0.088 |
+| fused (block_n 2, warps 8) | 10000 | fp32 | 0.20 | 0.49 | 0.088 |
+| fused (block_n 4, warps 2) | 10000 | fp32 | 0.20 | 0.48 | 0.059 |
+| fused (block_n 4, warps 4) | 10000 | fp32 | 0.21 | 0.53 | 0.059 |
+| fused (block_n 4, warps 8) | 10000 | fp32 | 0.20 | 0.51 | 0.059 |
+| fused (block_n 8, warps 2) | 10000 | fp32 | 0.19 | 0.52 | 0.044 |
+| fused (block_n 8, warps 4) | 10000 | fp32 | 0.21 | 0.48 | 0.044 |
+| fused (block_n 8, warps 8) | 10000 | fp32 | 0.21 | 0.48 | 0.044 |
+| fused (block_n 16, warps 2) | 10000 | fp32 | 0.23 | 1.15 | 0.033 |
+| fused (block_n 16, warps 4) | 10000 | fp32 | 0.21 | 0.75 | 0.033 |
+| fused (block_n 16, warps 8) | 10000 | fp32 | 0.20 | 0.47 | 0.033 |
+| fused (block_n 2, warps 2) | 40000 | bf16 autocast | 0.21 | 0.85 | 0.310 |
+| fused (block_n 2, warps 4) | 40000 | bf16 autocast | 0.21 | 0.78 | 0.309 |
+| fused (block_n 2, warps 8) | 40000 | bf16 autocast | 0.25 | 0.89 | 0.309 |
+| fused (block_n 4, warps 2) | 40000 | bf16 autocast | 0.21 | 0.69 | 0.194 |
+| fused (block_n 4, warps 4) | 40000 | bf16 autocast | 0.20 | 1.00 | 0.194 |
+| fused (block_n 4, warps 8) | 40000 | bf16 autocast | 0.21 | 1.05 | 0.194 |
+| fused (block_n 8, warps 2) | 40000 | bf16 autocast | 0.22 | 1.27 | 0.137 |
+| fused (block_n 8, warps 4) | 40000 | bf16 autocast | 0.20 | 0.77 | 0.137 |
+| fused (block_n 8, warps 8) | 40000 | bf16 autocast | 0.20 | 0.99 | 0.137 |
+| fused (block_n 16, warps 2) | 40000 | bf16 autocast | 0.39 | 2.29 | 0.108 |
+| fused (block_n 16, warps 4) | 40000 | bf16 autocast | 0.23 | 2.02 | 0.108 |
+| fused (block_n 16, warps 8) | 40000 | bf16 autocast | 0.23 | 0.79 | 0.108 |
+| fused (block_n 2, warps 2) | 40000 | fp32 | 0.20 | 0.69 | 0.349 |
+| fused (block_n 2, warps 4) | 40000 | fp32 | 0.20 | 0.73 | 0.349 |
+| fused (block_n 2, warps 8) | 40000 | fp32 | 0.24 | 0.91 | 0.349 |
+| fused (block_n 4, warps 2) | 40000 | fp32 | 0.22 | 0.65 | 0.233 |
+| fused (block_n 4, warps 4) | 40000 | fp32 | 0.20 | 0.69 | 0.233 |
+| fused (block_n 4, warps 8) | 40000 | fp32 | 0.21 | 0.81 | 0.233 |
+| fused (block_n 8, warps 2) | 40000 | fp32 | 0.25 | 1.14 | 0.176 |
+| fused (block_n 8, warps 4) | 40000 | fp32 | 0.24 | 0.68 | 0.176 |
+| fused (block_n 8, warps 8) | 40000 | fp32 | 0.22 | 0.77 | 0.176 |
+| fused (block_n 16, warps 2) | 40000 | fp32 | 0.51 | 2.21 | 0.148 |
+| fused (block_n 16, warps 4) | 40000 | fp32 | 0.26 | 1.98 | 0.148 |
+| fused (block_n 16, warps 8) | 40000 | fp32 | 0.26 | 0.72 | 0.148 |
+
+Best launch configurations: {"(10000, True)": {"fwd_ms": [[16, 2], 0.19960151985287666], "bwd_ms": [[16, 8], 0.45153952669352293]}, "(10000, False)": {"fwd_ms": [[8, 2], 0.19212951883673668], "bwd_ms": [[16, 8], 0.4717319970950484]}, "(40000, True)": {"fwd_ms": [[8, 8], 0.20044960547238588], "bwd_ms": [[4, 2], 0.692597939632833]}, "(40000, False)": {"fwd_ms": [[2, 4], 0.20011351443827152], "bwd_ms": [[4, 2], 0.6537339650094509]}}
 
 ## Fused geometry region: kernel-level timing and launch sweep
 
