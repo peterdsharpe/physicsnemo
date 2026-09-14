@@ -16384,3 +16384,164 @@ the 365-cell ones: `v0_isla_qtsdf_surf10k_seed42/43`, float32 0.0572 /
 their seed spread on pressure and velocity, @sec-interior-task). The bars
 are unchanged in form: supported within 3% of that reference on every
 field; pays between 3% and 10%; fails beyond 10%. Owner: this session.
+
+## 2026-09-13 — Kernel study: ISLA's step is 1.05x GeoTransolver's on the recipe's compiled path (0.86x without recompute), the 3.7x was a retired kernel measured eager; an exact fused geometry kernel gives parity at 40k tokens {#sec-nb-kernel-study}
+
+**Setting.** ISLA (Invariant Slice Attention) is a soft-slice transformer for surface
+fields: 10,000 surface points are routed to 256 slices by a softmax over points, slice
+states are quadrature-weighted means, and each point reads the slices back weighted by
+a softmax over slices. What makes it different from Transolver-style slicing is the
+geometry region in every layer: for every point-slice pair it evaluates six relational
+invariants of the point and the slice anchor (distance, its log, and four dot products
+of unit vectors), feeds them to a 6->1 Linear that biases the routing, and pools them
+back to the point with the routing weights. That is a (batch x points x slices x 6)
+tensor per layer -- 15 M numbers at 10k tokens, 61 M at 40k -- and the book's cost
+section says the step is 3.7x slower than GeoTransolver's (`matched_memory_isla_gt_2026-09-08.json`).
+
+**Question.** Where does the time and memory of one training step (forward, backward,
+AdamW) actually go, and which implementation options -- fusion, recompute, compile
+modes, a custom kernel -- shorten it while computing exactly the same function?
+Options were admitted only if they reproduce the eager reference forward to 1e-6
+relative and the parameter gradients to 1e-5 in fp32 and agree in float64 (same
+arithmetic, different order).
+
+**Instruments.** One NVIDIA GB300 on AGA (driver 580.167.08, torch 2.12.0+cu130), the
+GPU the recipe trains on and the book's number was measured on; the reference
+configuration (`isla_surface_reference.yaml`, hidden 192, 12 layers, 256 slices,
+`geo_checkpoint: true`) on synthetic inputs; step time = median of 10 cuda-synchronized
+steps after 3 warm-ups; peak = `max_memory_allocated`. An analytic roofline (FLOPs and
+bytes per stage against measured peaks: 1925 TFLOP/s bf16, 7135 GB/s), torch.profiler
+traces with every kernel attributed to its launching operator and phase, allocation
+snapshots at the peak, and a numerics gate against the eager reference in fp32 and
+float64. Artifacts in `results/kernel_study_2026-09-13/` (jobs 736338, 736352, 738400);
+tables in `TABLES.md`; this entry is the report. An RTX 4090 Laptop was used for the first
+pass; its numbers are secondary and labelled.
+
+**What was seen.**
+
+1. *The 3.7x reproduces and is a kernel, not the architecture.* Eager, with the
+   middle-dimension point softmax that was replaced on 2026-09-10, ISLA takes 244.7 ms
+   against GeoTransolver's 67.8 ms at 10k tokens (3.61x). With the row-parallel softmax
+   the same eager step is 86.7 ms (1.28x), or 67.0 ms (0.99x) without `geo_checkpoint`.
+   The recipe compiles both models (`compile: true`): compiled, ISLA is 47.3 ms with
+   `geo_checkpoint` (1.05x GeoTransolver's 45.2 ms) or 39.0 ms without (0.86x), at 1.30
+   or 1.94 GiB peak against GeoTransolver's 2.70. At 40k tokens the original-softmax
+   eager step is 1284 ms; the reference eager 135 ms; compiled 108-119 ms; GeoTransolver
+   compiled 53 ms.
+
+2. *The step is far from any roofline, for two different reasons at two sizes.* The
+   analytic step at 10k tokens is 404 GFLOP and 62 GB of traffic as eager PyTorch
+   executes it (8.8 ms at the GB300's bandwidth), or 15 GB if every stage were fused
+   (2.1 ms). The eager reference runs 33.8 ms of kernels inside a 91 ms step -- 3,224
+   kernel launches, so 63% of the wall time is host-side launch and autograd overhead
+   on the Grace CPU. At 40k the kernels fill the step (130.6 of 135 ms) and the
+   invariants stage alone takes 71 ms against a 21 ms roofline for its eager traffic:
+   it carries 61% of all bytes, and its fused-traffic roofline is 11x smaller. Every
+   stage but the point MLP is memory-bound; the MLP reaches 10.7% of the bf16 FLOP peak.
+
+3. *`torch.compile` fuses the elementwise chain but keeps the tensor, and its default
+   backward configuration is poor.* Inductor still materializes the (B,N,S,6)
+   invariants twice per layer (fp32, and a bf16 copy for the GEMM); one generated
+   reduction kernel for the geometry backward is 13.4 of the 20.0 ms of backward
+   kernels at 10k and 56 of 82 ms at 40k. `mode="max-autotune-no-cudagraphs"` fixes
+   the configuration: 10k 39.0 -> 33.3 ms; 40k 108 -> 41 ms; 40k batch 2 177 -> 67 ms.
+   `mode="reduce-overhead"` (CUDA graphs) removes the launch-bound regime: 26.0 ms at
+   10k, 0.58x of default-compiled GeoTransolver, at the cost of static shapes and
+   activation memory that `max_memory_allocated` cannot see (2.02 GiB reserved).
+
+4. *A fused Triton kernel for the geometry region is exact and removes the tensor.*
+   `geo_kernel="fused"` (opt-in; `physicsnemo/experimental/nn/isla/geo_kernel.py`)
+   evaluates invariants, routing bias, slice softmax and pooling on register tiles of
+   8 points x 256 slices and never writes a (B,N,S,.) intermediate; the backward
+   recomputes the tile. Region-level, one layer at 10k tokens: eager 0.70 / 1.20 ms
+   (forward / backward), Inductor 0.43 / 2.09, fused 0.23 / 0.55; at 40k: 2.87 / 3.73,
+   0.73 / 11.67, 0.20 / 0.77; region memory 0.265 / 0.125 / 0.034 GiB. Whole step,
+   compiled: 45.3 ms at 10k (kernel time 8.8 ms in a 41.5 ms wall, so launch-bound; no
+   wall-time gain over 39.0) and 52.1 ms at 40k (vs 108), at 1.27 / 4.50 GiB (vs 1.94 /
+   7.13); at 40k batch 2, 54.7 ms and 8.82 GiB against GeoTransolver's 51.6 ms and
+   19.85 GiB. Numerics: output 5.4e-7 relative to the eager reference (the reference's
+   own fp32-vs-fp64 floor is 6.2e-7), gradient 1.1e-7, float64 agreement 1e-15; 12 new
+   tests, 99 existing ISLA tests pass; compiles with zero graph breaks.
+
+5. *Memory map.* At the eager peak (1.35 GiB at 10k) the largest live blocks are the
+   MLP activations (0.48 GiB), the transposed copies the fast point softmax makes
+   (0.22), and the assign logits (0.19); with `geo_checkpoint` off under compile the
+   kept (B,N,S,6) invariants and (B,N,S,3) relative vectors are 0.71 of 1.76 GiB
+   (2.63 of 6.96 at 40k). `geo_checkpoint` under compile buys 0.64 GiB for +21% time at
+   10k; the fused kernel makes it moot.
+
+**Why it matters.** The cost section's premise -- that ISLA's geometry makes it
+several times more expensive than GeoTransolver -- does not hold on the path the
+recipe runs: at 10k tokens the two are within 5-14% of each other in step time, and
+ISLA uses half the memory. The remaining cost is not arithmetic (the step is 400
+GFLOP on a 2 PFLOP/s part) but memory traffic of one stage and host launch overhead,
+both of which are implementation choices with exact-arithmetic remedies. At the token
+counts where the traffic dominates (40k and above) the fused kernel and Inductor's
+autotuned mode each halve the step; combined they should do better, and none of them
+changes a single output beyond fp32 roundoff.
+
+**What is next.** (a) Measure fused + `max-autotune` and fused + `reduce-overhead`
+(the profiles predict the gains add: 8.8 ms of kernels in a 41.5 ms wall at 10k).
+(b) Expose `compile_mode` in the recipe and measure GeoTransolver under the same modes
+so the anchor column is like-for-like. (c) One training run with `geo_kernel="fused"`
+for neutrality (its bf16 backward accumulates in fp32 where eager's rounds to bf16 --
+more precise, not identical) before any default changes. (d) Correct the book's cost
+section from the reconciliation table in `TABLES.md`, on the GB300 numbers (done 2026-09-14, @sec-mt2-cost).
+
+*Provenance.* Study run by a delegated engineering agent in an isolated worktree on
+2026-09-13 at Peter's request; merged by the coordinating session on 2026-09-14 with
+the fused kernel left opt-in and the class defaults unchanged. Every number above is in
+the artifact JSONs of `results/kernel_study_2026-09-13/` with GPU, driver, torch version
+and load snapshot recorded.
+
+## 2026-09-14 — Verdict, RELINT2: the interior query-token configuration on the reference frame matches the similarity gauge on pressure and velocity and is 12% better on eddy viscosity; the interior flagship moves to the reference frame at no price {#sec-nb-relint-verdict}
+
+*Setting.* After the void first attempt (@sec-nb-relint-void), the relaunch
+(@sec-nb-relint-amend) trained the interior query-token configuration with
+the signed-distance scalar on the frame-free reference frame (relative frame,
+total-measure scale) with a Horvitz–Thompson-corrected boundary measure on a
+10,000-cell boundary subsample, two seeds
+(`v0_isla_qtsdfval_relint2_seed42/43`), otherwise the frozen interior
+protocol. The training loss tracked the 10,000-cell similarity-gauge
+reference epoch for epoch (0.0077 against 0.0079 at epoch 10; final
+validation loss 0.0010 and 0.0011 against 0.0011).
+
+*Instruments.* Float32 evaluation under the same snapshot and dataset
+variant on the 48 DrivAerML validation cars at the training query count of
+10,000 (job 742273; 48 cases per seed after deduplication; zero skipped
+loads), reduced as two-seed means with paired per-case comparisons against
+the 10,000-cell similarity-gauge lanes (`v0_isla_qtsdf_surf10k_seed42/43`),
+the 365-cell three-seed reference and unit-drive GeoTransolver-volume.
+Artifact: `results/relint2_reduction_2026-09-14.json`.
+
+*What we saw.* **Pressure 0.0550 against the reference's 0.0550 (1.000x),
+velocity 0.0782 against 0.0789 (0.990x), eddy viscosity 0.1005 against
+0.1142 (0.880x), the last lower on 40 of 48 cars.** Every field is inside
+the 3% bar, and eddy viscosity is 12% better. Against the 365-cell
+three-seed reference the ratios are 0.995 / 0.977 / 0.909. Against
+unit-drive GeoTransolver-volume the standings are pressure 0.933x
+(GeoTransolver-volume lower on 43 of 48), velocity 1.369x (ISLA lower on 48
+of 48) and eddy viscosity 0.874x (GeoTransolver-volume lower on 22 of 48,
+so the two are at parity per case while the mean favours GeoTransolver):
+the velocity lead is unchanged, the pressure deficit is unchanged at 7%,
+and the eddy-viscosity deficit shrinks from 27% to 14%.
+
+*Reading.* Supported, and the ruling of one flagship configuration is met:
+the interior configuration stands on the same frame as the surface
+reference, with no centroid, no sample statistic and no per-dataset length
+anywhere. The eddy-viscosity gain is not separately attributed: the
+relaunch changed both the frame and the boundary measure (raw subsample
+areas to the corrected quadrature), and the similarity gauge is
+insensitive to the measure's sum while the total-measure scale depends on
+it, so the two cannot be separated without a corrected-measure gauge lane;
+that lane is not scheduled, since the gauge is not a candidate for the
+reference. What the result does establish is that the frame-free
+construction costs nothing on the interior and that the earlier interior
+numbers, produced under the similarity gauge, are the prior configuration's
+record in the same sense as the constant-gauge surface numbers.
+
+*What changes.* The interior reference configuration is the relative frame
+with the total-measure scale and the corrected boundary measure; the recipe
+gains a reference interior config and the corrected-measure dataset
+variant; chapters 3, 8 and 12 and the index carry the new interior
+standings; the RELINT node is DONE. Owner: this session.

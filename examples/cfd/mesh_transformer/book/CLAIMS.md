@@ -1652,3 +1652,16 @@ interior control @sec-nb-udrv-int-prereg.
   (≥7%): fixed-angle price = MESHER PATTERN, not positional seeds (agrees with 35-case FF). Third seeds: reference 0.0363/0.0405/0.0427 →
   0.0398 (**+14.4%**, 3 seeds; supersedes 2-seed +10.3%), reference÷gauge 1.000 (parity, supersedes 0.965); ref-length 0.0425 (+22.1%).
   Update the ladder's fixed-angle cell everywhere to the 3-seed values. Write "at parity with the gauge at the fixed angle"; never "3.5% better" after 2026-09-13.
+- **KERNEL STUDY (2026-09-13/14; GB300, bf16, 10k tokens, B1; results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json; #sec-nb-kernel-study).**
+  Step-time ISLA/GT: book's config (eager, retired middle-dim softmax, ckpt) 3.61x (reproduces the 3.7x); eager fast softmax ckpt 1.28x; eager
+  no-ckpt 0.99x; COMPILED (recipe default) ckpt 1.05x (47.3/45.2 ms, 1.30/2.70 GiB), no-ckpt 0.86x (39.0 ms, 1.94 GiB); compiled+fused 1.00x
+  (1.27 GiB). 40k B1 bf16: compiled ckpt 118.7 vs GT 52.8 (2.2x); fused+compile 52.1 (0.99x) at 4.50 vs 10.03 GiB; max-autotune 41.2.
+  Numerics gate: every option ≤5.5e-7 output rel L2 (floor 6.2e-7), grads ~1e-7, fp64 1e-15. Fused kernel geo_kernel='fused' is OPT-IN; defaults
+  unchanged until fused+autotune measured and one neutrality training run. NEVER write "3.7x slower" again; write "1.05x on the compiled path at
+  10k (0.86x without recompute), 2.2x at 40k default, parity with the fused kernel".
+- **RELINT2 verdict (2026-09-14; fp32, code_relint, 48 cars, 10k queries; results/relint2_reduction_2026-09-14.json; #sec-nb-relint-verdict).**
+  Interior QT+SDF on the REFERENCE FRAME (relative, total_measure, HT-corrected boundary measure, 10k-cell boundary): p 0.0550 / v 0.0782 / nut 0.1005
+  = 1.000x / 0.990x / 0.880x of the 10k-cell gauge reference (0.0550/0.0789/0.1142); nut lower on 40/48. vs unit GT-volume: p 0.933x (GT 43/48),
+  v 1.369x (ISLA 48/48), nut 0.874x (GT 22/48). SUPPORTED → interior flagship = reference frame; earlier interior numbers (similarity gauge) =
+  prior configuration's record. Eddy-viscosity gain NOT attributed (frame + corrected measure changed together). First attempt VOID (uncorrected
+  measure): never cite its 0.75/0.75/1.0 as a frame result. Interior standings to write: velocity lead 27% (1.37x), pressure deficit 7%, nut deficit 14%.

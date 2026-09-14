@@ -83,10 +83,13 @@ of the bf16 training path is a measured quantity, @sec-mt2-contracts), and
 training is stable across a decade of learning rate where GeoTransolver
 degrades 4–14x. On the interior task, with its queries admitted as
 interacting tokens and given the signed distance to the wall, ISLA at 8.9M
-parameters is 27% more accurate than GeoTransolver's 27.6M-parameter volume
-configuration on interior velocity (0.080 against 0.109 in float32), 6% less
-accurate on interior pressure (0.055 against 0.052) and 27% less accurate on
-eddy viscosity (0.112 against 0.088); the bfloat16 evaluation had inflated
+parameters, on the same frame-free reference frame as the surface
+configuration, is 27% more accurate than GeoTransolver's 27.6M-parameter
+volume configuration on interior velocity (0.078 against 0.107 in float32),
+7% less accurate on interior pressure (0.055 against 0.051) and 14% less
+accurate on eddy viscosity (0.100 against 0.088; @sec-nb-relint-verdict);
+the prior similarity-gauge interior configuration stood at 27%, 6% and 27%
+on the same fields, and the bfloat16 evaluation had inflated
 GeoTransolver-volume's errors by 20–23% and ISLA's by 4–7%, which is what
 made pressure look like an ISLA lead;
 that lead holds only when at least the training count of 10,000 points is
@@ -99,7 +102,10 @@ artifact (@sec-interior-task). The passive,
 query-independent decode is 3.1x behind on pressure as built (float32). Cost: on one
 GPU and one instrument ISLA's current code peaks at 1.6 GiB of training
 memory against GeoTransolver's 4.1 GiB, the code that trained the checkpoints
-peaked at 9.3 GiB, and ISLA's step is 3.7x slower (@sec-cost).
+peaked at 9.3 GiB, and on the recipe's compiled path ISLA's step is 1.05x
+GeoTransolver's at 10,000 tokens and 2.2x at 40,000, where an exact fused
+geometry kernel restores parity (@sec-cost; the 3.7x quoted until
+2026-09-13 was a retired kernel measured eager).
 
 | Setting | Standing | Measured | Consistency (float32) |
 |---|---|---|---|

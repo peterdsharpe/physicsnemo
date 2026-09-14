@@ -487,8 +487,20 @@ one instrument (bf16 autocast, batch 1, 10,000 tokens, AdamW step included),
 ISLA's current code peaks at 1.6 GiB of allocated memory against
 GeoTransolver's 4.1 GiB, 2.6x less; the ISLA code that trained every
 checkpoint in this book peaked at 9.3 GiB, 2.3x more than GeoTransolver;
-and ISLA's training step takes 246 ms against GeoTransolver's 65 ms, 3.7x
-slower (results/matched_memory_isla_gt_2026-09-08.json).** Two exact rewrites separate the
+and on the path the recipe runs, both models compiled, ISLA's training
+step is 1.05x GeoTransolver's (47 against 45 ms with the geometry recompute
+on, at 1.30 against 2.70 GiB) or 0.86x with the recompute off (39 ms at
+1.94 GiB).** The 3.7x step-time ratio this book quoted until 2026-09-13
+(246 against 65 ms, results/matched_memory_isla_gt_2026-09-08.json) was
+the eager step with the point-over-slices softmax kernel retired on
+2026-09-10; the kernel study reproduces it on the same GPU (3.61x) and
+locates every ratio in between (@sec-nb-kernel-study;
+results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json). At 40,000
+tokens the default compiled step is 2.2x GeoTransolver's (119 against 53
+ms) because one stage, the relational invariants, moves 61% of the step's
+memory traffic; an exact fused kernel for that region, opt-in as
+`geo_kernel="fused"`, brings it to parity (52 ms) at 4.5 against 10.0 GiB,
+and the compiler's autotuned mode alone brings it to 41 ms. Two exact rewrites separate the
 two ISLA figures: pooling the slice mixture before the affine projection
 (9.3 → 3.4 GiB) and recomputing the per-slice invariants inside the
 backward pass instead of storing them (3.4 → 1.6 GiB at 3% more step time);

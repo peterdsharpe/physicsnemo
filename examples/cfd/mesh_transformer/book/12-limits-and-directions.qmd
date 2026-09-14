@@ -562,7 +562,12 @@ so capacity is not ruled out, only that step in width;
 @sec-interior-query-tokens). The single-car test then identified it as a
 capacity limit outright: with the data fixed the eddy-viscosity ratio widens
 to 1.64, so more training cars will not close it
-(@sec-nb-overfit-interior). Two facts bound
+(@sec-nb-overfit-interior). Moving the interior configuration to the
+frame-free reference frame, with the boundary measure corrected so that its
+sum is the surface area, narrowed the gap to 1.14x (0.100 against 0.088)
+while leaving pressure and velocity unchanged; the two changes were made
+together and the gain is not attributed between them
+(@sec-nb-relint-verdict). Two facts bound
 the query-token configuration itself: its query weights scale with the
 geometric mean of the surface weights, so refining the surface sample or
 changing the number of queries changes its prediction (4–9% on small random
@@ -823,8 +828,12 @@ anywhere once the inputs are matched.
 **Memory headroom.** On one GB300 with one instrument, ISLA's current
 code peaks at 1.6 GiB of training memory at 10,000 tokens against
 GeoTransolver's 4.1 GiB, 2.6x less, while the ISLA code that trained every
-checkpoint in this book peaked at 9.3 GiB, 2.3x more; ISLA's step is 3.7x
-slower (results/matched_memory_isla_gt_2026-09-08.json; @sec-mt2-cost).^[Measurement
+checkpoint in this book peaked at 9.3 GiB, 2.3x more; on the recipe's
+compiled path ISLA's step is 1.05x GeoTransolver's at 10,000 tokens (0.86x
+with the geometry recompute off) and 2.2x at 40,000, where an exact fused
+geometry kernel restores parity (@sec-mt2-cost, @sec-nb-kernel-study; the
+3.7x quoted here until 2026-09-13 was the retired softmax kernel measured
+eager, results/matched_memory_isla_gt_2026-09-08.json).^[Measurement
 records: @sec-nb-geo-pool-memory, @sec-nb-geo-recompute.] Two exact
 rewrites set the current figure. The relational readback pools the
 softmax slice mixture before the affine projection, so the activation
@@ -837,7 +846,8 @@ compiler recovers the step time and more (0.82x the eager stored path, at
 1.28 GiB), but rounds the bf16 chain differently, so it is a validated speed
 option rather than part of the frozen protocol (@sec-nb-geo-compile). The
 gap below GeoTransolver's footprint is real headroom for more tokens per
-case or a wider model, at 3.7x GeoTransolver's step time; no accuracy
+case or a wider model at a step time within 5–14% of GeoTransolver's at
+10,000 tokens on the compiled path; no accuracy
 number in this book was produced at the smaller footprint. The
 20,000-token floor test is affordable on ISLA's own measured numbers
 (2.78 GiB).

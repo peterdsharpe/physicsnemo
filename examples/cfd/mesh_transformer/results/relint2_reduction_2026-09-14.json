@@ -1,0 +1,173 @@
+{
+ "date": "2026-09-14",
+ "study": "RELINT2: interior query-token + SDF configuration on the reference frame (frame_mode=relative, scale_mode=total_measure) with the Horvitz-Thompson-corrected boundary measure (ComposeQuadratureMeasure), 10,000-cell boundary subsample",
+ "instrument": "float32, snapshot code_relint (training and evaluation), recipe copy recipe_relint, dataset drivaer_ml_volume_mt_relint, 48 DrivAerML validation cars at 10,000 interior queries; job 742273; zero skipped loads; 50 rows deduplicated to 48 by sample_id",
+ "prereg": "#sec-nb-relint-prereg amended by #sec-nb-relint-amend (reference = 10,000-cell similarity-gauge lanes v0_isla_qtsdf_surf10k_seed42/43); first attempt void (#sec-nb-relint-void)",
+ "bars": "supported within 3% of the reference on every field; pays 3-10%; fails >10%",
+ "relint2": {
+  "runs": [
+   "v0_isla_qtsdfval_relint2_seed42",
+   "v0_isla_qtsdfval_relint2_seed43"
+  ],
+  "n_cases": 48,
+  "pressure_l2": {
+   "seeds": [
+    0.05445,
+    0.05555
+   ],
+   "mean": 0.055
+  },
+  "velocity_l2": {
+   "seeds": [
+    0.07761,
+    0.07873
+   ],
+   "mean": 0.07817
+  },
+  "nut_l2": {
+   "seeds": [
+    0.10142,
+    0.09955
+   ],
+   "mean": 0.10049
+  }
+ },
+ "ref_surf10k_gauge": {
+  "runs": [
+   "v0_isla_qtsdf_surf10k_seed42",
+   "v0_isla_qtsdf_surf10k_seed43"
+  ],
+  "n_cases": 48,
+  "pressure_l2": {
+   "seeds": [
+    0.0548,
+    0.05516
+   ],
+   "mean": 0.05498
+  },
+  "velocity_l2": {
+   "seeds": [
+    0.07804,
+    0.0798
+   ],
+   "mean": 0.07892
+  },
+  "nut_l2": {
+   "seeds": [
+    0.10573,
+    0.12259
+   ],
+   "mean": 0.11416
+  }
+ },
+ "ref_365_gauge": {
+  "runs": [
+   "v0_isla_qtsdfval_seed42",
+   "v0_isla_qtsdfval_seed43",
+   "v0_isla_qtsdfval_seed44"
+  ],
+  "n_cases": 48,
+  "pressure_l2": {
+   "seeds": [
+    0.05471,
+    0.05467,
+    0.05641
+   ],
+   "mean": 0.05527
+  },
+  "velocity_l2": {
+   "seeds": [
+    0.07957,
+    0.07961,
+    0.08093
+   ],
+   "mean": 0.08004
+  },
+  "nut_l2": {
+   "seeds": [
+    0.10679,
+    0.11641,
+    0.10833
+   ],
+   "mean": 0.11051
+  }
+ },
+ "gt_vol_unit": {
+  "runs": [
+   "udrv_gt_vol_seed42",
+   "udrv_gt_vol_seed43"
+  ],
+  "n_cases": 48,
+  "pressure_l2": {
+   "seeds": [
+    0.05119,
+    0.05141
+   ],
+   "mean": 0.0513
+  },
+  "velocity_l2": {
+   "seeds": [
+    0.10896,
+    0.10509
+   ],
+   "mean": 0.10703
+  },
+  "nut_l2": {
+   "seeds": [
+    0.08798,
+    0.08776
+   ],
+   "mean": 0.08787
+  }
+ },
+ "ratios_relint2_over_surf10k": {
+  "pressure_l2": 1.0004,
+  "velocity_l2": 0.9905,
+  "nut_l2": 0.8803
+ },
+ "ratios_relint2_over_365ref": {
+  "pressure_l2": 0.9951,
+  "velocity_l2": 0.9766,
+  "nut_l2": 0.9093
+ },
+ "ratios_gt_over_relint2": {
+  "pressure_l2": 0.9327,
+  "velocity_l2": 1.3692,
+  "nut_l2": 0.8744
+ },
+ "paired_relint2_vs_surf10k": {
+  "pressure_l2": {
+   "n": 48,
+   "first_lower_on": 27,
+   "median_ratio": 0.9973
+  },
+  "velocity_l2": {
+   "n": 48,
+   "first_lower_on": 30,
+   "median_ratio": 0.9898
+  },
+  "nut_l2": {
+   "n": 48,
+   "first_lower_on": 40,
+   "median_ratio": 0.9283
+  }
+ },
+ "paired_gt_vs_relint2": {
+  "pressure_l2": {
+   "n": 48,
+   "first_lower_on": 43,
+   "median_ratio": 0.9276
+  },
+  "velocity_l2": {
+   "n": 48,
+   "first_lower_on": 0,
+   "median_ratio": 1.3796
+  },
+  "nut_l2": {
+   "n": 48,
+   "first_lower_on": 26,
+   "median_ratio": 0.9795
+  }
+ },
+ "verdict": "SUPPORTED: pressure 1.000x, velocity 0.991x, eddy viscosity 0.880x of the 10,000-cell similarity-gauge reference (two-seed means 0.0550 / 0.0782 / 0.1005 against 0.0550 / 0.0789 / 0.1142); eddy viscosity lower on 40 of 48 cars. Against unit-drive GeoTransolver-volume: pressure 0.933x (GT lower on 43/48), velocity 1.369x (ISLA lower on 48/48), eddy viscosity 0.874x (GT lower on 22/48). The interior flagship moves to the reference frame at no price."
+}

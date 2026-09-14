@@ -4,11 +4,14 @@
 how an architecture treats an interior point decides the result. Let the
 interior queries interact as tokens and give them the signed distance to
 the wall, the input GeoTransolver's volume configuration receives, and
-ISLA at a third of the parameters is 27% more accurate than that
-configuration on interior velocity (0.080 against 0.109, float32), 6% less
-accurate on interior pressure (0.055 against 0.052) and 27% less accurate on
-eddy viscosity (0.112 against 0.088, on the recipe's normalized viscosity
-metric); in bfloat16 the pressure ordering read the other way (0.057 against
+ISLA at a third of the parameters, on the frame-free reference frame, is
+27% more accurate than that configuration on interior velocity (0.078
+against 0.107, float32), 7% less accurate on interior pressure (0.055
+against 0.051) and 14% less accurate on eddy viscosity (0.100 against 0.088,
+on the recipe's normalized viscosity metric; @sec-nb-relint-verdict). The
+similarity-gauge interior configuration behind the rest of this chapter's
+numbers, now the prior configuration, stood at 27%, 6% and 27% (0.080,
+0.055 and 0.112); in bfloat16 its pressure ordering read the other way (0.057 against
 0.062), because bfloat16 inflates GeoTransolver-volume's errors by 20–23% and
 ISLA's by 4–7% (@sec-nb-fp32-interior-regrade); decode
 the queries passively, so that a prediction at one point never depends on
@@ -285,12 +288,14 @@ input, no local features.
 ## Results {#sec-interior-results}
 
 **With its interior queries admitted as interacting tokens and given the
-signed distance to the wall, ISLA is 27% more accurate than GeoTransolver's
-volume configuration on interior velocity (0.080 against 0.109 in float32,
-a ratio of 0.73), 6% less accurate on interior pressure (0.055 against
-0.052, 1.06) and 27% less accurate on eddy viscosity (0.112 against 0.088,
-1.27), at a third of the parameters and with the two models' inputs
-matched; the bfloat16 numbers that follow in this section (0.057 against
+signed distance to the wall, ISLA's reference configuration is 27% more
+accurate than GeoTransolver's volume configuration on interior velocity
+(0.078 against 0.107 in float32, a ratio of 0.73), 7% less accurate on
+interior pressure (0.055 against 0.051, 1.07) and 14% less accurate on eddy
+viscosity (0.100 against 0.088, 1.14), at a third of the parameters and with
+the two models' inputs matched (@sec-nb-relint-verdict); the similarity-gauge
+configuration that produced the diagnostics in this chapter, now the prior
+configuration, stood at 0.73, 1.06 and 1.27 (0.080, 0.055 and 0.112); the bfloat16 numbers that follow in this section (0.057 against
 0.062 on pressure, 0.91x) inflate GeoTransolver-volume's errors by 20–23%
 and ISLA's by 4–7% (@sec-nb-fp32-interior-regrade), and every ratio in the
 tables below is a bfloat16 ratio until its float32 re-evaluation lands; without the signed distance the

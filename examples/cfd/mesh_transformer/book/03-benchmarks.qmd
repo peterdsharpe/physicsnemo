@@ -99,6 +99,7 @@ campD = json.load(open(RP / "computational_support" / "campaign_d_verdict_2026-0
 cost = J("isla_vs_baselines_cost_fastkernel_2026-09-09.json")
 fw = J("farwake_reduction_2026-09-11.json")
 u510 = J("udrvl_510_reduction_2026-09-12.json")
+ri2 = J("relint2_reduction_2026-09-14.json")  # interior reference configuration (relative frame, total-measure scale, HT-corrected boundary measure)
 fs = J("farwake_far_field_shells_2026-09-11.json")["arms"]
 
 # ---- surface rungs: seed lists in float32 -------------------------------
@@ -274,8 +275,11 @@ rows.append(("DrivAerML, every case in a random pose", pB["gt_aug"]["pressure_me
 # interior: GeoTransolver-volume (unit drive) ÷ ISLA query tokens + SDF, two seeds, fp32
 def intf(keys, f): return mean(fp(fpint, keys, f))
 gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]
+# filled marker: ISLA's interior reference configuration (relative frame, total-measure scale; relint2 artifact);
+# open marker: the prior similarity-gauge interior configuration
 for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
-    rows.append((f"DrivAerML interior, {lab} (GeoTransolver-volume ÷ ISLA)", intf(gtv, f) / intf(isq, f), None, False, None, None))
+    rows.append((f"DrivAerML interior, {lab} — vs reference ISLA", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None, True, None, None))
+    rows.append((f"DrivAerML interior, {lab} — vs prior (gauge) ISLA", intf(gtv, f) / intf(isq, f), None, False, None, None))
 fig, ax = plt.subplots(figsize=(9.2, 6.4))
 y = list(range(len(rows)))[::-1]
 for yy, (label, rg, rt, filled, cg, ct) in zip(y, rows):
@@ -392,14 +396,17 @@ plt.show()
 
 ## Interior fields from the surface {#sec-scoreboard-interior}
 
-**On the boundary-to-interior task ISLA, with its interior queries admitted
-as interacting tokens and given the signed distance to the wall, is 26%
-more accurate than GeoTransolver's volume configuration on interior
-velocity at a third of the parameters, 7% less accurate on interior
-pressure and 27% less accurate on eddy viscosity (two seeds; a third seed
-gives 25%, 8% and 27%); at matched parameters it
-leads on pressure and velocity and trails on eddy viscosity by 18%, the
-whole of which sits in the far wake.** The task, the two architectures'
+**On the boundary-to-interior task ISLA's reference configuration, with
+its interior queries admitted as interacting tokens and given the signed
+distance to the wall, is 27% more accurate than GeoTransolver's volume
+configuration on interior velocity at a third of the parameters (0.0782
+against 0.1070), 7% less accurate on interior pressure (0.0550 against
+0.0513) and 14% less accurate on eddy viscosity (0.1005 against 0.0879;
+two seeds, float32; @sec-nb-relint-verdict). The prior similarity-gauge
+interior configuration, behind every earlier interior number, stood at 26%,
+7% and 27% on the same three fields; at matched parameters it led on
+pressure and velocity and trailed on eddy viscosity by 18%, the whole of
+which sits in the far wake.** The task, the two architectures'
 interior modes and the diagnostics are in @sec-interior; the numbers are
 in @fig-scoreboard-interior and @tbl-scoreboard-interior.
 
@@ -409,8 +416,12 @@ in @fig-scoreboard-interior and @tbl-scoreboard-interior.
 #|   Interior relative L2 on the 48 DrivAerML validation cars for the three
 #|   interior fields (panels), 10,000 interior queries per car, float32,
 #|   two seeds (dots). Red: GeoTransolver-volume (27.6M parameters, unit
-#|   drive). Light blue: ISLA with query tokens and the signed distance at
-#|   the reference width (8.9M). Dark blue: the same ISLA at hidden width 344
+#|   drive). Dark blue, second bar: ISLA's interior reference configuration
+#|   (query tokens with the signed distance on the relative frame with the
+#|   total-measure scale and the Horvitz–Thompson-corrected boundary
+#|   measure, 8.9M; @sec-nb-relint-verdict). Light blue: the prior
+#|   similarity-gauge interior configuration at the reference width (8.9M)
+#|   and at hidden width 344
 #|   (27.6M, parameter-matched to GeoTransolver-volume). The label above each
 #|   ISLA bar is its error divided by GeoTransolver-volume's (below 1 means
 #|   ISLA is more accurate). How to read this: the three arms receive the
@@ -426,18 +437,19 @@ in @fig-scoreboard-interior and @tbl-scoreboard-interior.
 #| code-fold: true
 fields = [("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "eddy viscosity")]
 h344 = campD["isla_qtsdf_h344"]["per_seed"]
-fig, axs = plt.subplots(1, 3, figsize=(10.5, 3.9))
+fig, axs = plt.subplots(1, 3, figsize=(11.5, 4.1))
 for ax, (f, name) in zip(axs, fields):
     arms = [("GeoTransolver-\nvolume, 27.6M", fp(fpint, gtv, f), RED),
-            ("ISLA query\ntokens, 8.9M", fp(fpint, isq, f), BLUE2),
-            ("ISLA query\ntokens, 27.6M", [h344[s][f] for s in ("42", "43")], BLUE)]
+            ("ISLA reference\nframe, 8.9M", ri2["relint2"][f]["seeds"], BLUE),
+            ("ISLA prior\n(gauge), 8.9M", fp(fpint, isq, f), BLUE2),
+            ("ISLA prior\n(gauge), 27.6M", [h344[s][f] for s in ("42", "43")], BLUE2)]
     means = [mean(v) for _, v, _ in arms]
-    ax.bar(range(3), means, width=0.62, color=[c for _, _, c in arms], alpha=0.9, zorder=2)
+    ax.bar(range(len(arms)), means, width=0.62, color=[c for _, _, c in arms], alpha=0.9, zorder=2)
     for x_, (_, v, c) in enumerate(arms):
         ax.plot([x_] * len(v), v, marker="o", ms=4.5, mfc="white", mec=INK, mew=0.9, ls="none", zorder=4)
         lab = f"{means[x_]:.4f}" + (f"\n{means[x_]/means[0]:.2f}x" if x_ else "")
         ax.text(x_, means[x_] * 1.02, lab, ha="center", va="bottom", fontsize=8.5, color=INK2)
-    ax.set_xticks(range(3)); ax.set_xticklabels([n for n, _, _ in arms], fontsize=8.5)
+    ax.set_xticks(range(len(arms))); ax.set_xticklabels([n for n, _, _ in arms], fontsize=8)
     ax.set_title(name, loc="left", fontsize=10, color=INK); ax.set_ylim(0, max(means) * 1.32)
     ax.grid(axis="x", visible=False)
 axs[0].set_ylabel("relative L2 over 48 cars [–]")
