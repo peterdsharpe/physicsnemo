@@ -140,7 +140,7 @@ peak allocated memory is 2.5 GiB at 0.83x the step time
 per-slice geometry spans all 20,000 tokens. ISLA in its passive-decode
 configuration has **9.9M parameters** (8.9M plus four read blocks) and
 peaks at **4.9 GB**; it consumes the surface tokens with normals and
-areas, the freestream direction, and at each interior query its position
+areas, the global condition vector (the freestream direction here), and at each interior query its position
 and, in the SDF-gradient arm, the same wall normal GeoTransolver-volume
 receives, but not the distance itself. The latent-volume-token arm has
 10.0M parameters at 5.8 GB; the exact-kernel MeshTransformer 0.76M at
@@ -203,7 +203,7 @@ ball-query features over neighbouring interior points at six radii, not
 from surface tokens, which this configuration does not receive.
 
 *ISLA.* The passive decoder builds every query-side invariant from the
-query position q, the freestream direction d, and a unit normal n̂ at
+query position q, the global condition vector d (the freestream direction here), and a unit normal n̂ at
 the query. Lengths need two conventions kept apart. The recipe stores
 coordinates nondimensionalized by the dataset's per-case reference
 length L_ref, which is 5 m for every DrivAerML car; the passive arms then
@@ -256,7 +256,7 @@ decoder.
 *ISLA, interacting mode.* The same architecture admits its interior
 queries into the encoder as tokens. Each query is seeded with the
 invariants of its position, its wall normal (the SDF gradient) and the
-freestream direction, exactly as a surface token is, plus a learned
+global condition vector, exactly as a boundary token is, plus a learned
 type embedding, and enters the measure-weighted slice routing with a
 learned weight relative to the surface measure; the twelve slice layers
 then run over surface and query tokens together, and the heads read the

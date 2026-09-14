@@ -1,10 +1,14 @@
 # ISLA: an invariant slice-attention surrogate {#sec-mt2}
 
 ISLA (Invariant Slice Attention; the code class is `ISLA`) is a soft-slice
-transformer whose backbone never sees a coordinate. Every learned operation
-acts on rotation- and translation-invariant scalars built from the surface
-geometry and the freestream direction, and vector outputs are assembled at
-the very end from an equivariant basis. The result is a surrogate whose
+transformer for steady boundary-value problems whose backbone never sees a
+coordinate. Every learned operation acts on rotation- and
+translation-invariant scalars built from the boundary geometry and the
+problem's global condition vectors, and vector outputs are assembled at the
+very end from an equivariant basis. In every experiment of this book the
+problem is external aerodynamics and the one global vector is the freestream
+direction; the architecture itself knows only that a global unit vector was
+supplied. The result is a surrogate whose
 rotation and translation covariance is exact by algebraic construction
 rather than learned (verified to roundoff in float64; the residual of the
 bf16 training path is a measured quantity, @sec-mt2-contracts), whose
@@ -32,16 +36,28 @@ boundary-integral kernels, fails on separated 3D flow
 
 ## What goes in and what comes out {#sec-mt2-architecture}
 
-**ISLA maps a sampled surface plus a freestream direction to fields at
-query points, and every field it produces transforms with the input
-under rigid motions.** The inputs, per case, are:
+**ISLA maps a sampled boundary plus the problem's global condition vector
+to fields at query points, and every field it produces transforms with the
+input under rigid motions.** The inputs, per case, are:
 
-- a set of $N$ sampled surface points $x_i \in \mathbb{R}^3$ (10,000 per
+- a set of $N$ sampled boundary points $x_i \in \mathbb{R}^3$ (10,000 per
   case in the protocol of @sec-protocol);
 - the unit outward normal $n_i$ at each point;
 - a measure weight $w_i > 0$ per point: the surface area the point
   stands for, so that $\sum_i w_i f(x_i)$ approximates $\int f \, dA$;
-- one global drive vector $d \in \mathbb{R}^3$, the freestream direction.
+- one global condition vector $d \in \mathbb{R}^3$, called the *drive*: a
+  direction that belongs to the problem rather than to any boundary cell.
+  In this book's external-aerodynamics datasets it is the freestream
+  direction; for a buoyant flow it would be the gravity direction. The
+  current implementation takes exactly one such vector and requires it;
+  problems with no global direction (steady conduction with pinned
+  temperatures) or with several are outside what the shipped code accepts
+  today, and generalizing the drive to a list of zero or more global vectors
+  is the engineering step that would admit them (@sec-limits);
+- optionally, per-cell boundary data (`boundary_scalars`), the channel for
+  whatever a boundary condition prescribes at each cell, and per-query
+  scalars (`query_scalars`), used in this book for the signed distance to
+  the wall.
 
 The outputs are one or more scalar fields (surface pressure in every
 result in this book) and one or more vector fields (wall shear stress)
@@ -84,7 +100,7 @@ flowchart TB
     classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
     classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
 
-    A["surface sample<br/>positions x_i, normals n_i, areas w_i<br/>freestream direction d"]:::data
+    A["boundary sample<br/>positions x_i, normals n_i, areas w_i<br/>global condition vector d (the drive)"]:::data
     B["length scale<br/>L = sqrt(sum_i w_i), the total surface measure<br/>r_i = x_i / L (no centre)"]:::fixed
     C["invariant seed<br/>n_i.d (positions enter only relative to anchors)"]:::fixed
     D["embed MLP -> h_i"]:::learned
@@ -119,7 +135,7 @@ swapped without positional bookkeeping.
 
 | symbol | code | meaning |
 |---|---|---|
-| $x_i, n_i, w_i, d$ | `points`, `normals`, `measure_weights`, `drive` | inputs: positions, unit normals, cell areas, freestream direction |
+| $x_i, n_i, w_i, d$ | `points`, `normals`, `measure_weights`, `drive` | inputs: positions, unit normals, cell areas, the global condition vector (the freestream direction in this book's datasets) |
 | $L$ | `gauge` | length scale: the square root of the total quadrature measure of the sample |
 | $r_i, \hat n_i, \hat d$ | `r`, `n_hat`, `d_hat` | scaled position (used only in differences), and unit directions of normal and drive |
 | $\ell_i$ | `log_w` | log measure weight, the bias that makes routing quadrature-weighted |
@@ -431,8 +447,10 @@ What is not a contract:
 - **Drive degree.** The output scales linearly with $\lvert d\rvert$ and a
   test confirms it, but the recipe feeds a unit direction, so the factor
   is one in every training and evaluation run. It is a normalization
-  detail, not a physical law: a pressure coefficient is degree zero in
-  the freestream speed and a dimensional pressure is degree two. ISLA has
+  detail, not a physical law: in the aerodynamic instance a pressure
+  coefficient is degree zero in the freestream speed and a dimensional
+  pressure is degree two, and a gravity vector's magnitude would enter a
+  buoyant problem through a dimensionless number, not this factor. ISLA has
   no drive-magnitude contract.
 - **Query independence in the reference configuration.** Without the
   passive decoder, every surface point is an interacting token, so the
@@ -603,7 +621,7 @@ costs 1.04x and replacing the invariant seeds by raw vectors
 (`seed_mode="raw"`) gives 0.99x, so adding coordinates does not help;
 every variant keeps an invariant path through the relational invariants,
 so these ablations do not show that invariants are dispensable. What the
-contract removes is the need for a canonical frame or a freestream
+contract removes is the need for a canonical frame or a global-direction
 estimate at inference, and it earns 6% and 19% against augmented
 GeoTransolver and Transolver when geometries arrive in arbitrary poses
 (@sec-pose).

@@ -765,6 +765,23 @@ are matched.
 
 ## Engineering directions {#sec-future}
 
+**Global conditions beyond one vector.** The problem class of @sec-pde-theory
+admits zero or more global condition vectors and per-cell boundary data; the
+shipped ISLA takes exactly one required global unit vector, the `drive`,
+which in every dataset of this book is the freestream direction. Steady
+conduction with pinned boundary temperatures has no global vector, a buoyant
+flow has a gravity vector plus inlet data on one boundary, and a magnetized
+flow has an applied field. The generalization is mechanical and preserves
+every contract: the seed becomes the set of invariants of the normal against
+each supplied global vector (none when there are none, so the seed reduces to
+the measure and the layers separate points through the relational invariants
+alone), the relational invariants gain one direction cosine per global
+vector, the vector head's basis gains each global vector and its complements,
+and boundary-condition data enter through the existing per-cell scalar
+channel. It is the first engineering step toward using ISLA outside external
+aerodynamics and has not been built; nothing in this book's measurements
+depends on it.
+
 **Cost.** On the recipe's compiled path, with both models compiled as the
 recipe runs them (one GB300, bfloat16, 10,000 tokens, batch 1), ISLA's
 step is 47 ms at 1.30 GiB with the geometry recompute on, 1.05x
@@ -860,7 +877,7 @@ that reverses the canonical-frame ordering (research/transfer_program,
 #sec-nb-campb-verdict; GeoTransolver without augmentation scores 0.0631).
 Elsewhere what ISLA offers on the surface is its contracts:
 exact rotation and translation covariance without a frame estimate or a
-freestream direction at inference, which a canonicalized GeoTransolver
+known global direction at inference, which a canonicalized GeoTransolver
 matches only where a frame can be estimated (@sec-pose); a
 query-independent configuration at a measured 3.0–3.7x accuracy cost
 (@sec-query-independence); and consistency under sampling. Consistency

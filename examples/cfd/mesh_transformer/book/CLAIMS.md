@@ -1674,3 +1674,10 @@ interior control @sec-nb-udrv-int-prereg.
   exact-kernel interior decoder in fp32 = GT-volume ÷ arm 0.10 (9.7x; the 8.0x was bf16); passive decode fp32 0.33 (3.1x). New anchors:
   #sec-mt2-variants (ch2), #sec-de-result replaces #sec-de-unit-drive (removed), fig-hilift-data-efficiency + tbl-hilift-ladder (ch5),
   fig-ladder-unit-drive (ch12; fig-slope-extrapolation removed), tbl-mt2-cost (ch2).
+- **FRAMING RULE (2026-09-14, Peter).** ISLA targets steady boundary-value PDE problems in general. The "freestream direction" is this book's
+  external-aerodynamics INSTANCE of a global condition vector ("the drive": a direction belonging to the problem, not to a boundary cell);
+  other instances: gravity/body force, applied field; none in steady conduction; inlet velocities are boundary data, not a freestream. Say
+  "boundary" for the problem class ("surface" only for the aero datasets' vehicle/wing surfaces); introduce the freestream only as the instance.
+  Current code limitation, stated honestly: exactly one required global vector; zero/several global vectors and per-cell boundary data
+  (boundary_scalars channel exists) are the generalization step (ch12 engineering). Never write the architecture's inputs as "surface +
+  freestream direction".
