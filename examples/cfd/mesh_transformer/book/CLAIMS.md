@@ -1665,3 +1665,12 @@ interior control @sec-nb-udrv-int-prereg.
   v 1.369x (ISLA 48/48), nut 0.874x (GT 22/48). SUPPORTED → interior flagship = reference frame; earlier interior numbers (similarity gauge) =
   prior configuration's record. Eddy-viscosity gain NOT attributed (frame + corrected measure changed together). First attempt VOID (uncorrected
   measure): never cite its 0.75/0.75/1.0 as a frame result. Interior standings to write: velocity lead 27% (1.37x), pressure deficit 7%, nut deficit 14%.
+- **BOOK OVERHAUL RULES (2026-09-14, Peter: chapters are a record of where we are, not how we got there).** Chapters state current facts;
+  history, retractions, dates, "until X lands", "pending", bf16 re-grades and "this book quoted" live ONLY in 18-notebook and 13-program-status.
+  Vocabulary: "reference configuration" (relative frame, total-measure scale), "constant-gauge variant", "similarity-gauge variant"; never
+  "prior configuration". Ratios are baseline ÷ ISLA everywhere, including chapter 8's interior (GT-volume ÷ ISLA: reference 0.93 / 1.37 / 0.87).
+  Corrections fixed during the overhaul: reference-configuration ISLA exists on 6 of 8 surface rungs (not 510, not 1,260, not the corner);
+  210-case ratios are the three-seed 0.84x / 0.90x; corner 512x80k constant gauge 0.0428, similarity gauge 0.0431, GT 0.0419, T 0.0431;
+  exact-kernel interior decoder in fp32 = GT-volume ÷ arm 0.10 (9.7x; the 8.0x was bf16); passive decode fp32 0.33 (3.1x). New anchors:
+  #sec-mt2-variants (ch2), #sec-de-result replaces #sec-de-unit-drive (removed), fig-hilift-data-efficiency + tbl-hilift-ladder (ch5),
+  fig-ladder-unit-drive (ch12; fig-slope-extrapolation removed), tbl-mt2-cost (ch2).
