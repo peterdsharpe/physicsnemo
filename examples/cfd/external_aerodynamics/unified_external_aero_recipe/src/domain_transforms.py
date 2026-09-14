@@ -23,9 +23,8 @@ each ``.pdmsh`` (``pattern: .../boundaries/vehicle``) and terminates in
 ``MeshToDomainMesh``, so every other typed boundary in the file (the
 curated DrivAerML layout carries ``vehicle``, ``no_slip``, ``slip``,
 ``inlet``, ``outlet``) is dropped before the model ever sees it.  Models
-that consume the full boundary-value problem (e.g. the ``MeshTransformer``
-all-boundary arm) instead read the whole ``DomainMesh`` -- which leaves
-these gaps this module fills:
+that consume the full boundary-value problem instead read the whole
+``DomainMesh`` -- which leaves these gaps this module fills:
 
 - The stock ``DomainMeshReader`` applies its cell AND point subsample caps
   uniformly to every mesh; the point cap destroys most of a cell-carrying
@@ -197,13 +196,12 @@ class ComputeFreestreamDirection(MeshTransform):
 
     Why this exists: ``NonDimensionalizeByMetadata`` non-dimensionalizes
     fields and geometry but never ``global_data``, so models that declare a
-    freestream drive would otherwise consume the RAW physical vector
-    (~39 m/s for DrivAerML).  The MeshTransformer's contract requires
-    declared fields to be nondimensional, and its zero-preserving drive
-    stream is norm-free by construction -- a 39x oversized drive multiplies
-    straight through the score/value products (measured on the DrivAerML
-    tunnel probe: raw-drive predictions at initialization are O(1e9) on the
-    vehicle-only arm and overflow float32 to NaN on the all-boundary arm).
+    freestream as a global vector input would otherwise consume the RAW
+    physical vector (~39 m/s for DrivAerML). A surrogate whose inputs are
+    declared nondimensional must not see it: an architecture of this program
+    that consumed the raw vector multiplied it straight through its
+    score/value products (initial predictions O(1e9), float32 overflow on
+    the all-boundary arm; measured on the DrivAerML tunnel probe, 2026-07).
     The unit direction plus the Cp/Cf-nondimensionalized targets is the
     AirFRANS-campaign convention (``freestream_direction``); for DrivAerML
     the discarded magnitude is a per-dataset constant, so no per-case
@@ -468,9 +466,9 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
 class ScaleGlobalField(MeshTransform):
     r"""Multiply one global_data field by a constant factor (probe P2).
 
-    Applied to the drive input only: ``U_inf_dir`` for the MeshTransformer
-    arms (the recipe's unit-direction drive, scaled to amplitude ``factor``)
-    or ``U_inf`` for GeoTransolver (its physical-velocity global embedding).
+    Applied to the global vector input only: ``U_inf_dir`` for ISLA (the
+    recipe's unit direction, scaled to amplitude ``factor``) or ``U_inf`` for
+    GeoTransolver (its physical-velocity global embedding).
     """
 
     def __init__(self, field_name: str, factor: float) -> None:
@@ -604,75 +602,6 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
             mesh = _compact_points(mesh)
         compose_measure_weights(mesh, 1.0 / kept_pi)
         return mesh
-
-
-@register()
-class ComputeDriveInvariants(MeshTransform):
-    r"""Per-cell drive-relative invariants as an extra cell_data feature.
-
-    Writes ``cell_data[output_field]`` of shape ``(n_cells, 3)`` holding
-    ``[n . d, r_hat . d, |r| / L]`` where ``n`` is the cell face normal
-    (``cell_data[normals_field]``), ``d`` the unit freestream direction
-    (``global_data[direction_field]``), ``r`` the cell centroid relative to
-    the mesh's plain centroid, and ``L`` a constant reference length. These
-    are exactly the seed invariants ISLA builds internally
-    (``model.py``: ``r_mag``, ``r_hat . d_hat``, ``n_hat . d_hat``), exposed
-    so that a raw-coordinate architecture (Transolver, GeoTransolver) can be
-    given them as inputs -- the INV transplant test of the HiLift small-data
-    carrier (notebook ``#sec-nb-inv-prereg``, 2026-09-06).
-
-    Place after ``CenterMesh`` and ``ComputeSurfaceNormals`` and before
-    ``MeshToDomainMesh``; the field rides along into
-    ``boundaries.<name>.cell_data`` like ``normals`` does.
-    """
-
-    def __init__(
-        self,
-        normals_field: str = "normals",
-        direction_field: str = "U_inf_dir",
-        output_field: str = "drive_inv",
-        reference_length: float = 8.0,
-    ) -> None:
-        super().__init__()
-        self._normals_field = normals_field
-        self._direction_field = direction_field
-        self._output_field = output_field
-        self._reference_length = float(reference_length)
-
-    def __call__(self, mesh: Mesh) -> Mesh:
-        if self._normals_field not in mesh.cell_data.keys():
-            raise KeyError(
-                f"ComputeDriveInvariants: cell_data[{self._normals_field!r}] "
-                f"missing; place after ComputeSurfaceNormals."
-            )
-        if self._direction_field not in mesh.global_data.keys():
-            raise KeyError(
-                f"ComputeDriveInvariants: global_data[{self._direction_field!r}] "
-                f"missing; place after ComputeFreestreamDirection."
-            )
-        n = mesh.cell_data[self._normals_field].float()
-        d = mesh.global_data[self._direction_field].float().reshape(1, 3)
-        c = mesh.cell_centroids.float()
-        r = c - c.mean(dim=0, keepdim=True)
-        r_mag = torch.linalg.vector_norm(r, dim=-1, keepdim=True).clamp_min(1e-12)
-        r_hat = r / r_mag
-        feats = torch.cat(
-            [
-                (n * d).sum(-1, keepdim=True),
-                (r_hat * d).sum(-1, keepdim=True),
-                r_mag / self._reference_length,
-            ],
-            dim=-1,
-        ).to(dtype=mesh.points.dtype)
-        new_cd = mesh.cell_data.clone()
-        new_cd[self._output_field] = feats
-        return mesh.with_data(cell_data=new_cd)
-
-    def extra_repr(self) -> str:
-        return (
-            f"{self._output_field} = [n.d, r_hat.d, |r|/{self._reference_length}] "
-            f"from {self._normals_field}, {self._direction_field}"
-        )
 
 
 def _pose_rotation_for_key(key: int, salt: int) -> torch.Tensor:

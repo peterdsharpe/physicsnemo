@@ -16618,3 +16618,29 @@ terminology was overhauled in the same pass (@sec-mt2, @sec-problem):
 "unit-direction baselines" replaces the old protocol label, the symbol for
 the global vector inputs is $\hat g_k$, and the relational invariants are
 now written $\xi_{is}$ to avoid the clash.
+
+## 2026-09-14 — Exact-kernel MeshTransformer code removed from the tree; git tag mt1-final marks the last commit carrying it {#sec-nb-mt1-removed}
+
+The exact-kernel MeshTransformer (MT1), the first architecture of this
+program (2026-07), had been retired as a product candidate since the
+interior verdict of @sec-nb-v0-verdict, but its code was still in the
+repository: the `mesh_attention` package (nine modules, about 9,000 lines)
+with its thirteen test files, the Laplace benchmark program beside this
+book (`models`, `problems`, `studies`, `datasets`, `tests`; 92 study
+scripts with their cluster launchers), and in the aerodynamics recipe the
+five `mesh_transformer_surface*` model configurations, the all-boundary and
+intrinsic-gauge dataset variants, the intrinsic reference-length transform
+and the per-cell drive-invariant transform with their tests. Peter, on
+learning the remnants existed: delete them if fully obsolete. Nothing
+outside the deleted set imported them: the ISLA package, its tests, the
+recipe's ISLA and baseline configurations and this book were unaffected,
+and the frozen run scripts archived under `results/` that import the old
+package stay as provenance of the runs they produced. The package exports
+were removed from `physicsnemo.experimental.nn`; the live dataset files
+kept their transforms and lost only comments that named the old model.
+Verification: the package imports; ISLA suites 136 passed; the recipe
+suite 231 passed (260 before, the 29 removed tests being the v1 arms').
+The last commit carrying the code is tagged `mt1-final` so any number the
+book cites for the earlier design can still be reproduced from that
+checkout. The book keeps the earlier design as history only, as CLAIMS
+already required.

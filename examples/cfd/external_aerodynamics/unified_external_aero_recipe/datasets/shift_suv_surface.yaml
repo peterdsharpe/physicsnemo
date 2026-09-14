@@ -61,8 +61,8 @@ pipeline:
       global_data: [TimeValue]
     # Unit freestream direction as a NEW global leaf `U_inf_dir` (`U_inf`
     # stays physical, so inference-side re-dimensionalization is
-    # unaffected). Consumed as the nondimensional rank-1 drive by the
-    # MeshTransformer templates; inert for models that don't declare it.
+    # unaffected). Consumed as the unit global vector input by ISLA;
+    # inert for models that don't declare it.
     # Placed before CenterMesh so the rotation augmentation
     # (transform_global_data: true, inserted after CenterMesh) rotates it
     # together with U_inf and the geometry.
@@ -95,17 +95,15 @@ pipeline:
     # drivaer_ml_surface.yaml.
     - _target_: ${dp:DropDegenerateCells}
     # Constant scale gauge for models that declare an explicit reference
-    # length read from global_data (the MeshTransformer templates'
+    # length read from global_data (the constant-gauge ISLA variants'
     # `reference_length_key: reference_length`). The value is in the
     # already-L_ref-nondimensionalized coordinate space (positions were
     # divided by the per-case `L_ref`=5 m above), so 8.0 means a physical
     # gauge of 40 m -- the tunnel scale, approximately the measure-weighted
     # RMS radius of the FULL DrivAerML boundary set (vehicle + ground +
     # walls + inlet/outlet), which is the source-normalization operating
-    # point the MeshTransformer is designed around. The same constant is
-    # injected by drivaer_ml_surface_allbc.yaml so the gauge is identical
-    # across the vehicle-only and all-boundaries arms; a vehicle-scale
-    # gauge (1.0 here) overflows the all-boundary arm's norm-free drive
+    # point the constant gauge was designed around; a vehicle-scale
+    # gauge (1.0 here) overflowed the retired all-boundary arm's norm-free
     # stream to NaN at initialization (measured dose-response: NaN at 1,
     # ~1e24 at 2, healthy for >= 6). Inert for every model that does not
     # declare it (the raw `L_ref` in global_data is untouched, so

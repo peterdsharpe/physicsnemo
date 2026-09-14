@@ -509,7 +509,13 @@ architecture (ISLA, code class `ISLA`) and two
 baselines (GeoTransolver, Transolver) on DrivAerML and HiLiftAeroML, with
 SHIFT-SUV as zero-shot target. Do not write "MT1" in polished chapters;
 say "the exact-kernel MeshTransformer, an earlier design of this program"
-where the interior chapter needs it.
+where the interior chapter needs it. Its code (physicsnemo/experimental/nn/
+mesh_attention, the Laplace example program under examples/cfd/
+mesh_transformer/{models,problems,studies,datasets,tests}, and the recipe's
+mesh_transformer_surface* configurations with the intrinsic-gauge and
+drive-invariant transforms) was DELETED on 2026-09-14 at Peter's direction;
+the last commit carrying it is tagged mt1-final. Never write that the code
+is in the tree.
 
 ## Program review 2026-09-08: the verdict and how to state it
 
