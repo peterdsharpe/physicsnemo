@@ -840,8 +840,8 @@ class ISLA(Module):
         if self.query_tokens:
             if query_independent:
                 raise ValueError("query_tokens is an interacting mode; set query_independent=False")
-            if use_local_features or raw_coord_channel or self.n_boundary_scalars or scale_conditioning or seed_mode != "invariant":
-                raise ValueError("query_tokens supports the plain invariant seed set only")
+            if use_local_features or raw_coord_channel or scale_conditioning or seed_mode != "invariant":
+                raise ValueError("query_tokens supports the plain invariant seed set (plus boundary and global scalars) only")
             self.qt_logw = nn.Parameter(torch.zeros(1))
             self.qt_type = nn.Parameter(torch.zeros(hidden))
         ### Query-token measure weight (audit 2026-09-08). "geometric_mean":
@@ -880,8 +880,8 @@ class ISLA(Module):
                 raise ValueError("support_tokens requires query_independent=True (passive read blocks decode the queries)")
             if self.query_tokens or self.latent_volume_tokens or self.n_anchors or wake_tokens:
                 raise ValueError("support_tokens excludes query_tokens, latent_volume_tokens, wake_tokens and n_anchors")
-            if use_local_features or raw_coord_channel or self.n_boundary_scalars or scale_conditioning or seed_mode != "invariant":
-                raise ValueError("support_tokens supports the plain invariant seed set only")
+            if use_local_features or raw_coord_channel or scale_conditioning or seed_mode != "invariant":
+                raise ValueError("support_tokens supports the plain invariant seed set (plus boundary and global scalars) only")
             self.sp_logw = nn.Parameter(torch.zeros(1))
             self.sp_type = nn.Parameter(torch.zeros(hidden))
         ### Optional per-query scalar inputs for the query tokens (e.g. the
@@ -993,6 +993,16 @@ class ISLA(Module):
             ],
             dim=-1,
         )
+
+    def _with_empty_boundary_data(self, inv, n_tokens: int):
+        """Boundary-condition data (``boundary_scalars``) belong to boundary cells;
+        tokens that are not boundary cells (support tokens, interior query tokens,
+        passive interior queries) carry zeros in that channel so the shared seed
+        layout is kept (GLOBAL INPUTS, 2026-09-14: the Dirichlet-data channel must
+        reach the interior paths for a boundary-value problem to be posed)."""
+        if not self.n_boundary_scalars:
+            return inv
+        return torch.cat([inv, inv.new_zeros(inv.shape[0], n_tokens, self.n_boundary_scalars)], dim=-1)
 
     def _with_global_scalars(self, inv, g_scalars, n_tokens: int):
         """Append the global scalar inputs (B, S) to every token's seed features;
@@ -1376,7 +1386,8 @@ class ISLA(Module):
             s_rhat = s_r / s_mag
             s_nhat = support_normals / support_normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             s_g = g_unit[:, None].expand(bs_, ns_, K, 3)
-            s_inv = self._with_global_scalars(self._seed_invariants(s_mag, s_rhat, s_nhat, s_g), g_scalars, ns_)
+            s_inv = self._with_global_scalars(
+                self._with_empty_boundary_data(self._seed_invariants(s_mag, s_rhat, s_nhat, s_g), ns_), g_scalars, ns_)
             h_s = self.embed(s_inv) + self.sp_type.to(h.dtype)
             if self.n_query_scalars:
                 if support_scalars is None:
@@ -1411,7 +1422,8 @@ class ISLA(Module):
             q_rhat = q_r / q_mag
             q_nhat = query_normals / query_normals.norm(dim=-1, keepdim=True).clamp_min(self.eps)
             q_g = g_unit[:, None].expand(bq, nq, K, 3)
-            q_inv = self._with_global_scalars(self._seed_invariants(q_mag, q_rhat, q_nhat, q_g), g_scalars, nq)
+            q_inv = self._with_global_scalars(
+                self._with_empty_boundary_data(self._seed_invariants(q_mag, q_rhat, q_nhat, q_g), nq), g_scalars, nq)
             h_q = self.embed(q_inv) + self.qt_type.to(h.dtype)
             if self.n_query_scalars:
                 if query_scalars is None:
@@ -1513,6 +1525,11 @@ class ISLA(Module):
                     q_nrm = query_normals
                 elif self.interior_queries:
                     q_nrm = None  # derived from the anchors below
+                elif query_points.shape[1] != normals.shape[1]:
+                    raise ValueError(
+                        "query_points are not the boundary points: pass query_normals (e.g. the SDF "
+                        "gradient) or set interior_queries=True to derive a normal from the anchors"
+                    )
                 else:
                     q_nrm = normals
             q_r = (q_pts - center) / gauge
@@ -1539,16 +1556,13 @@ class ISLA(Module):
             ### The remaining seed channels must match the encoder's seed
             ### layout (audit 2026-09-08: passive decoding used to fail with a
             ### shape error for every option below). Boundary scalars are
-            ### per-surface-point data, so they exist for the queries only when
-            ### the queries ARE the surface points.
+            ### per-boundary-cell data: the queries carry them only when the
+            ### queries ARE the boundary points, and zeros otherwise.
             if self.n_boundary_scalars:
-                if query_points is not None:
-                    raise ValueError(
-                        "n_boundary_scalars > 0 with query_independent=True decodes the surface "
-                        "points only (query_points=None): distinct query points carry no "
-                        "boundary scalars"
-                    )
-                q_inv = torch.cat([q_inv, bs.to(q_inv.dtype)], dim=-1)
+                if query_points is None:
+                    q_inv = torch.cat([q_inv, bs.to(q_inv.dtype)], dim=-1)
+                else:
+                    q_inv = self._with_empty_boundary_data(q_inv, nq)
             if self.raw_coord_channel:
                 q_inv = torch.cat([q_inv, q_r, q_nhat], dim=-1)
             if self.scale_conditioning:

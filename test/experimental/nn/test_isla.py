@@ -975,10 +975,10 @@ def test_passive_decode_seed_and_head_options(kw):
 
 
 def test_passive_decode_boundary_scalars():
-    """Audit 2026-09-08: boundary scalars are per-surface-point data. Passive
-    decoding of the surface itself (query_points=None) carries them into the
-    query seeds and runs; distinct query points have none and must raise
-    rather than fail with a shape error."""
+    """Audit 2026-09-08: boundary scalars are per-boundary-cell data. Passive
+    decoding of the boundary itself (query_points=None) carries them into the
+    query seeds and runs; distinct query points carry zeros in the channel
+    (GLOBAL INPUTS, 2026-09-14) and decode without a shape error."""
     torch.manual_seed(0)
     pts = torch.randn(1, 60, 3, dtype=torch.float64) * torch.tensor([3.0, 2.0, 1.0], dtype=torch.float64)
     nrm = torch.nn.functional.normalize(torch.randn_like(pts), dim=-1)
@@ -992,8 +992,9 @@ def test_passive_decode_boundary_scalars():
         out2 = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, boundary_scalars=bs * 2)
     assert out.shape == (1, 60, 4) and torch.isfinite(out).all()
     assert not torch.allclose(out, out2, atol=1e-6)  # the channel is live on the query side
-    with pytest.raises(ValueError):
-        m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, boundary_scalars=bs, query_points=pts[:, :17], query_normals=nrm[:, :17])
+    with torch.no_grad():
+        out_q = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, boundary_scalars=bs, query_points=pts[:, :17] * 0.5, query_normals=nrm[:, :17])
+    assert out_q.shape == (1, 17, 4) and torch.isfinite(out_q).all()
 
 
 def _rot_z(deg):

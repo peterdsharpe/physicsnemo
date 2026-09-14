@@ -60,7 +60,7 @@ def _assert_se3(m, pts, nrm, w, gv, gs, extra=None, atol=1e-10):
         moved_extra = {
             k: (v @ R.T + t if k.endswith("points") else (v @ R.T if k.endswith("normals") else v))
             for k, v in extra.items()
-        }
+        }  # scalars (query_scalars, boundary_scalars) are invariants and pass through unchanged
         moved = m(
             points=pts @ R.T + t, normals=nrm @ R.T, measure_weights=w,
             global_vectors=None if gv is None else gv @ R.T, global_scalars=gs, **moved_extra,
@@ -221,3 +221,31 @@ def test_one_vector_only_variants_refuse_other_counts(kw):
 def test_negative_counts_rejected():
     with pytest.raises(ValueError, match="non-negative"):
         ISLA(hidden=32, n_layers=1, n_slices=8, n_global_vectors=-1)
+
+
+def test_boundary_data_reaches_every_interior_path():
+    """A boundary-value problem needs the per-cell boundary data (Dirichlet trace)
+    on the boundary tokens and zeros on every token that is not a boundary cell.
+    All three interior paths accept it, the covariance contracts hold, and the
+    interior prediction depends on the boundary data."""
+    pts, nrm, w = _sample()
+    bsc = torch.randn(2, pts.shape[1], 1, dtype=D)
+    q = torch.randn(2, 30, 3, dtype=D) * 0.5
+    qn = torch.nn.functional.normalize(torch.randn(2, 30, 3, dtype=D), dim=-1)
+    gs = torch.tensor([[0.7], [2.0]], dtype=D)
+    arms = [
+        (_model(n_global_vectors=0, n_global_scalars=1, n_boundary_scalars=1, query_tokens=True, query_mass="source_total"),
+         dict(query_points=q, query_normals=qn)),
+        (_model(n_global_vectors=0, n_global_scalars=1, n_boundary_scalars=1, query_independent=True, interior_queries=True, n_decoder_layers=1),
+         dict(query_points=q)),
+        (_model(n_global_vectors=0, n_global_scalars=1, n_boundary_scalars=1, query_independent=True, support_tokens=True, query_mass="source_total", n_decoder_layers=1),
+         dict(query_points=q, query_normals=qn, support_points=q, support_normals=qn)),
+    ]
+    for m, extra in arms:
+        assert m.embed[0].in_features == 2  # boundary scalar + global scalar (no vectors, relative frame)
+        base = _assert_se3(m, pts, nrm, w, None, gs, extra=dict(extra, boundary_scalars=bsc))
+        with torch.no_grad():
+            other = m(points=pts, normals=nrm, measure_weights=w, global_scalars=gs, boundary_scalars=bsc + 1.0, **extra)
+        assert base.shape[1] == 30 and not torch.allclose(other, base, atol=1e-3)
+        continue
+        assert base.shape[1] == 30 and not torch.allclose(other, base, atol=1e-3)
