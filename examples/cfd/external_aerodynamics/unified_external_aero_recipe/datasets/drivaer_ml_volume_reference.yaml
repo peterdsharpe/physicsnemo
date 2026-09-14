@@ -87,9 +87,6 @@ pipeline:
       use_winding_number: false
     - _target_: ${dp:DropBoundary}
       names: [stl_geometry]
-    - _target_: ${dp:DropDegenerateCells}
-    - _target_: ${dp:ComposeQuadratureMeasure}
-      output_field: quadrature_measure
     - _target_: ${dp:RenameMeshFields}
       point_data:
         UMeanTrim: velocity
@@ -106,6 +103,10 @@ pipeline:
     # model YAML's `forward_kwargs:` spec. Targets are extracted from
     # interior.point_data.<name> by the `targets:` block below.
 
+    # Last in the chain: degenerate-cell guard, then the corrected measure on the cells the model will see.
+    - _target_: ${dp:DropDegenerateCells}
+    - _target_: ${dp:ComposeQuadratureMeasure}
+      output_field: quadrature_measure
 targets:
   velocity: vector
   pressure: scalar
