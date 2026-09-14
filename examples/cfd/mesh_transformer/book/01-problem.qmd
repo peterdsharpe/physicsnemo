@@ -406,11 +406,11 @@ are cell areas (or cell volumes in the interior), the metric is a surface
 integral: it scores error *per unit surface area*, so the large, smooth
 cells of an open surface count for more than the many small cells packed
 into a slot or a corner. A per-point root-mean-square over the same
-samples weights every cell equally and can rank two models differently;
-the single-case study of the companion notebook found the two
-conventions give baseline-to-ISLA ratios of 0.73 per unit area and 0.87
-per point on the same predictions. Every ratio in this book is the
-area-weighted one unless a caption says otherwise. The fields enter as the
+samples weights every cell equally and can rank two models differently:
+on one set of predictions the two conventions give a Transolver-to-ISLA
+ratio of 0.73 per unit area and 0.87 per point (@sec-nb-overfit-verdict).
+Every ratio in this book is the area-weighted one unless a caption says
+otherwise. The fields enter as the
 training pipeline presents them — each field shifted and scaled by dataset
 statistics — so the denominator is the norm of the standardized label, not
 of the raw pressure. The reported error is the arithmetic mean of
@@ -421,6 +421,14 @@ the same cases. Every cross-architecture ratio in this book is the named
 baseline's error divided by ISLA's error on the same cases,
 so a ratio above one favours ISLA; this convention is stated
 here once and not restated per table.
+
+**The reporting instrument is float32 inference.** Every error in this book
+is scored with the model run in float32 on the sampled points. Scoring in
+bfloat16 adds an architecture-dependent offset of 3–10% to the mean error
+(per case up to about 30%), larger for GeoTransolver and Transolver than for ISLA,
+so a bfloat16 comparison flatters ISLA; a number scored in bfloat16 is
+labelled as such wherever it appears (@sec-nb-fp32-instrument). Training runs
+in bfloat16 (@sec-protocol); the instrument concerns evaluation only.
 
 Two diagnostic analyses use a *different* scale and are labelled as such
 wherever they appear: the reference-predictor calibration of
@@ -538,13 +546,18 @@ contracts tested in this book, all on ISLA (@sec-mt2):
 
 - **rotation and translation covariance**: a rigidly moved input produces
   the rigidly moved output (scalars unchanged, vectors rotated);
-- **similarity covariance**: the same under positive rescaling, which
-  requires the reference length to transform with the geometry — this
-  holds only with the similarity gauge on and is not claimed for the
-  default constant gauge behind the accuracy results;
+- **similarity covariance**: the same under a positive rescaling of the
+  geometry (positions by $k$, cell measures by $k^2$), which requires the
+  reference length to transform with the geometry. The reference
+  configuration's length scale is the square root of the total surface
+  measure and the similarity-gauge variant's is the measure-weighted RMS
+  radius, so both hold it; the constant-gauge variant does not;
 - **measure-scale invariance**: multiplying every cell measure by one
   constant leaves every output unchanged, so only the relative weighting
-  of cells matters;
+  of cells matters. The constant-gauge and similarity-gauge variants hold
+  it. The reference configuration does not: its length scale reads the
+  total measure, so rescaling the measures alone rescales its lengths, and
+  similarity covariance takes this contract's place;
 - **query independence**: the prediction at a point does not depend on
   which other points are in the query batch (chunking may only reorder
   floating-point sums). ISLA holds this for interior queries in its
@@ -588,8 +601,9 @@ the uniform-sampling error (@sec-full-data).
 *Units invariance* has two halves. For **lengths**, every model
 nondimensionalizes coordinates by the dataset's reference length $L$, so no
 weight ever sees a metre; exact scale covariance when $L$ transforms with
-the geometry is a contract only for ISLA with its similarity
-gauge on, and is not claimed otherwise. For the **measure**, cell areas
+the geometry is a contract for ISLA's reference configuration and its
+similarity-gauge variant, not for its constant-gauge variant, and is not
+claimed for GeoTransolver or Transolver. For the **measure**, cell areas
 enter as quadrature weights; whether a trained model exploits correct
 weights under non-uniform sampling is not a contract but the
 density-robustness measurement above. Nothing in this book asserts a units
@@ -630,7 +644,9 @@ third test. Configurations
 that fail it are still measured, as ablations that price the requirement:
 the routing without its measure weights is the standing example
 (@sec-mechanism, @sec-de-unit-drive), 5–17% more accurate on
-HiLiftAeroML in distribution and 19x less robust to sampling density.
+HiLiftAeroML in distribution, 19x worse under a 10:1 sampling-density bias,
+and worse than predicting zero under area-proportional sampling
+(@sec-nb-bench-verdict, @sec-nb-overfit-routing-probe).
 Physically meaningful geometric inputs (signed distance, geodesic or
 heat-method distance, curvature), exact invariances and measure-consistent
 operators are the directions the program pursues instead.
@@ -688,11 +704,12 @@ lab notebook (@sec-notebook).
 count, the tokens per case and the peak training memory of both sides in
 the same sentence. At 10,000 tokens per case ISLA has 8.9
 million parameters and GeoTransolver 9.0 million; tokens per case and
-epochs are identical. Peak training memory at 10,000 tokens, on one GB300 with one
-instrument, is 1.6 GiB for ISLA's current code with activation recompute
-against 4.1 GiB for GeoTransolver; the ISLA checkpoints behind the accuracy
-numbers were trained with an earlier version of the code that peaked at
-9.3 GiB, and ISLA's step is 3.7x slower (@sec-resource-matching).
+epochs are identical. On one GB300 in bfloat16 at 10,000 tokens and batch 1,
+both models compiled as the recipe runs them, ISLA's training step is 47 ms
+at 1.30 GiB of peak memory with its geometry recompute on, 1.05x
+GeoTransolver's 45 ms at 2.70 GiB, and 39 ms at 1.94 GiB without it
+(@sec-resource-matching). Memory was not a controlled variable in any
+comparison, and no accuracy result depends on it.
 Every figure and table caption ends with the artifact in `results/` from
 which it is computed, and every figure is drawn from that artifact at
 render time.
