@@ -16644,3 +16644,129 @@ The last commit carrying the code is tagged `mt1-final` so any number the
 book cites for the earlier design can still be reproduced from that
 checkout. The book keeps the earlier design as history only, as CLAIMS
 already required.
+
+## 2026-09-14 — Preregistration, GLOBIN-ACCEPT: ISLA on a screened-Poisson family with no global direction and one scalar parameter {#sec-nb-globin-accept-prereg}
+
+**Setting.** ISLA now accepts zero or more global vector inputs and zero or
+more global scalar inputs (@sec-nb-global-inputs), but every problem it
+has been trained on is external aerodynamics with one global vector and no
+scalar. The generalization is untested on the problems it was made for.
+Writing this test also exposed a gap: the per-cell boundary-data channel
+(`boundary_scalars`, the Dirichlet trace) was refused on all three interior
+paths, so a boundary-value problem with prescribed boundary values could
+not be posed to the interior. That is fixed in the same commit: tokens
+that are not boundary cells carry zeros in the channel, and a new contract
+test covers the three paths.
+
+**Problem.** The screened Poisson equation $\nabla^2 u - \kappa^2 u = 0$
+inside a random star-shaped closed surface in three dimensions (a unit
+sphere perturbed by real spherical harmonics up to order three, amplitude
+about 0.1), with Dirichlet data $u$ on the boundary and the screening
+parameter $\kappa \in [0, 3]$; $\kappa = 0$ is Laplace's equation, steady
+conduction with pinned boundary temperatures. Exact solutions are sums of
+six fundamental solutions $e^{-\kappa|x-y|}/|x-y|$ with sources outside the
+body, so the interior labels are exact and every case is a new geometry, a
+new trace and a new $\kappa$. Inputs: 1,024 boundary points with unit normals
+and Horvitz–Thompson area weights, the trace as the one boundary scalar,
+$\kappa$ as the one global scalar input, no global vector input. Output: $u$
+at 256 volume-uniform interior queries through the interacting query-token
+path (the query normal is the level-set gradient of the surface function).
+Each case is normalized by the boundary RMS of its trace, which the linear
+PDE permits.
+
+**Arms and instruments.** (A) ISLA, `n_global_vectors=0`,
+`n_global_scalars=1`, `n_boundary_scalars=1`, width 128, six layers, 64
+slices, query tokens with `source_total` mass. (B) The same model with
+$\kappa$ withheld (`n_global_scalars=0`). Trivial predictors: the
+measure-weighted boundary mean of the trace and the nearest boundary value.
+Two seeds per arm, 3,000 steps of eight fresh cases each (infinite data),
+AdamW with a one-cycle schedule, bfloat16 autocast in training, float32
+evaluation. Test sets of 64 held-out cases: T0 with $\kappa \in [0, 3]$; T1
+with $\kappa \in [3, 4]$, parameter extrapolation, reported and not part of
+the bar. Metric: per-case relative $L^2$ over the queries, mean over cases.
+Hardware: the local RTX 4090 laptop GPU. Script:
+`research/global_inputs_acceptance/screened_poisson_acceptance.py`; artifact
+`results/global_inputs_acceptance_screened_poisson_2026-09-14.json`.
+
+**Predictions and bars, written before the run.**
+
+- **Acceptance.** Arm A reaches a T0 mean relative $L^2$ of **at most
+  0.10** on both seeds. The boundary-mean predictor is expected near 0.5
+  and the nearest-value predictor near 0.3 to 0.5; a model that does not
+  beat both by at least 3x has not learned the boundary-to-interior map.
+  Failing this bar falsifies the claim that the generalized inputs make
+  ISLA usable, as built, on a non-aerodynamic boundary-value problem.
+- **The scalar input matters.** Arm B is **at least 1.5x worse** than arm
+  A on T0 (seed means). Screening at $\kappa = 3$ across a body of
+  diameter about two changes the interior solution by a factor of order
+  $e^{-3}$ relative to $\kappa = 0$, and the trace alone does not identify
+  $\kappa$ (different source layouts and screenings give the same trace).
+  If B matches A, the scalar reaches the model but is not needed here, and
+  the family was too easy to discriminate conditioning; the seed-append
+  conditioning would then be tested on a family where it must matter.
+- **Extrapolation (reported only).** T1 will be worse than T0 for both
+  arms; no bar.
+
+**What the result cannot say.** This is an acceptance test of the input
+interface on a smooth, source-generated family, not a benchmark against a
+classical solver or another architecture; a boundary-element method solves
+this family exactly. It says whether the zero-vector, one-scalar,
+Dirichlet-data configuration trains and generalizes across geometries and
+parameters at all.
+
+## 2026-09-14 — Verdict, GLOBIN-ACCEPT at 3,000 steps: 5–7x better than the trivial predictors, the 0.10 bar missed by one seed at 0.109, the scalar input helps by 1.2x not 1.5x {#sec-nb-globin-accept-verdict}
+
+**Setting.** The preregistration of @sec-nb-globin-accept-prereg: ISLA with
+no global vector input and one global scalar input ($\kappa$) predicting the
+interior solution of the screened Poisson equation inside random
+star-shaped bodies from the Dirichlet trace, against the same model with
+$\kappa$ withheld and two trivial predictors. Two seeds per arm, 3,000
+steps of eight fresh cases, float32 evaluation on 64 held-out cases per
+set. Artifact:
+`results/global_inputs_acceptance_screened_poisson_2026-09-14.json`
+(commit bad7c142, RTX 4090 laptop GPU, 190–227 s per training run,
+1.91M parameters).
+
+**What we saw** (per-case relative $L^2$ over the interior queries, mean
+over cases; T0 is $\kappa \in [0,3]$, T1 is $\kappa \in [3,4]$):
+
+| Arm | T0 seed 0 | T0 seed 1 | T1 seed 0 | T1 seed 1 |
+|---|---|---|---|---|
+| ISLA, $\kappa$ as global scalar input | 0.109 | 0.099 | 0.200 | 0.181 |
+| ISLA, $\kappa$ withheld | 0.119 | 0.129 | 0.235 | 0.237 |
+| Nearest boundary value | 0.555 | | 1.164 | |
+| Boundary mean of the trace | 0.749 | | 0.985 | |
+
+**Against the bars.** The acceptance bar (T0 at most 0.10 on both seeds)
+is **missed by one seed**, 0.109 against 0.099; the seed mean is 0.104. The
+3x margin over both trivial predictors is met with room: 5.3x over the
+nearest boundary value and 7.2x over the boundary mean. The
+scalar-conditioning prediction (the $\kappa$-blind arm at least 1.5x
+worse) is **falsified**: the blind arm is worse in all four comparisons
+(both seeds, both sets), by 1.19x on T0 and 1.24x on T1, not 1.5x. The
+scalar input is used and helps consistently; it is not decisive on this
+family because the trace largely identifies $\kappa$: six sources at radii
+1.8 to 2.8 imprint a decay pattern on the boundary from which the screening
+can be read, as the preregistration's escape clause anticipated.
+Extrapolation to $\kappa \in [3,4]$ costs both arms about 1.8x, and the
+trivial predictors are useless there (relative error near or above one).
+
+**Why it matters.** The zero-vector, one-scalar, Dirichlet-data
+configuration trains and generalizes across geometries, traces and the
+parameter on a problem that has nothing to do with aerodynamics, through
+the same code path the aerodynamic recipe uses; the boundary-data channel
+that this test forced open is the piece that makes a boundary-value problem
+posable at all. The bar was missed by 9% on one seed with the training
+loss still falling (0.30 at step 400, 0.11 at step 3,000), which says the
+budget, not the architecture, set the number; the bar is not moved, the
+result stands as a narrow miss, and the budget question is answered by a
+separate pre-registered extension below.
+
+**Preregistered extension (written before its run).** The same script with
+9,000 steps per run (three times the budget), otherwise unchanged; artifact
+`results/global_inputs_acceptance_screened_poisson_9000steps_2026-09-14.json`.
+Prediction: the scalar arm reaches T0 at most 0.10 on both seeds (if it
+does not, the 10% floor is a property of this model size on this family,
+not of the budget), and the blind arm stays worse by a factor between 1.1
+and 1.3 (if the gap closes to parity the scalar is redundant here; if it
+widens past 1.5x the earlier ratio was a budget artifact).
