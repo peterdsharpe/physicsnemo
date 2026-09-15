@@ -32,11 +32,23 @@ ARMS = {
            "w384nw": ["scale_isla_dr_w384nw_seed42", "scale_isla_dr_w384nw_seed43"],
            "c512x80k": ["scale_isla_dr_c512x80k_seed42", "scale_isla_dr_c512x80k_seed43"],
            "kernelctrl": ["scale_isla_dr_kernelctrl_seed42", "scale_isla_dr_kernelctrl_seed43"],
-           "g512x80k": ["scale_isla_dr_g512x80k_seed42", "scale_isla_dr_g512x80k_seed43"]},
+           "g512x80k": ["scale_isla_dr_g512x80k_seed42", "scale_isla_dr_g512x80k_seed43"],
+           # RELFRAME corner (rows 32-33, preregistered 2026-09-14): isla_surface_reference (frame_mode=relative,
+           # scale_mode=total_measure) at width 512 x 80,000 cells, trained and evaluated under code_globin + recipe_globin
+           "r512x80k": ["scale_isla_dr_r512x80k_seed42", "scale_isla_dr_r512x80k_seed43"]},
 }
 # Numerics families (coordinator amendment): t80k, c512x80k and kernelctrl were trained from code_perf (fast
 # point-softmax kernel; bf16-roundoff-level differences from the reference checkpoints); everything else from code_isla5.
 FAST_KERNEL = {"t80k", "c512x80k", "kernelctrl", "g512x80k"}
+GLOBIN = {"r512x80k"}  # code_globin (9f94e0df): global-inputs API, eager geometry kernel; own reference below
+# "÷ own reference" for arms whose reference is not the constant-gauge lane: the relative-frame reference
+# rf_dr_mt2_meas_seed{42,43} (frame_mode=relative, scale_mode=total_measure, width 192, 10,000 cells, lr 1e-3, 500 epochs,
+# from code_frame/recipe_frame), float32 on the 48 validation cars, evaluated under code_eval_frame + recipe_frame by the
+# frame program (book artifact results/frame_reduction_2026-09-11.json, key drivaer_val). code_globin evaluates the
+# old-signature arithmetic bitwise at K=1, so the corner under code_globin is like for like (coordinator, 2026-09-14).
+OWN_REF = {"dr_r512x80k": {"runs": ["rf_dr_mt2_meas_seed42", "rf_dr_mt2_meas_seed43"], "pressure_l2": 0.05522,
+                           "seed_pressure": [0.054718, 0.055721], "wss_l2": [0.080220, 0.080929],
+                           "snapshot": "code_eval_frame", "source": "results/frame_reduction_2026-09-11.json#drivaer_val"}}
 STEP = re.compile(r"Epoch (\d+) \[(\d+)/(\d+)\] Loss: ([0-9.eE+-]+|nan) Step: ([0-9.]+)s Mem: ([0-9.]+)GB")
 
 
@@ -171,7 +183,8 @@ for ds, arms in ARMS.items():
             for k in ("params", "peak_mem_gb", "median_step_s", "gpu_hours"):
                 v = [t[k] for _, t in per if t and t.get(k) is not None]
                 a[k] = st.mean(v) if v else None
-            a["numerics"] = "fast point-softmax (code_perf)" if arm in FAST_KERNEL else "reference kernel (code_isla5 / reference lanes)"
+            a["numerics"] = ("relative frame, eager geometry kernel (code_globin)" if arm in GLOBIN else
+                             "fast point-softmax (code_perf)" if arm in FAST_KERNEL else "reference kernel (code_isla5 / reference lanes)")
             if arm == "w384nw":
                 a["label"] = "ablation (discretization-dependent; never a reference configuration)"
             out["arms"][f"{ds}_{arm}"] = a
@@ -182,6 +195,10 @@ for ds in ARMS:
             a = out["arms"].get(f"{ds}_{arm}")
             if a:
                 a["pressure_over_ref"] = a["pressure_l2"] / ref["pressure_l2"]
+                own = OWN_REF.get(f"{ds}_{arm}")
+                if own:
+                    a["own_reference"] = own
+                    a["pressure_over_own_ref"] = a["pressure_l2"] / own["pressure_l2"]
 # Density-bias probe (float32; 10:1 biased sampling vs the uniform control, both at 10,000 cells): biased / uniform
 # pressure error per arm. The reference arm's probe comes from the transfer session's campaign E; the SCALE arms from
 # highlift/hl_scale_isla_probe_fp32_aga.sbatch.
@@ -216,6 +233,19 @@ PROBE = {"dr_ref": [f"{T}/transfer/campaign_e_fp32/iw_mt2_lr1e3_seed{s}" for s i
          "dr_gauge_ref@80k_codeeval": [f"{T}/scale_probe_fp32_80kx/iw_mt2_gauge_seed{s}" for s in (42, 43)],
          "dr_g512x80k": [f"{T}/scale_probe_fp32/scale_isla_dr_g512x80k_seed{s}" for s in (42, 43)],
          "dr_g512x80k@80k": [f"{T}/scale_probe_fp32_80k/scale_isla_dr_g512x80k_seed{s}" for s in (42, 43)]}
+# HiLift probes: SAMPLE FRAME ONLY (program instruction 2026-09-10), highlift_probe_{biased3,unif2}_sf.yaml at 10,000
+# cells for every HiLift arm and the reference, and the _sf_80k pair at the native count of the 40k/80k arms.
+# Launcher highlift/hl_scale_isla_probe_hl_sf_fp32_aga.sbatch (code_eval, float32, sidecars).
+PROBE["hl_ref"] = [f"{T}/scale_probe_hl_fp32_sf/mt2_hl_lr1_seed{s}" for s in (42, 43)]
+for _arm in ("w384", "w512", "w384nw", "t40k", "t80k", "c384x40k", "c512x80k"):
+    PROBE[f"hl_{_arm}"] = [f"{T}/scale_probe_hl_fp32_sf/scale_isla_hl_{_arm}_seed{s}" for s in (42, 43)]
+for _arm, _cells in (("t40k", "40k"), ("c384x40k", "40k"), ("t80k", "80k"), ("c512x80k", "80k")):
+    PROBE[f"hl_{_arm}@{_cells}"] = [f"{T}/scale_probe_hl_fp32_sf_native/scale_isla_hl_{_arm}_seed{s}" for s in (42, 43)]
+# RELFRAME corner and its own reference: SAMPLE FRAME ONLY, under code_globin + recipe_globin
+# (highlift/hl_scale_isla_globin_probe_sf_fp32_aga.sbatch). The 10k key doubles as the arm's density column.
+PROBE["dr_r512x80k"] = [f"{T}/scale_probe_fp32_sf/scale_isla_dr_r512x80k_seed{s}" for s in (42, 43)]
+PROBE["dr_r512x80k@80k_sf"] = [f"{T}/scale_probe_fp32_sf_80k/scale_isla_dr_r512x80k_seed{s}" for s in (42, 43)]
+PROBE["dr_rf_ref@10k_sf"] = [f"{T}/scale_probe_fp32_sf/rf_dr_mt2_meas_seed{s}" for s in (42, 43)]
 
 
 def _probe_metric(d):
