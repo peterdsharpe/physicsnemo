@@ -17105,3 +17105,61 @@ GeoTransolver with the unit drive, and its 10,000-token prior at 1,260
 cases is the unit-drive rerun (udrv_hl_gt_full_seed{42,43}), also still
 training. These lanes are also the 20,000-token rung of the SCALE study's
 token ladder.
+
+## 2026-09-15 — Verdict, KERNEL-NEUTRAL seed-44 pair: fused 2.2% better than its eager twin; three-seed mean within 3% but the fused spread is 11% against 1.8%; still opt-in; seed pairs 45 and 46 preregistered {#sec-nb-kernel-neutral-3seed-verdict}
+
+**Setting.** The follow-up preregistered in @sec-nb-kernel-neutral-verdict:
+a seed-44 pair, fused and eager, trained from the same snapshot
+(`code_globin`, `recipe_globin`) with identical data order, so that a
+kernel effect could be separated from the seed-43 outlier. Both lanes
+trained without incident; at step 46 of epoch 0 their losses agreed to
+four digits, so the trajectories started identical. Float32 sealed
+validation, 48 cars, each checkpoint evaluated through both kernels.
+Artifact: `results/kernel_neutral_reduction_3seed_2026-09-15.json`.
+
+**What we saw** (float32 relative $L^2$; ratio = fused lane ÷ eager twin):
+
+| Seed | Fused pressure | Eager pressure | Ratio | Wall-shear ratio |
+|---|---|---|---|---|
+| 42 | 0.0552 | 0.0547 | 1.008 | 1.011 |
+| 43 | 0.0607 | 0.0557 | 1.089 | 1.096 |
+| 44 | 0.0543 | 0.0556 | 0.977 | 0.983 |
+
+Three-seed means: pressure 0.0567 against 0.0553, ratio
+1.025; wall shear ratio 1.030. Spread across the three seeds:
+fused 11.2%, eager 1.8%. Evaluating any checkpoint
+through the fused kernel or the eager region differs by at most
+5e-07 relative. Epoch time on the same-day pair, same
+snapshot: fused 26 s, eager 29 s (median over 498 epochs), a 1.1x gain;
+the 1.6x reported yesterday compared against the 2026-09-10 reference
+logs on other nodes and is withdrawn as a like-for-like figure.
+
+**Against the predictions.** Neither written prediction held cleanly. The
+"kernel at fault" prediction (fused seed 44 worse than eager seed 44 by
+more than 3%) is **falsified**: the fused lane is 2.2% *better*. The
+"outlier" prediction (pair within 3%, fused spread collapsing toward the
+eager spread) is **half met**: the pair is within 3%, but the spread did
+not collapse, because seed 43 is still in the set. Reopened on three
+seeds, the neutrality bar splits: the three-seed mean ratio 1.025
+is within 3%, while the per-seed criterion (every seed within the eager
+spread plus 3%) still fails on seed 43 alone. The picture is not a mean
+shift: two seeds land within 2.2% on either side of their twins, and one
+lands 9% high. It is consistent with the fused kernel widening run-to-run
+variance, and equally consistent, on three draws, with one unlucky seed
+under either kernel; three seeds cannot separate those. **The kernel
+stays opt-in.**
+
+**Preregistered extension (written before its run).** Two more pairs,
+seeds 45 and 46, fused and eager, same snapshot (launcher indices 4 to 7
+of `kernel/fused_train_aga.sbatch`; evaluation units appended to
+`kernel/fused_eval_fp32_aga.sbatch`), giving five matched pairs.
+Prediction if the kernel widens variance: the five fused seeds' relative
+spread stays at least twice the five eager seeds', with at least one more
+fused seed outside the eager spread plus 3%; then the kernel stays opt-in
+and the engineering item is a float32-accumulation path for the pooled
+invariants, to be tested the same way. Prediction if seed 43 was chance:
+the two new pairs each agree within 3% and the five-seed spreads are
+within a factor of two of each other; then the five-seed mean ratio,
+if within 3%, makes the fused kernel the recommended CUDA default, with
+eager kept as the reference implementation, and the seed-43 pair stays in
+the record as the one that did not agree.
