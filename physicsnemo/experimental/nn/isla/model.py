@@ -557,7 +557,104 @@ def _kernel_readout(q_r, src_r, src_h, src_w, rho, eps, logspace: bool = False):
 
 
 class ISLA(Module):
-    r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges (see module docs)."""
+    r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
+
+    A soft-slice transformer for steady boundary-value problems whose attention
+    operates only on invariants of the per-point vector set and whose vector
+    outputs are re-assembled in an equivariant basis at the heads, so exact
+    rotation and translation covariance holds by construction (see the module
+    docstring for the contracts and the reference configuration). Every
+    argument is keyword-only.
+
+    Args:
+        out_scalars: Number of scalar output fields per token (e.g. pressure).
+        out_vectors: Number of vector output fields per token (e.g. wall shear);
+            each is expanded in the ``4 + 3K`` equivariant head basis.
+        hidden: Token width of the slice blocks.
+        n_layers: Number of slice-attention blocks in the encoder.
+        n_slices: Number of soft slices (data-adaptive anchors) per block.
+        mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
+        reference_length: Constant length unit of the centered frame when
+            ``scale_mode="reference_length"``; unused by the reference
+            configuration (``scale_mode="total_measure"``).
+        use_measure_weights: Route with the quadrature measure as a log-space
+            bias so slice states are measure-weighted (quadrature) means. ``False``
+            is the "weights-off" ablation, which reads the sampling density.
+        fast_point_softmax: Use the row-parallel softmax kernel over points
+            (``True``, the default since 2026-09-10) or the reference
+            middle-dimension kernel (roundoff-level difference).
+        n_boundary_scalars: Number of per-cell boundary-condition scalars
+            (``boundary_scalars``, e.g. a Dirichlet trace) appended to the seeds;
+            tokens that are not boundary cells carry zeros in the channel.
+        n_global_vectors: Number ``K >= 0`` of global vector inputs
+            (``global_vectors`` of shape ``(B, K, 3)``); each enters as a unit
+            direction through one seed cosine, one relational direction cosine
+            and three head basis vectors. ``1`` (the external-aerodynamics
+            freestream direction) reproduces the former single-vector model.
+        n_global_scalars: Number ``S >= 0`` of global scalar inputs
+            (``global_scalars`` of shape ``(B, S)``, e.g. PDE parameters),
+            appended to every token's seed features.
+        similarity_gauge: Centered-frame variant whose centroid and length unit
+            are the measure-weighted centroid and RMS radius of the sample
+            (adds equivariance to geometric scale); requires
+            ``frame_mode="centered"`` and ``scale_mode="reference_length"``.
+        use_relational_geo: Feed the point-anchor relational invariants to the
+            routing bias and the read-back (``False`` is the feature-only
+            slicing ablation).
+        query_independent: Decode queries passively through read blocks, so a
+            prediction at one point does not depend on which other points are
+            queried (given the boundary sample).
+        n_decoder_layers: Number of passive read blocks when
+            ``query_independent`` is set.
+        local_readout_rho: Radius (in frame units) of the measure-weighted
+            Gaussian local readout of the passive decoder.
+        query_tokens: Admit ``query_points`` as interacting tokens (the interior
+            reference configuration; needs ``query_normals``).
+        geo_checkpoint: Rebuild the per-slice geometric invariants in the
+            backward pass instead of storing them (bitwise-identical forward and
+            gradients, lower peak memory).
+        n_query_scalars: Number of per-query scalars (``query_scalars``, e.g.
+            the signed distance to the wall) for the interior modes.
+        query_scalar_scale: ``"length"`` divides query scalars by the frame's
+            length unit and enters ``[s, sign(s) log(|s| + eps)]``; ``"none"``
+            enters them raw.
+        query_mass: Routing weight of interior/support tokens:
+            ``"geometric_mean"`` (each query carries the mean boundary
+            log-weight plus a learned offset; kept for trained checkpoints) or
+            ``"source_total"`` (the tokens share a learned fraction of the total
+            boundary measure; invariant to re-representing the same measure).
+        support_tokens: With ``query_independent``, admit a per-case
+            computational support (``support_points`` / ``support_normals`` /
+            ``support_scalars``) as interacting tokens next to the boundary.
+        frame_mode: ``"relative"`` (reference): positions enter only as
+            point-to-anchor differences, no centroid anywhere; ``"centered"``:
+            centre on the plain mean of the sampled points (the constant-gauge
+            and similarity-gauge variants).
+        scale_mode: ``"total_measure"`` (reference): divide positions by the
+            square root of the total quadrature measure, an integral of the
+            geometry; ``"reference_length"``: divide by ``reference_length``.
+        geo_kernel: ``"eager"`` (default, the reference implementation) or
+            ``"fused"`` (exact Triton kernel for the per-layer geometry region,
+            CUDA only, opt-in; one global vector only).
+        eps: Numerical floor for norms and logarithms.
+        **legacy_options: Research options removed from the mainline on
+            2026-09-15 (see ``_REMOVED_OPTIONS``). A checkpoint that recorded one
+            at its former default loads unchanged; any other value raises a
+            ``ValueError`` naming the git tag ``isla-research-full`` where the
+            option remains runnable.
+
+    Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
+    ``(B, N, 3)``; ``measure_weights`` ``(B, N)`` (required by
+    ``scale_mode="total_measure"``; Horvitz-Thompson corrected so they sum to
+    the boundary measure); ``global_vectors`` ``(B, K, 3)``; ``global_scalars``
+    ``(B, S)``; ``boundary_scalars`` ``(B, N, n_boundary_scalars)``;
+    ``query_points`` / ``query_normals`` ``(B, Q, 3)`` and ``query_scalars``
+    ``(B, Q, n_query_scalars)`` for the interior modes; ``support_points`` /
+    ``support_normals`` ``(B, M, 3)`` and ``support_scalars``
+    ``(B, M, n_query_scalars)`` with ``support_tokens``. Returns
+    ``(B, N_out, out_scalars + 3 * out_vectors)`` with ``N_out`` the boundary
+    token count, or the query count in the interior modes.
+    """
 
     class MetaData(ModelMetaData):
         jit: bool = False
