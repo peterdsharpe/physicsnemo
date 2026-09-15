@@ -17481,3 +17481,54 @@ not a productization item, and is left open with its evidence.
 ablation (default 1.0, bitwise); the corner lanes are not relaunched at
 a retuned rate without the coordinator's and Peter's say-so, per the
 parallel session's rule.
+
+## 2026-09-15 — Preregistration, CORNER-WLR: the reference configuration at the scale corner under the width learning-rate rule {#sec-nb-corner-wlr-prereg}
+
+**Setting.** The scoreboard's only measurement of ISLA at the scale
+corner (width 512, 80,000 DrivAerML cells per car) is the constant-gauge
+variant, at 0.0428 against GeoTransolver's 0.0419 and Transolver's 0.0431
+(float32, evaluated at 80,000 cells, seed means; @sec-scoreboard-surface).
+The reference configuration itself, the relative frame with the
+total-measure scale, has no number there: at the protocol learning rate
+of $10^{-3}$ it diverged on both seeds, and the localization work of
+@sec-nb-relframe-divergence-matrix and @sec-nb-relframe-divergence-locmat2-verdict
+located the cause in a width-driven hardening of the slice routing that a
+lower learning rate removes. Whether the flagship reaches parity with the
+baselines at scale is therefore open, and it is the load-bearing question
+for the claim that the reference-size deficit is a statement about size.
+Peter's directive of 2026-09-15 is to prepare the mainline as a clear,
+evidence-grounded case; this is the experiment that case needs most.
+
+**The arm.** `scale_isla_dr_r512x80k_wlr_seed42/43`: the reference
+configuration (`isla_surface_reference`, geometry recompute on) at width
+512 and 80,000 cells, learning rate $10^{-3} \times 192/512 = 3.75 \times 10^{-4}$,
+everything else as the corner lanes (500 epochs, bfloat16, compile off,
+no augmentation), snapshot `code_globin2` at its identity defaults
+(launcher `kernel/corner_wlr_aga.sbatch`). This is a **width-rule arm**,
+labelled as such: the protocol-rate arm's divergence stays on the record
+and no protocol-rate lane is relaunched. Evaluation with the float32
+instrument at 80,000 cells on the 48 validation cars, and the sample-frame
+probe at 80,000 and 10,000 cells as for the corner's other arms.
+
+**Predictions and bars, written before the run.**
+
+- **Parity at scale.** The two-seed mean float32 pressure error lies
+  within **3%** of GeoTransolver's corner value 0.0419, that is at most
+  0.0432, and within 3% of the constant-gauge variant's 0.0428. Meeting it
+  makes the sentence "at scale the three architectures are within 3%,
+  including the reference configuration" true and closes the corner row
+  of the scoreboard with the flagship on it.
+- **Falsified** if the reference is worse than 1.10x GeoTransolver
+  (above 0.0461): then the relative frame carries an accuracy price at
+  scale that the constant gauge does not, and the frame decision of
+  @sec-principled-decisions is re-opened with that number.
+- **Between** 3% and 10%: reported as the reference frame's price at
+  scale, with the frame decision unchanged (the decision was never made
+  on accuracy).
+- **Stability.** Both seeds train to 500 epochs without the drift of the
+  protocol-rate arm (epoch-mean step loss monotone to within noise after
+  epoch 20). Divergence at this rate would falsify the width rule as the
+  remedy and send the question back to the routing mechanism.
+- **Sample-frame consistency** at 80,000 cells: ratio at most 1.5, the
+  corner's existing bar, expected to be met since the frame reads no sample
+  statistic.
