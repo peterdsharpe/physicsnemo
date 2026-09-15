@@ -17422,3 +17422,62 @@ protocol rate, and (h) the protocol rate unchanged as the diverging
 control. Bar: the matrix readout (epoch-30 mean step loss below the
 epoch-5 value = stable; above three times it = diverged). The scale knob
 defaults to one, so no existing checkpoint changes.
+
+## 2026-09-15 — Verdict, LOCMAT-2: a softer routing temperature delays the width-512 collapse by three epochs and does not prevent it; the working remedy is the learning rate {#sec-nb-relframe-divergence-locmat2-verdict}
+
+**Setting.** The pair preregistered in
+@sec-nb-relframe-divergence-mechanism: the fastest-failing configuration
+of the relative-frame divergence matrix (width 512, 10,000 cells,
+protocol rate $10^{-3}$, seed 42, 30 epochs) with the slice blocks'
+assignment logits scaled by 192/512 = 0.375 (arm g) against the
+unchanged control (arm h), both under the snapshot `code_globin2` that
+adds the `routing_logit_scale` knob (default 1.0). Readout: the matrix
+rule, epoch-30 mean step loss against its epoch-5 value.
+
+**What we saw.** The control reproduces matrix arm c to four digits at
+every epoch (0.0133 at epoch 5, 0.0646 at epoch 29, validation pressure
+0.7775 at epoch 29), which also proves on a real run that the knob's
+default is bitwise the previous code. The softened arm **diverges too**:
+epoch-5 mean 0.0160, epoch-29 mean 0.0578 (3.6x), validation pressure
+0.774 at the end. Its collapse comes later, best validation pressure
+0.264 at epoch 10 against the control's 0.252 at epoch 6, and the drift
+to the mean-field level runs from epoch 12 to 18 against 8 to 15. A
+factor 0.375 on the logits buys about three epochs and changes nothing
+else. The falsified prediction was that stability at the protocol rate
+would place the instability in the routing logits' scale; it does not.
+
+**Parameter comparison** (epoch-30 checkpoints of the matrix arms). The
+assignment layers' weight norms are the same in diverged and stable
+models, 9 to 16 per layer with the same depth profile, and the
+LayerNorm gains sit at one everywhere; there is no weight explosion. The
+one systematic difference is the assignment **bias**: its largest entry is
+0.2 to 0.5 per layer in the diverged models against 0.05 to 0.13 in the
+stable ones, consistent with tokens hardening onto a few shared slices
+whose anchors then sit at the centre (@sec-nb-relframe-divergence-mechanism).
+The relational-geometry logit weights and the seed embedding are the
+same across all four. Norms alone cannot say what drives the hardening;
+they say what does not.
+
+**Where this leaves the flagship at width 512.** Three facts are
+established: the relative frame at width 512 diverges at the protocol
+rate at 10,000 and 80,000 cells while the centered frame does not; the
+divergence is a slow hardening of the token-to-slice routing with
+anchor collapse; halving the learning rate removes it (matrix arm d,
+stable to 0.0016 with validation pressure 0.088 at 30 epochs). One
+candidate fix is refuted (routing temperature), one is not needed (the
+head-frame normalization). **Recommendation for Peter:** treat the width
+scaling of the learning rate as the protocol for ISLA's width ladder,
+$\eta(w) = 10^{-3} \cdot 192 / w$ (which gives $3.75 \times 10^{-4}$ at 512,
+within a factor 1.3 of the cured arm), stated once and applied to every
+width, rather than a per-run retune; whether the same rule is applied to
+the baselines' width arms is a fairness decision that the baselines'
+own stability at $10^{-3}$ does not force. The architectural question,
+a routing that cannot harden in the relative frame (the single-scalar
+seed is the plausible root, since the centered frame's five-scalar seed
+gives layer one spatial slices from the first step), is a research node,
+not a productization item, and is left open with its evidence.
+
+**Bookkeeping.** `routing_logit_scale` stays in the code as the recorded
+ablation (default 1.0, bitwise); the corner lanes are not relaunched at
+a retuned rate without the coordinator's and Peter's say-so, per the
+parallel session's rule.
