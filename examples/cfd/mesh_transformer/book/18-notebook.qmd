@@ -17532,3 +17532,49 @@ probe at 80,000 and 10,000 cells as for the corner's other arms.
 - **Sample-frame consistency** at 80,000 cells: ratio at most 1.5, the
   corner's existing bar, expected to be met since the frame reads no sample
   statistic.
+
+## 2026-09-15 — The 1,260-case HiLift rung with unit-direction GeoTransolver: GeoTransolver 0.0355 against ISLA's constant-gauge 0.0405 on pressure (0.88x); the ladder's ordering holds at full data {#sec-nb-udrv-1260-verdict}
+
+**Setting.** The last rung of the HiLiftAeroML data-efficiency ladder
+without a fair baseline was the full training split, 1,260 cases: the
+physical-velocity GeoTransolver arm had been stopped on 2026-09-09 when the
+unit-direction verdict made it an unfair comparison
+(@sec-nb-udrv-resched), and its unit-direction replacements
+`udrv_hl_gt_full_seed42/43` (unit-direction lane rows 16 and 17, learning
+rate $10^{-3}$, 10,000 cells, 500 epochs) have been training since, at
+about fifteen minutes per epoch on the I/O-bound full split. Both trained
+today and were scored with the float32 instrument on the 180 validation
+cases against the rate-matched ISLA constant-gauge priors
+`mt2_hl_lr1_seed42/43`, the same pair the 20,000-token floor test uses
+(@sec-nb-floor20k-isla). Artifact: `results/udrv_1260_reduction_2026-09-15.json`.
+
+**What we saw** (relative $L^2$, seeds and means; ratio = GeoTransolver ÷ ISLA):
+
+| Field | GeoTransolver, unit direction | ISLA, constant gauge | Ratio |
+|---|---|---|---|
+| Pressure | 0.0363 / 0.0348 → 0.0355 | 0.0393 / 0.0417 → 0.0405 | 0.878 |
+| Velocity | 0.0530 / 0.0518 → 0.0524 | 0.0572 / 0.0592 → 0.0582 | 0.900 |
+| Wall shear | 0.0844 / 0.0825 → 0.0834 | 0.0905 / 0.0942 → 0.0923 | 0.904 |
+
+**Reading.** GeoTransolver leads by 12% on pressure and 10% on velocity
+and wall shear at full data, the same margin as at 510 cases (0.84x) and
+210 cases (0.84x against the constant gauge): the HiLift ordering is
+flat in training-set size from 210 to 1,260 cases, and the full rung adds
+no new information about which architecture learns more from more data.
+ISLA's reference configuration is not measured on this rung (it costs a
+week of I/O-bound training per seed and the ladder's other rungs put it
+0.84 to 0.94x of the constant gauge on HiLift); the constant-gauge
+variant is the ISLA value here, as on the 510-case rung. The Transolver
+pair (`udrv_hl_transolver_full_lr3e3_seed42/43`) is at epochs 444 and
+471 and will complete the rung's baseline column.
+
+**Why it matters.** With this rung the HiLift ladder has a unit-direction
+GeoTransolver on every count, and the verdict of @sec-verdict stands
+without a "not yet measured" caveat on the surface: the baselines lead
+ISLA in-distribution at every HiLift count and at DrivAerML's reference
+size, by 6 to 25%, and the deficit does not close with data. The case for
+ISLA is the one the book already makes: exact contracts where pose
+varies, sampling consistency by construction, the interior velocity lead,
+learning-rate robustness, memory, and the general input interface; the
+in-distribution surface accuracy of the released baselines is not among
+its wins, at any count measured.
