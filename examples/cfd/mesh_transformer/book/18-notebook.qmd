@@ -17060,3 +17060,48 @@ test error is at most 0.7x GeoTransolver's with degradation ratio
 $d \le 4$; falsified if ISLA is at or above 0.9x GeoTransolver or both
 models show $d \ge 8$. The test manifest is built by the sanctioned
 script once and the sealed evaluation runs exactly once per checkpoint.
+||||||| 6c13127f
+
+## 2026-09-15 — W2-C floor test, ISLA half: 20,000 tokens per case buy ISLA 5% at 1,260 HiLift cases (0.0384 against 0.0405, float32, rate-matched) for 2.0x the step time and 1.9x the memory; the GeoTransolver half waits on the unit-drive 20k twins {#sec-nb-floor20k-isla}
+
+The 20,000-token floor test (W2-C, @sec-nb-w2-prereg) asked whether the
+1,260-case rung's error floor is the protocol's token budget: if giving
+each case twice the surface tokens helps both architectures by a similar
+factor, the floor is the protocol's; if GeoTransolver gains ≥ 10 points
+more than ISLA, the objection that ISLA's advantage was a token-budget
+artifact stands. The two ISLA lanes (floor_hl_mt2_full_20k_seed{42,43};
+constant gauge, lr 1e-3, 500 epochs, 20,000 tokens, snapshot code; the
+last of the wave-2 lanes to finish, at two epochs per hour under the
+fleet's reader contention) were evaluated in float32 under code_eval on
+the 180 validation cases at the standard 10,000 evaluation cells (jobs
+749788 and 750214; bf16 twins 749787 and 750213; no loader warnings). The
+rate-matched 10,000-token prior is mt2_hl_lr1_seed{42,43} (lr 1e-3). The
+GeoTransolver arms of the test (floor_hl_gt_full_20k_seed{42,43}) were the
+physical-drive baseline and were stopped at epoch 153 by the rescheduling
+of @sec-nb-udrv-resched; their unit-drive replacements
+(udrv_hl_gt_full_20k_seed{42,43}) are training under ISLA Main's watcher and
+complete the test when they land. Artifact `results/floor20k_2026-09-15.json`.
+
+| ISLA, 1,260 cases (180 val, float32) | pressure (42 / 43 → mean) | velocity | wall shear | step time | peak memory |
+|---|---|---|---|---|---|
+| 10,000 tokens (prior, mt2_hl_lr1) | 0.0393 / 0.0417 → **0.0405** | 0.0582 | 0.0923 | 1.84 s | 9.8 GB |
+| 20,000 tokens (floor lanes) | 0.0380 / 0.0388 → **0.0384** | 0.0559 | 0.0880 | 3.69 s | 18.9 GB |
+| 20k ÷ 10k | **0.949** | 0.960 | 0.953 | 2.0x | 1.9x |
+
+The bf16 twins read 0.0386 / 0.0393 against 0.0401 / 0.0425
+(ratio 0.943), the usual 1–2% offset.
+
+**Reading, ISLA half.** Doubling the tokens per case improves ISLA by
+5.1% on pressure, 4.0% on velocity and 4.7% on wall shear at
+1,260 cases, inside the 5–10% the preregistration expected from the earlier
+token effect and small against the 2.0x step time and 1.9x memory it costs:
+at this rung ISLA's error is not token-starved. The comparison the test was
+built for, whether GeoTransolver gains more, is read when the unit-drive
+20k twins land; the prereg's decision rule (similar factor within 5 points
+→ the floor is the protocol's; GeoTransolver ≥ 10 points more → the
+objection stands) is unchanged. Under the ruling of
+@sec-nb-ruling-released-baselines the comparison is against the released
+GeoTransolver with the unit drive, and its 10,000-token prior at 1,260
+cases is the unit-drive rerun (udrv_hl_gt_full_seed{42,43}), also still
+training. These lanes are also the 20,000-token rung of the SCALE study's
+token ladder.

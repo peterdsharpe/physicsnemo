@@ -1,0 +1,79 @@
+{
+ "study": "W2-C: 20,000-token floor test at 1,260 HiLift cases (ISLA half)",
+ "date": "2026-09-15",
+ "precision": "float32 (bf16 twins listed)",
+ "validation": "HiLift 180 cases (18 never-seen geometries x 10 angles), 10,000 evaluation cells",
+ "runs_20k": {
+  "isla": [
+   "floor_hl_mt2_full_20k_seed42",
+   "floor_hl_mt2_full_20k_seed43"
+  ],
+  "gt_unit_drive_pending": [
+   "udrv_hl_gt_full_20k_seed42",
+   "udrv_hl_gt_full_20k_seed43"
+  ],
+  "gt_physical_stopped": [
+   "floor_hl_gt_full_20k_seed42",
+   "floor_hl_gt_full_20k_seed43"
+  ]
+ },
+ "runs_10k_prior": {
+  "isla": [
+   "mt2_hl_lr1_seed42",
+   "mt2_hl_lr1_seed43"
+  ]
+ },
+ "lr": "1e-3 both",
+ "snapshot": "code (training); code_eval (fp32 evaluation, jobs 749788, 750214; bf16 749787, 750213)",
+ "isla_20k": {
+  "pressure": [
+   0.038008,
+   0.03881
+  ],
+  "velocity": [
+   0.0553,
+   0.056458
+  ],
+  "tau_wall": [
+   0.087325,
+   0.088589
+  ],
+  "bf16_pressure": [
+   0.038563,
+   0.039347
+  ]
+ },
+ "isla_10k": {
+  "pressure": [
+   0.039308,
+   0.041671
+  ],
+  "velocity": [
+   0.057196,
+   0.059247
+  ],
+  "tau_wall": [
+   0.090476,
+   0.094189
+  ],
+  "bf16_pressure": [
+   0.040134,
+   0.042515
+  ]
+ },
+ "isla_20k_over_10k": {
+  "pressure": 0.948616307931686,
+  "velocity": 0.959765722284723,
+  "tau_wall": 0.9526114856632281,
+  "bf16_pressure": 0.9426611332260524
+ },
+ "cost": {
+  "step_seconds_20k": 3.69,
+  "step_seconds_10k": 1.84,
+  "peak_mem_GB_20k": 18.87,
+  "peak_mem_GB_10k": 9.81,
+  "note": "last 300 logged steps of seed 42; both under fleet I/O contention"
+ },
+ "bars": "W2-C (#sec-nb-w2-prereg): both architectures improve by a similar factor (within 5 percentage points); falsifier: GeoTransolver gains >= 10 points more than ISLA; GT half pending the unit-drive 20k twins",
+ "loader_check": "no 'skipping load' in any eval log"
+}

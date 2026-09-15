@@ -1696,4 +1696,8 @@ interior control @sec-nb-udrv-int-prereg.
   inputs. Symbol: ĝ_k (k = 1..K) for the global vector inputs, ĝ_1 = the freestream direction in this book; the relational invariants keep
   xi_is (two indices; renamed from g_is on 2026-09-14 to avoid the clash). Artifact names (udrv_*, geotransolver_drive_conditioning_*, fig-ladder-unit-drive) stay as written.
 - **KERNEL-NEUTRAL (2026-09-15).** The fused geometry kernel is NOT training-neutral on two seeds (fp32 pressure +4.9% seed mean; seed 43 +8.9%, seed 42 +0.8%); geo_kernel='eager' stays the default and the reference; never write that the fused kernel is the default or 'neutral'. Evaluation-time kernel difference 1e-7 (fused vs eager on one checkpoint). Epoch time 1.6x faster at 10k tokens compile-off (20/24 s vs 35/37 s). Seed-44 pair pending (#sec-nb-kernel-neutral-verdict).
-
+- **W2-C floor test, ISLA half (2026-09-15, fp32; results/floor20k_2026-09-15.json).** ISLA 20k tokens at 1,260 cases 0.0380/0.0388 → 0.0384 vs
+  rate-matched 10k prior mt2_hl_lr1 0.0393/0.0417 → 0.0405: ratio 0.949 (−5.1%); velocity 0.960, wall shear 0.953;
+  cost 2.0x step, 1.9x memory. Write "ISLA is not token-starved at 1,260 cases (5% for 2x tokens)". GT half PENDING (unit-drive 20k twins
+  udrv_hl_gt_full_20k_seed{42,43} + 10k prior udrv_hl_gt_full_seed{42,43}, both training); do not grade W2-C until both land. floor_hl_gt_* (physical drive)
+  are stopped and are NOT a comparison.
