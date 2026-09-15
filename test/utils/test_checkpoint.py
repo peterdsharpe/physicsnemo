@@ -364,3 +364,53 @@ def test_isla_declares_its_legacy_name(tmp_path):
     drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
     with torch.no_grad():
         assert torch.allclose(fresh(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), atol=1e-6)
+
+
+def test_isla_reference_checkpoint_round_trip(tmp_path):
+    """A reference-configuration ISLA saved with Module.save is rebuilt bitwise by
+    Module.from_checkpoint from its recorded constructor arguments."""
+    from physicsnemo.core.module import Module
+    from physicsnemo.experimental.nn.isla import ISLA
+
+    torch.manual_seed(0)
+    model = ISLA(hidden=16, n_layers=1, n_slices=4, out_scalars=2, out_vectors=1).eval()
+    path = str(tmp_path / "isla_reference.mdlus")
+    model.save(path)
+    loaded = Module.from_checkpoint(path).eval()
+    assert type(loaded) is ISLA
+    assert loaded._args["__args__"] == model._args["__args__"]
+    pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
+    with torch.no_grad():
+        assert torch.equal(loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+                           model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w))
+
+
+def test_isla_research_checkpoint_args_load_when_at_former_defaults(tmp_path):
+    """Checkpoints written by the research class recorded options the lean class no
+    longer has. Recorded at their former defaults they load into the same network
+    (and the re-saved arguments no longer carry them); a non-default value raises
+    and names the tag where the research class is preserved."""
+    from physicsnemo.core.module import Module
+    from physicsnemo.experimental.nn.isla import ISLA
+    from physicsnemo.experimental.nn.isla.model import RESEARCH_TAG
+
+    torch.manual_seed(0)
+    model = ISLA(hidden=16, n_layers=1, n_slices=4).eval()
+    ### Simulate the research class's recorded arguments (JSON turns tuples into lists).
+    model._args["__args__"].update(center_mode="plain", odd_head=False, anchor_topk=0, local_radii=[0.01, 0.03])
+    path = str(tmp_path / "isla_research_defaults.mdlus")
+    model.save(path)
+    loaded = Module.from_checkpoint(path).eval()
+    assert not {"center_mode", "odd_head", "anchor_topk", "local_radii"} & set(loaded._args["__args__"])
+    pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
+    with torch.no_grad():
+        assert torch.equal(loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+                           model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w))
+
+    model._args["__args__"]["odd_head"] = True
+    bad = str(tmp_path / "isla_research_odd_head.mdlus")
+    model.save(bad)
+    with pytest.raises(ValueError, match=RESEARCH_TAG):
+        Module.from_checkpoint(bad)

@@ -94,18 +94,52 @@ if HAS_TRITON:
 
     @triton.jit
     def _load3(ptr, offs, mask):
-        return (tl.load(ptr + offs, mask=mask, other=0.0), tl.load(ptr + offs + 1, mask=mask, other=0.0),
-                tl.load(ptr + offs + 2, mask=mask, other=0.0))
+        return (
+            tl.load(ptr + offs, mask=mask, other=0.0),
+            tl.load(ptr + offs + 1, mask=mask, other=0.0),
+            tl.load(ptr + offs + 2, mask=mask, other=0.0),
+        )
 
     @triton.jit
     def _geo_fwd_kernel(
-        r_ptr, n_ptr, d_ptr, z_ptr, m_ptr, logit_ptr, w_ptr, b_ptr,
-        bias_out_ptr, mix_out_ptr, pooled_out_ptr,
-        N, S, eps,
-        r_sb, r_sn, n_sb, n_sn, d_sb, d_sn, z_sb, z_ss, m_sb, m_ss,
-        l_sb, l_sn, bo_sb, bo_sn, mo_sb, mo_sn, po_sb, po_sn,
-        RELATIVE: tl.constexpr, LIN_BF16: tl.constexpr, LOGIT_BF16: tl.constexpr, F64: tl.constexpr,
-        BLOCK_N: tl.constexpr, BLOCK_S: tl.constexpr,
+        r_ptr,
+        n_ptr,
+        d_ptr,
+        z_ptr,
+        m_ptr,
+        logit_ptr,
+        w_ptr,
+        b_ptr,
+        bias_out_ptr,
+        mix_out_ptr,
+        pooled_out_ptr,
+        N,
+        S,
+        eps,
+        r_sb,
+        r_sn,
+        n_sb,
+        n_sn,
+        d_sb,
+        d_sn,
+        z_sb,
+        z_ss,
+        m_sb,
+        m_ss,
+        l_sb,
+        l_sn,
+        bo_sb,
+        bo_sn,
+        mo_sb,
+        mo_sn,
+        po_sb,
+        po_sn,
+        RELATIVE: tl.constexpr,
+        LIN_BF16: tl.constexpr,
+        LOGIT_BF16: tl.constexpr,
+        F64: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        BLOCK_S: tl.constexpr,
     ):
         pid_n = tl.program_id(0)
         pid_b = tl.program_id(1)
@@ -134,7 +168,11 @@ if HAS_TRITON:
         g2 = h0 * d0[:, None] + h1 * d1[:, None] + h2 * d2[:, None]
         g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
         g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
-        g5 = n0[:, None] * m0[None, :] + n1[:, None] * m1[None, :] + n2[:, None] * m2[None, :]
+        g5 = (
+            n0[:, None] * m0[None, :]
+            + n1[:, None] * m1[None, :]
+            + n2[:, None] * m2[None, :]
+        )
 
         w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
         w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
@@ -156,7 +194,11 @@ if HAS_TRITON:
             zh1 = _div(z1, zmag, F64)
             zh2 = _div(z2, zmag, F64)
             g6 = tl.zeros_like(g0) + zmag[None, :]
-            g7 = zh0[None, :] * d0[:, None] + zh1[None, :] * d1[:, None] + zh2[None, :] * d2[:, None]
+            g7 = (
+                zh0[None, :] * d0[:, None]
+                + zh1[None, :] * d1[:, None]
+                + zh2[None, :] * d2[:, None]
+            )
             w6 = _rn(tl.load(w_ptr + 6), LIN_BF16)
             w7 = _rn(tl.load(w_ptr + 7), LIN_BF16)
             q6 = _rn(g6, LIN_BF16)
@@ -173,8 +215,16 @@ if HAS_TRITON:
         ssum = tl.sum(e, axis=1)
         mix = _div(e, ssum[:, None], F64)
 
-        tl.store(bias_out_ptr + pid_b * bo_sb + offs_n[:, None] * bo_sn + offs_s[None, :], bias.to(bias_out_ptr.dtype.element_ty), mask=mask)
-        tl.store(mix_out_ptr + pid_b * mo_sb + offs_n[:, None] * mo_sn + offs_s[None, :], mix.to(mix_out_ptr.dtype.element_ty), mask=mask)
+        tl.store(
+            bias_out_ptr + pid_b * bo_sb + offs_n[:, None] * bo_sn + offs_s[None, :],
+            bias.to(bias_out_ptr.dtype.element_ty),
+            mask=mask,
+        )
+        tl.store(
+            mix_out_ptr + pid_b * mo_sb + offs_n[:, None] * mo_sn + offs_s[None, :],
+            mix.to(mix_out_ptr.dtype.element_ty),
+            mask=mask,
+        )
 
         mq = _rn(mix, LIN_BF16)
         po = pooled_out_ptr + pid_b * po_sb + offs_n * po_sn
@@ -191,14 +241,55 @@ if HAS_TRITON:
 
     @triton.jit
     def _geo_bwd_kernel(
-        r_ptr, n_ptr, d_ptr, z_ptr, m_ptr, logit_ptr, w_ptr, b_ptr,
-        gbias_ptr, gmix_ptr, gpooled_ptr,
-        glogit_ptr, gr_ptr, gn_ptr, gd_ptr, gz_part_ptr, gm_part_ptr, gw_part_ptr, gb_part_ptr,
-        N, S, eps, n_tiles,
-        r_sb, r_sn, n_sb, n_sn, d_sb, d_sn, z_sb, z_ss, m_sb, m_ss,
-        l_sb, l_sn, gb_sb, gb_sn, gm_sb, gm_sn, gp_sb, gp_sn, gl_sb, gl_sn,
-        RELATIVE: tl.constexpr, LIN_BF16: tl.constexpr, LOGIT_BF16: tl.constexpr, F64: tl.constexpr,
-        BLOCK_N: tl.constexpr, BLOCK_S: tl.constexpr,
+        r_ptr,
+        n_ptr,
+        d_ptr,
+        z_ptr,
+        m_ptr,
+        logit_ptr,
+        w_ptr,
+        b_ptr,
+        gbias_ptr,
+        gmix_ptr,
+        gpooled_ptr,
+        glogit_ptr,
+        gr_ptr,
+        gn_ptr,
+        gd_ptr,
+        gz_part_ptr,
+        gm_part_ptr,
+        gw_part_ptr,
+        gb_part_ptr,
+        N,
+        S,
+        eps,
+        n_tiles,
+        r_sb,
+        r_sn,
+        n_sb,
+        n_sn,
+        d_sb,
+        d_sn,
+        z_sb,
+        z_ss,
+        m_sb,
+        m_ss,
+        l_sb,
+        l_sn,
+        gb_sb,
+        gb_sn,
+        gm_sb,
+        gm_sn,
+        gp_sb,
+        gp_sn,
+        gl_sb,
+        gl_sn,
+        RELATIVE: tl.constexpr,
+        LIN_BF16: tl.constexpr,
+        LOGIT_BF16: tl.constexpr,
+        F64: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+        BLOCK_S: tl.constexpr,
     ):
         pid_n = tl.program_id(0)
         pid_b = tl.program_id(1)
@@ -228,7 +319,11 @@ if HAS_TRITON:
         g2 = h0 * d0[:, None] + h1 * d1[:, None] + h2 * d2[:, None]
         g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
         g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
-        g5 = n0[:, None] * m0[None, :] + n1[:, None] * m1[None, :] + n2[:, None] * m2[None, :]
+        g5 = (
+            n0[:, None] * m0[None, :]
+            + n1[:, None] * m1[None, :]
+            + n2[:, None] * m2[None, :]
+        )
         w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
         w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
         w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
@@ -250,7 +345,11 @@ if HAS_TRITON:
             zh1 = _div(z1, zmag, F64)
             zh2 = _div(z2, zmag, F64)
             g6 = tl.zeros_like(g0) + zmag[None, :]
-            g7 = zh0[None, :] * d0[:, None] + zh1[None, :] * d1[:, None] + zh2[None, :] * d2[:, None]
+            g7 = (
+                zh0[None, :] * d0[:, None]
+                + zh1[None, :] * d1[:, None]
+                + zh2[None, :] * d2[:, None]
+            )
             w6 = _rn(tl.load(w_ptr + 6), LIN_BF16)
             w7 = _rn(tl.load(w_ptr + 7), LIN_BF16)
             q6 = _rn(g6, LIN_BF16)
@@ -267,8 +366,16 @@ if HAS_TRITON:
         mix = _div(e, ssum[:, None], F64)
 
         # ---- incoming gradients
-        gbias_in = tl.load(gbias_ptr + pid_b * gb_sb + offs_n[:, None] * gb_sn + offs_s[None, :], mask=mask, other=0.0).to(bias.dtype)
-        gmix_in = tl.load(gmix_ptr + pid_b * gm_sb + offs_n[:, None] * gm_sn + offs_s[None, :], mask=mask, other=0.0).to(bias.dtype)
+        gbias_in = tl.load(
+            gbias_ptr + pid_b * gb_sb + offs_n[:, None] * gb_sn + offs_s[None, :],
+            mask=mask,
+            other=0.0,
+        ).to(bias.dtype)
+        gmix_in = tl.load(
+            gmix_ptr + pid_b * gm_sb + offs_n[:, None] * gm_sn + offs_s[None, :],
+            mask=mask,
+            other=0.0,
+        ).to(bias.dtype)
         gp = gpooled_ptr + pid_b * gp_sb + offs_n * gp_sn
         gp0 = tl.load(gp + 0, mask=mask_n, other=0.0).to(bias.dtype)
         gp1 = tl.load(gp + 1, mask=mask_n, other=0.0).to(bias.dtype)
@@ -277,7 +384,15 @@ if HAS_TRITON:
         gp4 = tl.load(gp + 4, mask=mask_n, other=0.0).to(bias.dtype)
         gp5 = tl.load(gp + 5, mask=mask_n, other=0.0).to(bias.dtype)
         # pooled = sum_s mix_s geo_s  ->  d/dmix_s = sum_g gp_g geo_gs ; d/dgeo_gs = mix_s gp_g
-        gmix = gmix_in + gp0[:, None] * q0 + gp1[:, None] * q1 + gp2[:, None] * q2 + gp3[:, None] * q3 + gp4[:, None] * q4 + gp5[:, None] * q5
+        gmix = (
+            gmix_in
+            + gp0[:, None] * q0
+            + gp1[:, None] * q1
+            + gp2[:, None] * q2
+            + gp3[:, None] * q3
+            + gp4[:, None] * q4
+            + gp5[:, None] * q5
+        )
         if not RELATIVE:
             gp6 = tl.load(gp + 6, mask=mask_n, other=0.0).to(bias.dtype)
             gp7 = tl.load(gp + 7, mask=mask_n, other=0.0).to(bias.dtype)
@@ -286,7 +401,11 @@ if HAS_TRITON:
         dot = tl.sum(gmix * mix, axis=1)
         glogit = mix * (gmix - dot[:, None])
         glogit = tl.where(mask, glogit, 0.0)
-        tl.store(glogit_ptr + pid_b * gl_sb + offs_n[:, None] * gl_sn + offs_s[None, :], glogit.to(glogit_ptr.dtype.element_ty), mask=mask)
+        tl.store(
+            glogit_ptr + pid_b * gl_sb + offs_n[:, None] * gl_sn + offs_s[None, :],
+            glogit.to(glogit_ptr.dtype.element_ty),
+            mask=mask,
+        )
         gb = glogit + gbias_in  # total gradient on the routing bias
         # Linear backward: d/dgeo_g = gb w_g ; d/dw_g = sum gb geo_g ; d/db = sum gb
         gg0 = gb * w0 + mix * gp0[:, None]
@@ -333,14 +452,38 @@ if HAS_TRITON:
         gz2 = -tl.sum(grel2, axis=0)
         # n_hat: g3 = rel_hat.n ; g5 = n.m
         gn = gn_ptr + pid_b * n_sb + offs_n * n_sn
-        tl.store(gn + 0, tl.sum(tl.where(mask, gg3 * h0 + gg5 * m0[None, :], 0.0), axis=1), mask=mask_n)
-        tl.store(gn + 1, tl.sum(tl.where(mask, gg3 * h1 + gg5 * m1[None, :], 0.0), axis=1), mask=mask_n)
-        tl.store(gn + 2, tl.sum(tl.where(mask, gg3 * h2 + gg5 * m2[None, :], 0.0), axis=1), mask=mask_n)
+        tl.store(
+            gn + 0,
+            tl.sum(tl.where(mask, gg3 * h0 + gg5 * m0[None, :], 0.0), axis=1),
+            mask=mask_n,
+        )
+        tl.store(
+            gn + 1,
+            tl.sum(tl.where(mask, gg3 * h1 + gg5 * m1[None, :], 0.0), axis=1),
+            mask=mask_n,
+        )
+        tl.store(
+            gn + 2,
+            tl.sum(tl.where(mask, gg3 * h2 + gg5 * m2[None, :], 0.0), axis=1),
+            mask=mask_n,
+        )
         # m_s: g4 = rel_hat.m ; g5 = n.m
         gm_part = gm_part_ptr + tile * S * 3 + offs_s * 3
-        tl.store(gm_part + 0, tl.sum(tl.where(mask, gg4 * h0 + gg5 * n0[:, None], 0.0), axis=0), mask=mask_s)
-        tl.store(gm_part + 1, tl.sum(tl.where(mask, gg4 * h1 + gg5 * n1[:, None], 0.0), axis=0), mask=mask_s)
-        tl.store(gm_part + 2, tl.sum(tl.where(mask, gg4 * h2 + gg5 * n2[:, None], 0.0), axis=0), mask=mask_s)
+        tl.store(
+            gm_part + 0,
+            tl.sum(tl.where(mask, gg4 * h0 + gg5 * n0[:, None], 0.0), axis=0),
+            mask=mask_s,
+        )
+        tl.store(
+            gm_part + 1,
+            tl.sum(tl.where(mask, gg4 * h1 + gg5 * n1[:, None], 0.0), axis=0),
+            mask=mask_s,
+        )
+        tl.store(
+            gm_part + 2,
+            tl.sum(tl.where(mask, gg4 * h2 + gg5 * n2[:, None], 0.0), axis=0),
+            mask=mask_s,
+        )
         # d: g2 = rel_hat.d (+ g7 = zhat.d)
         gd0 = gg2 * h0
         gd1 = gg2 * h1
@@ -368,7 +511,9 @@ if HAS_TRITON:
         tl.store(gz_part + 0, gz0, mask=mask_s)
         tl.store(gz_part + 1, gz1, mask=mask_s)
         tl.store(gz_part + 2, gz2, mask=mask_s)
-        gd = gd_ptr + pid_b * n_sb + offs_n * n_sn  # grad_d is allocated with n_hat's layout (B, N, 3)
+        gd = (
+            gd_ptr + pid_b * n_sb + offs_n * n_sn
+        )  # grad_d is allocated with n_hat's layout (B, N, 3)
         tl.store(gd + 0, tl.sum(tl.where(mask, gd0, 0.0), axis=1), mask=mask_n)
         tl.store(gd + 1, tl.sum(tl.where(mask, gd1, 0.0), axis=1), mask=mask_n)
         tl.store(gd + 2, tl.sum(tl.where(mask, gd2, 0.0), axis=1), mask=mask_n)
@@ -380,13 +525,23 @@ def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias):
     if not (r.is_cuda and r.dtype in (torch.float32, torch.float64)):
         raise ValueError("fused geo region needs CUDA float32/float64 geometry")
     if s > MAX_SLICES:
-        raise ValueError(f"fused geo region supports at most {MAX_SLICES} slices, got {s}")
+        raise ValueError(
+            f"fused geo region supports at most {MAX_SLICES} slices, got {s}"
+        )
     if logits_pre.shape != (b, n, s) or logits_pre.stride(-1) != 1:
-        raise ValueError("logits_pre must be (B, N, S) with a contiguous last dimension")
+        raise ValueError(
+            "logits_pre must be (B, N, S) with a contiguous last dimension"
+        )
     for t in (n_hat, d_hat):
         if t.shape != (b, n, 3) or t.stride(-1) != 1:
             raise ValueError("r, n_hat, d_hat must be (B, N, 3) with unit last stride")
-    if r.stride(-1) != 1 or m_s.shape != (b, s, 3) or z_pos.shape != (b, s, 3) or z_pos.stride(-1) != 1 or m_s.stride(-1) != 1:
+    if (
+        r.stride(-1) != 1
+        or m_s.shape != (b, s, 3)
+        or z_pos.shape != (b, s, 3)
+        or z_pos.stride(-1) != 1
+        or m_s.stride(-1) != 1
+    ):
         raise ValueError("geometry tensors must have unit last stride")
     if weight.shape[-1] not in (6, 8) or bias.numel() != 1:
         raise ValueError("routing Linear must be 6->1 or 8->1")
@@ -413,9 +568,17 @@ def _bwd_block(s):
 
 @torch.library.custom_op("physicsnemo::isla_geo_region_fwd", mutates_args=())
 def _geo_region_fwd(
-    logits_pre: torch.Tensor, r: torch.Tensor, n_hat: torch.Tensor, d_hat: torch.Tensor,
-    z_pos: torch.Tensor, m_s: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
-    eps: float, relative: bool, lin_bf16: bool,
+    logits_pre: torch.Tensor,
+    r: torch.Tensor,
+    n_hat: torch.Tensor,
+    d_hat: torch.Tensor,
+    z_pos: torch.Tensor,
+    m_s: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+    eps: float,
+    relative: bool,
+    lin_bf16: bool,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias)
     b, n, s = logits_pre.shape
@@ -429,14 +592,45 @@ def _geo_region_fwd(
     block_n, block_s = _fwd_block(s), _next_pow2(s)
     grid = (triton.cdiv(n, block_n), b)
     _geo_fwd_kernel[grid](
-        r, n_hat, d_hat, z_pos, m_s, logits_pre, w, bb, bias_out, mix_out, pooled,
-        n, s, float(eps),
-        r.stride(0), r.stride(1), n_hat.stride(0), n_hat.stride(1), d_hat.stride(0), d_hat.stride(1),
-        z_pos.stride(0), z_pos.stride(1), m_s.stride(0), m_s.stride(1),
-        logits_pre.stride(0), logits_pre.stride(1), bias_out.stride(0), bias_out.stride(1),
-        mix_out.stride(0), mix_out.stride(1), pooled.stride(0), pooled.stride(1),
-        RELATIVE=relative, LIN_BF16=lin_bf16, LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
-        F64=r.dtype == torch.float64, BLOCK_N=block_n, BLOCK_S=block_s, num_warps=NUM_WARPS,
+        r,
+        n_hat,
+        d_hat,
+        z_pos,
+        m_s,
+        logits_pre,
+        w,
+        bb,
+        bias_out,
+        mix_out,
+        pooled,
+        n,
+        s,
+        float(eps),
+        r.stride(0),
+        r.stride(1),
+        n_hat.stride(0),
+        n_hat.stride(1),
+        d_hat.stride(0),
+        d_hat.stride(1),
+        z_pos.stride(0),
+        z_pos.stride(1),
+        m_s.stride(0),
+        m_s.stride(1),
+        logits_pre.stride(0),
+        logits_pre.stride(1),
+        bias_out.stride(0),
+        bias_out.stride(1),
+        mix_out.stride(0),
+        mix_out.stride(1),
+        pooled.stride(0),
+        pooled.stride(1),
+        RELATIVE=relative,
+        LIN_BF16=lin_bf16,
+        LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
+        F64=r.dtype == torch.float64,
+        BLOCK_N=block_n,
+        BLOCK_S=block_s,
+        num_warps=NUM_WARPS,
     )
     return bias_out, mix_out, pooled
 
@@ -445,17 +639,39 @@ def _geo_region_fwd(
 def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16):
     b, n, s = logits_pre.shape
     out_dt = torch.bfloat16 if lin_bf16 else r.dtype
-    return (torch.empty(b, n, s, device=r.device, dtype=out_dt), torch.empty(b, n, s, device=r.device, dtype=r.dtype),
-            torch.empty(b, n, 6 if relative else 8, device=r.device, dtype=out_dt))
+    return (
+        torch.empty(b, n, s, device=r.device, dtype=out_dt),
+        torch.empty(b, n, s, device=r.device, dtype=r.dtype),
+        torch.empty(b, n, 6 if relative else 8, device=r.device, dtype=out_dt),
+    )
 
 
 @torch.library.custom_op("physicsnemo::isla_geo_region_bwd", mutates_args=())
 def _geo_region_bwd(
-    logits_pre: torch.Tensor, r: torch.Tensor, n_hat: torch.Tensor, d_hat: torch.Tensor,
-    z_pos: torch.Tensor, m_s: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
-    grad_bias: torch.Tensor, grad_mix: torch.Tensor, grad_pooled: torch.Tensor,
-    eps: float, relative: bool, lin_bf16: bool,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    logits_pre: torch.Tensor,
+    r: torch.Tensor,
+    n_hat: torch.Tensor,
+    d_hat: torch.Tensor,
+    z_pos: torch.Tensor,
+    m_s: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor,
+    grad_bias: torch.Tensor,
+    grad_mix: torch.Tensor,
+    grad_pooled: torch.Tensor,
+    eps: float,
+    relative: bool,
+    lin_bf16: bool,
+) -> tuple[
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+    torch.Tensor,
+]:
     b, n, s = logits_pre.shape
     ng = 6 if relative else 8
     grad_bias = grad_bias.contiguous()
@@ -474,16 +690,56 @@ def _geo_region_bwd(
     w = weight.reshape(-1).to(r.dtype).contiguous()
     bb = bias.reshape(-1).to(r.dtype).contiguous()
     _geo_bwd_kernel[(n_tiles, b)](
-        r, n_hat, d_hat, z_pos, m_s, logits_pre, w, bb, grad_bias, grad_mix, grad_pooled,
-        glogit, gr, gn, gd, gz_part, gm_part, gw_part, gb_part,
-        n, s, float(eps), n_tiles,
-        r.stride(0), r.stride(1), gn.stride(0), gn.stride(1), d_hat.stride(0), d_hat.stride(1),
-        z_pos.stride(0), z_pos.stride(1), m_s.stride(0), m_s.stride(1),
-        logits_pre.stride(0), logits_pre.stride(1), grad_bias.stride(0), grad_bias.stride(1),
-        grad_mix.stride(0), grad_mix.stride(1), grad_pooled.stride(0), grad_pooled.stride(1),
-        glogit.stride(0), glogit.stride(1),
-        RELATIVE=relative, LIN_BF16=lin_bf16, LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
-        F64=r.dtype == torch.float64, BLOCK_N=block_n, BLOCK_S=block_s, num_warps=NUM_WARPS,
+        r,
+        n_hat,
+        d_hat,
+        z_pos,
+        m_s,
+        logits_pre,
+        w,
+        bb,
+        grad_bias,
+        grad_mix,
+        grad_pooled,
+        glogit,
+        gr,
+        gn,
+        gd,
+        gz_part,
+        gm_part,
+        gw_part,
+        gb_part,
+        n,
+        s,
+        float(eps),
+        n_tiles,
+        r.stride(0),
+        r.stride(1),
+        gn.stride(0),
+        gn.stride(1),
+        d_hat.stride(0),
+        d_hat.stride(1),
+        z_pos.stride(0),
+        z_pos.stride(1),
+        m_s.stride(0),
+        m_s.stride(1),
+        logits_pre.stride(0),
+        logits_pre.stride(1),
+        grad_bias.stride(0),
+        grad_bias.stride(1),
+        grad_mix.stride(0),
+        grad_mix.stride(1),
+        grad_pooled.stride(0),
+        grad_pooled.stride(1),
+        glogit.stride(0),
+        glogit.stride(1),
+        RELATIVE=relative,
+        LIN_BF16=lin_bf16,
+        LOGIT_BF16=logits_pre.dtype == torch.bfloat16,
+        F64=r.dtype == torch.float64,
+        BLOCK_N=block_n,
+        BLOCK_S=block_s,
+        num_warps=NUM_WARPS,
     )
     gz = gz_part.sum(dim=1)
     gm = gm_part.sum(dim=1)
@@ -493,15 +749,40 @@ def _geo_region_bwd(
 
 
 @_geo_region_bwd.register_fake
-def _(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, grad_bias, grad_mix, grad_pooled, eps, relative, lin_bf16):
+def _(
+    logits_pre,
+    r,
+    n_hat,
+    d_hat,
+    z_pos,
+    m_s,
+    weight,
+    bias,
+    grad_bias,
+    grad_mix,
+    grad_pooled,
+    eps,
+    relative,
+    lin_bf16,
+):
     b, n, s = logits_pre.shape
     e = lambda *shape, dt=r.dtype: torch.empty(*shape, device=r.device, dtype=dt)  # noqa: E731
-    return (torch.empty_like(logits_pre), e(b, n, 3), e(b, n, 3), e(b, n, 3), e(b, s, 3), e(b, s, 3),
-            e(*weight.shape, dt=weight.dtype), e(*bias.shape, dt=bias.dtype))
+    return (
+        torch.empty_like(logits_pre),
+        e(b, n, 3),
+        e(b, n, 3),
+        e(b, n, 3),
+        e(b, s, 3),
+        e(b, s, 3),
+        e(*weight.shape, dt=weight.dtype),
+        e(*bias.shape, dt=bias.dtype),
+    )
 
 
 def _setup_context(ctx, inputs, output):
-    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16 = inputs
+    logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, eps, relative, lin_bf16 = (
+        inputs
+    )
     ctx.save_for_backward(logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias)
     ctx.eps, ctx.relative, ctx.lin_bf16 = eps, relative, lin_bf16
 
@@ -513,10 +794,28 @@ def _backward(ctx, grad_bias, grad_mix, grad_pooled):
     if grad_mix is None:
         grad_mix = torch.zeros(logits_pre.shape, device=r.device, dtype=r.dtype)
     if grad_pooled is None:
-        grad_pooled = torch.zeros(logits_pre.shape[0], logits_pre.shape[1], weight.shape[-1], device=r.device, dtype=r.dtype)
+        grad_pooled = torch.zeros(
+            logits_pre.shape[0],
+            logits_pre.shape[1],
+            weight.shape[-1],
+            device=r.device,
+            dtype=r.dtype,
+        )
     glogit, gr, gn, gd, gz, gm, gw, gb = _geo_region_bwd(
-        logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, grad_bias, grad_mix, grad_pooled,
-        ctx.eps, ctx.relative, ctx.lin_bf16,
+        logits_pre,
+        r,
+        n_hat,
+        d_hat,
+        z_pos,
+        m_s,
+        weight,
+        bias,
+        grad_bias,
+        grad_mix,
+        grad_pooled,
+        ctx.eps,
+        ctx.relative,
+        ctx.lin_bf16,
     )
     return glogit, gr, gn, gd, gz, gm, gw, gb, None, None, None
 
@@ -524,12 +823,37 @@ def _backward(ctx, grad_bias, grad_mix, grad_pooled):
 _geo_region_fwd.register_autograd(_backward, setup_context=_setup_context)
 
 
-def fused_geo_region(lin: torch.nn.Linear, logits_pre, r, n_hat, d_hat, z_pos, m_s, eps: float, relative: bool = False):
-    """Drop-in for ``model._geo_region`` (dense routing, no second-moment channel):
-    returns (bias (B,N,S), mix (B,N,S), pooled (B,N,geo)) from one fused kernel."""
+def fused_geo_region(
+    lin: torch.nn.Linear,
+    logits_pre,
+    r,
+    n_hat,
+    d_hat,
+    z_pos,
+    m_s,
+    eps: float,
+    relative: bool = False,
+):
+    """Drop-in for ``model._geo_region``: returns (bias (B,N,S), mix (B,N,S),
+    pooled (B,N,geo)) from one fused kernel."""
     if not HAS_TRITON:
         raise RuntimeError("fused geo region requires triton")
-    lin_bf16 = torch.is_autocast_enabled("cuda") and torch.get_autocast_dtype("cuda") == torch.bfloat16
+    lin_bf16 = (
+        torch.is_autocast_enabled("cuda")
+        and torch.get_autocast_dtype("cuda") == torch.bfloat16
+    )
     if torch.is_autocast_enabled("cuda") and not lin_bf16:
         raise RuntimeError("fused geo region supports autocast in bfloat16 only")
-    return _geo_region_fwd(logits_pre, r, n_hat, d_hat, z_pos, m_s, lin.weight, lin.bias, float(eps), bool(relative), bool(lin_bf16))
+    return _geo_region_fwd(
+        logits_pre,
+        r,
+        n_hat,
+        d_hat,
+        z_pos,
+        m_s,
+        lin.weight,
+        lin.bias,
+        float(eps),
+        bool(relative),
+        bool(lin_bf16),
+    )
