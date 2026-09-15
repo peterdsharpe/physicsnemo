@@ -240,10 +240,18 @@ class _SliceBlock(nn.Module):
                  use_relational_geo: bool = True, geo_checkpoint: bool = False,
                  second_moment: bool = False, anchor_topk: int = 0,
                  fast_point_softmax: bool = True, relative_frame: bool = False,
-                 geo_kernel: str = "eager", n_global_vectors: int = 1) -> None:
+                 geo_kernel: str = "eager", n_global_vectors: int = 1,
+                 routing_logit_scale: float = 1.0) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
         self.fast_point_softmax = bool(fast_point_softmax)
+        ### ROUTING SCALE (2026-09-15, #sec-nb-relframe-divergence-mechanism): the
+        ### assignment logits are multiplied by this factor before both softmaxes
+        ### (points over slices and slices over points). 1.0 is the trained model
+        ### bitwise; a value below one keeps the token->slice routing softer, the
+        ### discriminator for the width-512 relative-frame divergence (routing
+        ### hardened to one slice per token while the anchors collapsed).
+        self.routing_logit_scale = float(routing_logit_scale)
         ### KERNEL STUDY (2026-09-13): "fused" evaluates the dense geometry region
         ### (invariants -> routing bias -> point->slice mix -> pooled invariants) in
         ### one Triton kernel per direction that never materializes a (B,N,S,.)
@@ -310,6 +318,8 @@ class _SliceBlock(nn.Module):
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
         logits = self.assign(self.norm_assign(h))  # (B, N, S)
+        if self.routing_logit_scale != 1.0:
+            logits = logits * self.routing_logit_scale
         a = _softmax_over_points(logits + log_w, self.fast_point_softmax)  # normalized over points
         ### Equivariant anchors: weighted mean position AND mean normal
         ### direction per slice (v3b) -- anchors gain orientation.
@@ -469,6 +479,7 @@ class ISLA(Module):
         use_measure_weights: bool = True,
         measure_weight_power: float = 1.0,
         fast_point_softmax: bool = True,
+        routing_logit_scale: float = 1.0,
         use_local_features: bool = False,
         local_radii: tuple[float, ...] = (0.01, 0.03),
         n_boundary_scalars: int = 0,
@@ -633,6 +644,12 @@ class ISLA(Module):
         ### kernels agree to 1e-6 in float32 evaluation. Checkpoints trained before
         ### 2026-09-10 used the reference kernel.
         self.fast_point_softmax = bool(fast_point_softmax)
+        ### Routing logit scale for every slice block (see _SliceBlock); 1.0 = the
+        ### trained arithmetic. Not applied to the passive read blocks or the head
+        ### frame: the divergence probe located the hardening in the encoder routing.
+        if routing_logit_scale <= 0:
+            raise ValueError("routing_logit_scale must be positive")
+        self.routing_logit_scale = float(routing_logit_scale)
         self.out_scalars = out_scalars
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
@@ -710,7 +727,7 @@ class ISLA(Module):
                         anchor_topk=self.anchor_topk,
                         fast_point_softmax=self.fast_point_softmax,
                         relative_frame=self.relative_frame, geo_kernel=geo_kernel,
-                        n_global_vectors=K)
+                        n_global_vectors=K, routing_logit_scale=self.routing_logit_scale)
             for _ in range(n_layers)
         )
         if self.relative_frame:

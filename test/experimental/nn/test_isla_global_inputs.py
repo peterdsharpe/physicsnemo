@@ -249,3 +249,37 @@ def test_boundary_data_reaches_every_interior_path():
         assert base.shape[1] == 30 and not torch.allclose(other, base, atol=1e-3)
         continue
         assert base.shape[1] == 30 and not torch.allclose(other, base, atol=1e-3)
+
+
+def test_routing_logit_scale_default_is_identity_and_softens_below_one():
+    """routing_logit_scale=1.0 is the trained model bitwise; a value below one keeps
+    the token->slice routing softer (higher entropy) and preserves every contract."""
+    import math
+    import physicsnemo.experimental.nn.isla.model as M
+    pts, nrm, w = _sample()
+    gv = torch.randn(2, 1, 3, dtype=D)
+    m1 = _model(); m1b = _model(routing_logit_scale=1.0); m_soft = _model(routing_logit_scale=0.25)
+    m_soft.load_state_dict(m1.state_dict())
+    with torch.no_grad():
+        o1 = m1(points=pts, normals=nrm, measure_weights=w, global_vectors=gv)
+        o1b = m1b(points=pts, normals=nrm, measure_weights=w, global_vectors=gv)
+    assert torch.equal(o1, o1b)
+    ents = {}
+    orig = M._SliceBlock.forward
+    def spy(self, h, log_w, r, n_hat, g_hat, eps):
+        logits = self.assign(self.norm_assign(h)) * self.routing_logit_scale
+        mix = torch.softmax(logits, dim=-1)
+        ents.setdefault(self.routing_logit_scale, []).append(-(mix * (mix + 1e-12).log()).sum(-1).mean().item() / math.log(mix.shape[-1]))
+        return orig(self, h, log_w, r, n_hat, g_hat, eps)
+    M._SliceBlock.forward = spy
+    try:
+        with torch.no_grad():
+            m1(points=pts, normals=nrm, measure_weights=w, global_vectors=gv)
+            o_soft = m_soft(points=pts, normals=nrm, measure_weights=w, global_vectors=gv)
+    finally:
+        M._SliceBlock.forward = orig
+    assert sum(ents[0.25]) / len(ents[0.25]) > sum(ents[1.0]) / len(ents[1.0])
+    assert not torch.allclose(o_soft, o1, atol=1e-6)
+    _assert_se3(m_soft, pts, nrm, w, gv, None)
+    with pytest.raises(ValueError, match="positive"):
+        ISLA(hidden=32, n_layers=1, n_slices=8, routing_logit_scale=0.0)
