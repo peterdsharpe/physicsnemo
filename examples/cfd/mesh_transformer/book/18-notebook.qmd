@@ -12358,6 +12358,71 @@ if the ratio is ≤ 1.5 but the error exceeds 0.0470. Acceptance as for the
 other lanes (alive, no errors, first step; expected about 0.28 s per step
 and about 23 GB with the recompute).
 
+*Launched and accepted 2026-09-14 22:18 PDT* (jobs 749828 / 749829, chain
+links queued): both seeds alive, 60,298,076 parameters, steps 0.27–0.29 s,
+22.1–22.2 GB, `frame_mode: relative` and `scale_mode: total_measure` logged
+by the recipe, no errors; at 108 steps per epoch the pair lands in about
+23 hours. Launchers: `highlift/hl_scale_isla_globin_aga.sbatch` (training),
+`..._globin_eval_aga.sbatch` / `..._globin_eval_fp32_aga.sbatch`
+(evaluation) and `..._globin_probe_sf_fp32_aga.sbatch` (sample-frame
+probes), all `code_globin` + `recipe_globin`, derived from the SCALE ISLA
+launchers with only the snapshot, recipe path and tags changed. The
+reference's sample-frame density probe (`rf_dr_mt2_meas_seed{42,43}` at
+10,000 cells under `code_globin`) was submitted at once (job 749840).
+
+*Own-reference probe landed (2026-09-14 22:40 PDT; all four units loaded,
+sidecar `code_globin`, no guard trips).* The relative-frame reference at
+10,000 cells in the sample frame: uniform 0.0545 / 0.0555 (mean 0.0550,
+within 0.4% of the frame program's 0.05522 under `code_eval_frame`, so the
+two snapshots agree on this checkpoint), biased 0.0655 / 0.0702, biased ÷
+uniform **1.20 / 1.27 (mean 1.23)** — the relative frame at reference size
+carries the same order of density sensitivity as the similarity gauge
+(1.21x) and about a tenth of the constant gauge's (12x). The corner's bar
+(≤ 1.5 at 80,000 cells) is therefore a test of whether that holds at width
+512 and eight times the count.
+
+**Readout (2026-09-15): the relative-frame corner diverged at the protocol
+learning rate on both seeds; no bar can be graded.** Both lanes ran the
+full 500 epochs (one time-limit link boundary each, resumed from
+checkpoint) and evaluated cleanly under `code_globin` (loads at epoch 500,
+sidecars, no guard trips), but the model they saved is a mean-field
+predictor: seed 42 scores **0.774** in float32 (0.774 bf16) on the 48 cars
+with per-car values 0.75–0.80, and every density-probe column reads
+0.773–0.775 (biased = uniform to three digits, the signature of an output
+that no longer depends on the sample). The cause is in training, not
+evaluation. Step losses (bf16 training, normalized targets) against the
+lanes that trained normally under the same or matched conditions:
+
+| lane | code | epoch 5 | epoch 20 | epoch 100 | epoch 499 | final val loss |
+|---|---|---|---|---|---|---|
+| relative-frame corner 512 × 80k, seed 42 | `code_globin` | 0.0149 | 0.0071 | **0.0573** | 0.0599 | 0.0594 |
+| relative-frame corner 512 × 80k, seed 43 | `code_globin` | 0.0195 | **0.0629** | **0.496** (step max 1.94 at epoch 98) | 0.0557 | 0.0559 |
+| relative-frame reference 192 × 10k (`rf_dr_mt2_meas_seed42`) | `code_frame` | 0.0096 | 0.0038 | 0.0011 | 0.0006 | 0.0008 |
+| relative-frame reference, eager kernel (`kf_dr_isla_eager_seed44`) | `code_globin` | 0.0129 | 0.0033 | 0.0012 | 0.0006 | 0.0008 |
+| constant-gauge corner 512 × 80k (`c512x80k`, seed 42) | `code_perf` | 0.0076 | 0.0026 | 0.0006 | 0.0003 | 0.0005 |
+| similarity-gauge corner 512 × 80k (`g512x80k`, seed 42) | `code_perf` | 0.0060 | 0.0023 | 0.0005 | 0.0003 | 0.0005 |
+
+Both relative-frame corner seeds track the healthy corners for the first
+epochs (seed 42 reaches a step loss of 0.0059, seed 43 0.0112), then blow
+up early — seed 42 between epochs 20 and 25 (epoch-mean train loss 0.032 at
+25, 0.069 at 50), seed 43 before epoch 20 with a second excursion to 1.9 at
+epoch 98 — and settle for the remaining 400+ epochs on a plateau of
+0.056–0.060, the loss of predicting the mean, from which the StepLR
+schedule at 1e-3 (no gradient clipping in the recipe) never recovers. Under
+the preregistration's rule the row is **a divergence at the protocol rate,
+reported as such and not retuned**; the bars (≤ 0.0449 and ratio ≤ 1.5;
+≥ 3; > 0.0470) are not graded, since a mean-field output satisfies the ratio
+bar vacuously. What the matrix isolates: the relative frame trains normally
+at reference size under `code_globin` (the eager and fused kernel lanes,
+0.0006), and width 512 × 80,000 cells trains normally in the constant and
+similarity gauges under `code_perf` (0.0003), so the instability is
+specific to the relative frame *at scale* — width 512, 80,000 cells, or
+their product, with the exact recompute (`geo_checkpoint`, on here and off
+in the reference-size `code_globin` lanes) as the one further difference.
+The seed 43 evaluations run for the record (same expectation). Decision
+on a localization matrix or a retuned rate rests with the coordinating
+session; nothing is relaunched from this track without it.
+
 ## 2026-09-09 — Preregistered: QTDENS, does GeoTransolver-volume's eddy-viscosity lead come from reading the interior sample's density, and does an ISLA-native query-neighbour channel close the gap? {#sec-nb-qt-density-prereg}
 
 **Setting.** On the DrivAerML interior task ISLA's query-token
