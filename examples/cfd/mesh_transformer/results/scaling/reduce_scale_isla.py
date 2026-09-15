@@ -187,6 +187,10 @@ for ds, arms in ARMS.items():
                              "fast point-softmax (code_perf)" if arm in FAST_KERNEL else "reference kernel (code_isla5 / reference lanes)")
             if arm == "w384nw":
                 a["label"] = "ablation (discretization-dependent; never a reference configuration)"
+            if arm == "r512x80k":
+                a["label"] = ("DIVERGED at the protocol learning rate (both seeds; step loss blew up before epoch 25 and "
+                              "plateaued at 0.056-0.060, the mean-field level, for the remaining epochs); the evaluated "
+                              "checkpoint is a mean-field predictor; bars not graded (notebook 2026-09-15)")
             out["arms"][f"{ds}_{arm}"] = a
 for ds in ARMS:
     ref = out["arms"].get(f"{ds}_ref")
