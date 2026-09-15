@@ -17023,3 +17023,40 @@ eager seeds'. Prediction if seed 43 was an outlier: the pair agrees within
 neutrality question is reopened with the three-seed means and the same 3%
 bar. Either way the eager seed-44 run becomes a third seed of the
 reference itself. The float32 evaluation reuses `kernel/fused_eval_fp32_aga.sbatch`.
+
+## 2026-09-15 — Deflection sealed test, preregistration amendment before evaluation: unit-direction GeoTransolver reference arms and the float32 instrument {#sec-nb-deflection-amend}
+
+**Setting.** The geometry-extrapolation experiment on HiLiftAeroML's
+`deflection` split (@sec-nb-deflection-prereg; sealed evaluation scripted
+in @sec-nb-deflection-eval-ready) trains on the 80% of geometries with the
+lower flap and slat deflections and tests once, sealed, on the 36 most
+aggressive settings. Its GeoTransolver arms were the physical-velocity
+lanes `defl_hl_gt_deflection_seed42/43`, stopped at epoch 153 on 2026-09-09
+when the unit-direction verdict made every physical-velocity baseline an
+unfair comparison; the decision of that day (@sec-nb-udrv-resched)
+replaced them with `udrv_hl_gt_deflection_seed42/43` (unit-direction lane
+rows 18 and 19, identical except for the input convention) and kept the
+bars. The ISLA arms `defl_hl_mt2_deflection_seed42/43` are trained; the
+unit-direction GeoTransolver seed 43 trained today and seed 42 is at
+epoch 488 of 500.
+
+**Amendment, written before any sealed number exists.** Two changes to
+the scripted evaluation, neither touching the bars or the test list:
+
+- The sealed launcher `highlift/hl_defl_test_eval_aga.sbatch` evaluates
+  `udrv_hl_gt_deflection_seed{42,43}` as the GeoTransolver arms, with the
+  unit-direction input mapping those lanes trained with, and its
+  all-trained guard names the same four runs.
+- The instrument is float32 (`precision=float32`), as every comparison in
+  this book has been reported since @sec-nb-fp32-drivaer-regrade; the
+  launcher as scripted on 2026-09-07 predates that rule. The in-distribution
+  validation numbers of the same checkpoints are taken by the float32
+  wave-2 and unit-direction evaluators (rows 36–37 and 18–19), submitted
+  today, so the degradation ratio $d$ is validation-to-test in one
+  instrument.
+
+**Bars, unchanged** (arm H of @sec-nb-w2-prereg): carried if ISLA's sealed
+test error is at most 0.7x GeoTransolver's with degradation ratio
+$d \le 4$; falsified if ISLA is at or above 0.9x GeoTransolver or both
+models show $d \ge 8$. The test manifest is built by the sanctioned
+script once and the sealed evaluation runs exactly once per checkpoint.
