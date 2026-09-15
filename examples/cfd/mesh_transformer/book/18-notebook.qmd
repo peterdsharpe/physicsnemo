@@ -12313,6 +12313,51 @@ equal to their mean (range guard satisfied): pressure 0.0400 uniform against
 seed, of the same size as its DrivAerML ratio (12x). HiLift probe results
 enter the HiLift half of this entry when the lanes land.
 
+**Preregistered before launch (2026-09-14): the relative-frame corner
+`r512x80k` (rows 32–33), which replaces the similarity-gauge corner as the
+adoptable row.** Peter's decision via ISLA Main: the program's reference
+configuration is now the relative frame (`isla_surface_reference`:
+`frame_mode=relative`, no centroid and no sample scale anywhere in the
+forward pass, positions entering only through point-to-anchor differences;
+`scale_mode=total_measure`, the length scale is the square root of the
+sampled surface's total quadrature measure; translation invariance exact
+without centring; the frame carries no information about where the mesher
+put its cells). Its corner is the scaled configuration to adopt if it holds
+the bars. Arm: `model=isla_surface_reference model.hidden=512`, 80,000 cells,
+DrivAerML 435 cars, learning rate 1e-3, 500 epochs, seeds 42/43, exact
+activation recompute (`geo_checkpoint` true in the model yaml), geometry
+kernel at its eager default (the fused kernel is not training-neutral),
+run ids `scale_isla_dr_r512x80k_seed{42,43}`, jobs `scale-isla-32/33`.
+Snapshots: training from `code_globin` (package 9f94e0df: ISLA's forward
+takes `global_vectors`/`global_scalars`; `recipe_globin` maps
+`global_vectors` to the unit freestream direction and `measure_weights` to
+the Horvitz–Thompson measure), the pair the `kf_dr_isla_fused_*` lanes
+trained from; `code_perf` and `code_eval` predate the signature change and
+cannot train or load this model. Evaluation in bf16 and float32 under
+`code_globin` + `recipe_globin` (raising loader, legacy-name search and the
+summary range guard verified present by the coordinating session), snapshot
+sidecar written as for every other evaluation. Density probes in the sample
+frame only: `drivaer_probe_{biased3,unif2}_sf{,_80k}.yaml` copied unchanged
+from `recipe/datasets` into `recipe_globin/datasets`, probed at 80,000 cells
+on the 320,000-cell pool and at 10,000, two seeds. **Own reference** for the
+"÷ own reference" column: `rf_dr_mt2_meas_seed{42,43}` (relative frame,
+total-measure scale, width 192, 12 layers, 256 slices, 10,000 cells, lr
+1e-3, 500 epochs, from `code_frame`/`recipe_frame`): float32 pressure 0.0547
+/ 0.0557, mean **0.05522**, wss 0.0802 / 0.0809 (book artifact
+results/frame_reduction_2026-09-11.json, key `drivaer_val`, evaluated under
+`code_eval_frame`; `code_globin` evaluates the old-signature arithmetic
+bitwise at K = 1, so the corner under `code_globin` is like for like). Not
+`rf_dr_mt2_ref_*`, the constant-reference-length variant. The reference's
+sample-frame density ratio is probed at 10,000 cells under `code_globin` on
+the same `_sf` datasets so the two rows share a snapshot. **Bars (float32),
+stated now:** *principled scaling* if the corner's pressure error is ≤ 0.0449
+(within 5% of the constant-gauge corner's 0.0428; 0.81x its own reference)
+**and** its sample-frame biased ÷ uniform ratio at 80,000 cells is ≤ 1.5;
+*the frame fails at scale* if that ratio is ≥ 3; *the frame costs accuracy*
+if the ratio is ≤ 1.5 but the error exceeds 0.0470. Acceptance as for the
+other lanes (alive, no errors, first step; expected about 0.28 s per step
+and about 23 GB with the recompute).
+
 ## 2026-09-09 — Preregistered: QTDENS, does GeoTransolver-volume's eddy-viscosity lead come from reading the interior sample's density, and does an ISLA-native query-neighbour channel close the gap? {#sec-nb-qt-density-prereg}
 
 **Setting.** On the DrivAerML interior task ISLA's query-token
