@@ -686,82 +686,16 @@ are matched.
   ISLA, the floor is ISLA's. The GeoTransolver arm is a physical-velocity run;
   its reading is about the floor, not the ordering.
 - **The deflection split** trains on the 80% of geometries with the lower
-  flap-and-slat deflection and evaluates once on the 20% with the most
-  aggressive settings (held out per checkpoint, not a program-level
-  confirmation, @sec-limits-validation; bars in @sec-nb-deflection-prereg,
-  written in ISLA/GT). Its GeoTransolver arm is physical-velocity, so the
-  ISLA arm is a measurement of ISLA's error across a geometry-parameter
-  boundary and not a comparison of architectures unless a unit-direction
-  baseline is run on the same split.
-- **Why does the reference frame pay at the fixed angle?** The fixed-angle
-  split is the one never-seen-geometry rung where the frame-free reference
-  pays for leaving the plain-mean frame (14.5% against 1–5% on the other
-  never-seen rungs, @sec-limits-mechanism). The full-geometry-frame
-  diagnostic rules out positional information lost with the seeds; the
-  reading left standing, that at a single freestream direction the mesher's
-  refinement pattern along leading edges and flaps becomes a geometric cue
-  that transfers within the wing family, is consistent with every rung and
-  not separately tested. A test would hold the geometry fixed and vary the
-  mesher: if the constant-gauge variant's fixed-angle advantage over the
-  reference vanishes on a re-meshed validation set, the cue is the mesher's;
-  if it persists, the reading is wrong.
-- **What is the force error against the full surface?** Lift and drag
-  from 10,000, 20,000 and 40,000 sampled cells and from the full surface,
-  labels and predictions, on a preselected set of validation cases at 35 and
-  1,260 training cases. ISLA's 3% figure at 35 cases holds against the full
-  surface if the full-surface error is within 1.5 percentage points of the
-  sampled-cell error; if the sampled-cell reference itself deviates from the
-  full-surface integral by more than the model error, the reported force
-  errors are quadrature-limited and are restated against the full surface.
-  The baselines' 35-case force errors in @sec-data-efficiency (8–17%) are
-  physical-velocity measurements; the unit-direction baselines' forces are not yet
-  reduced.
-- **Is a second-moment channel worth having?** The expressivity benchmark
-  on the first-moment collision family (@sec-mt2-contracts): ISLA with a
-  per-slice second-moment contraction, against the base model and the
-  local-distance channel, scored by whether a linear probe on the
-  common-component output separates the two arrangement families; bars in
-  @sec-nb-mom2-prereg. It decides whether the documented representation
-  limitation is cheap to remove before any larger geometric-algebra backbone
-  is considered.
-- **Is there a stronger independent baseline?** Every baseline in this
-  book is from the Transolver family. AB-UPT (an anchored neural-field
-  decoder; TMLR, arXiv 2502.09692) is the published architecture whose
-  design most directly contradicts the interior finding here, that
-  accuracy needed the queries to interact; AB-GATr (arXiv 2605.18816) is
-  the scalable equivariant comparator for ISLA's combination of symmetry
-  and accuracy; regularized family adaptation (arXiv 2605.27968) tests
-  whether the zero-shot cross-family failure is cheaper to close by
-  adapting than by collecting a family from scratch; and Transolver++ is
-  the template's `plus` option, a cheap control that is not a reproduction
-  of that paper. Each is a candidate node, to be run under this protocol
-  with the freestream at unit scale for every model; published numbers
-  on other splits are not a comparison with ISLA.
-- **Does boundary self-identification help ISLA?** The largest measured
-  industrial gain of the exact-kernel MeshTransformer (@sec-interior) came from a trace
-  formulation that let each boundary token identify its own cell in the
-  readout, so that a prediction at a surface point had an explicit term from
-  that point's own cell rather than only from the pooled field. ISLA's
-  routing has no analogous explicit term: the heads read each surface
-  point's encoder token, but after twelve layers of slice routing that token
-  holds whatever the routing mixed into it, and nothing in the readout marks
-  the point's own position, normal and area apart from the field. The test
-  is a single-factor addition of an own-token readout channel to ISLA,
-  everything else frozen, at 35 and 1,260 HiLift cases, two seeds. Falsified
-  if it moves neither rung by more than the two-seed spread; a gain at 35
-  cases only would say the term is a small-data aid, at both rungs that
-  ISLA's readout is missing a general ingredient.
-- **Which generalization axes does structure buy, one at a time?** A 3D
-  RANS corpus generated with counterfactual twin draws per factor (pose,
-  scale, Reynolds number, layout, mesh), so each axis is tested exactly.
-  Preregistered: on pose twins GeoTransolver without a freestream frame
-  fails by 5x or more and canonicalized GeoTransolver matches ISLA within
-  1.05x; on scale twins at fixed Reynolds number across 0.02–20 m (the
-  first real test of the similarity gauge) GeoTransolver exceeds 2x at a 10x
-  scale change; on Reynolds twins no architecture transfers a decade of Re
-  better than another; mesh twins set the floor below which no difference
-  is reportable. The arms are void unless twin draws are adopted at
-  generation time, which is why the preregistration precedes the corpus.
+  flap-and-slat deflection and evaluates once, sealed, on the 20% with the
+  most aggressive settings (360 cases; bars in @sec-nb-deflection-prereg,
+  reference arm and instrument amended in @sec-nb-deflection-amend). The
+  result is a falsification of the geometry-extrapolation claim
+  (@sec-nb-deflection-verdict): ISLA is 1.16x the unit-direction
+  GeoTransolver on sealed pressure, and both architectures degrade by the
+  same factor across the boundary (1.23x against 1.25x), so the
+  in-regime ordering carries through unchanged. A split across geometry
+  classes, rather than along one geometry parameter of one wing family,
+  remains the open test, and none of this book's datasets provides one.
 
 ## Engineering directions {#sec-future}
 

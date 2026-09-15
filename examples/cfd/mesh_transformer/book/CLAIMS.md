@@ -1701,3 +1701,5 @@ interior control @sec-nb-udrv-int-prereg.
   cost 2.0x step, 1.9x memory. Write "ISLA is not token-starved at 1,260 cases (5% for 2x tokens)". GT half PENDING (unit-drive 20k twins
   udrv_hl_gt_full_20k_seed{42,43} + 10k prior udrv_hl_gt_full_seed{42,43}, both training); do not grade W2-C until both land. floor_hl_gt_* (physical drive)
   are stopped and are NOT a comparison.
+- **DEFLECTION SEALED TEST (2026-09-15): FALSIFIED.** On HiLift's deflection split (train 144 milder geometries, sealed test 36 most aggressive, 360 cases, fp32, 2 seeds) ISLA is 1.157x unit-direction GeoTransolver on pressure (1.108x velocity, 1.115x wall shear); degradation test/val 1.23x (ISLA) vs 1.25x (GT), within 0.03 on every field. Never write that ISLA extrapolates better in a geometry parameter; write 'both architectures degrade equally; the in-regime ordering carries through'. A geometry-CLASS split remains untested (no dataset). (#sec-nb-deflection-verdict)
+

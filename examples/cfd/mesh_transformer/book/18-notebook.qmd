@@ -17163,3 +17163,62 @@ within a factor of two of each other; then the five-seed mean ratio,
 if within 3%, makes the fused kernel the recommended CUDA default, with
 eager kept as the reference implementation, and the seed-43 pair stays in
 the record as the one that did not agree.
+
+## 2026-09-15 — Verdict, deflection sealed test: falsified. ISLA is 1.16x GeoTransolver on the 360 sealed high-deflection cases and both degrade by the same 1.23–1.25x across the geometry boundary {#sec-nb-deflection-verdict}
+
+**Setting.** The geometry-extrapolation experiment of
+@sec-nb-deflection-prereg, evaluated once and sealed as scripted in
+@sec-nb-deflection-eval-ready and amended in @sec-nb-deflection-amend:
+HiLiftAeroML's 180 geometries sorted by mean flap-and-slat deflection, the
+1,260 cases of the 144 milder geometries for training (180 of them held
+out as in-regime validation), the 360 cases of the 36 most aggressive
+geometries as the sealed test. Arms: ISLA (`defl_hl_mt2_deflection_seed42/43`)
+and unit-direction GeoTransolver (`udrv_hl_gt_deflection_seed42/43`),
+lr $10^{-3}$, 10,000 tokens, 500 epochs, two seeds each. Float32
+instrument; the same checkpoints scored on `deflection_val` (180 cases)
+and `deflection_test` (360 cases, all present, disjoint from training and
+validation by the sanctioned manifest builder). Artifact:
+`results/deflection_sealed_test_2026-09-15.json`.
+
+**What we saw** (relative $L^2$, seed means; $d$ = test ÷ validation):
+
+| Field | ISLA val | ISLA test | $d$ ISLA | GeoTransolver val | GeoTransolver test | $d$ GT | ISLA ÷ GT, test |
+|---|---|---|---|---|---|---|---|
+| Pressure | 0.0327 | 0.0400 | 1.23 | 0.0278 | 0.0346 | 1.25 | 1.157 |
+| Velocity | 0.0537 | 0.0612 | 1.14 | 0.0490 | 0.0552 | 1.13 | 1.108 |
+| Wall shear | 0.0846 | 0.0941 | 1.11 | 0.0771 | 0.0843 | 1.09 | 1.115 |
+| Temperature | 0.0424 | 0.0497 | 1.17 | 0.0402 | 0.0467 | 1.16 | 1.065 |
+| Density | 0.0446 | 0.0514 | 1.15 | 0.0380 | 0.0446 | 1.17 | 1.154 |
+
+Per seed on pressure: ISLA test 0.0393 / 0.0407 (val 0.0317 / 0.0336);
+GeoTransolver test 0.0339 / 0.0352 (val 0.0273 / 0.0282).
+
+**Against the bars.** Carried required ISLA at or below 0.7x GeoTransolver
+on the sealed test with $d \le 4$; falsified required ISLA at or above 0.9x
+or both models at $d \ge 8$. **Falsified**: ISLA is 1.157x GeoTransolver on
+pressure, 1.108x on velocity and 1.115x on wall shear, on all
+five fields worse than GeoTransolver out of regime by almost exactly its
+in-regime deficit (1.176x on validation pressure). The degradation
+across the geometry boundary is mild and the same for both architectures:
+1.23x for ISLA and 1.25x for GeoTransolver on pressure, and within 0.03 of
+each other on every field. Neither model is near the $d \ge 8$ collapse
+the preregistration guarded against.
+
+**Why it matters.** The hypothesis was that ISLA's exact geometric
+construction would carry across a *geometry-parameter* boundary better
+than GeoTransolver's learned geometry encoding, as its pose invariance
+carries across a *pose* boundary. It does not: on this split the two
+architectures extrapolate equally well, and the ordering is the
+in-regime ordering, unit-direction GeoTransolver ahead by about 15%. This
+is the same shape as the fixed-angle result (@sec-nb-udrv-single-verdict): with the
+input scale matched, GeoTransolver's advantage on HiLift is not a
+generalization deficit that a harder split exposes, it is a capacity or
+inductive-bias difference that survives the split unchanged. The 36 most
+aggressive deflections are still the same wing family with the same
+mesher, so this split tests interpolation in a geometry parameter more
+than a new geometry class; a split across geometry classes remains the
+open test of the geometry-generalization claim, and none of this book's
+datasets provides one.
+
+**Bookkeeping.** The stopped physical-velocity GeoTransolver arms were not
+evaluated, as decided on 2026-09-09. No rerun.
