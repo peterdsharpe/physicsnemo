@@ -1695,3 +1695,5 @@ interior control @sec-nb-udrv-int-prereg.
   "physical-velocity" for the counterpart. Degree-one contract is gone: vectors are normalized inside the model; magnitudes are scalar
   inputs. Symbol: ĝ_k (k = 1..K) for the global vector inputs, ĝ_1 = the freestream direction in this book; the relational invariants keep
   xi_is (two indices; renamed from g_is on 2026-09-14 to avoid the clash). Artifact names (udrv_*, geotransolver_drive_conditioning_*, fig-ladder-unit-drive) stay as written.
+- **KERNEL-NEUTRAL (2026-09-15).** The fused geometry kernel is NOT training-neutral on two seeds (fp32 pressure +4.9% seed mean; seed 43 +8.9%, seed 42 +0.8%); geo_kernel='eager' stays the default and the reference; never write that the fused kernel is the default or 'neutral'. Evaluation-time kernel difference 1e-7 (fused vs eager on one checkpoint). Epoch time 1.6x faster at 10k tokens compile-off (20/24 s vs 35/37 s). Seed-44 pair pending (#sec-nb-kernel-neutral-verdict).
+

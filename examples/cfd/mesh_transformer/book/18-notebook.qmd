@@ -16962,3 +16962,64 @@ instrument on the sealed validation split, as for every reference number.
 - **Speed, reported.** Epoch time from the training logs against the eager
   reference's; at 10,000 tokens and compile off the study predicts a small
   gain only, the large gain being at 40,000 tokens under compile.
+
+## 2026-09-15 — Verdict, KERNEL-NEUTRAL: not neutral by the bar (seed mean +4.9% on pressure, one seed at +8.9%); the fused kernel stays opt-in; a seed-44 pair is preregistered to separate kernel from seed {#sec-nb-kernel-neutral-verdict}
+
+**Setting.** The preregistration of @sec-nb-kernel-neutral-prereg: the two
+DrivAerML surface reference lanes re-run from the current head with the
+exact fused Triton geometry kernel as the only change, scored with the
+float32 instrument on the sealed validation split against the eager twins'
+numbers in `results/frame_reduction_2026-09-11.json`. Artifact:
+`results/kernel_neutral_reduction_2026-09-15.json`; lanes
+`kf_dr_isla_fused_seed42/43`, snapshots `code_globin` and `recipe_globin`
+at 9f94e0df; one GB300 node per lane. Each fused-trained checkpoint was
+evaluated twice, through the fused kernel and through the eager region.
+
+**What we saw** (float32 relative $L^2$ on 48 validation cars):
+
+| Lane | Pressure | Wall shear | Pressure ÷ eager twin |
+|---|---|---|---|
+| Eager reference, seed 42 | 0.0547 | 0.0802 | 1 |
+| Eager reference, seed 43 | 0.0557 | 0.0809 | 1 |
+| Fused kernel, seed 42 | 0.0552 | 0.0811 | 1.008 |
+| Fused kernel, seed 43 | 0.0607 | 0.0887 | 1.089 |
+
+Seed means: pressure 0.0579 against 0.0552
+(1.049x), wall shear 1.054x. The two eager
+seeds differ by 1.8%; the two fused seeds differ by
+10.0%.
+Evaluating one fused-trained checkpoint through the fused kernel and
+through the eager region gives the same numbers to 2e-07 relative, so
+the difference is a **training-time** effect, not an evaluation-time one.
+Epoch time: 20 and 24 s for the fused lanes against 35 and 37 s for
+the eager twins (median over 498 epochs; 1.6x), at 10,000 tokens with
+compile off.
+
+**Against the bar.** **Not neutral.** The seed mean is
++4.9% on pressure against a 3% bar, and seed 43 exceeds its
+twin by 8.9%, far beyond the eager seed spread plus 3%. Seed 42 alone
+would have passed (+0.8%). The kernel **stays opt-in**, as the
+preregistration prescribed for this outcome, and `geo_kernel="eager"`
+remains the reference implementation and the default.
+
+**What it can and cannot say.** With two seeds the result cannot
+distinguish a kernel that widens the training variance from one that
+shifts the mean, nor either from one unlucky seed: the fused seed pair
+spans 10% where the eager pair spans 2%, which is suggestive of variance
+and is not a conclusion. The mechanism named in the preregistration, the
+fused region's bfloat16 accumulation order, remains the first suspect;
+the numerics gate on random weights ($10^-6$ per step) is evidently not
+sufficient for a 500-epoch neutrality claim, which is the point of running
+the lane.
+
+**Preregistered follow-up (written before its run).** A seed-44 **pair**
+from the same snapshot, `kf_dr_isla_fused_seed44` and
+`kf_dr_isla_eager_seed44`, everything else identical (launcher indices 2
+and 3 of `kernel/fused_train_aga.sbatch`). Prediction if the kernel is at
+fault: the fused seed-44 lane exceeds the eager seed-44 lane by more than
+3% on pressure, and the three fused seeds' spread stays above the three
+eager seeds'. Prediction if seed 43 was an outlier: the pair agrees within
+3% and the fused three-seed spread collapses toward the eager one; then the
+neutrality question is reopened with the three-seed means and the same 3%
+bar. Either way the eager seed-44 run becomes a third seed of the
+reference itself. The float32 evaluation reuses `kernel/fused_eval_fp32_aga.sbatch`.
