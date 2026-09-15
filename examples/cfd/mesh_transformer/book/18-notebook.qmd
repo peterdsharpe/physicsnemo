@@ -17222,3 +17222,59 @@ datasets provides one.
 
 **Bookkeeping.** The stopped physical-velocity GeoTransolver arms were not
 evaluated, as decided on 2026-09-09. No rerun.
+
+## 2026-09-15 — Verdict, KERNEL-NEUTRAL at five seed pairs: no mean shift (ratio 1.009), four of five pairs within 3%, one 9% outlier; the fused kernel stays opt-in {#sec-nb-kernel-neutral-5seed-verdict}
+
+**Setting.** The extension preregistered in
+@sec-nb-kernel-neutral-3seed-verdict: seed pairs 45 and 46, fused and
+eager, from the same snapshot with identical data order, added to the
+three pairs already scored. Five matched pairs in total; float32 sealed
+validation on 48 cars. Artifact:
+`results/kernel_neutral_reduction_5seed_2026-09-15.json`. The eager
+seed-46 lane lost one link to a preemption during a checkpoint write and
+resumed from the previous save after the truncated files were set aside
+(recorded in the cluster notes); its trajectory is otherwise unremarkable.
+
+**What we saw** (float32 relative $L^2$; ratio = fused lane ÷ eager twin):
+
+| Seed | Fused pressure | Eager pressure | Ratio | Wall-shear ratio |
+|---|---|---|---|---|
+| 42 | 0.0552 | 0.0547 | 1.008 | 1.011 |
+| 43 | 0.0607 | 0.0557 | 1.089 | 1.096 |
+| 44 | 0.0543 | 0.0556 | 0.977 | 0.983 |
+| 45 | 0.0561 | 0.0560 | 1.002 | 1.003 |
+| 46 | 0.0557 | 0.0573 | 0.971 | 0.966 |
+
+Five-seed means: pressure ratio 1.009, wall shear 1.011. Spread
+across seeds: fused 11.3%, eager 4.7% (ratio 2.4x). Seeds
+outside the eager spread plus 3%: 43. Evaluation-time kernel
+difference on any checkpoint: at most $5 \times 10^{-7}$. Epoch time on the
+new pairs, trained under storage contention: fused 39 and 41 s, eager 41
+and 42 s (1.03x); the quiet seed-44 pair gave 1.1x.
+
+**Against the preregistered clauses.** Neither clause is met cleanly, and
+the record says so. The *variance* clause needed the fused spread at
+least twice the eager spread **and** a second fused seed outside the eager
+spread plus 3%: the spread ratio is 2.4x, but no second seed is out;
+seed 43 is the only one. The *chance* clause needed both new pairs within
+3% **and** the spreads within a factor of two: both new pairs are within 3%
+(1.002 and 0.971), but the spread ratio is above two, because seed 43 is
+still in the set. Read plainly: four of five matched pairs agree within
+3%, two of them with the fused kernel better; the five-seed mean is
+1.009; and one pair, seed 43, has the fused lane 9% worse. Five draws
+cannot say whether that pair is a kernel-induced tail or one unlucky run,
+and the eager side's own spread grew from 1.8% to 4.7% as seeds were
+added, which shows how noisy a single pair is at this size.
+
+**Decision.** The default-flip rule required the chance clause plus a mean
+within 3%; the chance clause is not met, so **`geo_kernel="eager"` stays
+the default and the reference implementation**, and the fused kernel
+stays an exact, documented opt-in with this record attached. The
+decision costs little at the reference size: the like-for-like epoch gain
+at 10,000 tokens with compile off is 1.03 to 1.1x. The kernel's value is
+the 2.2x at 40,000 tokens under compile (@sec-nb-kernel-study), which has
+not been trained for neutrality at all; a neutrality lane at that size is
+the next step if the 40,000-token regime becomes a production setting,
+and a float32-accumulation path for the pooled invariants remains the
+engineering candidate if a tail is ever confirmed. No further seed pairs
+at 10,000 tokens: the marginal pair cannot move the decision.
