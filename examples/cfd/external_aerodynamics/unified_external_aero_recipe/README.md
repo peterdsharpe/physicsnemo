@@ -291,8 +291,8 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `domino_{surface,volume}` |
-| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,surface_reference,volume_reference,volume_support}`, `domino_{surface,volume}` |
+| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference,volume_support}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
 
 Pick one of each on the CLI:
 
@@ -330,6 +330,92 @@ per-field losses are directly comparable without weighting.
 the YAML field is reserved for future use, and the recipe raises
 `NotImplementedError` (in `build_dataloaders` and the collate) if you try
 to set it above 1.
+
+### ISLA (Invariant Slice Attention)
+
+`physicsnemo.experimental.nn.ISLA` is an equivariant slice-attention
+surrogate for steady boundary-value problems. A boundary sample (points,
+unit normals, quadrature measures, optional per-cell boundary scalars) and
+the problem's global inputs go in; fields on the boundary, or at interior
+query points, come out. Three contracts hold by construction rather than by
+augmentation: rotation and translation covariance (the backbone sees only
+invariants of the per-point vector set; the frame is re-attached at the
+vector heads), measure-aware routing (slice states are quadrature-weighted
+means, so the routing reads a sampled integral rather than a point
+population), and, with `query_independent: true`, query independence (a
+prediction at one point does not depend on which other points are queried).
+The constructor and `forward()` are keyword-only, so a call reads exactly as
+the `forward_kwargs:` mapping does.
+
+**Reference configuration** (`conf/model/isla_surface_reference.yaml`):
+relative frame (`frame_mode: relative`; positions enter only as
+point-to-anchor differences, no centroid anywhere) with the total-measure
+scale (`scale_mode: total_measure`; the length unit is the square root of
+the sample's total quadrature measure, so no per-dataset reference length is
+needed); `hidden: 192`, `n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`;
+`geo_checkpoint: true` (rebuilds the per-slice geometric invariants in
+backward instead of storing them: same forward and gradients bitwise, lower
+peak memory; set `false` to trade memory for speed). The geometry region
+runs the eager PyTorch kernel by default; the fused Triton kernel is an
+exact opt-in via `+model.geo_kernel=fused` (CUDA only).
+
+**Data-to-model mapping** (surface reference):
+
+```yaml
+forward_kwargs:
+  points: interior.points
+  normals: boundaries.vehicle.cell_data.normals
+  global_vectors: global_data.U_inf_dir
+  measure_weights: interior.point_data._target_quadrature_measure
+```
+
+`U_inf_dir` is the unit freestream direction, written by
+`ComputeFreestreamDirection` in the surface dataset YAMLs (`U_inf` stays
+physical, so inference-side re-dimensionalization is unaffected).
+`_target_quadrature_measure` is the Horvitz-Thompson cell measure that
+`MeshToDomainMesh` records for the subsampled interior points, so the
+total-measure scale sees the full surface area at any
+`sampling_resolution`. The volume reference reads the equivalent
+`boundaries.vehicle.cell_data.quadrature_measure` written by
+`ComposeQuadratureMeasure` in `datasets/drivaer_ml_volume_reference.yaml`.
+
+**Variants.** Constant gauge (`isla_surface.yaml`): `frame_mode: centered`,
+`scale_mode: reference_length`, `reference_length: 8.0` (see the
+`SetGlobalField` note in `drivaer_ml_surface.yaml` for the calibration).
+Similarity gauge: `similarity_gauge: true` on the centered frame derives the
+centroid and length scale from the measure-weighted geometry and adds
+equivariance to geometric scale.
+
+**Interior modes.** `query_tokens: true` admits the interior query points
+as interacting tokens carrying the SDF gradient as `query_normals` and the
+SDF as `query_scalars` (`n_query_scalars: 1`); this is the interior
+reference (`isla_volume_reference.yaml`). `query_independent: true` instead
+decodes queries passively through `n_decoder_layers` read blocks, and
+`support_tokens: true` adds a per-case computational support
+(`support_points` / `support_normals` / `support_scalars`) as interacting
+tokens next to the boundary (`isla_volume_support.yaml`).
+
+**General PDE inputs.** `n_global_vectors` (K >= 0 unit directions;
+`global_vectors` has shape `(B, K, 3)`), `n_global_scalars` (S >= 0 PDE
+parameters; `global_scalars` has shape `(B, S)`) and `n_boundary_scalars`
+(per-cell `boundary_scalars`). The freestream direction is the K = 1, S = 0
+instance.
+
+**Measured standing** (float32, as recorded in the book's `CLAIMS.md`).
+DrivAerML surface pressure: ISLA 0.0552 (reference configuration, 435 cars)
+vs GeoTransolver 0.0503 and Transolver 0.0517, so the released baselines
+lead on in-distribution surface accuracy. ISLA leads where equivariance and
+the measure matter: with every case in its own random pose, ISLA 0.0566
+without augmentation vs augmented GeoTransolver 0.0602 and Transolver
+0.0676; on the DrivAerML interior (48 cars) pressure 0.0550 / velocity
+0.0782 / eddy viscosity 0.1005 vs GeoTransolver-volume 0.0513 / 0.1070 /
+0.0879 (velocity ahead, pressure and eddy viscosity behind); and at 10k
+tokens compiled, 1.30 GiB peak memory vs 2.70 GiB at matched step time
+(47 ms vs 45 ms). Under an area-proportional sampler, the measure-weighted
+ISLA arms are the only ones whose predictions converge toward the
+uniform-sampling answer as the cell count grows from 2.5k to 40k; every
+other arm's curve is flat. The full evidence, protocols and caveats are in
+[`examples/cfd/mesh_transformer/book`](../../mesh_transformer/book).
 
 ## Scripts
 
@@ -580,6 +666,18 @@ python src/train.py model=flare_surface dataset=drivaer_ml_surface \
 python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
+# ISLA (Invariant Slice Attention), reference configuration: relative frame,
+# total-measure scale, geo_checkpoint on. Add +model.geo_kernel=fused for the
+# exact fused Triton geometry kernel (CUDA only, opt-in).
+python src/train.py model=isla_surface_reference dataset=drivaer_ml_surface \
+    training.optimizer.lr=1e-3 compile=false
+
+# ISLA interior reference: boundary -> volume queries as SDF query tokens.
+# Pair with drivaer_ml_volume_reference, which writes the Horvitz-Thompson
+# corrected boundary measure the total-measure scale needs.
+python src/train.py model=isla_volume_reference \
+    dataset=drivaer_ml_volume_reference training.optimizer.lr=1e-3 compile=false
+
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
 # 180 GB-class devices. First epoch includes ~90 s of torch.compile warmup.
@@ -592,6 +690,11 @@ python src/train.py model=globe_volume dataset=drivaer_ml_volume \
 python src/train.py model=geotransolver_surface dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000 \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
+
+# HiLift surface (ISLA reference configuration)
+python src/train.py model=isla_surface_reference dataset=highlift_surface \
+    training.optimizer.lr=1e-3 compile=false training.num_epochs=200 \
+    sampling_resolution=100000
 
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \
