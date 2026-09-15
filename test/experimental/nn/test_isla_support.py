@@ -37,8 +37,12 @@ D = torch.float64
 
 def _cloud(n, seed=0):
     g = torch.Generator().manual_seed(seed)
-    pts = torch.randn(1, n, 3, dtype=D, generator=g) * torch.tensor([3.0, 2.0, 1.0], dtype=D)
-    nrm = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
+    pts = torch.randn(1, n, 3, dtype=D, generator=g) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=D
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=D, generator=g), dim=-1
+    )
     w = torch.rand(1, n, dtype=D, generator=g) + 0.5
     return pts, nrm, w
 
@@ -46,22 +50,39 @@ def _cloud(n, seed=0):
 def _interior(n, seed=1):
     g = torch.Generator().manual_seed(seed)
     q = torch.randn(1, n, 3, dtype=D, generator=g) * 4.0
-    qn = torch.nn.functional.normalize(torch.randn(1, n, 3, dtype=D, generator=g), dim=-1)
+    qn = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=D, generator=g), dim=-1
+    )
     qs = q.norm(dim=-1, keepdim=True) * 0.3 + 0.05  # a positive "signed distance"
     return q, qn, qs
 
 
 def _model(**kw):
     torch.manual_seed(0)
-    return ISLA(hidden=64, n_layers=2, n_slices=16, query_independent=True, n_decoder_layers=3,
-                support_tokens=True, n_query_scalars=1, query_mass="source_total", **{**_CENTERED, **kw}).double().eval()
+    return (
+        ISLA(
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            query_independent=True,
+            n_decoder_layers=3,
+            support_tokens=True,
+            n_query_scalars=1,
+            query_mass="source_total",
+            **{**_CENTERED, **kw},
+        )
+        .double()
+        .eval()
+    )
 
 
 @pytest.fixture
 def setup():
     m = _model()
     pts, nrm, w = _cloud(300)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=D, generator=torch.Generator().manual_seed(3)), dim=-1)
+    drv = torch.nn.functional.normalize(
+        torch.randn(1, 3, dtype=D, generator=torch.Generator().manual_seed(3)), dim=-1
+    )
     sp, sn, ss = _interior(120, seed=1)
     q, qn, qs = _interior(80, seed=2)
     return m, pts, nrm, drv, w, (sp, sn, ss), (q, qn, qs)
@@ -70,8 +91,18 @@ def setup():
 def _run(m, pts, nrm, drv, w, S, Q):
     sp, sn, ss = S
     q, qn, qs = Q
-    return m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs,
-             support_points=sp, support_normals=sn, support_scalars=ss)
+    return m(
+        points=pts,
+        normals=nrm,
+        global_vectors=drv,
+        measure_weights=w,
+        query_points=q,
+        query_normals=qn,
+        query_scalars=qs,
+        support_points=sp,
+        support_normals=sn,
+        support_scalars=ss,
+    )
 
 
 def test_query_independence_with_fixed_support(setup):
@@ -84,8 +115,19 @@ def test_query_independence_with_fixed_support(setup):
         small = _run(m, pts, nrm, drv, w, S, (q[:, :20], qn[:, :20], qs[:, :20]))
         big = _run(m, pts, nrm, drv, w, S, Q)
         other = _interior(500, seed=9)
-        mixed = _run(m, pts, nrm, drv, w, S, (torch.cat([q[:, :20], other[0]], 1), torch.cat([qn[:, :20], other[1]], 1),
-                                              torch.cat([qs[:, :20], other[2]], 1)))
+        mixed = _run(
+            m,
+            pts,
+            nrm,
+            drv,
+            w,
+            S,
+            (
+                torch.cat([q[:, :20], other[0]], 1),
+                torch.cat([qn[:, :20], other[1]], 1),
+                torch.cat([qs[:, :20], other[2]], 1),
+            ),
+        )
     assert torch.allclose(alone, big[:, :1], atol=1e-12, rtol=0.0)
     assert torch.allclose(small, big[:, :20], atol=1e-12, rtol=0.0)
     assert torch.allclose(small, mixed[:, :20], atol=1e-12, rtol=0.0)
@@ -105,19 +147,31 @@ def test_se3_covariance_and_global_vector_magnitude(setup):
     m, pts, nrm, drv, w, S, Q = setup
     sp, sn, ss = S
     q, qn, qs = Q
-    R, _ = torch.linalg.qr(torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(5)))
+    R, _ = torch.linalg.qr(
+        torch.randn(3, 3, dtype=D, generator=torch.Generator().manual_seed(5))
+    )
     if torch.det(R) < 0:
         R[:, 0] = -R[:, 0]
     t = torch.tensor([2.0, -5.0, 1.0], dtype=D)
     with torch.no_grad():
         base = _run(m, pts, nrm, drv, w, S, Q)
-        moved = _run(m, pts @ R.T + t, nrm @ R.T, drv @ R.T, w, (sp @ R.T + t, sn @ R.T, ss), (q @ R.T + t, qn @ R.T, qs))
+        moved = _run(
+            m,
+            pts @ R.T + t,
+            nrm @ R.T,
+            drv @ R.T,
+            w,
+            (sp @ R.T + t, sn @ R.T, ss),
+            (q @ R.T + t, qn @ R.T, qs),
+        )
         scaled_drive = _run(m, pts, nrm, 2.5 * drv, w, S, Q)
     p0, v0 = base[..., :1], base[..., 1:4]
     p1, v1 = moved[..., :1], moved[..., 1:4]
     assert torch.allclose(p1, p0, atol=1e-10)
     assert torch.allclose(v1, v0 @ R.T, atol=1e-10)
-    assert torch.allclose(scaled_drive, base, atol=1e-10)  # unit direction inside; magnitude has no effect
+    assert torch.allclose(
+        scaled_drive, base, atol=1e-10
+    )  # unit direction inside; magnitude has no effect
 
 
 def test_measure_scale_and_refinement_invariance(setup):
@@ -129,7 +183,15 @@ def test_measure_scale_and_refinement_invariance(setup):
     with torch.no_grad():
         base = _run(m, pts, nrm, drv, w, S, Q)
         scaled = _run(m, pts, nrm, drv, 4.2 * w, S, Q)
-        split = _run(m, pts.repeat_interleave(2, 1), nrm.repeat_interleave(2, 1), drv, w.repeat_interleave(2, 1) / 2, S, Q)
+        split = _run(
+            m,
+            pts.repeat_interleave(2, 1),
+            nrm.repeat_interleave(2, 1),
+            drv,
+            w.repeat_interleave(2, 1) / 2,
+            S,
+            Q,
+        )
     assert torch.allclose(scaled, base, atol=1e-10)
     assert torch.allclose(split, base, atol=1e-10)
 
@@ -137,20 +199,44 @@ def test_measure_scale_and_refinement_invariance(setup):
 def test_similarity_gauge_scale_equivariance():
     m = _model(similarity_gauge=True)
     pts, nrm, w = _cloud(300)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=D, generator=torch.Generator().manual_seed(3)), dim=-1)
+    drv = torch.nn.functional.normalize(
+        torch.randn(1, 3, dtype=D, generator=torch.Generator().manual_seed(3)), dim=-1
+    )
     S, Q = _interior(120, 1), _interior(80, 2)
     k = 2.7
     with torch.no_grad():
         base = _run(m, pts, nrm, drv, w, S, Q)
-        scaled = _run(m, k * pts, nrm, drv, k**2 * w, (k * S[0], S[1], k * S[2]), (k * Q[0], Q[1], k * Q[2]))
+        scaled = _run(
+            m,
+            k * pts,
+            nrm,
+            drv,
+            k**2 * w,
+            (k * S[0], S[1], k * S[2]),
+            (k * Q[0], Q[1], k * Q[2]),
+        )
     assert torch.allclose(scaled, base, atol=1e-10)
 
 
 def test_geo_checkpoint_is_exact_with_support(setup):
     m, pts, nrm, drv, w, S, Q = setup
     torch.manual_seed(0)
-    m2 = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, query_independent=True, n_decoder_layers=3,
-              support_tokens=True, n_query_scalars=1, query_mass="source_total", geo_checkpoint=True).double().eval()
+    m2 = (
+        ISLA(
+            **_CENTERED,
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            query_independent=True,
+            n_decoder_layers=3,
+            support_tokens=True,
+            n_query_scalars=1,
+            query_mass="source_total",
+            geo_checkpoint=True,
+        )
+        .double()
+        .eval()
+    )
     m2.load_state_dict(m.state_dict())
     with torch.no_grad():
         a = _run(m, pts, nrm, drv, w, S, Q)
@@ -169,8 +255,17 @@ def test_all_parameters_receive_gradients(setup):
 
 def test_decoder_depth_is_configurable():
     torch.manual_seed(0)
-    m12 = ISLA(**_CENTERED, hidden=32, n_layers=2, n_slices=8, query_independent=True, n_decoder_layers=12,
-               support_tokens=True, n_query_scalars=1, query_mass="source_total")
+    m12 = ISLA(
+        **_CENTERED,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+        query_independent=True,
+        n_decoder_layers=12,
+        support_tokens=True,
+        n_query_scalars=1,
+        query_mass="source_total",
+    )
     assert len(m12.read_blocks) == 12
     n_read = sum(p.numel() for p in m12.read_blocks.parameters())
     n_enc = sum(p.numel() for p in m12.blocks.parameters())
@@ -179,27 +274,74 @@ def test_decoder_depth_is_configurable():
 
 def test_option_validation():
     with pytest.raises(ValueError):
-        ISLA(**_CENTERED, hidden=32, n_layers=1, n_slices=8, support_tokens=True)  # needs query_independent
+        ISLA(
+            **_CENTERED, hidden=32, n_layers=1, n_slices=8, support_tokens=True
+        )  # needs query_independent
     with pytest.raises(ValueError):
-        ISLA(**_CENTERED, hidden=32, n_layers=1, n_slices=8, support_tokens=True, query_independent=True, query_tokens=True)
+        ISLA(
+            **_CENTERED,
+            hidden=32,
+            n_layers=1,
+            n_slices=8,
+            support_tokens=True,
+            query_independent=True,
+            query_tokens=True,
+        )
     m = _model()
     pts, nrm, w = _cloud(50)
     drv = torch.tensor([[0.0, 0.0, 1.0]], dtype=D)
     S, Q = _interior(10, 1), _interior(5, 2)
     with pytest.raises(ValueError):  # support without scalars while n_query_scalars > 0
-        m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=Q[0], query_normals=Q[1], query_scalars=Q[2],
-          support_points=S[0], support_normals=S[1])
+        m(
+            points=pts,
+            normals=nrm,
+            global_vectors=drv,
+            measure_weights=w,
+            query_points=Q[0],
+            query_normals=Q[1],
+            query_scalars=Q[2],
+            support_points=S[0],
+            support_normals=S[1],
+        )
 
 
 def test_passive_queries_take_scalars_without_support():
     """The read path accepts the query SDF scalar on its own (n_query_scalars with
     query_independent=True), which the earlier passive arm could not."""
     torch.manual_seed(0)
-    m = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, query_independent=True, n_decoder_layers=2, n_query_scalars=1).double().eval()
+    m = (
+        ISLA(
+            **_CENTERED,
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            query_independent=True,
+            n_decoder_layers=2,
+            n_query_scalars=1,
+        )
+        .double()
+        .eval()
+    )
     pts, nrm, w = _cloud(200)
     drv = torch.tensor([[0.0, 0.0, 1.0]], dtype=D)
     q, qn, qs = _interior(30, 2)
     with torch.no_grad():
-        a = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=qs)
-        b = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w, query_points=q, query_normals=qn, query_scalars=2 * qs)
+        a = m(
+            points=pts,
+            normals=nrm,
+            global_vectors=drv,
+            measure_weights=w,
+            query_points=q,
+            query_normals=qn,
+            query_scalars=qs,
+        )
+        b = m(
+            points=pts,
+            normals=nrm,
+            global_vectors=drv,
+            measure_weights=w,
+            query_points=q,
+            query_normals=qn,
+            query_scalars=2 * qs,
+        )
     assert a.shape == (1, 30, 4) and not torch.allclose(a, b, atol=1e-6)
