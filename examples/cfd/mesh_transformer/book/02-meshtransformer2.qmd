@@ -390,8 +390,8 @@ reference in three places:
 - the head's radial basis vector is $\hat r_i$, the direction from the
   centre, instead of the direction from the token's soft anchor.
 
-**The constant-gauge variant** (`scale_mode="reference_length"`,
-`center_mode="plain"`) centres on the plain mean of the sampled points and
+**The constant-gauge variant** (`frame_mode="centered"`,
+`scale_mode="reference_length"`) centres on the plain mean of the sampled points and
 scales by a constant,
 
 $$
@@ -463,15 +463,15 @@ The $e_\phi$ basis vectors, $e_\phi(\hat u,\hat n)$ and
 $e_\phi(\hat u,\hat g_k)$ (two of the seven in this book), are cross
 products and therefore flip sign
 under a mirror while their coefficients do not; the default vector head
-is covariant under rotations and translations only, and
-`test_parity_fix_reflection_equivariance` asserts that it is *not*
-mirror-covariant. Three alternative heads are exactly O(3)-covariant
-and verified as such (`parity_fix`, which gates the $e_\phi$
-coefficients with the pseudoscalar $\hat u\cdot(\hat n\times\hat g_1)$;
-`vector_basis="true5"` and `"true7"`, which drop or replace the
-pseudovectors; `odd_head`, which builds parity-odd coefficients from
-triple products against the slice anchors). None is the reference head;
-their measured cost is collected in @sec-limits.
+is covariant under rotations and translations only, not under
+reflections. Three alternative heads that are exactly O(3)-covariant were
+built and verified (a pseudoscalar gate on the $e_\phi$ coefficients,
+$\hat u\cdot(\hat n\times\hat g_1)$; true-vector bases that drop or replace the
+pseudovectors; an odd-coefficient head built from triple products against
+the slice anchors). None is the reference head; their measured cost is
+collected in @sec-limits, and they were removed from the mainline class on
+2026-09-15 and remain runnable, with their tests, at the git tag
+`isla-research-full` (@sec-principled-ask).
 
 What is not a contract:
 
@@ -541,7 +541,8 @@ What is not a contract:
   the other, and ISLA's outputs on the common component agree to 4e-15
   (reference and similarity-gauge configurations, two seeds); the optional
   local-distance channel separates them (0.039–0.063), as does a
-  second-moment channel (`second_moment_features`, 2.41 against 1.99)
+  second-moment channel (2.41 against 1.99; both channels are research
+  options, runnable at the tag `isla-research-full`)
   (`results/isla_first_moment_collision_2026-09-08.json`). Rotational
   symmetry about the global vector input is thus sufficient but not
   necessary for the collision. Either channel removes it at a known cost
@@ -718,8 +719,8 @@ constant, does not buy the advantage back (@sec-limits-mechanism).
 (@sec-query-independence). The passive decoder reaches 0.203–0.211
 against 0.0577 for the interacting constant-gauge variant at learning rate
 1e-3, the 3.5–3.7x end of the range; the anchor-conditioned variant
-(`n_anchors`, a fixed interacting core with all points decoding passively)
-reaches 0.209/0.221 against 0.0697/0.0671 for the 6,500-token interacting
+(a fixed interacting core with all points decoding passively; a research
+option, runnable at the tag `isla-research-full`) reaches 0.209/0.221 against 0.0697/0.0671 for the 6,500-token interacting
 control, the 3.0–3.3x end. The 6,500-token control is a token-count
 control, not a matched-memory comparison with GeoTransolver
 (@sec-mt2-cost). On the boundary→interior task the passive decode costs
@@ -735,25 +736,23 @@ channels, are listed once here so the results chapters can name them.
 |---|---|
 | `frame_mode` (`"relative"`) | `"relative"` is the reference: positions enter only as point-to-anchor differences, $K$ seeds plus the global scalars, $5 + K$ relational invariants (one and six in this book), no centering. `"centered"` selects the gauge variants of @sec-mt2-variants ($3 + 2K$ seeds, $6 + 2K$ relational invariants, a centre). Checkpoints store their constructor arguments, so a saved model loads in the configuration that trained it |
 | `scale_mode` (`"total_measure"`) | `"total_measure"` divides positions by the square root of the total quadrature measure of the sample; `"reference_length"` uses the constant `reference_length` (the constant-gauge variant); `"global"` reads a supplied `frame_scale` (the full-geometry-frame diagnostic) |
-| `center_mode` (`"plain"`) | under `frame_mode="centered"` only: `"plain"` centres on the plain mean of the sampled points, `"measure"` on the Horvitz–Thompson mean, `"global"` on a supplied `frame_center` (the full-geometry-frame diagnostic) |
 | `similarity_gauge` (off) | the similarity-gauge variant: measure-weighted centroid and RMS-radius reference length; requires `frame_mode="centered"` |
 | `use_measure_weights` (on) | log-measure bias in the routing softmax |
 | `use_relational_geo` (on) | anchor-relational invariants in routing and read-back |
-| `seed_mode` (`"invariant"`) | `"raw"` feeds $[r_i, \hat n_i, \hat g_k]$ instead of the invariant seed(s); gauge variants only |
-| `raw_coord_channel` (off) | appends $r_i$ and $\hat n_i$ to the seeds |
 | `query_independent`, `n_decoder_layers` (off, 4) | passive decoder with read blocks and local kernel readout |
-| `n_anchors` (0) | interacting core restricted to a fixed-size anchor subset; all points decode passively |
-| `interior_queries` (off) | proxy normal for off-surface queries from the anchor normals |
-| `latent_volume_tokens` (off) | equivariant off-surface tokens along anchor normals; requires the passive decoder |
-| `use_local_features`, `local_radii` (off) | seven measure-weighted patch-integral invariants per radius appended to the seeds |
-| `second_moment_features` (off) | second-moment invariants of each slice at the query, which separate the first-moment collision of @sec-mt2-contracts |
 | `n_global_vectors` (1) | number $K$ of global vector inputs; each adds one seed cosine, one relational direction cosine and three head basis vectors; $K = 0$ is allowed |
 | `n_global_scalars` (0) | number $S$ of global scalar inputs, appended to every token's seed |
 | `n_boundary_scalars` (0) | extra per-point scalar inputs (boundary-condition traces), pass-through to the seeds |
-| `scale_conditioning` (off) | appends the log raw cloud radius, deliberately breaking scale equivariance |
 | `geo_checkpoint` (on in the recipe), `geo_kernel` (`"eager"`) | rebuild the per-slice geometry in the backward pass; `"fused"` selects the exact fused geometry kernel of @sec-mt2-cost |
-| `parity_fix`, `vector_basis`, `odd_head` | the O(3)-covariant vector heads of @sec-mt2-contracts |
 
 Every flag is verified by the tests of @sec-mt2-contracts to preserve
-the rotation and translation contracts unless breaking them is its
-purpose, in which case the test asserts the break.
+the rotation and translation contracts. This is the mainline class as
+prepared for PhysicsNeMo integration: the research-only options that the
+program built and refuted or used as diagnostics (the O(3)-covariant heads,
+wake and latent volume tokens, raw-coordinate and scale-conditioning
+channels, local patch integrals, second-moment features, sparse routing,
+anchor-conditioned decode, query-cloud density channels, the measured and
+externally supplied frame centres) were removed on 2026-09-15 and remain
+runnable, with their tests, at the git tag `isla-research-full`; a
+checkpoint that names one of them at its former default loads unchanged,
+and one that set it raises an error naming the tag.
