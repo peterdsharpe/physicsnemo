@@ -16,13 +16,30 @@
 # limitations under the License.
 
 # ---------------------------------------------------------------------------
-# ISLA (Invariant Slice Attention) -- SURFACE recipe.
+# ISLA (Invariant Slice Attention) -- SURFACE recipe (reference configuration).
 # ---------------------------------------------------------------------------
-# Thesis-killer configuration (prereg mt2_stage0, sha c73bf8b6): invariant
-# soft-slice backbone at GT-matched scale (~8.5M params), exact similarity
-# equivariance / measure-aware aggregation by construction
-# (contract unit tests gate launch). Consumes the same DomainMesh paths as
-# the GeoTransolver template plus the recorded target quadrature measure.
+# The ISLA reference configuration (decided 2026-09-11): the relative frame
+# with the total-measure scale. Positions enter only through point-to-anchor
+# differences (frame_mode=relative: no centroid and no per-sample frame
+# anywhere in the forward pass), and the length unit is the square root of
+# the total quadrature measure of the sampled surface (scale_mode=total_measure),
+# so no per-dataset reference length is needed. Translation invariance is
+# exact without centering; the frame carries no information about where the
+# mesher put its cells. Both settings are also the class defaults and are
+# stated here explicitly. Checkpoints store their constructor arguments, so
+# models saved under other settings load unchanged.
+#
+# Consumes the same DomainMesh paths as the GeoTransolver template plus the
+# recorded target quadrature measure (measure_weights). The freestream
+# direction is external aerodynamics' one global vector input (K = 1); other
+# PDEs pass their own global vectors and global scalars (see the ISLA class
+# docstring).
+#
+# Variant: isla_surface_constant_gauge.yaml (centered frame with a fixed
+# reference length; the configuration before 2026-09-11, kept as an ablation).
+# Naming note: until 2026-09-15 this file carried the constant gauge and the
+# reference configuration lived in isla_surface_reference.yaml, which is now a
+# pointer to this file.
 input_type: tensors
 output_type: tensors
 
@@ -40,16 +57,9 @@ model:
   n_layers: 12
   n_slices: 256
   mlp_ratio: 4
-  # Constant scale gauge (reference_length 8.0 in the L_ref-nondimensional frame)
-  # (see drivaer_ml_surface.yaml for the calibration rationale).
-  reference_length: 8.0
-  # Prior (constant-gauge) frame, pinned explicitly: since 2026-09-11 the class
-  # defaults are frame_mode=relative and scale_mode=total_measure (the
-  # reference configuration, conf/model/isla_surface_reference.yaml).
-  frame_mode: centered
-  scale_mode: reference_length
+  frame_mode: relative
+  scale_mode: total_measure
   # Rebuild the per-slice geometric invariants inside backward instead of
-  # storing them: forward and gradients bitwise identical, peak training
-  # memory 2.3x lower (1.5 GB vs 3.5 GB at 10k tokens, RTX 4090 bf16) for a
-  # 1.16x step time. Set false to trade memory for speed.
+  # storing them: forward and gradients bitwise identical, lower peak training
+  # memory for a modest step-time cost. Set false to trade memory for speed.
   geo_checkpoint: true

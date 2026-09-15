@@ -3,52 +3,9 @@
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# ---------------------------------------------------------------------------
-# ISLA -- SURFACE recipe, REFERENCE CONFIGURATION (decided 2026-09-11).
-# ---------------------------------------------------------------------------
-# isla_surface.yaml with the relative frame: no centroid and no sample scale
-# anywhere in the forward pass. Positions enter only through point-to-anchor
-# differences (frame_mode=relative drops the four centroid-referenced seed
-# invariants and the two centroid-referenced relational invariants), and the
-# length scale is the square root of the total quadrature measure of the
-# sampled surface (scale_mode=total_measure), so no per-dataset reference
-# length is needed. Translation invariance is exact without centering; the
-# frame carries no information about where the mesher put its cells.
-#
-# Since 2026-09-11 these are also the class defaults (frame_mode=relative,
-# scale_mode=total_measure); they are stated here explicitly. Checkpoints store
-# their constructor arguments, so models saved under the earlier defaults load
-# unchanged. This file is the configuration behind the book's reference numbers
-# from 2026-09-11 on; the constant-gauge isla_surface.yaml is the prior reference.
-input_type: tensors
-output_type: tensors
-
-forward_kwargs:
-  points: interior.points
-  normals: boundaries.vehicle.cell_data.normals
-  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
-  measure_weights: interior.point_data._target_quadrature_measure
-
-model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 1                 # pressure
-  out_vectors: 1                 # wss
-  hidden: 192
-  n_layers: 12
-  n_slices: 256
-  mlp_ratio: 4
-  frame_mode: relative
-  scale_mode: total_measure
-  geo_checkpoint: true
+# Deprecated name, kept so that older launch commands and the book's
+# provenance references still resolve: the ISLA surface reference
+# configuration is conf/model/isla_surface.yaml (renamed 2026-09-15).
+# Use model=isla_surface.
+defaults:
+  - isla_surface

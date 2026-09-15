@@ -1,0 +1,51 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# ISLA -- SURFACE recipe, CONSTANT-GAUGE VARIANT (ablation; not the reference).
+# ---------------------------------------------------------------------------
+# isla_surface.yaml with the centered frame and a fixed reference length:
+# positions are measured from the measure-weighted centroid of the sample and
+# the length unit is reference_length (8.0 in the L_ref-nondimensional frame;
+# see the SetGlobalField note in datasets/drivaer_ml_surface.yaml for the
+# calibration). This was the ISLA reference configuration before 2026-09-11
+# and is the configuration behind the book's "constant gauge" numbers. It is
+# kept as the ablation that isolates what the relative frame and the
+# total-measure scale buy; pinned explicitly because the class defaults are
+# frame_mode=relative and scale_mode=total_measure.
+# Naming note: before 2026-09-15 this content was conf/model/isla_surface.yaml.
+input_type: tensors
+output_type: tensors
+
+forward_kwargs:
+  points: interior.points
+  normals: boundaries.vehicle.cell_data.normals
+  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
+  measure_weights: interior.point_data._target_quadrature_measure
+
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1                 # pressure
+  out_vectors: 1                 # wss
+  hidden: 192
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  reference_length: 8.0
+  frame_mode: centered
+  scale_mode: reference_length
+  geo_checkpoint: true

@@ -347,7 +347,7 @@ prediction at one point does not depend on which other points are queried).
 The constructor and `forward()` are keyword-only, so a call reads exactly as
 the `forward_kwargs:` mapping does.
 
-**Reference configuration** (`conf/model/isla_surface_reference.yaml`):
+**Reference configuration** (`conf/model/isla_surface.yaml`):
 relative frame (`frame_mode: relative`; positions enter only as
 point-to-anchor differences, no centroid anywhere) with the total-measure
 scale (`scale_mode: total_measure`; the length unit is the square root of
@@ -379,17 +379,21 @@ total-measure scale sees the full surface area at any
 `boundaries.vehicle.cell_data.quadrature_measure` written by
 `ComposeQuadratureMeasure` in `datasets/drivaer_ml_volume_reference.yaml`.
 
-**Variants.** Constant gauge (`isla_surface.yaml`): `frame_mode: centered`,
-`scale_mode: reference_length`, `reference_length: 8.0` (see the
-`SetGlobalField` note in `drivaer_ml_surface.yaml` for the calibration).
-Similarity gauge: `similarity_gauge: true` on the centered frame derives the
-centroid and length scale from the measure-weighted geometry and adds
-equivariance to geometric scale.
+**Variants.** Constant gauge (`isla_surface_constant_gauge.yaml`):
+`frame_mode: centered`, `scale_mode: reference_length`, `reference_length: 8.0`
+(see the `SetGlobalField` note in `drivaer_ml_surface.yaml` for the
+calibration); the reference configuration before 2026-09-11, kept as the
+ablation that isolates what the relative frame and the total-measure scale
+buy. Similarity gauge: `similarity_gauge: true` on the centered frame derives
+the centroid and length scale from the measure-weighted geometry and adds
+equivariance to geometric scale. The names `isla_surface_reference` and
+`isla_volume_reference`, under which the reference configurations were first
+introduced, remain as pointers to `isla_surface` and `isla_volume`.
 
 **Interior modes.** `query_tokens: true` admits the interior query points
 as interacting tokens carrying the SDF gradient as `query_normals` and the
 SDF as `query_scalars` (`n_query_scalars: 1`); this is the interior
-reference (`isla_volume_reference.yaml`). `query_independent: true` instead
+reference (`isla_volume.yaml`). `query_independent: true` instead
 decodes queries passively through `n_decoder_layers` read blocks, and
 `support_tokens: true` adds a per-case computational support
 (`support_points` / `support_normals` / `support_scalars`) as interacting
@@ -669,13 +673,13 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
 # ISLA (Invariant Slice Attention), reference configuration: relative frame,
 # total-measure scale, geo_checkpoint on. Add +model.geo_kernel=fused for the
 # exact fused Triton geometry kernel (CUDA only, opt-in).
-python src/train.py model=isla_surface_reference dataset=drivaer_ml_surface \
+python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=1e-3 compile=false
 
 # ISLA interior reference: boundary -> volume queries as SDF query tokens.
 # Pair with drivaer_ml_volume_reference, which writes the Horvitz-Thompson
 # corrected boundary measure the total-measure scale needs.
-python src/train.py model=isla_volume_reference \
+python src/train.py model=isla_volume \
     dataset=drivaer_ml_volume_reference training.optimizer.lr=1e-3 compile=false
 
 # GLOBE (mesh-native)
@@ -692,7 +696,7 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
 
 # HiLift surface (ISLA reference configuration)
-python src/train.py model=isla_surface_reference dataset=highlift_surface \
+python src/train.py model=isla_surface dataset=highlift_surface \
     training.optimizer.lr=1e-3 compile=false training.num_epochs=200 \
     sampling_resolution=100000
 

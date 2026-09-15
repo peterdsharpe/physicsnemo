@@ -1,49 +1,11 @@
+# @package _global_
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# ---------------------------------------------------------------------------
-# ISLA interior reference configuration (decided 2026-09-14, book notebook
-# #sec-nb-relint-verdict): boundary -> interior on DrivAerML volume data with
-# the interior query points admitted as interacting tokens that carry the
-# signed distance to the wall and its gradient, on the same frame-free
-# reference frame as the surface configuration (isla_surface_reference.yaml):
-# frame_mode=relative (no centroid anywhere; positions enter only as
-# point-to-anchor differences) and scale_mode=total_measure (length unit =
-# square root of the total boundary quadrature measure).
 #
-# The total-measure scale needs measure weights whose sum is the surface
-# area. A subsampled boundary's raw cell_areas sum to the kept fraction of
-# it, so this config reads the Horvitz-Thompson-corrected measure written by
-# the ComposeQuadratureMeasure transform of datasets/drivaer_ml_volume_reference.yaml
-# (notebook #sec-nb-relint-void for what goes wrong without it). Pair this
-# model config with that dataset config.
-#
-# Standing (float32, 48 DrivAerML validation cars, 10,000 queries, two seeds,
-# results/relint2_reduction_2026-09-14.json): pressure 0.0550, velocity 0.0782,
-# eddy viscosity 0.1005; 1.000x / 0.990x / 0.880x of the similarity-gauge
-# interior configuration it replaces.
-input_type: tensors
-output_type: tensors
-
-forward_kwargs:
-  points: boundaries.vehicle.cell_centroids
-  normals: boundaries.vehicle.cell_normals
-  measure_weights: boundaries.vehicle.cell_data.quadrature_measure
-  global_vectors: global_data.U_inf_dir   # the one global vector input of external aerodynamics: the freestream direction
-  query_points: interior.points
-  query_normals: interior.point_data.sdf_normals
-  query_scalars: interior.point_data.sdf
-
-model:
-  _target_: physicsnemo.experimental.nn.ISLA
-  out_scalars: 2                 # pressure, nut (dataset targets: scalars first)
-  out_vectors: 1                 # velocity
-  hidden: 192
-  n_layers: 12
-  n_slices: 256
-  mlp_ratio: 4
-  frame_mode: relative
-  scale_mode: total_measure
-  query_tokens: true
-  n_query_scalars: 1
-  geo_checkpoint: true
+# Deprecated name, kept so that older launch commands and the book's
+# provenance references still resolve: the ISLA interior reference
+# configuration is conf/model/isla_volume.yaml (renamed 2026-09-15).
+# Use model=isla_volume.
+defaults:
+  - isla_volume

@@ -17578,3 +17578,53 @@ varies, sampling consistency by construction, the interior velocity lead,
 learning-rate robustness, memory, and the general input interface; the
 in-distribution surface accuracy of the released baselines is not among
 its wins, at any count measured.
+
+## 2026-09-15 — Recipe configuration names: the plain `isla_surface` and `isla_volume` now carry the reference configuration; the constant gauge is a named variant {#sec-nb-config-rename}
+
+**The setting.** The training recipe under
+`examples/cfd/external_aerodynamics/unified_external_aero_recipe` exposes
+each architecture as a Hydra model configuration selected with
+`model=<name>`. Until today the plain ISLA surface name, `isla_surface`,
+carried the constant-gauge construction (the centered frame with a fixed
+reference length, the reference configuration before 2026-09-11), while
+the flagship relative-frame, total-measure configuration lived under the
+suffixed name `isla_surface_reference`, and likewise `isla_volume_reference`
+for the interior. An integrator reading the recipe would have trained the
+ablation under the obvious name. A `mt2_surface` pointer from the
+MeshTransformer2-to-ISLA rename also survived.
+
+**What changed.** The plain names are now the reference configurations
+and the constant gauge is explicitly named:
+
+| Before 2026-09-15 | From 2026-09-15 | Content |
+|---|---|---|
+| `isla_surface_reference.yaml` | `isla_surface.yaml` | surface reference: relative frame, total-measure scale |
+| `isla_surface.yaml` | `isla_surface_constant_gauge.yaml` | centered frame, `reference_length: 8.0` (ablation) |
+| `isla_volume_reference.yaml` | `isla_volume.yaml` | interior reference: query tokens with the signed distance |
+| `mt2_surface.yaml` | deleted | pointer to the old `isla_surface` |
+
+`isla_surface_reference.yaml` and `isla_volume_reference.yaml` remain as
+one-line pointers to the plain files, so older launch commands and the
+provenance references in this notebook still resolve; `isla_volume_support.yaml`
+is unchanged. Model checkpoints are unaffected because they store their
+constructor arguments. The cluster's frozen recipe snapshots
+(`recipe_globin`, `recipe_relint` and earlier) predate the rename and keep
+the old names, so every sbatch script written against them runs as before;
+lanes launched against a post-rename snapshot pass `model=isla_surface` or
+`model=isla_volume`.
+
+**Guard.** `tests/test_isla_configs.py` composes the four names and the
+constant gauge through Hydra and asserts the frame and scale of each, that
+the deprecated names compose to exactly the plain files, and that the
+interior reference pairs the corrected boundary measure with the
+total-measure scale. Writing it exposed that the test it replaces
+(`test_isla_volume_reference_config.py`, committed 2026-09-14) had never
+passed as committed: it read the architecture block at `cfg.model.model`,
+whereas the recipe's `@package _global_` model files place it directly at
+`cfg.model` and the data-to-model mapping at `cfg.forward_kwargs`. The
+new test reads the real layout.
+
+**Reading rule for older entries.** Text in this notebook written before
+2026-09-15 that names `isla_surface.yaml` means the constant gauge, and
+text that names `isla_surface_reference.yaml` means today's
+`isla_surface.yaml`. The rule is recorded in `CLAIMS.md`.
