@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PHYSICSNEMO_DIST_TIMEOUT_S`; unset or empty configuration keeps PyTorch's
   backend default. Invalid timeouts are rejected before initialization state
   changes, allowing corrected configuration to be retried.
+- Adds `physicsnemo.experimental.nn.ISLA` (Invariant Slice Attention), an
+  SE(3)-equivariant, measure-aware slice-attention surrogate for steady
+  boundary-value problems with zero or more global vector and scalar inputs,
+  boundary-condition scalars, and interior query modes. The API is
+  keyword-only; the reference configuration and its variants are documented
+  in the unified external-aerodynamics recipe.
 
 ### Changed
 
@@ -41,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warns.
 
 ### Removed
+
+- Removes the exact-kernel MeshTransformer
+  (`physicsnemo.experimental.nn.mesh_attention`), its tests, and its Laplace
+  example program under `examples/cfd/mesh_transformer`. The last commit
+  carrying it is tagged `mt1-final`.
 
 ### Fixed
 
