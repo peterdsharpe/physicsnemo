@@ -17628,3 +17628,13 @@ new test reads the real layout.
 2026-09-15 that names `isla_surface.yaml` means the constant gauge, and
 text that names `isla_surface_reference.yaml` means today's
 `isla_surface.yaml`. The rule is recorded in `CLAIMS.md`.
+
+**The class-name aliases went with it.** The 2026-09-07 rename from
+MeshTransformer2 to ISLA had left an import-path alias
+(`physicsnemo.experimental.nn.mt2`) and a class alias (`MeshTransformer2`)
+in the package. Neither name ever appeared in a PhysicsNeMo release, so
+both are deleted from the mainline; the one remaining mention of the old
+name is the class attribute that lets checkpoint files written under it
+(`MeshTransformer2.*.mdlus`) still load, which the checkpoint tests cover.
+The ISLA unit suite drops the alias test (44 tests plus the 12 general-input
+tests); the recipe suite passes at 233 after the rename.

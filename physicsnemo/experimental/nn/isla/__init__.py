@@ -14,6 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from physicsnemo.experimental.nn.isla.model import ISLA, MeshTransformer2
+from physicsnemo.experimental.nn.isla.model import ISLA
 
-__all__ = ["ISLA", "MeshTransformer2"]
+__all__ = ["ISLA"]

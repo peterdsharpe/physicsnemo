@@ -601,14 +601,6 @@ def test_query_scalars_contracts():
         )
 
 
-def test_legacy_name_is_an_alias():
-    """The previous name and import path keep working (cluster configs, checkpoints)."""
-    from physicsnemo.experimental.nn import MeshTransformer2 as legacy_top
-    from physicsnemo.experimental.nn.mt2 import MeshTransformer2 as legacy_path
-
-    assert legacy_top is ISLA and legacy_path is ISLA
-
-
 def test_query_tokens_contracts():
     """Query-token mode (interior queries as interacting tokens): exactly
     rotation/translation-covariant, finite, live (differs from the passive

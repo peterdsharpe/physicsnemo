@@ -26,13 +26,7 @@ import warnings
 from physicsnemo.core.warnings import LegacyFeatureWarning
 
 from .diffusion_unet_3d_blocks import Conv3D, GroupNorm3D, UNetAttention3D, UNetBlock3D
-from .isla import ISLA, MeshTransformer2
-from .rope import (
-    build_axial_rope_cos_sin_2d_continuous,
-    build_rope_cos_sin_1d_continuous,
-    spherical_centroid,
-    stereographic_projection,
-)
+from .isla import ISLA
 from .point_tokenizer import PointCloudTokenizer
 from .point_utils import (
     chunked_knn_indices,
@@ -44,6 +38,12 @@ from .point_utils import (
     masked_mean,
     unflatten_to_padded,
 )
+from .rope import (
+    build_axial_rope_cos_sin_2d_continuous,
+    build_rope_cos_sin_1d_continuous,
+    spherical_centroid,
+    stereographic_projection,
+)
 
 __all__ = [
     "FLARE",
@@ -52,7 +52,6 @@ __all__ = [
     "GroupNorm3D",
     "UNetAttention3D",
     "ISLA",
-    "MeshTransformer2",
     "build_axial_rope_cos_sin_2d_continuous",
     "build_rope_cos_sin_1d_continuous",
     "spherical_centroid",

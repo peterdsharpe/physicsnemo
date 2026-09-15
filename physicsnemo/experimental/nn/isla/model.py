@@ -79,8 +79,8 @@ supplied frame) live at git tag ``isla-research-full``. Checkpoints that
 recorded such an option at its former default still load; one that recorded
 a non-default value raises and names the tag (see ``_REMOVED_OPTIONS``).
 
-``MeshTransformer2`` is retained as a backward-compatible alias of
-:class:`ISLA`.
+Checkpoint files written under the class's pre-2026-09-07 name
+(``MeshTransformer2.*.mdlus``) still load through ``_legacy_class_names``.
 """
 
 import math
@@ -1392,7 +1392,3 @@ class ISLA(Module):
         vectors = torch.einsum("bnvk,bnkc->bnvc", coeffs, basis)
 
         return torch.cat([scalars, vectors.reshape(b, n, self.out_vectors * 3)], dim=-1)
-
-
-#: Backward-compatible alias for the architecture's previous name.
-MeshTransformer2 = ISLA
