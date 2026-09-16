@@ -138,12 +138,13 @@ S["hl510"] = dict(
     paired=(f"{u510['paired_fp32']['gt_unit_vs_isla_prior']['lower_first_on']} of 180, {u510['paired_fp32']['transolver_unit_vs_isla_prior']['lower_first_on']} of 180", "results/udrvl_510_reduction_2026-09-12.json"),
     draws=None, src="results/udrvl_510_reduction_2026-09-12.json")
 u1260 = J("udrv_1260_reduction_2026-09-15.json")["summary"]["pressure_l2"]
+u1260t = J("udrv_1260_transolver_2026-09-16.json")["summary"]["pressure_l2"]  # unit-direction Transolver pair, two seeds
 S["hl1260"] = dict(
     title="HiLiftAeroML, 1,260 training cases (180 validation cases)",
-    gt=u1260["gt_seeds"], t=None,
+    gt=u1260["gt_seeds"], t=u1260t["transolver_seeds"],
     isla_cg=u1260["isla_seeds"], isla_ref=None,
     paired=("per-case counts not reduced", "results/udrv_1260_reduction_2026-09-15.json"),
-    draws=None, src="results/udrv_1260_reduction_2026-09-15.json")
+    draws=None, src="results/udrv_1260_reduction_2026-09-15.json; results/udrv_1260_transolver_2026-09-16.json")
 S["geo4"] = dict(
     title="HiLiftAeroML, 4 training geometries (18 held-out geometries, 180 cases)",
     gt=fp(fpall, [f"udrv_hl_gt_geometry_super_scarce_seed{s}" for s in (42, 43)]),
@@ -366,8 +367,7 @@ print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed va
       "the protocol rate 1e-3, the other arms at their protocol rates (@sec-nb-corner-wlr-verdict); the "
       "constant-gauge variant retrained at 3.75e-4 scores 0.0424, so the rate costs it nothing and the "
       "reference's excess is the frame's (@sec-nb-cg-wlr-verdict; control, not a row). "
-      "On the 1,260-case HiLift rung the unit-direction Transolver pair is still "
-      "training and its cells read pending; the 27–218-car DrivAerML ladder has no unit-direction "
+      "The 27–218-car DrivAerML ladder has no unit-direction "
       "baseline measurement and is not listed. Data: "
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
 ```

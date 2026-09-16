@@ -17815,3 +17815,44 @@ for the centered frame and necessary for the relative one.
 this entry removes one argument against adopting it (it costs the
 centered construction nothing) and adds none for the routing mechanism
 beyond what @sec-nb-relframe-divergence-mechanism already records.
+
+## 2026-09-16 — The 1,260-case HiLift rung, Transolver column: unit-direction Transolver 0.0385 against ISLA's constant-gauge 0.0405 (0.95x); the rung's baseline column is complete {#sec-nb-udrv-1260-transolver-verdict}
+
+**The setting.** The 1,260-case rung is the full HiLiftAeroML training
+set, the top of the ladder whose lower rungs (35, 210, 510 cases) all have
+both unit-direction baselines measured. @sec-nb-udrv-1260-verdict closed
+the GeoTransolver half of this rung (0.0355 against ISLA's constant-gauge
+variant 0.0405, GeoTransolver ÷ ISLA 0.88) while the plain Transolver pair
+was still training; its two lanes, at 14 minutes per epoch on 1,260 cases
+of 10,000 cells, finished on 2026-09-16 after eleven and twelve four-hour
+chain links each.
+
+**What was run.** `udrv_hl_transolver_full_lr3e3_seed42/43`: Transolver
+at its protocol learning rate 3e-3, unit freestream direction, 500 epochs,
+evaluated in float32 on the 180 validation cases at 10,000 cells with the
+same instrument as the GeoTransolver pair
+(results/udrv_1260_transolver_2026-09-16.json).
+
+**What we saw** (float32, 180 validation cases, two seeds each, ratios
+baseline ÷ ISLA):
+
+| field | Transolver (seeds) | GeoTransolver | ISLA constant gauge | Transolver ÷ ISLA | Transolver ÷ GeoTransolver |
+|---|---|---|---|---|---|
+| pressure | **0.0385** (0.0387 / 0.0383) | 0.0355 | 0.0405 | **0.952** | 1.084 |
+| velocity | 0.0557 (0.0557 / 0.0557) | 0.0524 | 0.0582 | 0.957 | 1.063 |
+| wall shear | 0.0895 (0.0895 / 0.0894) | 0.0834 | 0.0923 | 0.969 | 1.072 |
+| temperature | 0.0457 | 0.0439 | 0.0465 | 0.982 | 1.040 |
+| density | 0.0524 | 0.0485 | 0.0552 | 0.950 | 1.081 |
+
+**Why it matters.** The ladder's ordering at full data is GeoTransolver,
+then Transolver, then ISLA's constant-gauge variant, on every field. The
+Transolver-to-ISLA ratio on pressure runs 0.90 at 510 cases and 0.95 at
+1,260 (@sec-scoreboard-surface), so the plain Transolver's lead over ISLA
+narrows with data where GeoTransolver's (0.84 at 510, 0.88 at 1,260) also
+narrows, and neither closes. Every surface rung of the scoreboard now has
+both unit-direction baselines; the reference configuration remains
+unmeasured on the 510- and 1,260-case rungs, and the tables say so.
+
+**What's next.** Nothing further on this rung. The only HiLift lanes
+still training are the GeoTransolver 20,000-cell pair that completes the
+20k floor comparison.
