@@ -3,8 +3,9 @@
 **With every architecture fed the same inputs and scored on the same
 float32 instrument, GeoTransolver and plain Transolver are at least as
 accurate as ISLA on every in-distribution surface benchmark this program has
-measured, from parity at the 512-wide, 80,000-cell corner (against the
-constant-gauge variant of ISLA, the only one measured there) to 28% at 35
+measured, from 2% at the 512-wide, 80,000-cell corner against the
+constant-gauge variant of ISLA (5% against the reference configuration,
+which trains there at the width learning rate) to 28% at 35
 HiLift cases (against ISLA's reference configuration, the relative frame);
 ISLA is ahead where geometries arrive in arbitrary poses (6% and 19%,
 constant-gauge variant), on interior velocity (27%, reference configuration
@@ -60,9 +61,11 @@ frame the price is the plain mean's mesher pattern, not positional
 information (@sec-nb-frame-full-verdict,
 @sec-nb-frame-full-fixed-angle-verdict, @sec-nb-relframe-ladder-verdict).
 Where a rung has both, the tables give the reference configuration and the
-constant-gauge variant side by side; on the 510-case, 1,260-case and corner
-rungs only the constant-gauge variant, which centres on the plain mean of
-the sampled points, is measured, and the tables say so. Two further
+constant-gauge variant side by side; on the 510-case and 1,260-case rungs
+only the constant-gauge variant, which centres on the plain mean of the
+sampled points, is measured, and the tables say so; at the corner the
+reference configuration is measured under the width learning rate
+(@sec-nb-corner-wlr-verdict). Two further
 configurations appear where they inform the reading: the baselines with
 the surface measure carried in their slice pooling (research variants that
 locate a property, @sec-part-baseline; the released GeoTransolver and
@@ -173,12 +176,13 @@ S["dr435"] = dict(
     draws=None,
     src="results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json; results/relframe_reduction_2026-09-11.json; results/accuracy_consistency_matrix_2026-09-10.json")
 sc = MAT["scale_corner"]["rows"]
+cw = J("corner_wlr_reduction_2026-09-15.json")["summary"]  # reference configuration at the corner, width learning rate 3.75e-4
 S["corner"] = dict(
     title="DrivAerML, 435 cars, hidden width 512, 80,000 cells per car",
     gt=[sc["geotransolver_unit_512x80k"]["in_family"]], t=[sc["transolver_unit_512x80k"]["in_family"]],
-    isla_cg=[sc["isla_constant_gauge_512x80k"]["in_family"]], isla_ref=None,
+    isla_cg=[sc["isla_constant_gauge_512x80k"]["in_family"]], isla_ref=cw["in_family_80k_seeds"],
     paired=("not reduced per case", ""), draws=None,
-    src="results/accuracy_consistency_matrix_2026-09-10.json (scale corner; two seeds per arm, seed means)")
+    src="results/accuracy_consistency_matrix_2026-09-10.json (scale corner; two seeds per arm, seed means); results/corner_wlr_reduction_2026-09-15.json (reference configuration at the corner)")
 
 def ratio(b, i): return mean(b) / mean(i)
 ```
@@ -224,7 +228,8 @@ print(": Training cost of the three architectures on one instrument and one exec
 ISLA; the margin runs from 28% at 35 HiLift cases against the reference
 configuration (20% against the constant-gauge variant) and 25% at 4
 training geometries (the same against the reference configuration and the
-constant-gauge variant, which are at parity there) to parity at the
+constant-gauge variant, which are at parity there) to 2% against the
+constant-gauge variant and 5% against the reference configuration at the
 512-wide, 80,000-cell corner, and it does not close as the training set
 grows from 35 to 210 cases.**
 @fig-scoreboard-forest places every setting on one axis of baseline error
@@ -285,6 +290,7 @@ add("HiLift, fixed angle 12° — vs reference ISLA", "fixed", "isla_ref")
 add("HiLift, fixed angle 12° — vs constant-gauge variant", "fixed", "isla_cg")
 add("DrivAerML, 435 cars — vs reference ISLA", "dr435", "isla_ref")
 add("DrivAerML, 435 cars — vs constant-gauge variant", "dr435", "isla_cg")
+add("DrivAerML, 512 wide × 80k cells — vs reference ISLA (width learning rate)", "corner", "isla_ref")
 add("DrivAerML, 512 wide × 80k cells — vs constant-gauge variant", "corner", "isla_cg")
 # pose: baselines with augmentation in random poses ÷ ISLA without, in random poses
 pB = poseB["arms"]
@@ -345,15 +351,18 @@ print(out)
 print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed values in "
       "parentheses; the corner row lists seed means of two seeds) on every rung where the "
       "unit-direction baselines and ISLA are both measured. The ratio columns give baseline ÷ ISLA "
-      "against the reference configuration in bold on the six rungs where it is measured (35 and "
-      "210 HiLift cases, 4 and 21 training geometries, the fixed angle, 435 DrivAerML cars) and "
+      "against the reference configuration in bold on the seven rungs where it is measured (35 and "
+      "210 HiLift cases, 4 and 21 training geometries, the fixed angle, 435 DrivAerML cars, the "
+      "512 × 80k corner) and "
       "against the constant-gauge variant on every rung; brackets are the 90% interval of the "
       "constant-gauge ratio over four random training draws (35 and 210 cases; at 35 cases the "
       "draws used GeoTransolver's 1e-3 lane). GeoTransolver runs at 3e-3 on the 35-case rung and "
       "1e-3 elsewhere on HiLift, 1e-3 on DrivAerML; Transolver at 3e-3 everywhere; ISLA at 1e-3. "
-      "The corner row is width 512 and 80,000 cells per car for all three (ISLA with the fast "
-      "point-softmax kernel, constant-gauge variant; 60.2M, 35.9M and 23.9M parameters), evaluated "
-      "at 80,000 cells. On the 1,260-case HiLift rung the unit-direction Transolver pair is still "
+      "The corner row is width 512 and 80,000 cells per car for all arms (ISLA with the fast "
+      "point-softmax kernel; 60.2M, 35.9M and 23.9M parameters), evaluated at 80,000 cells; the "
+      "reference configuration there trained at the width learning rate 3.75e-4 after diverging at "
+      "the protocol rate 1e-3, the other arms at their protocol rates (@sec-nb-corner-wlr-verdict). "
+      "On the 1,260-case HiLift rung the unit-direction Transolver pair is still "
       "training and its cells read pending; the 27–218-car DrivAerML ladder has no unit-direction "
       "baseline measurement and is not listed. Data: "
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")

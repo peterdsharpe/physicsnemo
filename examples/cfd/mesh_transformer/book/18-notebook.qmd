@@ -17638,3 +17638,82 @@ name is the class attribute that lets checkpoint files written under it
 (`MeshTransformer2.*.mdlus`) still load, which the checkpoint tests cover.
 The ISLA unit suite drops the alias test (44 tests plus the 12 general-input
 tests); the recipe suite passes at 233 after the rename.
+
+## 2026-09-15 — Verdict, CORNER-WLR: the reference configuration reaches 0.0442 at the 512 × 80k corner under the width learning rate, 1.05x GeoTransolver, between the parity and falsification bars {#sec-nb-corner-wlr-verdict}
+
+**The setting.** The scale corner of this program is DrivAerML at hidden
+width 512 and 80,000 surface cells per car, where GeoTransolver (0.0419),
+ISLA's constant-gauge variant (0.0428) and Transolver (0.0431) sit within
+3% of one another on float32 surface pressure. The reference configuration
+of ISLA, the relative frame with the total-measure scale, had no number
+there because it diverged at the protocol learning rate of $10^{-3}$; the
+divergence was traced to a width-driven hardening of the slice routing
+that a lower rate removes (@sec-nb-relframe-divergence-mechanism). The
+preregistration of @sec-nb-corner-wlr-prereg asked whether the flagship
+reaches parity at scale when trained at the width rule
+$10^{-3} \times 192/512 = 3.75 \times 10^{-4}$, with three outcomes
+written in advance: parity within 3% of GeoTransolver (at most 0.0432),
+falsified above 1.10x (0.0461), and "between" reported as the reference
+frame's price at scale with the frame decision unchanged.
+
+**What was run.** Two seeds of the reference configuration at width 512
+and 80,000 cells (`scale_isla_dr_r512x80k_wlr_seed42/43`), 500 epochs,
+bfloat16, no augmentation, everything as the corner's other arms except
+the learning rate. Evaluation with the corner's float32 instrument on the
+48 validation cars: the sample-frame density probe at 80,000 cells
+(uniform probe = in-family accuracy; biased ÷ uniform = density factor)
+and the same probe at 10,000 cells
+(results/corner_wlr_reduction_2026-09-15.json).
+
+**What we saw.**
+
+| quantity (float32, 48 cars) | seed 42 | seed 43 | mean | comparators at the corner |
+|---|---|---|---|---|
+| pressure, uniform probe, 80,000 cells | 0.0449 | 0.0434 | **0.0442** | GeoTransolver 0.0419, constant gauge 0.0428, Transolver 0.0431 |
+| ratio to GeoTransolver | | | **1.054** | parity bar 1.03; falsifier 1.10 |
+| ratio to the constant-gauge variant | | | 1.032 | |
+| ratio to Transolver | | | 1.025 | |
+| wall shear, uniform probe, 80,000 cells | 0.0698 | 0.0677 | 0.0688 | not reduced for the other corner arms |
+| pressure, biased probe, 80,000 cells | 0.0475 | 0.0457 | 0.0466 | |
+| density factor at 80,000 cells | 1.06 | 1.05 | **1.05** | GeoTransolver 10.5, Transolver 14.9, constant gauge 16.6, similarity gauge 1.09; bar 1.5 |
+| pressure, uniform probe, 10,000 cells | 0.0606 | 0.0576 | 0.0591 | no other corner arm evaluated at 10,000 cells |
+| density factor at 10,000 cells | 1.97 | 1.73 | 1.85 | |
+
+Both seeds trained to 500 epochs without the drift of the protocol-rate
+arm: the epoch-mean step loss falls from 0.051 at epoch 0 to 0.00105 at
+50, 0.00048 at 100, 0.00030 at 200 and sits at 0.00028 from epoch 250 to
+the end, with the minimum (0.00027) at epochs 391 and 376, inside the
+plateau's noise. The stability bar is met.
+
+**Verdict.** **Between.** The two-seed mean is 5.4% above GeoTransolver
+and 3.2% above the constant-gauge variant, so the parity bar is missed by
+2.4 points and the falsifier is not fired. Per the preregistration this is
+reported as the reference frame's price at scale, and the frame decision of
+@sec-principled-decisions, which was never made on accuracy, is unchanged.
+The sample-frame consistency bar is met with a wide margin: the reference
+configuration's error rises 5% under a 10:1 density bias where the
+released baselines' rise 10 to 15 times and the constant-gauge variant's
+17 times.
+
+**Why it matters.** At the reference size (width 192, 10,000 cells, 435
+cars) the reference configuration is 1.10x GeoTransolver (0.0552 against
+0.0503). At the corner it is 1.05x. Half of the reference-size deficit is
+therefore a statement about size and resolution, and half remains as the
+frame's price. One confound is stated here and wherever this number is
+quoted: the reference at the corner trained at 3.75e-4 while the other
+three arms trained at their protocol rates, because the reference's
+protocol-rate lane diverged; part of the 5% may be rate rather than frame,
+and no protocol-rate reference number exists at the corner to separate
+them. The 10,000-cell evaluation of the 80,000-cell-trained model, 0.0591
+with a density factor of 1.85, is recorded without a comparator: none of
+the corner's other arms was evaluated eight times coarser than it trained.
+
+**What's next.** The width learning-rate rule
+($10^{-3} \times 192/\text{width}$) is now the only recipe under which the
+reference configuration trains at width 512; adopting it as ISLA's protocol
+above width 192, or returning to the routing mechanism for a rate-free fix,
+is Peter's decision. A single control would close the rate confound: the
+constant-gauge variant at the corner under the same 3.75e-4 (one two-seed
+pair, about six GPU-hours per seed); if it lands near its 1e-3 value of
+0.0428 the 5% is the frame's, and if it lands near 0.0442 it is the rate's.
+That control is proposed, not launched.
