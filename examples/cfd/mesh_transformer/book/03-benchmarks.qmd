@@ -48,15 +48,17 @@ spread at 35 cases and is the uncertainty to read.
 **Which ISLA.** ISLA's reference configuration is the relative frame with
 the total-measure length scale (@sec-mt2-forward): no centroid, no sample
 statistic anywhere in the frame, so its output does not depend on how the
-surface was sampled. It is measured on six of the eight surface rungs
+surface was sampled. It is measured on seven of the eight surface rungs
 below: 35 and 210 HiLift cases, 4 and 21 training geometries, the fixed
-angle, and DrivAerML at 435 cars. Its price against the constant-gauge
+angle, DrivAerML at 435 cars, and the 512-wide, 80,000-cell corner (under
+the width learning rate). Its price against the constant-gauge
 variant (@sec-mt2-variants) splits by whether the validation geometries
-recur in training: none on DrivAerML, 1% at 4 geometries and 5% at 21
-geometries (never-seen validation geometries), 11% at both 35 and 210
-cases, where the validation geometries recur, and 14.5% at the fixed angle
-(three seeds), where a single freestream direction makes the mesher's refinement
-pattern a reusable cue; on both splits tested with an exact full-geometry
+recur in training: none on DrivAerML at the reference size, 3% at the
+corner (4% at a matched learning rate, @sec-nb-cg-wlr-verdict), 1% at 4
+geometries and 5% at 21 geometries (never-seen validation geometries), 11%
+at both 35 and 210 cases, where the validation geometries recur, and 14.5%
+at the fixed angle (three seeds), where a single freestream direction makes
+the mesher's refinement pattern a reusable cue; on both splits tested with an exact full-geometry
 frame the price is the plain mean's mesher pattern, not positional
 information (@sec-nb-frame-full-verdict,
 @sec-nb-frame-full-fixed-angle-verdict, @sec-nb-relframe-ladder-verdict).
@@ -361,7 +363,9 @@ print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed va
       "The corner row is width 512 and 80,000 cells per car for all arms (ISLA with the fast "
       "point-softmax kernel; 60.2M, 35.9M and 23.9M parameters), evaluated at 80,000 cells; the "
       "reference configuration there trained at the width learning rate 3.75e-4 after diverging at "
-      "the protocol rate 1e-3, the other arms at their protocol rates (@sec-nb-corner-wlr-verdict). "
+      "the protocol rate 1e-3, the other arms at their protocol rates (@sec-nb-corner-wlr-verdict); the "
+      "constant-gauge variant retrained at 3.75e-4 scores 0.0424, so the rate costs it nothing and the "
+      "reference's excess is the frame's (@sec-nb-cg-wlr-verdict; control, not a row). "
       "On the 1,260-case HiLift rung the unit-direction Transolver pair is still "
       "training and its cells read pending; the 27–218-car DrivAerML ladder has no unit-direction "
       "baseline measurement and is not listed. Data: "

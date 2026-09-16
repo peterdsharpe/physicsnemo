@@ -17758,3 +17758,60 @@ width-rate value is 0.0442.
 - **Stability.** Both seeds train to 500 epochs (the constant gauge is
   stable at 1e-3 at this width; a lower rate is not expected to change
   that).
+
+## 2026-09-16 — Verdict, CG-WLR: the constant gauge under the width learning rate scores 0.0424, so the rate costs it nothing and the reference configuration's corner excess is the frame's {#sec-nb-cg-wlr-verdict}
+
+**The setting.** The CORNER-WLR verdict (@sec-nb-corner-wlr-verdict) left
+one confound open: ISLA's reference configuration scored 0.0442 at the
+512-wide, 80,000-cell DrivAerML corner after training at the width
+learning rate 3.75e-4, while the constant-gauge variant's corner value
+0.0428 came from the protocol rate 1e-3. The preregistration of
+@sec-nb-cg-wlr-prereg trained the constant-gauge variant itself at
+3.75e-4, two seeds, otherwise identical to the reference pair, and wrote
+the bars in advance: a two-seed mean at or below 0.0432 gives the excess
+to the frame, at or above 0.0438 to the rate, between is mixed.
+
+**What we saw** (float32, 48 validation cars, sample-frame probe;
+results/cg_wlr_reduction_2026-09-16.json):
+
+| quantity | seed 42 | seed 43 | mean | comparators |
+|---|---|---|---|---|
+| pressure, uniform probe, 80,000 cells | 0.0418 | 0.0429 | **0.0424** | constant gauge at 1e-3: 0.0428; reference at 3.75e-4: 0.0442; GeoTransolver 0.0419 |
+| ratio to the constant gauge at 1e-3 | | | **0.990** | |
+| reference at 3.75e-4 ÷ this arm | | | **1.042** | matched-rate frame price |
+| wall shear, uniform probe, 80,000 cells | 0.0659 | 0.0680 | 0.0670 | reference at 3.75e-4: 0.0688 |
+| density factor at 80,000 cells | 14.1 | 14.4 | 14.2 | constant gauge at 1e-3: 16.6; reference: 1.05 |
+| pressure, uniform probe, 10,000 cells | 0.0587 | 0.0605 | 0.0596 | reference at 3.75e-4: 0.0591 |
+| density factor at 10,000 cells | 10.1 | 10.3 | 10.2 | reference at 3.75e-4: 1.85 |
+
+Both seeds trained to 500 epochs without incident.
+
+**Verdict.** **The frame owns the excess.** At 0.0424 the constant gauge
+under the lower rate is 1% *better* than at its protocol rate, so the
+rate component of the reference's excess is zero to within seed noise
+(−0.0004 in readout units against a seed spread of 0.0011) and the whole
+of the reference's excess over the constant gauge at the corner, 0.0018
+or 4.2% at matched rate, is the relative frame's. The rate confound
+stated in the CORNER-WLR verdict is closed: the sentence "the reference
+frame's price at scale is about 5%" stands without the qualifier. The
+sample-frame density factor of 14 confirms, as at 1e-3, that the
+constant gauge's accuracy does not survive a 10:1 density bias while the
+reference's does (1.05); nothing about that trade changes with the rate.
+
+**Why it matters.** The corner now has a matched-rate pair of ISLA
+configurations: the frame that gives sampling consistency by construction
+costs 4% of in-distribution pressure accuracy at scale, against 0% at the
+reference size on DrivAerML (@sec-verdict) and 1 to 5% on the
+never-seen-geometry rungs. The constant gauge at the width rate is also
+the best ISLA number at the corner, 0.0424 against GeoTransolver's
+0.0419, 1.01x; it is recorded here as a control and does not enter the
+scoreboard's corner row, which keeps the protocol-rate constant gauge
+(0.0428) and the width-rate reference (0.0442) so that every arm in the
+row is labelled by the rate it actually trained at. The width rule itself
+is now measured on both ISLA constructions at width 512: it is neutral
+for the centered frame and necessary for the relative one.
+
+**What's next.** The width learning-rate rule decision stays with Peter;
+this entry removes one argument against adopting it (it costs the
+centered construction nothing) and adds none for the routing mechanism
+beyond what @sec-nb-relframe-divergence-mechanism already records.
