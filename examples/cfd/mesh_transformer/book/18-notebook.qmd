@@ -17716,4 +17716,45 @@ is Peter's decision. A single control would close the rate confound: the
 constant-gauge variant at the corner under the same 3.75e-4 (one two-seed
 pair, about six GPU-hours per seed); if it lands near its 1e-3 value of
 0.0428 the 5% is the frame's, and if it lands near 0.0442 it is the rate's.
-That control is proposed, not launched.
+That control is launched as CG-WLR (@sec-nb-cg-wlr-prereg).
+
+## 2026-09-15 — Preregistration, CG-WLR: the constant-gauge variant at the corner under the width learning rate, to split the reference's 5% into frame and rate {#sec-nb-cg-wlr-prereg}
+
+**Setting.** The CORNER-WLR verdict (@sec-nb-corner-wlr-verdict) puts
+ISLA's reference configuration at 0.0442 on the 512-wide, 80,000-cell
+DrivAerML corner, 1.05x GeoTransolver and 1.03x ISLA's constant-gauge
+variant, but the reference trained at the width learning rate 3.75e-4
+while every other corner arm trained at its protocol rate (1e-3 for the
+constant gauge). The 5% therefore has two candidate owners: the relative
+frame, and the lower rate's slower progress within 500 epochs. A single
+control separates them.
+
+**The arm.** `scale_isla_dr_cg512x80k_wlr_seed42/43`: the constant-gauge
+variant (centered frame, `reference_length` 8.0; `model=isla_surface` in
+the pre-rename cluster snapshot `recipe_globin`, which the launcher
+asserts is the centered frame before training) at width 512 and 80,000
+cells, learning rate 3.75e-4, otherwise identical to the reference pair
+(500 epochs, bfloat16, compile off, no augmentation, snapshot
+`code_globin2`; launcher `kernel/cg_wlr_aga.sbatch`). Evaluation with the
+corner's float32 sample-frame probe at 80,000 and 10,000 cells
+(`kernel/cg_wlr_eval_aga.sbatch`). Two seeds, about six GPU-hours each.
+
+**Predictions and bars, written before the run.** Let $c$ be the
+two-seed mean float32 pressure error of this arm at 80,000 cells; the
+constant gauge's protocol-rate value is 0.0428 and the reference's
+width-rate value is 0.0442.
+
+- **Frame owns the 5%** if $c \le 0.0432$ (within 1% of the constant
+  gauge's protocol-rate value): the rate costs the constant gauge nothing,
+  so the reference's excess is the relative frame's price at scale, and
+  the sentence in @sec-verdict stays as written.
+- **Rate owns most of it** if $c \ge 0.0438$: the lower rate costs the
+  constant gauge at least two thirds of the reference's excess, the
+  reference's 5% is rewritten as "at most 1.6% frame" and the corner
+  becomes a matched-rate comparison between the two ISLA configurations
+  with the baselines' protocol-rate numbers flagged as unmatched.
+- **Mixed** between 0.0432 and 0.0438: reported as such, with the split
+  stated in readout units.
+- **Stability.** Both seeds train to 500 epochs (the constant gauge is
+  stable at 1e-3 at this width; a lower rate is not expected to change
+  that).
