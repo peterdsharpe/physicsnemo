@@ -17944,3 +17944,74 @@ whether the rule is the right *shape* beyond width 512 (one point measured)
 and whether the baselines would also benefit from a width-scaled rate
 (they were not tested, and the released baselines are not modified,
 @sec-nb-ruling-released-baselines).
+
+## 2026-09-17 — Preregistration, CAP: which capacity axis lifts ISLA's single-case floor? A slice-count ladder against width, depth and MLP width on the DrivAerML one-car instrument {#sec-nb-cap-prereg}
+
+**Setting.** The in-distribution surface deficit of ISLA against
+GeoTransolver and Transolver is representational, not a data limit:
+trained on a single DrivAerML car for 20,000 steps over 64 resamplings,
+ISLA's constant-gauge configuration reaches a float32 pressure error of
+0.1064 on that car's 10,000-cell views where GeoTransolver reaches 0.0766
+and Transolver 0.0811, a 1.31 to 1.39x floor that is wider than the
+435-car gap (@sec-nb-overfit-verdict; results/overfit_single_case_2026-09-11.json).
+The routing probe located the missing capacity on smooth, large-cell
+regions of the surface, not at the gaps, and refuted logit saturation and
+open-surface starvation as mechanisms. Two candidate explanations remain
+open and are separable: the slice count (256 anchors partition the surface;
+a smooth pressure field over large cells must be expressed through the
+five relational invariants per slice and a softmax that hardens with
+training), and plain per-token capacity (width, depth, MLP width). The
+estimator-variance explanation is already bounded by MIX: area-proportional
+training gains only 3.5% in family (@sec-nb-mix-prereg,
+results/mix_conventions_2026-09-10.json), so it is not the lever.
+
+**The instrument.** The single-case floor of OVERFIT-1, unchanged: one
+DrivAerML training car, 64 cached 10,000-cell resamplings, 20,000
+single-sample steps, bfloat16 training, constant-gauge ISLA
+(`mt2_surface` in the frozen `recipe_ovf`, snapshot `code_ovf`), seed 42,
+float32 evaluation on the same car at 10,000 and 40,000 cells
+(`overfit_cap_aga.sbatch`, `overfit_cap_eval_aga.sbatch`, lanes
+`overfit/overfit_lanes_cap.tsv`). The baseline lane
+`ovf_dr_isla_seed42_v64` (256 slices, width 192, 12 layers, MLP ratio 4) is
+reused, not retrained. One seed, as in OVERFIT-1: the floor is a fit to a
+fixed target and its seed spread was not the limiting uncertainty there.
+
+**Arms, one factor each against the baseline.**
+
+| arm | change | learning rate |
+|---|---|---|
+| `s128` | `n_slices` 128 | 1e-3 |
+| `s512` | `n_slices` 512 | 1e-3 |
+| `s1024` | `n_slices` 1024 | 1e-3 |
+| `h384` | `hidden` 384 | 5e-4 (the width rule, @sec-nb-lr-rule-decision) |
+| `l24` | `n_layers` 24 | 1e-3 |
+| `m8` | `mlp_ratio` 8 | 1e-3 |
+
+**Readout.** Float32 pressure error on the car's 10,000-cell views
+(baseline 0.1064; GeoTransolver 0.0766; Transolver 0.0811), with the
+40,000-cell value and the tail-20 training loss (baseline 0.0004) beside
+it.
+
+**Bars, written before the run.** For each axis, the top rung against the
+baseline 0.1064:
+
+- **Closes the floor**: at or below 0.0852 (within 1.05x of Transolver's
+  single-case floor). The axis is the representational bottleneck and a
+  435-car pair on that axis is launched next.
+- **Carries capacity**: at or below 0.0950 (a gain of at least 10.7%,
+  about half the log-gap to Transolver). Reported as a partial carrier;
+  the axis enters the design ledger with its cost.
+- **Null**: at or above 0.1010 (less than 5%). The axis is not where the
+  capacity is missing.
+
+**Predictions.** Slices carry (`s1024` at or below 0.0950, monotone over
+128, 256, 512, 1024) and width carries (`h384` at or below 0.0950, in line
+with the 9 to 11% per width step of the SCALE study), while depth and MLP
+width are null: the floor is set by how finely the surface is partitioned
+and how much each token can carry about its own patch, not by the depth of
+the slice stack. The slice hypothesis is falsified if `s1024` is null; the
+whole capacity picture is falsified if every arm is null, in which case the
+deficit sits in the routing or the read-out form itself and the next
+experiment is a soft-routing or readout-form probe, not a size ladder.
+Cost: six one-GPU lanes, two nodes, a few hours each (the 1024-slice lane
+carries four times the geometry work of the baseline).
