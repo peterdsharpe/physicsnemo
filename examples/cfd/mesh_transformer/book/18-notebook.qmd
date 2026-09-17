@@ -17856,3 +17856,53 @@ unmeasured on the 510- and 1,260-case rungs, and the tables say so.
 **What's next.** Nothing further on this rung. The only HiLift lanes
 still training are the GeoTransolver 20,000-cell pair that completes the
 20k floor comparison.
+
+## 2026-09-17 — Verdict, W2-C 20,000-cell floor test, GeoTransolver half: doubling the cells lowers both architectures by about 5% and leaves their ratio unchanged; the 1,260-case gap is not a token floor {#sec-nb-w2c-floor-verdict}
+
+**The setting.** The HiLift data-efficiency ladder flattens at its top:
+from 510 to 1,260 training cases the baselines' lead over ISLA's
+constant-gauge variant moves little (GeoTransolver ÷ ISLA 0.84 then 0.88
+on pressure, @sec-nb-udrv-1260-verdict). W2-C asked whether that
+flattening is a shared protocol floor set by the 10,000 sampled cells per
+case rather than by the architectures: if both models are starved of
+surface resolution at 1,260 cases, doubling the cells should move both and
+could move their ratio. The ISLA half was reduced on 2026-09-15
+(results/floor20k_2026-09-15.json): the constant-gauge variant trained at
+20,000 cells scores 0.0384 against 0.0405 at 10,000, a 5.1% gain for a
+2.0x step time and 1.9x peak memory. The GeoTransolver half, the
+unit-direction pair `udrv_hl_gt_full_20k_seed42/43` at learning rate
+1e-3, finished training on 2026-09-17 after about 35 four-hour chain
+links each on the I/O-bound 1,260-case set.
+
+**What was run.** Both halves are evaluated in float32 on the 180
+validation cases at 10,000 cells, the rung's instrument, so the
+comparison isolates the training resolution
+(results/floor20k_gt_2026-09-17.json).
+
+**What we saw** (float32, 180 validation cases, two seeds each; ratios
+GeoTransolver ÷ ISLA constant gauge):
+
+| field | GeoTransolver 20k (seeds) | ISLA 20k (seeds) | ratio at 20k | ratio at 10k | GeoTransolver 20k ÷ 10k | ISLA 20k ÷ 10k |
+|---|---|---|---|---|---|---|
+| pressure | **0.0340** (0.0333 / 0.0347) | **0.0384** (0.0380 / 0.0388) | **0.885** | 0.878 | 0.956 | 0.949 |
+| velocity | 0.0513 (0.0509 / 0.0516) | 0.0559 (0.0553 / 0.0565) | 0.917 | 0.900 | 0.978 | 0.960 |
+| wall shear | 0.0809 (0.0803 / 0.0816) | 0.0880 (0.0873 / 0.0886) | 0.920 | 0.904 | 0.970 | 0.953 |
+
+**Verdict.** **Not a shared token floor.** Doubling the training cells
+lowers GeoTransolver's pressure error by 4.4% and ISLA's by 5.1%, and the
+ratio between them moves from 0.878 to 0.885, within the two-seed spread
+of either arm (GeoTransolver's seeds differ by 4%). Neither architecture
+is starved of surface resolution at 1,260 cases: the 12% gap at full data
+is a property of the models at this protocol, not of the cell count. The
+flattening of the ladder from 510 to 1,260 cases therefore stands as a
+statement about data, and the W2-C question is closed with both halves
+measured.
+
+**Why it matters.** This removes the last protocol explanation on the
+table for the baselines' full-data lead on HiLift. With W2-C the W2 wave
+is complete: power (third seeds), the 510-case rung, the token floor, the
+single-angle mechanism and the paired per-case statistics have all read
+out, and every one of its comparisons has since been re-run under the
+unit-direction protocol (UDRV-L). The scoreboard keeps its 10,000-cell
+rows; the 20,000-cell numbers are recorded here and in `CLAIMS.md` as the
+floor control.
