@@ -17906,3 +17906,41 @@ out, and every one of its comparisons has since been re-run under the
 unit-direction protocol (UDRV-L). The scoreboard keeps its 10,000-cell
 rows; the 20,000-cell numbers are recorded here and in `CLAIMS.md` as the
 floor control.
+
+## 2026-09-17 — Decision, provisional: the width learning-rate rule (lr = 1e-3 × 192 / width above width 192) is ISLA's protocol; adopted autonomously, open to Peter's overrule {#sec-nb-lr-rule-decision}
+
+**The setting.** ISLA's protocol learning rate is 1e-3 at hidden width
+192, the rate at which every scoreboard number of the reference size was
+trained. At width 512 the reference configuration diverges at that rate on
+both seeds (@sec-nb-relframe-divergence-matrix): the slice routing hardens
+to one slice per token within the first thirty epochs and the anchors
+collapse to the centre (@sec-nb-relframe-divergence-mechanism). A softer
+routing temperature only delays the collapse
+(@sec-nb-relframe-divergence-locmat2-verdict); a lower rate removes it.
+The question left open on 2026-09-15 was whether to make the lower rate a
+rule of the protocol or to keep searching for a rate-free change to the
+routing.
+
+**The evidence that decides it.** Two controls have landed since. Under
+the width rule $10^{-3} \times 192/512 = 3.75 \times 10^{-4}$ the
+reference configuration trains cleanly to 500 epochs at the 512-wide,
+80,000-cell corner and scores 0.0442 (@sec-nb-corner-wlr-verdict). The
+constant-gauge variant trained under the same rule scores 0.0424 against
+0.0428 at its protocol rate (@sec-nb-cg-wlr-verdict): the rule costs the
+centered construction nothing and is necessary for the relative one. A
+rule that is neutral where it is not needed and sufficient where it is
+needed is a protocol, not a tuning.
+
+**The decision.** ISLA's learning rate is 1e-3 at width 192 and
+$10^{-3} \times 192 / \text{width}$ above it. It is written into the
+reference configuration's comments
+(`conf/model/isla_surface.yaml`), the recipe README and `CLAIMS.md`, and
+every width-above-192 ISLA number in this book is labelled as trained under
+it. The decision is made here autonomously because the two controls
+answered the open question and Peter had not yet ruled; it is reversible,
+and a rate-free routing fix remains a legitimate research question with its
+own preregistration if he prefers that path. What this does not settle:
+whether the rule is the right *shape* beyond width 512 (one point measured)
+and whether the baselines would also benefit from a width-scaled rate
+(they were not tested, and the released baselines are not modified,
+@sec-nb-ruling-released-baselines).

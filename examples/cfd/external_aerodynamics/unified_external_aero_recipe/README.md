@@ -359,6 +359,14 @@ peak memory; set `false` to trade memory for speed). The geometry region
 runs the eager PyTorch kernel by default; the fused Triton kernel is an
 exact opt-in via `+model.geo_kernel=fused` (CUDA only).
 
+**Learning rate.** 1e-3 at `hidden: 192` (the protocol rate). Above 192
+use the width rule `lr = 1e-3 × 192 / hidden` (3.75e-4 at 512): at width
+512 the relative frame diverges at 1e-3 because the slice routing hardens
+to one slice per token, trains cleanly under the rule, and the rule costs
+the centered variant nothing (measured at 512 × 80,000 cells on
+DrivAerML; the book's notebook records the divergence mechanism and both
+controls).
+
 **Data-to-model mapping** (surface reference):
 
 ```yaml
