@@ -18958,3 +18958,33 @@ half the one-car magnitude (2.5 points of ratio against the one-car study's
 heads close the form gap is the pending question; no promotion decision is
 taken on the four-head pair alone. The reference configuration stays
 single-routing until the full verdict.
+
+## 2026-09-18 — Interim, LR-REF: the reference configuration diverges at learning rate 1e-2 (loss NaN at epochs 21 and 32 on the two seeds); the 3e-3 and posed lanes train cleanly; the 1e-2 lanes are stopped {#sec-nb-lrref-interim}
+
+**Setting.** LR-REF (@sec-nb-refprops-prereg) re-measures the learning-rate
+grid {1e-3, 3e-3, 1e-2} on the reference configuration at 435 DrivAerML
+cars, because the grid the book cites was measured on the legacy centred
+variant. The preregistration named a divergence at 1e-2 as a possible
+outcome to be reported as the reference's rate ceiling rather than a
+failure of the claim.
+
+**What we saw.** Both 1e-2 seeds trained with finite loss (0.065 and 0.063
+on the last finite step) and then went to NaN within one step, seed 42 at
+epoch 21 and seed 43 at epoch 32, and stayed there. The 3e-3 seeds are at
+epochs 90 and 104 with finite losses and no NaN, and the two posed lanes at
+epochs 90 and 91 likewise. The 1e-2 lanes were cancelled and marked blocked
+at 12:25 PDT so that two GPU nodes do not train NaN for 470 epochs; their
+logs are kept.
+
+**Reading, provisional.** The reference configuration's rate ceiling at
+width 192 lies between 3e-3 and 1e-2. This is the same failure mode the
+width-512 study found at 1e-3 (@sec-nb-relframe-divergence-mechanism): the relative frame's
+routing hardens under too high an effective rate and the anchors collapse,
+after which the invariants are not finite. The legacy centred variant
+survived 1e-2 at 1.55x its best error; the relative frame does not survive
+it at all, so the learning-rate robustness claim, once the 3e-3 lanes are
+scored, will read "stable across half a decade (1e-3 to 3e-3) where
+GeoTransolver degrades 9x one step above its best; diverges at 1e-2", and
+the width rule remains the operating guidance for anything above the
+protocol rate. The verdict on the 3e-3 pair and the posed pair follows when
+they finish.
