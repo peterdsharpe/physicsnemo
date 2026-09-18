@@ -1,0 +1,270 @@
+# Using ISLA {#sec-using}
+
+**ISLA ships as one class with one recommended configuration, trained and
+evaluated by the unified external-aerodynamics recipe; this chapter is the
+operating manual.** It tells you which configuration to run and why, what
+the model needs from your data, the two commands that train and evaluate
+it, the learning-rate rule that lets it scale in width, the inference
+sampler that removes most of the draw noise at a fixed cell budget, and
+what a step costs. Everything here is about the reference configuration
+unless a variant is named; the reasons behind each recommendation are in
+@sec-mt2 and the evidence chapters, cited at the point where they apply.
+
+## Which configuration {#sec-using-config}
+
+Use the **reference configuration**: the relative frame with the
+total-measure length scale. It is the class default, so `ISLA()` with no
+frame arguments is it, and the recipe's `isla_surface.yaml` states the two
+settings explicitly:
+
+```yaml
+model:
+  _target_: physicsnemo.experimental.nn.ISLA
+  out_scalars: 1        # pressure
+  out_vectors: 1        # wall shear stress
+  hidden: 192
+  n_layers: 12
+  n_slices: 256
+  mlp_ratio: 4
+  frame_mode: relative        # positions enter only as point-to-anchor differences
+  scale_mode: total_measure   # length unit = sqrt(total quadrature measure)
+  geo_checkpoint: true        # rebuild per-slice geometry in backward: same numbers, half the memory
+```
+
+The configuration table below is the whole decision. The two variants exist
+because the program measured them; they are not recommended for new work.
+
+| configuration | recipe config | when to use | what you give up |
+|---|---|---|---|
+| **reference** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the released baselines, a few percent of in-distribution accuracy (@sec-scoreboard) |
+| constant-gauge variant (plain-mean centre, fixed length) | `isla_surface_constant_gauge` | reproducing a measurement that used it | consistency under a change of sampling: 12x error growth under a 10:1 density bias (@sec-scoreboard-consistency) |
+| similarity-gauge variant (measure-weighted centre and RMS radius) | `similarity_gauge: true` on a centred frame | a diagnostic comparison of frame choices | a frame still estimated from the sample; equal accuracy to the reference |
+| passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
+
+::: {.callout-tip collapse="true" title="Checkpoints remember their configuration"}
+Every checkpoint stores its constructor arguments, so a model saved under a
+variant loads in the configuration that trained it; you never have to
+recall which frame a checkpoint used. A checkpoint that names one of the
+research-only options removed from the class on 2026-09-15 at its former
+default loads unchanged; one that set such an option raises an error naming
+the git tag `isla-research-full`, where the full research class remains
+runnable with its tests.
+:::
+
+## What the model needs from your data {#sec-using-inputs}
+
+The forward call is keyword-only, so the recipe's `forward_kwargs:` mapping
+reads exactly as the call does. For the surface task:
+
+```yaml
+forward_kwargs:
+  points: interior.points                                  # (B, N, 3) sampled cell centroids
+  normals: boundaries.vehicle.cell_data.normals            # (B, N, 3) unit outward normals
+  measure_weights: interior.point_data._target_quadrature_measure   # (B, N) area each sampled cell stands for
+  global_vectors: global_data.U_inf_dir                    # (B, 1, 3) the freestream as a unit direction
+```
+
+Three of these need a word.
+
+- **The measure weights must sum to the surface area.** When the recipe
+  keeps $n$ of $N$ cells, each kept cell carries the Horvitz–Thompson weight,
+  its area times $N/n$, so that the total measure, which is ISLA's length
+  unit, is the full surface area at any `sampling_resolution`. The surface
+  dataset writes this as `_target_quadrature_measure`; the volume dataset
+  writes the equivalent `quadrature_measure` through its
+  `ComposeQuadratureMeasure` stage. Feeding raw sub-sampled areas shrinks the
+  length unit by the kept fraction and moves every invariant out of its
+  trained range.
+- **The global vector must be a unit direction.** `ComputeFreestreamDirection`
+  writes `U_inf_dir` from the physical velocity; the model normalizes it
+  again internally and discards the magnitude. This is also the
+  fair-comparison rule for every architecture in the book
+  (@sec-fair-comparison): fed the physical velocity, GeoTransolver's global
+  context collapses to one slice and loses 3.4 to 3.8x.
+- **A speed or other magnitude that matters is a global scalar.** Set
+  `n_global_scalars` and pass `global_scalars` of shape (B, S). No fixed power
+  of the freestream speed is a physical law for every output (a pressure
+  coefficient is degree zero, a dimensional pressure degree two), so the
+  model learns the dependence like any other parameter.
+
+::: {.callout-note collapse="true" title="Problems other than external aerodynamics"}
+The architecture knows only that it was handed $K$ global directions and
+$S$ global scalars. A buoyant flow passes gravity as its one direction; a
+magnetized flow passes two; steady conduction with pinned temperatures
+passes none (`n_global_vectors: 0`) and supplies the pinned values as
+per-cell `boundary_scalars` (`n_boundary_scalars`). Each global direction
+adds one seed cosine, one relational cosine and three vectors to the output
+basis (@sec-mt2-inputs). The tests in `test_isla_global_inputs.py` cover
+zero and two directions, global scalars, and the invariance of the output to
+the magnitude of every global vector.
+:::
+
+## Training {#sec-using-train}
+
+From the recipe root:
+
+```bash
+# DrivAerML surface, reference configuration
+python src/train.py model=isla_surface dataset=drivaer_ml_surface \
+    training.optimizer.lr=1e-3 compile=false
+
+# DrivAerML interior: boundary -> volume, queries as interacting tokens with the signed distance
+python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
+    training.optimizer.lr=1e-3 compile=false
+
+# HiLiftAeroML surface
+python src/train.py model=isla_surface dataset=highlift_surface \
+    training.optimizer.lr=1e-3 compile=false training.num_epochs=200 sampling_resolution=100000
+```
+
+The protocol behind every number in this book is 10,000 sampled cells per
+case, 500 epochs, bfloat16 autocast, no augmentation, learning rate 1e-3 at
+width 192, final-epoch checkpoint (@sec-protocol). ISLA needs no rotation
+augmentation: the contracts make it exact, and a model trained in the
+dataset's native frame predicts a car in any pose (@sec-pose).
+
+### The width learning-rate rule {#sec-using-lr}
+
+**Above width 192, set the learning rate to $10^{-3} \times 192 /
+\mathrm{hidden}$.** At width 512 that is $3.75 \times 10^{-4}$. At the
+protocol rate of $10^{-3}$ the relative frame diverges at width 512: the
+routing hardens to one slice per token and the anchors collapse. Under the
+rule it trains cleanly, and the rule costs the constant-gauge variant
+nothing at the same corner (its error at $3.75 \times 10^{-4}$ equals its
+error at $10^{-3}$), so the rule is a property of the frame, not a
+retuning of the comparison (@sec-nb-corner-wlr-verdict,
+@sec-nb-cg-wlr-verdict). Within a decade of rate at width 192 ISLA is
+stable where GeoTransolver degrades 4 to 14x (@sec-robustness-lr).
+
+::: {.callout-warning collapse="true" title="The rule is provisional"}
+The rule is adopted in the recipe config and documented here as the
+program's working practice; it rests on one corner (width 512, 80,000
+cells) and two controls. A width ladder at fixed cells would establish it as
+a scaling law; until then treat it as the safe default rather than an
+optimum.
+:::
+
+## Evaluation and the inference sampler {#sec-using-sampler}
+
+Inference shares the training configuration and reads the checkpoint by
+run identifier:
+
+```bash
+python src/infer.py model=isla_surface dataset=drivaer_ml_surface \
+    run_id=<the trained run_id> infer_split=val sampling_resolution=10000 precision=float32
+```
+
+Report in float32. The recipe trains under bf16 autocast, and every number
+in this book is a float32 inference on the final-epoch checkpoint
+(@sec-metrics); bf16 inference adds a precision residual of about a percent
+that is not the model's.
+
+**For inference at a fixed cell budget, draw the cells with the stratified
+sampler.** Replace the dataset's `SubsampleMesh` stage with the recipe's
+`StratifiedSubsampleMesh`:
+
+```yaml
+    - _target_: ${dp:StratifiedSubsampleMesh}   # was SubsampleMesh
+      n_cells: ${sampling_resolution}
+```
+
+It keeps the same inclusion law (every cell kept with probability $n/N$,
+weight $N/n$), so nothing about the trained model or the quantity it
+estimates changes, but the kept cells are a *systematic* draw along the
+Morton order of the cell centroids, one per consecutive run of $N/n$ cells
+with a single random offset. A systematic sample has the same expectation as
+an independent draw for every cell-weighted integral and a lower variance
+for smooth integrands. The effect is a free improvement for every model and
+largest for ISLA, whose slice states are the noisiest estimates
+(@sec-deficit-anatomy):
+
+```{python}
+#| label: tbl-using-strat
+#| output: asis
+import json, statistics
+from pathlib import Path
+RES = Path("..") / "results"
+qv = json.load(open(RES / "quadvar_reduction_2026-09-17.json"))["arms"]
+mean = statistics.mean
+names = [("isla_ref", "ISLA, reference configuration"), ("isla_cg", "ISLA, constant-gauge variant"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
+out = "| model | independent draw | stratified draw | change |\n|---|---:|---:|---:|\n"
+for k, lab in names:
+    a = qv[k]; u = a["unif"]["10000"]; ind = mean(u["seeds"]) if isinstance(u, dict) else u
+    st = mean(a["strat"]["10000"]["seeds"])
+    out += f"| {lab} | {ind:.4f} | {st:.4f} | {(st/ind-1)*100:+.1f}% |\n"
+print(out)
+print(": DrivAerML surface pressure (area-weighted relative L2, float32, 48 validation cars, 10,000 cells, seed means) "
+      "for the same checkpoints under the independent and the stratified inference draw. "
+      "Data: results/quadvar_reduction_2026-09-17.json. {#tbl-using-strat}")
+```
+
+The book keeps the independent draw for its headline comparisons and
+reports the stratified draw as a labelled row (@sec-scoreboard); for a
+deployment, use the stratified draw, or more cells.
+
+::: {.callout-tip collapse="true" title="How many cells"}
+The in-distribution gap to the baselines halves from the 10,000-cell
+independent draw to 80,000 cells, because most of it is estimator variance
+in the slice states (@sec-deficit-anatomy). The default compiled step is
+2.2x GeoTransolver's at 40,000 tokens; the fused geometry kernel
+(`+model.geo_kernel=fused`, CUDA only, exact) brings it to parity there
+(@sec-using-cost). If the budget allows 40,000 cells, use them with the fused
+kernel; if it allows 10,000, use the stratified draw.
+:::
+
+## Loading a trained model {#sec-using-checkpoint}
+
+A saved ISLA is a PhysicsNeMo module checkpoint and loads with the class's
+`from_checkpoint`; the constructor arguments are stored inside it, so no
+configuration has to be repeated. A checkpoint written under the class's
+former name loads through the compatibility alias. The forward call in your
+own code mirrors the recipe mapping:
+
+```python
+from physicsnemo.experimental.nn import ISLA
+model = ISLA.from_checkpoint("checkpoints/isla_surface.mdlus").eval()
+out = model(points=x, normals=n, measure_weights=w, global_vectors=g_hat)  # (B, N, 1 + 3)
+p, tau = out[..., :1], out[..., 1:]
+```
+
+`points` and `normals` are (B, N, 3), `measure_weights` (B, N) summing to the
+surface area, `global_vectors` (B, 1, 3) or (B, 3) for one direction. The
+output stacks the scalar fields first, then each vector field's three
+components. For interior prediction with `isla_volume`, add `query_points`,
+`query_normals` (the signed-distance gradient) and `query_scalars` (the signed
+distance) and read the output at the query rows; deploy at the training query
+count of 10,000, because the interacting decode's prediction at a point
+depends on the joint query set (@sec-interior-companion).
+
+## Cost {#sec-using-cost}
+
+At the recipe dimensions ISLA has 8.9M parameters (GeoTransolver 9.0M). On
+one GB300 in bfloat16, batch of one case, both models compiled as the
+recipe runs them, the training step at 10,000 tokens is 47 ms at 1.30 GiB
+with the geometry recompute on, against GeoTransolver's 45 ms at 2.70 GiB;
+switching the recompute off gives 39 ms at 1.94 GiB. At 40,000 tokens the
+default path is 119 ms against 53 ms and the fused kernel 52 ms at 4.5
+against 10.0 GiB (@tbl-mt2-cost). Two practical consequences:
+
+- **Leave `geo_checkpoint: true` unless you are short of time and long on
+  memory.** It is bitwise identical in outputs and gradients.
+- **Use `+model.geo_kernel=fused` at 40,000 tokens and above.** It computes
+  the same function (relative difference at most $5.5 \times 10^{-7}$ in
+  bf16) and is opt-in only because it requires CUDA and Triton.
+
+The passive decoder adds 1.1M parameters and four read blocks; the
+query-token interior configuration adds almost no parameters but spans every
+token with the per-slice geometry, at 0.28 s per step and 6.0 GB at 10,000
+interior queries.
+
+## Contracts you can check on your own data {#sec-using-contracts}
+
+The contracts are exact properties of the code (@sec-mt2-contracts), and
+each is cheap to verify on a loaded checkpoint: rotate and translate the
+inputs by a random rigid motion and compare the scalars (unchanged) and the
+vectors (rotated); scale the points by $k$ and the measure weights by $k^2$
+(unchanged). In float32 the residuals are of order $10^{-6}$; in bf16
+autocast about a percent. A residual far above these on your own data means
+the inputs, not the model: normals that are not unit, weights that do not
+sum to the surface area, or a global vector that was already centred or
+scaled by something sample-dependent.

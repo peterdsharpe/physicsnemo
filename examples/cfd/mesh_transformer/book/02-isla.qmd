@@ -1,0 +1,792 @@
+# ISLA, one idea at a time {#sec-mt2}
+
+**ISLA is a slice-attention transformer that never sees a coordinate.**
+Every learned operation inside it acts on scalars that do not change when
+the geometry is rotated, translated or uniformly rescaled, and every sum it
+takes over the boundary is a quadrature rule, so its answer converges to one
+field as the mesh is refined instead of depending on where the mesher put
+its cells. Vectors are rebuilt at the very end from a basis that rotates
+with the body. That is the whole design; the rest of this chapter builds it
+up in six ideas, each with a picture on the two-dimensional airfoil of
+@sec-problem, and then states the result as the tests that verify it and the
+cost that it carries.
+
+The chapter reads top to bottom with every collapsed note closed. The notes
+hold derivations and code correspondences for a reader who wants them.
+
+```{python}
+#| label: setup-isla
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
+```
+
+## Where ISLA stands among mesh transformers {#sec-mt2-position}
+
+The strongest empirical record on industrial aerodynamics belongs to the
+Transolver family, whose *physics attention* routes every mesh point softly
+into a few hundred *slices*, lets the slices attend to one another, and
+reads the result back to the points. GeoTransolver adds a geometry encoder
+and a global-context projector. Both feed the network raw coordinates in
+some frame and the freestream vector as a global feature; both learn the
+physics of pose and scale from data, and both aggregate over whatever points
+the mesher produced.
+
+ISLA keeps the routing mechanism and changes what the network is allowed
+to see. The change is paid once at the network's edges: invariant scalars
+on the way in, an equivariant basis on the way out. Inside, the slice
+layers are the same kind of object as Transolver's, with two additions
+that this chapter explains: the routing weights carry the surface measure,
+and every token knows where it is only relative to the slice anchors. The
+opposite design, enforcing physical structure inside every layer with typed
+scalar and vector streams or analytic boundary-integral kernels, was built
+in this program and fails on separated three-dimensional flow
+(@sec-interior-negatives).
+
+```{mermaid}
+%%| fig-cap: >
+%%|   The ISLA forward pass. Grey boxes are data; dashed blue boxes are fixed
+%%|   geometric maps with no parameters; solid blue boxes are learned. From
+%%|   the length scale to the last slice layer, nothing but invariant scalars
+%%|   is computed; the one place a vector is rebuilt is the output basis. The
+%%|   passive decoder on the right is optional (@sec-mt2-passive). How to read
+%%|   this: it is the reference configuration; the gauge variants
+%%|   (@sec-mt2-variants) insert a centring step before the length scale.
+flowchart TB
+    classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
+    classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
+    classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
+
+    A["boundary sample: positions x_i, unit normals n_i, measure weights w_i<br/>global vector inputs g_k (k = 1..K), global scalar inputs σ"]:::data
+    B["length scale L = sqrt(Σ w_i); r_i = x_i / L (idea 2)"]:::fixed
+    C["invariant seed: n_i · ĝ_k, then σ (idea 2)"]:::fixed
+    D["embedding MLP → token state h_i"]:::learned
+    E["slice layer × 12 (ideas 1, 3, 4, 5)<br/>measure-weighted routing → anchors z_s, m_s → relational invariants ξ_is<br/>→ slice states Z_s → read-back → h_i"]:::learned
+    F["encoder state: h_i, final anchors"]:::data
+    Q["query points x_q"]:::data
+    R["passive read blocks × 4 (optional)"]:::learned
+    H["linear head: scalars, and 4 + 3K coefficients per vector"]:::learned
+    V["equivariant basis at each token (idea 6)"]:::fixed
+    O["scalar and vector fields"]:::out
+
+    A --> B --> C --> D --> E --> F --> H --> O
+    F -. optional .-> R
+    Q -.-> R
+    R -.-> H
+    V --> O
+```
+
+## What goes in and what comes out {#sec-mt2-inputs}
+
+**ISLA maps a sampled boundary plus the problem's global conditions to
+fields at query points.** Per case, the inputs are:
+
+- $N$ sampled boundary points $x_i \in \mathbb{R}^3$, each with a unit
+  outward normal $n_i$ and a **measure weight** $w_i > 0$, the surface area
+  the point stands for, so that $\sum_i w_i f(x_i) \approx \int f\,dA$. In
+  the protocol of @sec-protocol, $N = 10{,}000$ per case.
+- **Global vector inputs** $g_k \in \mathbb{R}^3$, $k = 1,\dots,K$:
+  directions that belong to the problem rather than to any cell. In this
+  book $K = 1$ and $g_1$ is the freestream direction; for a buoyant flow it
+  would be gravity, and a magnetized flow would add the applied field. Steady
+  conduction with pinned temperatures has $K = 0$. Each is normalized to a
+  unit direction $\hat g_k$ inside the model; a magnitude that matters is a
+  global scalar.
+- **Global scalar inputs** $\sigma \in \mathbb{R}^S$: the parameters of the
+  PDE, such as a diffusivity, a Reynolds number or a freestream speed. They
+  are appended to the seed of every token. $S = 0$ in every experiment here.
+- Optionally, per-cell boundary data (`boundary_scalars`: whatever a
+  boundary condition prescribes at each cell) and per-query scalars
+  (`query_scalars`: in this book the signed distance to the wall for
+  interior queries).
+
+The outputs are one or more scalar fields (surface pressure, in every
+surface result of the book) and one or more vector fields (wall shear
+stress) at query points. In the reference configuration the queries *are*
+the surface sample and each point receives its own prediction; with the
+passive decoder (@sec-mt2-passive) queries can be any positions, on or off
+the surface.
+
+```{python}
+#| label: fig-isla-inputs
+#| fig-cap: >
+#|   What one token carries, on the running airfoil example. Each boundary
+#|   cell (black dot at its midpoint) has a position, a unit outward normal
+#|   (grey arrow) and a measure weight (the cell's length here, its area in
+#|   three dimensions; drawn as the thickness of the boundary segment). The
+#|   one global vector input of this book is the freestream direction (black
+#|   arrow). How to read this: nothing else enters the model; in particular
+#|   no coordinate of any point is ever given to a learned layer.
+#| code-fold: true
+rng = np.random.default_rng(2)
+# an uneven "mesher": fine near the leading edge, coarse elsewhere
+u = np.linspace(0, 1, 2001)
+density = 1.0 + 14.0 * np.exp(-((u - 0.5) / 0.05) ** 2) + 2.0 * np.exp(-((u - 0.0) / 0.04) ** 2) + 2.0 * np.exp(-((u - 1.0) / 0.04) ** 2)
+cdf = np.concatenate([[0], np.cumsum(density[:-1] * np.diff(u))]); cdf /= cdf[-1]
+frac = np.interp(np.linspace(0, 1, 41), cdf, u)
+Jm = joukowski(n_cells=40, frac=frac)
+fig, ax = plt.subplots(figsize=(8.0, 3.6))
+clean_axes(ax); ax.set_xlim(-2.5, 2.6); ax.set_ylim(-1.3, 1.5)
+segs = np.stack([Jm["xy"][:-1], Jm["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[BASELINE], linewidths=2 + 14 * Jm["w"] / Jm["w"].max(), capstyle="butt", zorder=1))
+ax.plot(Jm["xy"][:, 0], Jm["xy"][:, 1], color=INK, lw=0.8, zorder=2)
+ax.quiver(Jm["mid"][:, 0], Jm["mid"][:, 1], Jm["nrm"][:, 0], Jm["nrm"][:, 1], color=MUTED, scale=12, width=0.0035, headwidth=4, zorder=3)
+ax.plot(Jm["mid"][:, 0], Jm["mid"][:, 1], "o", ms=3.2, color=INK, zorder=4)
+i = 8
+ax.annotate(r"token $i$: position $x_i$, normal $n_i$, measure $w_i$", xy=Jm["mid"][i], xytext=(0.2, -1.15),
+            fontsize=9.5, color=INK, arrowprops=dict(arrowstyle="-", color=INK2, lw=0.8))
+g = Jm["g_hat"]
+ax.annotate("", xy=(-1.9 + 0.8 * g[0], 1.05 + 0.8 * g[1]), xytext=(-1.9, 1.05), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
+ax.text(-2.4, 1.3, r"global vector input $\hat g_1$ (freestream direction)", fontsize=9.5, color=INK)
+ax.text(1.05, 0.95, "thick segment = large measure weight\n(a coarse cell); thin = fine cell", fontsize=8.5, color=INK2)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Tensor shapes and keyword names"}
+Every constructor argument and every `forward` input is keyword-only.
+`points` (batch, $N$, 3), `normals` (batch, $N$, 3), `measure_weights`
+(batch, $N$), `global_vectors` (batch, $K$, 3; a (batch, 3) tensor is
+accepted when $K = 1$), `global_scalars` (batch, $S$), `boundary_scalars`
+(batch, $N$, `n_boundary_scalars`), and for off-surface prediction
+`query_points`, `query_normals`, `query_scalars`. The output is (batch,
+tokens, `out_scalars` + 3 · `out_vectors`). The constructor counts
+`n_global_vectors` (default 1) and `n_global_scalars` (default 0) fix $K$
+and $S$; with $K = 1$, $S = 0$ the network is parameter-for-parameter the
+model behind every number in this book. Five options remain one-vector only
+and raise otherwise: the fused geometry kernel, `odd_head`, `parity_fix`,
+`latent_volume_tokens` and `wake_tokens`.
+:::
+
+## Idea 1: every sum over the boundary is a quadrature rule {#sec-mt2-quadrature}
+
+**A mesh is a discretization of a surface, not the surface itself, so any
+quantity the model forms by summing over cells must be an integral estimate
+that does not care how the cells were laid down.** A plain mean over
+points depends on the mesher: refine the leading edge and the mean of
+anything is pulled toward the leading edge. A *measure-weighted* mean,
+$\sum_i w_i f_i / \sum_i w_i$, is a quadrature estimate of $\int f\,dA /
+\int dA$ and converges to the same number under any refinement.
+@fig-isla-quadrature shows the difference on the airfoil: two "meshers"
+produce two samples of the same shape, and the plain means disagree while
+the measure-weighted means agree.
+
+```{python}
+#| label: fig-isla-quadrature
+#| fig-cap: >
+#|   Two samplings of one airfoil, and the mean pressure coefficient each
+#|   gives. Left: equal-arclength cells. Right: the same shape with cells
+#|   clustered at the leading edge, as a mesher resolving the suction peak
+#|   would. Colour is the surface pressure coefficient. The plain mean over
+#|   points (grey) moves between the two samplings because the second
+#|   sampling has more points where the pressure is low; the measure-weighted
+#|   mean (blue) is a quadrature estimate of the same integral and moves
+#|   only by the quadrature error. How to read this: the slice sums inside
+#|   ISLA are all of the blue kind. It does not show a trained model.
+#| code-fold: true
+Ju = joukowski(n_cells=40)
+fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.9))
+norm = Normalize(-1.6, 1.0)
+for ax, JJ, title in zip(axes, (Ju, Jm), ("equal-arclength sampling", "leading-edge-clustered sampling")):
+    clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.35, 1.3)
+    segs = np.stack([JJ["xy"][:-1], JJ["xy"][1:]], axis=1)
+    ax.add_collection(LineCollection(segs, colors=DIVERGING(norm(np.clip(JJ["cp_s"], -1.6, 1))), linewidths=6, capstyle="butt", zorder=2))
+    ax.plot(JJ["mid"][:, 0], JJ["mid"][:, 1], "o", ms=2.6, color=INK, zorder=3)
+    plain = JJ["cp_s"].mean(); weighted = np.sum(JJ["w"] * JJ["cp_s"]) / JJ["w"].sum()
+    ax.set_title(f"{title}: {len(JJ['w'])} cells")
+    ax.text(0.0, -1.0, f"plain mean of $C_p$ over points: {plain:+.3f}", ha="center", fontsize=9.5, color=INK2)
+    ax.text(0.0, -1.22, f"measure-weighted mean: {weighted:+.3f}", ha="center", fontsize=9.5, color=BLUE, fontweight="bold")
+sm = plt.cm.ScalarMappable(norm=norm, cmap=DIVERGING); sm.set_array([])
+cb = fig.colorbar(sm, ax=axes, fraction=0.025, pad=0.02); cb.set_label("surface pressure coefficient $C_p$ [–]", color=INK2)
+plt.show()
+```
+
+In ISLA the measure enters through the routing softmax as a log-space bias,
+$\ell_i \equiv \log w_i$: the weight a slice gives to a point is
+proportional to $w_i$ times a learned, content-dependent factor, so every
+slice aggregate is a weighted mean of the blue kind. Under sampling laws
+that do not draw cells uniformly, the recipe supplies the
+Horvitz–Thompson weight (area divided by inclusion probability), and the
+estimate remains consistent. This is the origin of ISLA's consistency under
+a change of sampling (@sec-scoreboard-consistency), and it is also a
+correctness requirement rather than a tunable: without the weights a slice
+aggregates a mean over whichever points the mesher placed, and a different
+mesher changes the answer (@sec-principle). The in-distribution price of
+the requirement is a variance effect that shrinks with cell count
+(@sec-deficit-anatomy).
+
+::: {.callout-note collapse="true" title="Why the price of the weights is variance, and why it shrinks"}
+A quadrature-weighted mean over a draw that is uniform over cells has an
+effective sample size of $N/(1 + \mathrm{CV}^2)$, where CV is the
+coefficient of variation of the cell areas. On both datasets the areas vary
+enough that the effective size is about a fifth of the points, so each slice
+state is a noisier estimate of the same integral and moves about twice as
+much when the surface is resampled. That noise falls as $1/\sqrt{N}$ and is
+nearly gone at 40,000 cells on DrivAerML; the stratified inference draw of
+@sec-using-sampler removes most of it at 10,000. The part of the ablation's
+advantage that does not shrink, on the wings, is mesh-pattern content
+learned from the mesher, and it collapses under an area-proportional draw to
+errors worse than predicting zero (@sec-consistency-bench).
+:::
+
+## Idea 2: position without a frame {#sec-mt2-frame}
+
+**A model that is handed coordinates in some frame has to learn that the
+frame is arbitrary; ISLA is never handed coordinates.** Two things are
+needed to make this work: a unit of length, and a way to say where a point
+is.
+
+The unit of length is the square root of the total measure,
+
+$$
+L \equiv \Big(\sum_i w_i\Big)^{1/2}, \qquad r_i \equiv x_i / L ,
+$$
+
+the square root of the total surface area, an integral of the geometry.
+Being an integral, it does not move when the sampling law changes; being a
+length, it makes a uniform rescale of the geometry (points by $k$, areas by
+$k^2$) invisible to everything downstream. The alternatives, a fixed
+constant or a statistic of the sampled points, are the gauge variants of
+@sec-mt2-variants, and @fig-isla-frame shows why a point statistic is a
+poor frame.
+
+Where a point is, ISLA states only *relative to other things*: the scaled
+positions $r_i$ are used solely in differences $r_i - z_s$ against slice
+anchors (idea 3), so a common shift of every point cancels exactly and
+translation invariance needs no centring. The one scalar a token starts
+with, its **seed**, is the orientation of its normal against each global
+direction,
+
+$$
+s_i \equiv \big[\,\hat n_i\!\cdot\!\hat g_1,\ \dots,\ \hat n_i\!\cdot\!\hat g_K,\ \sigma\,\big],
+\qquad h_i^{(0)} = \mathrm{MLP}_{\mathrm{embed}}(s_i):
+$$
+
+on the airfoil, "how much does this cell face the wind". With $K = 0$ and
+$S = 0$ the seed is a constant and every distinction between tokens comes
+from the relational invariants of idea 4.
+
+```{python}
+#| label: fig-isla-frame
+#| fig-cap: >
+#|   Why the frame must not be a point statistic. The two samplings of
+#|   @fig-isla-quadrature, overlaid. The plain mean of the sampled positions
+#|   (open grey markers) moves toward the leading edge when the sampling is
+#|   clustered there, so a model whose coordinates are centred on it sees the
+#|   whole body displaced. The measure-weighted centroid (blue) and the total
+#|   measure (the length unit, printed) are integrals and agree between the
+#|   samplings to quadrature error. How to read this: ISLA's reference
+#|   configuration uses no centre at all and only the length unit; the
+#|   constant-gauge variant uses the grey centre and is the configuration that
+#|   collapses under a sampling-density bias (@sec-scoreboard-consistency).
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.6))
+clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
+ax.plot(Ju["xy"][:, 0], Ju["xy"][:, 1], color=INK, lw=1.0)
+cent = {}
+for JJ, mk, lab in ((Ju, "o", "equal-arclength"), (Jm, "s", "clustered")):
+    ax.plot(JJ["mid"][:, 0], JJ["mid"][:, 1], mk, ms=3.0, color=INK2 if mk == "o" else MUTED, alpha=0.8, label=f"{lab} sample points")
+    cent[lab] = (JJ["mid"].mean(axis=0), (JJ["w"][:, None] * JJ["mid"]).sum(axis=0) / JJ["w"].sum())
+    ax.plot(*cent[lab][0], mk, ms=11, mfc="white", mec=INK2, mew=2.0, zorder=5)
+    ax.plot(*cent[lab][1], mk, ms=11, mfc=BLUE, mec=BLUE, mew=2.0, zorder=6)
+pm_c = cent["clustered"][0]; pm_u = cent["equal-arclength"][0]; wc = cent["clustered"][1]
+ax.annotate("plain mean of the clustered sample:\npulled toward the leading edge", xy=pm_c, xytext=(-1.6, -0.75), fontsize=8.5, color=INK2,
+            ha="center", arrowprops=dict(arrowstyle="-", color=INK2, lw=0.8))
+ax.annotate("measure-weighted centroids of both samplings\n(the equal-arclength plain mean coincides with them)", xy=wc, xytext=(0.9, 0.75),
+            fontsize=8.5, color=BLUE, ha="center", arrowprops=dict(arrowstyle="-", color=BLUE, lw=0.8))
+ax.text(-2.3, -1.02, f"total measure $\\sum_i w_i$: {Ju['w'].sum():.3f} (equal-arclength), {Jm['w'].sum():.3f} (clustered)", fontsize=9, color=INK2)
+ax.legend(loc="upper left", fontsize=8.5)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Code correspondence"}
+`gauge` is $L$; `r` is $r_i$; `n_hat`, `g_hat` are the unit normal and
+global directions; `log_w` is $\ell_i$; `invariants` is the seed $s_i$
+(`_seed_invariants` in `physicsnemo/experimental/nn/isla/model.py`). The
+magnitude $\lvert g_k \rvert$ is discarded: no fixed power of a global
+vector's magnitude is a physical law (a pressure coefficient is degree zero
+in the freestream speed, a dimensional pressure degree two), so a magnitude
+that matters is passed as a global scalar and learned.
+:::
+
+## Idea 3: slices and their anchors {#sec-mt2-slices}
+
+**Attention over ten thousand tokens is too expensive and too
+unstructured; slice attention routes every token softly into a few hundred
+slices, and each slice becomes one aggregate token.** In each of the 12
+layers, a linear map of the normalized token state gives a logit
+$\lambda_{is}$ for every token–slice pair, and a softmax *over tokens* for
+each slice, with the measure bias of idea 1, gives the routing weights
+
+$$
+a_{is} = \frac{\exp(\lambda_{is} + \ell_i)}{\sum_j \exp(\lambda_{js} + \ell_j)} .
+$$
+
+Because the softmax runs over tokens, each slice's weights sum to one and
+$\sum_i a_{is} f_i$ is a measure-weighted mean of the blue kind. ISLA adds
+one thing Transolver does not have: from the same weights each slice forms
+two vectors,
+
+$$
+z_s \equiv \sum_i a_{is}\, r_i, \qquad
+m_s \equiv \frac{\sum_i a_{is}\, \hat n_i}{\lvert \sum_i a_{is}\, \hat n_i \rvert},
+$$
+
+its mean position and its mean normal direction: the slice's **anchor**.
+Both are weighted sums of vectors that rotate with the body, with weights
+that do not, so the anchors rotate with the body. They give each layer 256
+data-adaptive reference points, and a token's position will be described
+by its relation to this constellation (idea 4) instead of by coordinates.
+
+```{python}
+#| label: fig-isla-slices
+#| fig-cap: >
+#|   Soft slices and their anchors, illustrated with six slices on the
+#|   airfoil. Each cell is coloured by the slice that gives it the most
+#|   weight; the routing here is a hand-made function of position along the
+#|   surface, standing in for the learned logits. Stars are the anchors, the
+#|   measure-weighted mean position of each slice, with the slice's mean
+#|   normal drawn as an arrow. How to read this: an anchor need not lie on the
+#|   surface, and the assignment is soft (every cell has some weight in every
+#|   slice); in the model there are 256 slices per layer and the logits are
+#|   learned from the token states.
+#| code-fold: true
+JJ = joukowski(n_cells=80)
+s_arc = np.concatenate([[0], np.cumsum(JJ["w"])]); s_mid = (s_arc[:-1] + s_arc[1:]) / 2; total = s_arc[-1]
+n_sl = 6
+centres = (np.arange(n_sl) + 0.5) / n_sl * total
+d = np.abs(s_mid[:, None] - centres[None, :]); d = np.minimum(d, total - d)
+logits = -(d / (0.06 * total)) ** 2
+lw_ = np.log(JJ["w"])[:, None]
+a = np.exp(logits + lw_); a /= a.sum(axis=0, keepdims=True)          # softmax over points, per slice
+z = (a[:, :, None] * JJ["mid"][:, None, :]).sum(axis=0)              # anchors
+m = (a[:, :, None] * JJ["nrm"][:, None, :]).sum(axis=0); m /= np.linalg.norm(m, axis=1, keepdims=True)
+slice_colors = ["#4a3aa7", "#1baf7a", "#eda100", "#e34948", "#2a78d6", "#8c564b"]
+fig, ax = plt.subplots(figsize=(8.0, 3.8))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.3, 1.4)
+segs = np.stack([JJ["xy"][:-1], JJ["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[slice_colors[k] for k in a.argmax(axis=1)], linewidths=6, capstyle="butt", zorder=2))
+for k in range(n_sl):
+    ax.plot(*z[k], marker="*", ms=16, color=slice_colors[k], mec=INK, mew=0.6, zorder=5)
+    ax.annotate("", xy=z[k] + 0.45 * m[k], xytext=z[k], arrowprops=dict(arrowstyle="-|>", color=slice_colors[k], lw=1.8), zorder=4)
+ax.text(0.0, -1.2, r"star: anchor position $z_s = \sum_i a_{is} r_i$;  arrow: anchor normal $m_s$", ha="center", fontsize=9.5, color=INK2)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Why the softmax runs over points, and what read-back does differently"}
+Routing normalizes over points so that a slice is an *average*, with the
+measure bias making it a quadrature average. Reading back (idea 5)
+normalizes over slices instead, with no measure bias, because there a point
+is choosing *where to read*, not how much it weighs. Adding a constant to
+every $\ell_i$ cancels in the routing ratio; in the reference configuration
+the same constant also rescales $L$, which is why the reference is invariant
+to a joint geometric rescale rather than to a weight rescale alone
+(@sec-mt2-contracts).
+:::
+
+## Idea 4: relational invariants {#sec-mt2-relational}
+
+**Everything a token learns about its position, it learns from six scalars
+per anchor.** For each token–anchor pair, with $\rho_{is} \equiv r_i - z_s$
+the separation and $\hat\rho_{is}$ its direction, the layer forms
+
+$$
+\xi_{is} \equiv \big[\,
+\lvert\rho_{is}\rvert,\ \log\lvert\rho_{is}\rvert,\
+\hat\rho_{is}\!\cdot\!\hat g_1,\ \dots,\ \hat\rho_{is}\!\cdot\!\hat g_K,\
+\hat\rho_{is}\!\cdot\!\hat n_i,\
+\hat\rho_{is}\!\cdot\! m_s,\ \hat n_i\!\cdot\! m_s
+\,\big],
+$$
+
+which is $5 + K$ numbers, six with the one global direction of this book:
+how far the anchor is, on two scales; whether it lies upwind or downwind;
+whether it lies in front of the token's face or behind it; whether the token
+lies in front of the anchor's face; and whether the two faces agree. Each is
+a norm or a dot product of vectors that rotate together, so each is
+unchanged by any rotation or translation of the body, and each is a
+difference of positions, so no frame origin appears. @fig-isla-relational
+draws them for one token and one anchor.
+
+```{python}
+#| label: fig-isla-relational
+#| fig-cap: >
+#|   The relational invariants of one token against one anchor. The token
+#|   (black dot) has normal $n_i$; the anchor (star) has position $z_s$ and
+#|   normal $m_s$; the separation $\rho_{is}$ runs from anchor to token. The
+#|   six scalars ISLA forms are the length of $\rho$ (and its logarithm) and
+#|   four cosines: of $\rho$ against the freestream $\hat g_1$, against
+#|   $n_i$, against $m_s$, and of $n_i$ against $m_s$. How to read this: every
+#|   one of these numbers is the same after any rotation or translation of the
+#|   page; no coordinate axis appears in any of them.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 4.2))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.5, 1.5)
+ax.plot(JJ["xy"][:, 0], JJ["xy"][:, 1], color=BASELINE, lw=1.2)
+i = 22; k = 4                      # a token on the upper surface, the anchor mid-chord on the lower surface
+xi, ni = JJ["mid"][i], JJ["nrm"][i]; zs, ms = z[k], m[k]
+rho = xi - zs; rho_hat = rho / np.linalg.norm(rho); g = JJ["g_hat"]
+ax.plot(*xi, "o", ms=8, color=INK, zorder=6)
+ax.plot(*zs, marker="*", ms=18, color=VIOLET, mec=INK, mew=0.6, zorder=6)
+arrow = lambda p, v, c, lw=1.8: ax.annotate("", xy=p + v, xytext=p, arrowprops=dict(arrowstyle="-|>", color=c, lw=lw), zorder=5)
+arrow(zs, rho, INK2, 1.6); arrow(xi, 0.5 * ni, INK); arrow(zs, 0.5 * ms, VIOLET)
+arrow(np.array([-2.3, 1.05]), 0.6 * g, INK, 2.0)
+ax.text(-2.3, 1.25, r"$\hat g_1$ (freestream)", fontsize=10, color=INK)
+ax.text(*(xi + 0.6 * ni + [0.0, -0.08]), r"$n_i$", fontsize=11, color=INK, ha="center", va="top")
+ax.text(*(zs + 0.6 * ms + [0.0, -0.08]), r"$m_s$", fontsize=11, color=VIOLET, ha="center", va="top")
+ax.text(*(zs + 0.5 * rho + [0.15, 0.0]), r"$\rho_{is} = r_i - z_s$", fontsize=11, color=INK2, ha="left", va="center", path_effects=halo())
+ax.text(*(xi + [-0.12, 0.0]), "token $i$", fontsize=10, color=INK, ha="right", va="center")
+ax.text(*(zs + [0.12, 0.0]), "anchor $s$", fontsize=10, color=VIOLET, ha="left", va="center")
+vals = [(r"$|\rho_{is}|$", f"{np.linalg.norm(rho):.2f}"), (r"$\log|\rho_{is}|$", f"{np.log(np.linalg.norm(rho)):+.2f}"),
+        (r"$\hat\rho_{is}\cdot\hat g_1$", f"{rho_hat @ g:+.2f}"), (r"$\hat\rho_{is}\cdot n_i$", f"{rho_hat @ ni:+.2f}"),
+        (r"$\hat\rho_{is}\cdot m_s$", f"{rho_hat @ ms:+.2f}"), (r"$n_i\cdot m_s$", f"{ni @ ms:+.2f}")]
+ax.text(1.35, 1.4, r"$\xi_{is}$, the six relational invariants", fontsize=9.5, color=INK, fontweight="bold")
+for j, (lab, v) in enumerate(vals):
+    ax.text(1.4, 1.15 - 0.27 * j, lab, fontsize=10, color=INK, va="center"); ax.text(2.45, 1.15 - 0.27 * j, v, fontsize=10, color=INK2, ha="right", va="center")
+plt.show()
+```
+
+The invariants do two jobs in a layer. A linear map of $\xi_{is}$ to one
+scalar **refines the routing**, $\lambda'_{is} = \lambda_{is} + w_g \cdot
+\xi_{is} + b_g$, so that a slice can prefer tokens that are near its anchor,
+or upwind of it, or facing it, and the routing weights $a'_{is}$ are
+recomputed with the same measure-weighted softmax. And they are **pooled
+back** to the token (idea 5) so it learns where it sits relative to the
+slices it belongs to. Removing them from both roles is the largest single
+ablation measured on ISLA, a 16% loss at 35 wing cases
+(@sec-mechanism).
+
+## Idea 5: the slice layer, assembled {#sec-mt2-layer}
+
+**A slice layer sends information up from tokens to slices, transforms it
+there, and sends it back down together with the geometry.** With the
+refined routing weights, the slice state is the measure-weighted mean of the
+token states, passed through a per-slice MLP:
+
+$$
+Z_s = \sum_i a'_{is}\, h_i, \qquad Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)).
+$$
+
+Reading back uses a softmax *over slices* for each token, without the
+measure bias, and pools both the slice states and the relational
+invariants:
+
+$$
+\pi_{is} = \frac{\exp(\lambda'_{is})}{\sum_t \exp(\lambda'_{it})}, \qquad
+b_i = \sum_s \pi_{is}\, Z_s, \qquad
+\gamma_i = W_f \Big(\sum_s \pi_{is}\, \xi_{is}\Big) + b_f,
+$$
+
+$$
+h_i \leftarrow h_i + W_b\,[\,h_i;\ b_i;\ \gamma_i\,], \qquad
+h_i \leftarrow h_i + \mathrm{MLP}(\mathrm{LN}(h_i)).
+$$
+
+The token ends the layer knowing which slices it belongs to, what those
+slices contain, and where it sits relative to their anchors. Twelve such
+layers, pre-LayerNorm with residual connections, are the encoder.
+
+::: {.callout-note collapse="true" title="Pool first, then project: the identity that sets ISLA's memory"}
+Each layer holds the invariants $\xi_{is}$ as a tensor of shape $(B, N, S,
+6)$. Projecting each pair to width 96 and then pooling would make autograd
+store a $(B, N, S, 96)$ tensor per layer, about 0.5 GB in bf16 at $N =
+10{,}000$ and $S = 256$, or 5.9 GB across 12 layers. Because the projection
+is affine and $\pi_{is}$ sums to one over slices,
+$\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \sum_s \pi_{is} \xi_{is} + b_f$,
+so pooling first gives the identical tensor while saving only $(B, N, 6)$.
+The contract test checks the identity at $10^{-12}$; at the model level the
+two orderings differ by $4 \times 10^{-15}$ in float64, so checkpoints are
+interchangeable. The recipe additionally rebuilds every per-slice geometric
+tensor inside the backward pass instead of storing it (`geo_checkpoint`),
+which is bitwise identical in outputs and gradients and halves peak memory
+(@sec-mt2-cost).
+:::
+
+::: {.callout-note collapse="true" title="Multi-head routing (under study, not on the mainline)"}
+Transolver's physics attention runs several independent routings per
+layer ("heads"). ISLA's mainline runs one. A research branch adds `n_heads`
+independent routings per block, each with its own anchors and invariants;
+on a one-car overfitting instrument eight heads lowered ISLA's floor by 19%
+relative to a same-code single-routing control, and a run at 435 cars is in
+progress (@sec-nb-formheads-verdict, @sec-program-status). Until that
+verdict lands, the reference configuration is single-routing.
+:::
+
+## Idea 6: vectors from an equivariant basis {#sec-mt2-heads}
+
+**The network's state is made of invariants, so a vector output has to be
+assembled from vectors that rotate with the body, with invariant
+coefficients.** A single linear head on the normalized final state produces
+the scalar outputs and, for each vector output, $4 + 3K$ coefficients
+(seven in this book):
+
+$$
+[\,p_i;\ c_i\,] = W_h\, \mathrm{LN}(h_i), \qquad
+v_i = \sum_{j} c_{ij}\, B_{ij}, \qquad
+B_i = \big\{\hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
+e_\theta(\hat u_i, \hat n_i),\ e_\phi(\hat u_i, \hat n_i),\
+e_\theta(\hat u_i, \hat g_k),\ e_\phi(\hat u_i, \hat g_k)\big\}.
+$$
+
+Three of the basis vectors are directions the token already has: the global
+direction(s), its own normal, and $\hat u_i$, the **radial** direction from
+the token's own soft anchor to the token (a dedicated routing head assigns
+the token to slices and $u_i = r_i - \sum_s \beta_{is} z_s$; a difference of
+positions, so no centre appears). These already span space generically. The
+complements $e_\theta(\hat u, \hat a)$, the part of $-\hat a$ orthogonal to
+$\hat u$, and $e_\phi = \hat u \times e_\theta$ keep the expansion well
+conditioned where the three are nearly coplanar, and they are left
+unnormalized so that they vanish smoothly where $\hat u \parallel \hat a$
+and no direction field on the sphere has to be combed.
+
+```{python}
+#| label: fig-isla-basis
+#| fig-cap: >
+#|   The vector head's basis at one token, in the plane of the airfoil. The
+#|   token's wall shear stress is a linear combination, with learned
+#|   invariant coefficients, of directions the token already owns: the
+#|   freestream $\hat g_1$, its normal $n_i$, and the radial direction
+#|   $\hat u_i$ from its soft anchor (star), together with the complements
+#|   $e_\theta, e_\phi$ (the in-plane complement is drawn). How to read this:
+#|   rotate the page and every basis vector rotates with it while the
+#|   coefficients, being invariants, do not; that is the whole of the
+#|   covariance proof. It does not show a trained head.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.8))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.3, 1.5)
+ax.plot(JJ["xy"][:, 0], JJ["xy"][:, 1], color=BASELINE, lw=1.2)
+i = 18; xi, ni = JJ["mid"][i], JJ["nrm"][i]
+beta = np.exp(-((s_mid[i] - centres) / (0.35 * total)) ** 2); beta /= beta.sum()   # a soft assignment spread over slices
+anchor = (beta[:, None] * z).sum(axis=0); u = xi - anchor; u_hat = u / np.linalg.norm(u)
+e_th = -(ni - (ni @ u_hat) * u_hat); e_th_hat = e_th / np.linalg.norm(e_th)
+ax.plot(*anchor, marker="*", ms=16, color=VIOLET, mec=INK, mew=0.6, zorder=6)
+ax.plot(*xi, "o", ms=8, color=INK, zorder=6)
+arrow(anchor, u, INK2, 1.2)
+for v, c, lab in ((g, INK, r"$\hat g_1$"), (ni, BLUE, r"$\hat n_i$"), (u_hat, VIOLET, r"$\hat u_i$"), (e_th_hat, AQUA, r"$e_\theta(\hat u_i,\hat n_i)$")):
+    arrow(xi, 0.6 * v, c, 2.0); ax.text(*(xi + 0.75 * v), lab, fontsize=11, color=c, ha="center", va="center", path_effects=halo())
+ax.text(*(anchor + [0.0, -0.2]), "token's soft anchor", fontsize=9, color=VIOLET, ha="center", va="top")
+ax.text(*(anchor + 0.5 * u + [0.08, -0.05]), r"$u_i = r_i - \sum_s \beta_{is} z_s$", fontsize=9.5, color=INK2, va="top", path_effects=halo())
+ax.text(0.2, -1.15, r"$v_i = \sum_j c_{ij} B_{ij}$: learned invariant coefficients $c_{ij}$ times body-fixed directions $B_{ij}$", ha="center", fontsize=9.5, color=INK2)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Reflections"}
+The rotation contract is for proper rotations. Every backbone invariant is a
+norm or dot product, so *scalar* outputs are invariant under reflections
+too; but $e_\phi$ is a cross product and flips sign under a mirror while its
+coefficient does not, so the default vector head is covariant under
+rotations and translations only. Three exactly O(3)-covariant heads were
+built, verified, and measured; none is the reference head (@sec-limits),
+and they live at the git tag `isla-research-full`.
+:::
+
+## The forward pass on one page {#sec-mt2-forward}
+
+The symbols above are tied to the identifiers in
+`physicsnemo/experimental/nn/isla/model.py`; the reference configuration is
+`frame_mode="relative"`, `scale_mode="total_measure"`, the class default.
+
+| symbol | code | meaning |
+|---|---|---|
+| $x_i, n_i, w_i$ | `points`, `normals`, `measure_weights` | positions, unit normals, cell areas |
+| $\hat g_k$, $\sigma$ | `global_vectors`, `global_scalars` | the $K$ global directions and $S$ global scalars ($K = 1$, $S = 0$ here) |
+| $L$, $r_i$ | `gauge`, `r` | length scale $\sqrt{\sum_i w_i}$; scaled position, used only in differences |
+| $\ell_i$ | `log_w` | log measure weight, the routing bias |
+| $s_i$, $h_i$ | `invariants`, `h` | invariant seed; token state, width 192 |
+| $\lambda_{is}$, $a_{is}$ | `logits`, `a` | routing logit and weight (softmax over points), 256 slices |
+| $z_s, m_s$ | `z_pos`, `m_s` | anchor position and normal |
+| $\xi_{is}$ | `geo` | the $5 + K$ relational invariants |
+| $Z_s$ | `z` | slice state |
+| $\pi_{is}$, $b_i$, $\gamma_i$ | `point_mix`, `back`, `geo_pool` | read-back weight; pooled slice states; pooled invariants |
+| $\hat u_i$, $e_\theta, e_\phi$ | `r_hat`, `spherical_basis` | radial basis vector; tangential complements |
+
+::: {.callout-note collapse="true" title="The passive decoder and off-surface queries"}
+With `query_independent=True` the encoder runs unchanged on the surface and
+its final state is summarized once into slice states and anchors. Each query
+$q$ is placed in the same length scale, seeded the same way, and passed
+through four **read blocks** that form the same relational invariants
+against the final anchors, route over slices, read the slice states, and
+read the encoder states near the query with a measure-weighted Gaussian
+kernel of width `local_readout_rho` (0.02 length units). Nothing in a read
+block writes into the encoder, so the prediction at a query depends on the
+surface and that query alone; this is the exact query-independence contract,
+and it costs 3.0 to 3.7x in surface accuracy (@sec-query-independence). For
+queries off the surface (`interior_queries=True`) a normal is synthesized
+equivariantly from the anchor normals. The interior configuration that the
+book reports instead admits queries as interacting tokens
+(@sec-interior-query-tokens).
+:::
+{#sec-mt2-passive}
+
+## The gauge variants {#sec-mt2-variants}
+
+**Two documented variants replace the frame-free construction with a frame
+estimated from the sample; both are selected by `frame_mode="centered"` and
+both carry the sample's point distribution into the forward pass.** They
+subtract a centre $c$ before scaling, $r_i = (x_i - c)/L$, and differ from
+the reference in three places: the seed is $3 + 2K$ scalars (the rotation
+invariants of $\{r_i, \hat n_i, \hat g_k\}$, which now includes the distance
+from the centre and its direction cosines); the relational invariants gain
+$1 + K$ more that describe the anchor's position relative to the centre; and
+the head's radial basis vector is the direction from the centre instead of
+from the token's anchor.
+
+- **The constant-gauge variant** (`scale_mode="reference_length"`) centres
+  on the plain mean of the sampled points and scales by a constant
+  (`reference_length`, 8.0 in the recipe's nondimensional units). The plain
+  mean is the grey marker of @fig-isla-frame: under a 10:1 sampling-density
+  bias it moves by a large fraction of the body length and every downstream
+  invariant leaves its trained range. This variant was the program's
+  reference until the relative frame replaced it and is behind the
+  constant-gauge columns of the evidence chapters.
+- **The similarity-gauge variant** (`similarity_gauge=True`) centres on the
+  measure-weighted centroid and scales by the measure-weighted RMS radius,
+  both integrals; it is exactly equivariant to a geometric rescale and
+  consistent under sampling, and remains a frame estimated from the sample.
+
+The reference configuration is preferred at equal accuracy because it
+estimates nothing; @sec-mt2-design prices the choice.
+
+## The contracts, as tests {#sec-mt2-contracts}
+
+**Each contract is a property of the code, verified in double precision on
+random weights and a random anisotropic point cloud, not a property of a
+trained checkpoint.** The tests live in `test/experimental/nn/test_isla.py`
+and `test_isla_global_inputs.py`; the fixture is a 3-layer, 32-slice,
+width-64 model in float64 on 500 points with random normals, global vector
+input and weights.
+
+| contract | test | tolerance |
+|---|---|---|
+| rotation covariance: scalars unchanged, vectors $v \mapsto vQ^\top$ for a proper rotation $Q$ | `test_rotation_equivariance`, `test_qi_rotation_equivariance` | $10^{-10}$ |
+| translation invariance, with no centring anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
+| geometric-scale invariance: points $\times k$, areas $\times k^2$ leave every output unchanged, while areas alone do not | `test_relative_frame_contracts` | $10^{-12}$ |
+| the default is the reference configuration | `test_default_is_relative_total_measure` | exact |
+| query independence in the passive decoder: 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
+| off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
+| zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
+| gauge variants: weight-scale invariance; similarity gauge: geometric-scale equivariance | `test_measure_weight_scale_invariance`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
+| pool-then-project equals project-then-pool; geometry recompute is exact | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact |
+| every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
+| the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
+
+::: {.callout-warning collapse="true" title="What is not a contract"}
+- **Measure-weight scale alone.** The total measure is the length unit, so
+  multiplying every $w_i$ by a constant without rescaling the positions
+  changes the output, and the test asserts that it does. The gauge variants
+  have the opposite pair.
+- **Reflection covariance of vectors** (see idea 6).
+- **The magnitude of a global vector input**: discarded by design.
+- **Query independence in the reference configuration.** Every surface
+  point is an interacting token; on DrivAerML at matched token counts the
+  prediction at a shared 5,000-cell prefix changes by 6.8% when the
+  companion points change (GeoTransolver 2%). The exact contract is bought
+  by the passive decoder at the price of @sec-query-independence.
+- **Refinement of the source measure, in the query-token interior
+  configuration.** A query's routing weight is a learned factor times the
+  geometric mean of the source weights, so halving every source cell shifts
+  the balance between surface and queries (3.7 to 9.1% in a float64 probe
+  where the surface model moves by $10^{-15}$). The interior model is
+  therefore deployed at its training query count (@sec-interior-companion).
+- **Composition of optional channels.** Each optional channel preserves the
+  contracts alone; not every pair composes (the similarity gauge with the
+  local-feature channel is not scale-equivariant; the passive decoder with
+  boundary scalars fails on a shape when source and query counts differ).
+  None of these combinations is behind any number in the book.
+- **Completeness of the representation.** The anchors are first moments, so
+  two non-congruent arrangements whose transverse first moments about the
+  global direction vanish are indistinguishable to every layer (a
+  constructed five-component example agrees to $4 \times 10^{-15}$;
+  `results/isla_first_moment_collision_2026-09-08.json`). A second-moment
+  channel removes it at a known cost and is a research option; the collision
+  is not established as the cause of any measured deficit.
+- **Finite-precision residual on the deployed path.** The tests run in
+  float64; the recipe trains under bf16 autocast, where a CPU probe of the
+  scalar rotation residual gives 1.2 to 1.3% against $6 \times 10^{-7}$ in
+  float32. "Exact" describes the algebra; the residual on the GPU trained
+  path is not yet measured (@sec-program-status).
+:::
+
+## Cost {#sec-mt2-cost}
+
+**At the recipe dimensions (width 192, 12 layers, 256 slices) ISLA has 8.9M
+parameters against GeoTransolver's 9.0M, and on the path the recipe runs
+its training step costs 1.05x GeoTransolver's at 10,000 tokens in half the
+memory.** The step is memory-bound at every stage but the MLP; the
+relational invariants alone move 61% of the traffic, which is why the ratio
+grows with tokens and why an opt-in fused kernel exists for the geometry
+region. Every path in @tbl-mt2-cost computes the same function (output
+relative L2 against the eager reference at most $5.5 \times 10^{-7}$ in
+bf16).
+
+| ISLA execution path (10,000 tokens) | step [ms] | ISLA ÷ GeoTransolver step | peak memory, ISLA (GeoTransolver) [GiB] |
+|---|---:|---:|---:|
+| compiled, geometry recompute on (the recipe's default) | 47 | 1.05x | 1.30 (2.70) |
+| compiled, geometry recompute off | 39 | 0.86x | 1.94 (2.70) |
+| compiled with the fused geometry kernel (`geo_kernel="fused"`, opt-in) | 45 | 1.00x | 1.27 (2.70) |
+| eager, geometry recompute on | 87 | 1.28x | 1.52 (4.07) |
+| eager, point softmax in its middle-dimension layout (`fast_point_softmax=False`) | 245 | 3.61x | 1.52 (4.07) |
+
+: Training-step cost of ISLA's execution paths against GeoTransolver on the same path, one GB300, bf16 autocast, batch of one case, 10,000 tokens, AdamW step included, median of measured steps; memory is the peak allocated during the step. At 40,000 tokens the default compiled step is 2.2x GeoTransolver's (119 against 53 ms) and the fused kernel brings it to parity (52 ms) at 4.5 against 10.0 GiB. Data: results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json. {#tbl-mt2-cost}
+
+::: {.callout-note collapse="true" title="Where the memory goes"}
+Hooking every tensor autograd stores and grouping by shape, about three
+quarters of the stored activations at 10,000 tokens are per-slice geometry:
+the (points × slices × 3) separations and their unit versions, the (points
+× slices × 6) invariants, and the (points × slices) distances and routing
+softmaxes; the token path is the remaining quarter. Every geometric tensor
+is a cheap elementwise function of a few small inputs (positions, normals,
+the global directions, the anchors), so the recipe rebuilds them in the
+backward pass (`geo_checkpoint`); outputs and gradients are bitwise
+identical and peak memory falls 2.3x for a 1.16x step time on the eager path
+(results/isla_memory_recompute_2026-09-07.json). What remains is the token
+path and the routing softmaxes, the one per-slice quantity the backward pass
+needs. The passive decoder adds 1.1M parameters; the query-token interior
+configuration adds only a type embedding and a routing weight but spans
+every token with the per-slice geometry (0.28 s per step at 10,000 interior
+queries; results/v0_interior_resources_2026-09-07.json).
+:::
+
+## What each design choice costs and buys {#sec-mt2-design}
+
+**No single ingredient of ISLA carries its accuracy; the largest single
+effect measured is 16%. The reference frame buys consistency under a change
+of sampling at a price of 0 to 14.5% against the constant-gauge variant
+depending on the rung, and exact query independence costs 3.0 to 3.7x.**
+Each line below carries one number and the section that defines the
+measurement; ablation ratios are a variant's pressure error over the
+constant-gauge variant's in the single-factor ablation at 35 HiLiftAeroML
+training cases (@sec-mechanism), greater than one meaning worse.
+
+| choice | what it buys | what it costs | where |
+|---|---|---|---|
+| relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
+| exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 6% and 19% lead in random poses | adding raw coordinates does not help in distribution (1.04x, 0.99x); the contracts deny about 2.5 points of positional information at 435 cars | @sec-pose, @sec-deficit-anatomy |
+| the frame-free reference frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x | 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle | @sec-scoreboard-consistency, @sec-full-data |
+| measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells | @sec-principle, @sec-deficit-anatomy |
+| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on surface pressure; 3.1x on interior pressure | @sec-query-independence |
+| single routing per layer (idea 3) | simplicity, the fused kernel | about two points of form against multi-head routing on the one-car instrument; under study | @sec-nb-formheads-verdict |
+
+::: {.callout-note collapse="true" title="The flags that select these configurations"}
+| flag (default) | what it changes |
+|---|---|
+| `frame_mode` (`"relative"`) | the reference; `"centered"` selects the gauge variants. Checkpoints store their constructor arguments and load in the configuration that trained them |
+| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (constant-gauge variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
+| `similarity_gauge` (off) | the similarity-gauge variant; requires `frame_mode="centered"` |
+| `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
+| `use_relational_geo` (on) | the relational invariants in routing and read-back |
+| `query_independent`, `n_decoder_layers` (off, 4) | the passive decoder |
+| `query_tokens`, `n_query_scalars` | the interior configuration: queries as interacting tokens with per-query scalars (the signed distance) |
+| `n_global_vectors` (1), `n_global_scalars` (0) | $K$ and $S$; each vector adds one seed cosine, one relational cosine and three basis vectors |
+| `n_boundary_scalars` (0) | per-cell boundary-condition scalars, pass-through to the seeds |
+| `geo_checkpoint` (on in the recipe), `geo_kernel` (`"eager"`) | rebuild the geometry in the backward pass; `"fused"` selects the exact fused kernel |
+
+This is the mainline class as prepared for PhysicsNeMo integration. The
+research-only options the program built and refuted or used as diagnostics
+were removed from the class on 2026-09-15 and remain runnable, with their
+tests, at the git tag `isla-research-full`; a checkpoint that names one at
+its former default loads unchanged, and one that set it raises an error
+naming the tag (@sec-principled-ask).
+:::
