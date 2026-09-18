@@ -19307,3 +19307,38 @@ the book says about the budget itself:
 **Prediction.** The budget was the gap on DrivAerML (0.98 at 435 cars); the
 wing rungs rise by 0.03 to 0.05 but stay below 0.95 where validation
 geometries recur in training.
+
+## 2026-09-18 — Launch record, PROTO-200K-FLEET: eighty lanes accepted on AGA; two configuration defects found and fixed on the way {#sec-nb-proto200k-fleet-launch}
+
+**What was launched.** Eighty chain-ahead lanes at 200,000 cells per case
+(results/p200k_fleet_manifest_2026-09-18.tsv): the DrivAerML pose test (6),
+the seven HiLiftAeroML surface rungs (42), the HiLift deflection split (4),
+the DrivAerML small-data ladder at 27, 54, 109 and 218 cars (24) and the
+DrivAerML interior task (4), each for ISLA, GeoTransolver and Transolver
+(GeoTransolver and ISLA only on the deflection split and the interior) at
+seeds 42 and 43, 500 epochs, bf16, with the 435-car DrivAerML trio already
+running from the earlier launch. Every lane was accepted: alive, no new
+traceback, first epoch logged. The wing lanes validate every 25 epochs and
+the interior lanes every 10, because a 180-case validation at 200,000 cells
+per epoch would dominate wall-clock; the final-epoch checkpoints are scored
+in float32 separately as always.
+
+**Defects found by the launch.** Two configurations could not run as
+shipped. ISLA's surface config carries DrivAerML's one-scalar, one-vector
+head; the HiLift datasets have three scalar and two vector targets, so the
+sixteen ISLA wing lanes needed `model.out_scalars=3 model.out_vectors=2`,
+as the earlier wing lanes had. More seriously, the volume reference dataset
+configuration (`drivaer_ml_volume_reference.yaml`) never computes the unit
+freestream direction that the ISLA volume config reads as its global vector
+input, so `isla_volume` with its own dataset fails at the first step; the
+launch inserted the `ComputeFreestreamDirection` transform after
+`CenterMesh`, mirroring the support-token dataset, and the same fix is
+applied to the repository copy today. The interior lanes trained by the
+earlier RELINT study predate the rename of the global input and read the
+physical velocity through the old keyword, which is why the defect was not
+seen before.
+
+**Wall-clock.** At the acceptance check the pose lanes were at epoch 20 and
+the 27-car ladder lanes at epoch 100, the wing lanes at epochs 1 to 18 and
+the GeoTransolver interior lanes at epoch 12; the 1,260-case wing rung will
+finish last, in days.
