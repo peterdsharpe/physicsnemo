@@ -19083,3 +19083,58 @@ scoreboard chapter's steel-man paragraph carries the numbers, and the
 **What's next.** The pose test for these ablations (they are not covariant;
 the interesting number is their posed error against ISLA's) is the one
 remaining steel-man measurement and is queued behind the running lanes.
+
+## 2026-09-18 — Preregistration, TOK-PROTO: what does the DrivAerML standing look like when every model trains and evaluates at 40,000 and 80,000 cells instead of 10,000? {#sec-nb-tokproto-prereg}
+
+**Setting.** The protocol trains and scores every architecture at 10,000
+sampled cells per case; the recipe's own default is 200,000, and Peter asked
+why the book's baseline is so low. The choice dates from the program's
+early fast loop and was kept for comparability. The deficit anatomy
+(@sec-nb-deficit-anatomy) already says that 3 of ISLA's 8 points against
+GeoTransolver at 10,000 cells are count noise that evaluating the same
+checkpoints at 40,000 cells removes; what training at a higher count does
+to the standing has been measured only at the width-512 corner
+(@sec-nb-corner-wlr-verdict). The scale study
+(@sec-program-status, node SCALE) trained width-192 lanes at 40,000 and
+80,000 cells for GeoTransolver, Transolver and ISLA's legacy centered
+variant on 435 cars, two seeds each; they finished and were never scored in
+float32.
+
+**Question.** At width 192, with training and evaluation at the same
+count, how do GeoTransolver ÷ ISLA and Transolver ÷ ISLA move from 10,000
+to 40,000 to 80,000 cells, and what does that say about raising the
+protocol count for the final comparison?
+
+**Instrument.** Float32 inference at the training count on the 48-car
+validation split (the in-family instrument) for the twelve trained
+checkpoints (`kernel/tokproto_eval_aga.sbatch`), compared with the 10,000-cell
+values of the same architectures (GeoTransolver 0.0503, Transolver 0.0517,
+legacy centered ISLA 0.0558). ISLA here is the legacy centered variant,
+because the scale study predates the relative frame; the relative frame's
+10,000-cell value is within 1% of the legacy variant's on this dataset, so
+the ratios read across, and the relative frame's own higher-count lanes are
+the follow-up if the ratios move.
+
+**Bars, written before the run.**
+
+- **Count is the lever**: GeoTransolver ÷ ISLA rises from 0.90 at 10,000
+  cells to at least 0.95 at 40,000 and does not fall at 80,000; the anatomy's
+  count-noise attribution then holds for training as well as evaluation, and
+  the protocol count is raised to 40,000 (the fused kernel's parity point)
+  for the final comparison of the fixed configuration.
+- **Count is neutral**: the ratio moves by less than 0.02 between counts;
+  the 10,000-cell protocol is then a fair instrument and only the evaluation
+  draw matters, as the stratified-sampler study said.
+- **Count favors the baselines**: the ratio falls with count; then ISLA's
+  slice quadrature gains less from more cells than the baselines' raw
+  coordinates do, and the anatomy is wrong about what the count noise is.
+- Absolute errors of every model fall with count (every model benefits from
+  more cells); a model whose error rises with count is a training defect and
+  is investigated.
+
+**Prediction.** Count is the lever: about 0.95 at 40,000 and 0.96 at
+80,000, matching the width-512 corner (0.95 to 0.98) and the evaluation-only
+anatomy. If so the final comparison, once the configuration is fixed by
+HEADS-435 and LEN-RMS, is trained at 40,000 cells, and the book's protocol
+section says why 10,000 was the exploration count and 40,000 is the
+reporting count.

@@ -313,6 +313,7 @@ flowchart TB
     LRREF(["LRREF: learning-rate grid on ISLA<br/>RUNNING"]):::running
     LENRMS(["LENRMS: RMS-pairwise-distance length unit, candidate reference<br/>RUNNING"]):::running
     STEELMAN["STEELMAN: HT-centered baselines through the refinement benchmark<br/>DONE (consistent; more consistent than ISLA)"]:::done
+    TOKPROTO(["TOKPROTO: the standing at 40,000 and 80,000 training cells, width 192<br/>RUNNING"]):::running
     MEM2 --> MEMINST
     MEM2 --> SPARSE
     KERNEL --> KSTUDY
@@ -340,6 +341,8 @@ flowchart TB
     SGREF --> LENRMS
     LENRMS --> MAINLINE
     MWAW --> STEELMAN
+    SCALE --> TOKPROTO
+    TOKPROTO --> MAINLINE
 ```
 
 ## The ledger {#sec-ledger}
@@ -451,6 +454,7 @@ their numbers as measurements of that protocol only.
 | LRREF | RUNNING | Does the learning-rate robustness measured on the constant-gauge variant transfer to ISLA? | RFDIV | Supports: worst over {1e-3, 3e-3, 1e-2} within 1.6x of best; falsifies on divergence or above 2x. Interim: 1e-2 diverges to NaN at epochs 21 and 32 (the rate ceiling; lanes stopped); 3e-3 training cleanly. | @sec-nb-refprops-prereg; @sec-nb-lrref-interim |
 | LENRMS | RUNNING | Does the relative frame with the RMS-pairwise-distance length unit (normalized, center-free, converges on fractal boundaries where the total measure diverges) match the total-measure reference in accuracy, so it can become the reference? | SGREF (the frame deliberation), RELFRAME | Validated: within 1.5% under the stratified draw with overlapping seed ranges, no divergence, density factor within 1.05 to 1.3; better: at least 1.5% below; worse: at least 1.5% above. | @sec-nb-lenrms-prereg |
 | STEELMAN | DONE (consistent) | Do the Horvitz–Thompson-centered, measure-weighted baselines converge under refinement across samplers as ISLA's arms do, and at what accuracy? The steel-man of the consistency claim. | MWAW, BENCH | Consistent: both samplers within 3% of uniform at 40,000 cells for both variants; partially consistent; inconsistent (deviations not falling with count); uniform error within 1% of GeoTransolver. Within 1.2% of uniform at 40,000 for both arms, falling with count; 1.2% in-distribution price; more consistent than ISLA at every count. | @sec-nb-steelman-prereg; @sec-nb-steelman-verdict |
+| TOKPROTO | RUNNING | How does the DrivAerML standing move when every model trains and evaluates at 40,000 and 80,000 cells (width 192)? Decides whether the reporting protocol count is raised. | SCALE (the trained lanes) | Count is the lever: GeoTransolver ÷ ISLA at least 0.95 at 40,000, not falling at 80,000; neutral: moves under 0.02; favors baselines: falls. | @sec-nb-tokproto-prereg |
 | GLOBIN | DONE | Zero or more global vector inputs and zero or more global scalar inputs, without touching any checkpoint or contract. | RELINT | Bitwise the former model with one vector and no scalars; contracts hold for zero and two vectors and with scalars. | @sec-nb-global-inputs |
 | GLOBACC | DONE | Does the zero-vector, one-scalar configuration train on a non-aerodynamic problem (screened Poisson)? | GLOBIN | Relative L2 at most 0.10 on both seeds and 3x better than trivial predictors. 0.043 / 0.045 at 9,000 steps. | @sec-nb-globin-accept-prereg; @sec-nb-globin-accept-verdict; @sec-nb-globin-accept-extension-verdict |
 | GLOBDIS | DONE | Is the scalar input decisive where the boundary data cannot substitute for it? | GLOBACC | Scalar arm at most 0.10; blind arm at least 2x worse. 0.077 / 0.070; blind arm 3.8x worse. | @sec-nb-globin-discrim-prereg; @sec-nb-globin-discrim-verdict |
