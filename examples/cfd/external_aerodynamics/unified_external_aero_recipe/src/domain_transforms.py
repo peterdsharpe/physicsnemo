@@ -604,6 +604,73 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
         return mesh
 
 
+@register()
+class StratifiedSubsampleMesh(MeshTransform):
+    r"""Uniform-over-cells subsampling with spatial stratification (QUAD-VAR, 2026-09-17).
+
+    Same marginal inclusion law as :class:`SubsampleMesh` -- every cell is kept
+    with probability ``n / N`` and carries the measure weight ``N / n`` -- but
+    the ``n`` kept cells are a *systematic* sample along the Morton (Z-order)
+    ordering of the cell centroids: one cell per consecutive run of ``N / n``
+    cells, with a single random offset per draw. A systematic sample has the
+    same expectation as an independent draw for every cell-weighted integral
+    and a lower variance for integrands that are smooth over the surface, so
+    it lowers the finite-sample noise of an aggregate at a fixed token budget
+    without changing the sampling convention the model was trained under.
+    The offset is drawn from the transform's generator when one is attached
+    (the pipeline seeds it), so the draw is reproducible; no cell is ever
+    drawn twice.
+    """
+
+    def __init__(self, n_cells: int, compact: bool = True, bits: int = 16) -> None:
+        super().__init__()
+        self.n_cells = int(n_cells)
+        self.compact = compact
+        if not 1 <= int(bits) <= 21:
+            raise ValueError(f"bits must be in [1, 21], got {bits!r}")
+        self.bits = int(bits)
+        self._generator: torch.Generator | None = None
+
+    def _morton_order(self, centroids: torch.Tensor) -> torch.Tensor:
+        ### Quantize each axis to ``bits`` levels over the centroid bounding
+        ### box and interleave the bits (x in bit 3b, y in 3b+1, z in 3b+2):
+        ### a Z-order curve, so consecutive codes are spatial neighbours.
+        lo = centroids.min(dim=0).values
+        span = (centroids.max(dim=0).values - lo).clamp_min(1e-12)
+        levels = 2**self.bits
+        q = ((centroids - lo) / span * (levels - 1)).round().long().clamp(0, levels - 1)
+        code = torch.zeros(centroids.shape[0], dtype=torch.int64, device=centroids.device)
+        for b in range(self.bits):
+            for axis in range(3):
+                code |= ((q[:, axis] >> b) & 1) << (3 * b + axis)
+        return torch.argsort(code)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        n_before = mesh.n_cells
+        if n_before <= self.n_cells:
+            return mesh
+        order = self._morton_order(mesh.cell_centroids)
+        step = n_before / self.n_cells
+        generator = self._generator
+        if generator is not None and generator.device != order.device:
+            generator = None
+        offset = torch.rand((), device=order.device, generator=generator) * step
+        ### floor(offset + k * step), k = 0..n-1: n distinct positions in [0, N)
+        ### because step >= 1, each cell included with probability exactly n / N.
+        positions = torch.floor(
+            offset + step * torch.arange(self.n_cells, device=order.device, dtype=torch.float64)
+        ).long().clamp(max=n_before - 1)
+        indices = order[positions].sort().values
+        mesh = mesh.slice_cells(indices)
+        if self.compact:
+            mesh = _compact_points(mesh)
+        compose_measure_weights(mesh, n_before / self.n_cells)
+        return mesh
+
+    def extra_repr(self) -> str:
+        return f"n_cells={self.n_cells}, bits={self.bits}"
+
+
 def _pose_rotation_for_key(key: int, salt: int) -> torch.Tensor:
     """Uniform SO(3) rotation matrix drawn from a generator seeded by (key, salt).
 

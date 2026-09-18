@@ -18016,110 +18016,6 @@ experiment is a soft-routing or readout-form probe, not a size ladder.
 Cost: six one-GPU lanes, two nodes, a few hours each (the 1024-slice lane
 carries four times the geometry work of the baseline).
 
-## 2026-09-17 — Verdict, CAP: the slice count is not the bottleneck (128 to 1,024 slices are flat within 3%), depth and MLP width are null, and width alone carries an 11% lift of the single-case floor without closing it {#sec-nb-cap-verdict}
-
-**Setting.** @sec-nb-cap-prereg asked which capacity axis ISLA's
-single-case floor is missing, on the OVERFIT-1 instrument: one DrivAerML
-car, 64 cached 10,000-cell resamplings, 20,000 single-sample steps, the
-constant-gauge configuration at seed 42, float32 evaluation on the same
-car. The baseline (256 slices, width 192, 12 layers, MLP ratio 4) sits at
-0.1064 against Transolver's 0.0811 and GeoTransolver's 0.0766. Six
-one-factor arms were trained (results/cap_reduction_2026-09-17.json).
-
-**What we saw** (float32 pressure error on the training car; the
-tail-20 training loss is the fit measure):
-
-| arm | change | 10,000-cell readout | ratio to baseline | 40,000 cells | tail-20 loss |
-|---|---|---|---|---|---|
-| baseline | 256 slices, width 192, 12 layers, MLP 4 | 0.1064 | 1.000 | 0.0857 | 0.0004 |
-| `s128` | 128 slices | 0.1058 | 0.995 | 0.0852 | 0.0004 |
-| `s512` | 512 slices | 0.1096 | 1.030 | 0.0820 | 0.0004 |
-| `s1024` | 1,024 slices | 0.1052 | 0.989 | 0.0853 | 0.0004 |
-| `h384` | width 384 (learning rate 5e-4, width rule) | **0.0948** | **0.891** | 0.0806 | **0.0002** |
-| `l24` | 24 layers | 0.1081 | 1.016 | 0.0809 | 0.0003 |
-| `m8` | MLP ratio 8 | 0.1019 | 0.958 | 0.0810 | 0.0003 |
-| Transolver | | 0.0811 | 0.762 | 0.0793 | 0.0003 |
-| GeoTransolver | | 0.0766 | 0.720 | 0.0780 | 0.0002 |
-
-**Verdicts against the preregistered bars** (closes at or below 0.0852,
-carries at or below 0.0950, null at or above 0.1010):
-
-- **Slice count: null, and the slice hypothesis is falsified.** From 128
-  to 1,024 slices the floor moves within 3% in no consistent direction, and
-  the training loss does not move at all. How finely the surface is
-  partitioned into anchors is not where the capacity is missing; 256
-  slices are not starving the smooth regions.
-- **Depth: null.** Twenty-four layers score 0.1081 on the same fit loss
-  band as the baseline.
-- **MLP width: null** by the bar (0.1019 is a 4.2% gain, under the 5%
-  line), with a slightly lower fit loss.
-- **Width: carries, does not close.** Width 384 lowers the floor by 10.9%
-  to 0.0948, just inside the carrying bar, and halves the training loss to
-  0.0002, the only arm whose fit reaches the baselines' band. It stays 1.17x
-  Transolver and 1.24x GeoTransolver at 10,000 cells; at 40,000 cells it
-  reaches 0.0806, at parity with Transolver's 0.0793 and GeoTransolver's
-  0.0780.
-
-**Two readings, and one confound.** First, the representational deficit
-lives in the per-token channel width, not in the slice partition, the
-stack depth or the token-wise MLP: what a token can carry about its own
-patch, through the width of the state that the routing reads and writes,
-is the binding quantity. This agrees with the SCALE study, where width
-bought every architecture 9 to 11% per step, and with the 40,000-cell
-column here, where every arm converges toward the baselines as the car is
-sampled more densely. Second, the width arm trained at 5e-4 under the
-width rule (@sec-nb-lr-rule-decision) while the baseline trained at 1e-3,
-so part of its 11% may be the rate rather than the width; the single-case
-instrument is a fit to a fixed target, where the rate can matter. That
-confound is closed by the control preregistered next.
-
-**What this changes.** The prereg's "all null" branch did not fire, so a
-soft-routing or readout-form probe is not the next step; a size ladder on
-width is not the next step either, because width at fixed depth doubles the
-parameter count and leaves the parameter-matched protocol. The next
-question is *shape at matched parameters*: whether reallocating the same
-budget from depth to width (fewer, wider layers) recovers the width gain
-inside the protocol. That is SHAPE (@sec-nb-shape-prereg).
-
-## 2026-09-17 — Preregistration, SHAPE: does a wider, shallower ISLA at matched parameters recover CAP's width gain, and how much of that gain was the learning rate? {#sec-nb-shape-prereg}
-
-**Setting.** CAP (@sec-nb-cap-verdict) found width to be the only capacity
-axis that lifts ISLA's single-case floor, at the cost of leaving the
-parameter-matched protocol (width 384 at 12 layers has about twice the
-parameters of the reference), and with a learning-rate confound (the width
-arm ran at 5e-4 under the width rule, the baseline at 1e-3). Per-layer
-parameters scale with the square of the width, so two shapes match the
-reference's budget almost exactly: width 272 with 6 layers and width 384
-with 3 layers (both within 1% of width 192 with 12 layers on the
-width-squared-times-depth count; the slice and head parameters are small
-and shared).
-
-**Arms, on the same one-car instrument as CAP** (constant gauge, seed 42,
-20,000 steps, 64 views; lanes `overfit/overfit_lanes_shape.tsv`,
-launchers `overfit_shape_aga.sbatch` and `overfit_shape_eval_aga.sbatch`):
-
-| arm | shape | learning rate |
-|---|---|---|
-| `w272_l6` | width 272, 6 layers | 7.1e-4 (width rule) |
-| `w384_l3` | width 384, 3 layers | 5e-4 (width rule) |
-| `ctrl_lr5e4` | width 192, 12 layers (the baseline shape) | 5e-4 |
-
-**Bars, written before the run.** The shape arms take CAP's bars against
-the baseline 0.1064: closes at or below 0.0852, carries at or below
-0.0950, null at or above 0.1010. The control isolates the rate: if the
-baseline shape at 5e-4 scores at or below 0.0990 (a gain of 7% or more),
-most of CAP's width gain was the rate and the width verdict is downgraded
-to "between"; if it scores at or above 0.1030 (within 3% of 0.1064), the
-width gain is the width's.
-
-**Predictions.** The control is within 3% of the baseline (the rate is
-not the carrier at this size, as the CG-WLR control found at scale); both
-matched-parameter shapes carry (at or below 0.0950), with the wider and
-shallower `w384_l3` at least as good as `w272_l6`. If both shapes are null
-while the unmatched width-384 arm carried, the gain needs the extra
-parameters and the reference shape stands; if a shape closes the floor, a
-435-car pair on that shape against the reference is preregistered next.
-
 ## 2026-09-17 — Verdict, CAP: the slice count is not the bottleneck (flat from 128 to 1,024 slices); width carries 11%; and the single-case floor is mostly a query-count effect that the baselines do not have {#sec-nb-cap-verdict}
 
 **What was run.** The six one-factor arms of @sec-nb-cap-prereg on the
@@ -18192,3 +18088,80 @@ reference checkpoints at 10,000 cells against their 20,000- and
 preregistration before the run: a stratified 10,000-cell draw scores
 within 2% of the independent 20,000-cell draw. The baselines are
 evaluated the same way as the control; they are predicted flat.
+
+## 2026-09-17 — Preregistration, QUAD-VAR: a spatially stratified inference draw at a fixed token budget, evaluation-only on the DrivAerML checkpoints {#sec-nb-quadvar-prereg}
+
+**Setting.** @sec-nb-cap-verdict located the ISLA-specific part of the
+reference-size DrivAerML deficit in the finite-sample noise of the slice
+integrals: the 10,000-cell-trained constant-gauge checkpoints score 0.0561
+when queried on an independent uniform-over-cells draw of 10,000 cells,
+0.0540 at 20,000 and 0.0530 at 40,000, while GeoTransolver (0.0509,
+0.0508, 0.0506) and Transolver (0.0520, 0.0519, 0.0518) are flat
+(results/consistency_bench/consistency_bench_2026-09-10.json). The
+reference configuration shows the same slope: 0.0554 at 10,000 cells and
+0.0523 at 40,000 (results/consistency_bench/consistency_bench_rf_2026-09-11.json).
+If the slope is estimator variance, a lower-variance draw of the *same*
+10,000 cells should recover part of it without retraining and without
+changing what the model estimates.
+
+**The instrument.** A new recipe transform, `StratifiedSubsampleMesh`
+(`src/domain_transforms.py`, unit-tested: exact count, constant weights
+$N/n$, no duplicates, inclusion frequency $n/N$ for every cell, and a
+variance below half of the independent draw's on a smooth area-weighted
+integral), replaces the independent draw at inference by a systematic
+sample along the Morton (Z-order) curve of the cell centroids: one cell
+per consecutive run of $N/n$ cells with one random offset per draw. Every
+cell keeps the inclusion probability $n/N$ and the weight $N/n$ of the
+independent draw, so the sampling convention the checkpoints were trained
+under is unchanged and no swap penalty (@sec-nb-mix-prereg) applies; only
+the variance of the draw changes. Evaluation follows the consistency
+benchmark exactly (float32, 48 validation cars, `recipe_bench` with the
+transform appended, each checkpoint under its own snapshot; lanes
+`bench/bench_lanes_strat.tsv`, dataset `drivaer_bench_strat`, outputs
+`bench_evals/<run>/strat_<count>`): the constant-gauge pair
+`iw_mt2_lr1e3_seed42/43`, the reference pair `rf_dr_mt2_meas_seed42/43`,
+GeoTransolver `uw_gt_unit_lr1e3_seed42/43` and Transolver
+`uw_transolver_unit_lr3e3_seed42/43`, each at 10,000 and 20,000 cells.
+Sixteen evaluation lanes, no training.
+
+**Bars, written before the run** (float32 pressure, two-seed means,
+against each arm's own independent-draw values from the benchmark).
+
+- **Supported** if the stratified 10,000-cell draw recovers at least half
+  of the arm's gain from 10,000 to 40,000 independent cells: constant
+  gauge at or below 0.0546, reference at or below 0.0539.
+- **Falsified** if the stratified 10,000-cell draw is within 1% of the
+  independent 10,000-cell value (constant gauge at or above 0.0555,
+  reference at or above 0.0548): the slope is not draw variance.
+- **Between**: reported as a partial recovery in readout units.
+- **Control**: GeoTransolver and Transolver move by less than 1% under the
+  stratified draw at both counts; a baseline that moves by more says the
+  draw changes the estimand, not only the variance, and the ISLA reading
+  is withheld.
+- **Consistency**: the stratified 20,000-cell draw is at or below the
+  independent 20,000-cell draw for every ISLA arm (no arm gets worse).
+
+**Prediction.** Both ISLA arms are supported, the baselines are flat, and
+the DrivAerML ratio at the scoreboard's token budget moves from 0.91
+toward the 0.955 measured at 40,000 independent cells.
+
+**Competing derivation, recorded before the run** (from the parallel ISLA
+session, 2026-09-17). The draw keeps the uniform-over-cells inclusion law,
+so the Horvitz–Thompson weights stay proportional to cell area and the
+weight spread is untouched: the routing probe's effective token count,
+$N/(1+\mathrm{CV}^2) = 1{,}637$ of 10,000 on the car (@sec-nb-overfit-routing-probe),
+is set by that spread, not by spatial clumping. Stratification removes
+only the clumping component of the variance, so this derivation predicts
+a *small* gain, below the supported bar, and reads the count slope as
+mostly the weight-spread term that only more cells (or a lower-variance
+consistent quadrature that changes the weights, which MIX bounds at 3.5%)
+can reduce. An equal-*area* stratification would remove the weight spread
+but is a convention swap for these checkpoints, which MIX prices at 1.9x
+for ISLA; it is not run here. The bars above stand as written; the two
+derivations are separated by whether the stratified 10,000-cell draw
+lands above or below 0.0546. If supported, the
+stratified draw becomes the recipe's inference sampler for ISLA (a
+sampling-design choice that leaves the estimand and the training
+convention untouched) and the scoreboard gains a labelled row; if
+falsified, the count slope is a property of the trained function and the
+next probe is the readout form.
