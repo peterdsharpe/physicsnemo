@@ -777,6 +777,60 @@ print(": Training cost of the three architectures on one instrument and one exec
       "Data: results/isla_vs_baselines_cost_fastkernel_2026-09-09.json. {#tbl-scoreboard-resources}")
 ```
 
+The token budget decides the cost comparison more than the architecture
+does. @fig-cost-sweep sweeps the training step from 2,500 to 200,000 tokens
+per case on the compiled path every model trains on. GeoTransolver's step is
+nearly flat below 40,000 tokens, where the GPU is not saturated, and grows
+to about twice its 10,000-token value at the recipe's default of 200,000;
+ISLA on its default path (geometry recomputed in the backward pass) grows
+linearly from 20,000 tokens on and is five times GeoTransolver's step at
+200,000, while ISLA with the fused geometry kernel tracks GeoTransolver's
+step at every count in less than half its memory. At the recipe default of
+200,000 cells every model fits one GB300 with room to spare; GeoTransolver's
+49 GiB would not fit an 80 GB card.
+
+```{python}
+#| label: fig-cost-sweep
+#| fig-cap: >
+#|   Training-step time (top) and peak allocated memory (bottom) against the
+#|   number of tokens per case, one GB300, bf16 autocast, batch of one case,
+#|   AdamW step included, every model compiled, median of ten measured steps
+#|   after warm-up on random inputs. ISLA is shown on its recipe-default path
+#|   (geometry recomputed in the backward pass) and with the opt-in fused
+#|   geometry kernel (open squares, dashed). How to read this: the two axes
+#|   are logarithmic and the lines are joined measurements, not fits; the
+#|   sweep measures the step alone, and the training lanes of this book are
+#|   dominated by data loading, so it ranks the models' step cost, not their
+#|   wall-clock. The 200,000-token column is the recipe's default budget.
+#|   Data: results/cost_sweep_gb300_bf16_2026-09-18.json.
+#| code-fold: true
+import statistics as st
+CS = J("cost_sweep_gb300_bf16_2026-09-18.json")["runs"]
+arms = [("isla_compiled_recompute", "isla_ref", "ISLA (recipe default path)", {}),
+        ("isla_fused_compiled", "isla_ref", "ISLA + fused geometry kernel", dict(ls="--", mfc="white")),
+        ("geotransolver_compiled", "gt", "GeoTransolver", {}),
+        ("transolver_compiled", "t", "Transolver", {})]
+fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 6.6), sharex=True, gridspec_kw=dict(hspace=0.08))
+for arm, key, lab, ov in arms:
+    rows = sorted([r for r in CS if r["arm"] == arm and r["status"] == "ok"], key=lambda r: r["tokens"])
+    xs = [r["tokens"] for r in rows]
+    ax0.plot(xs, [st.median(r["step_ms"]) for r in rows], **series_kwargs(key, label=lab, **ov))
+    ax1.plot(xs, [r["peak_allocated_gib"] for r in rows], **series_kwargs(key, label=lab, **ov))
+for ax in (ax0, ax1):
+    ax.set_xscale("log"); ax.set_yscale("log"); ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
+ax0.set_ylabel("training step [ms]"); ax1.set_ylabel("peak allocated memory [GiB]")
+ax0.set_yticks([20, 50, 100, 200, 500]); ax0.set_yticklabels(["20", "50", "100", "200", "500"])
+ax1.set_yticks([0.5, 1, 2, 5, 10, 20, 50]); ax1.set_yticklabels(["0.5", "1", "2", "5", "10", "20", "50"])
+ax1.set_xticks([2500, 10000, 40000, 80000, 200000]); ax1.set_xticklabels(["2,500", "10,000", "40,000", "80,000", "200,000"])
+ax1.xaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax0.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax1.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+ax1.set_xlabel("tokens per case [count]")
+ax1.axvline(200000, color=BASELINE, lw=1.0, zorder=0); ax0.axvline(200000, color=BASELINE, lw=1.0, zorder=0)
+ax0.text(200000, ax0.get_ylim()[1] * 0.9, " recipe default", fontsize=8, color=INK2, va="top")
+ax0.legend(loc="upper left", fontsize=8.5)
+ax0.set_title("training-step cost against token count, one GB300, bf16, batch 1, compiled")
+plt.show()
+```
+
 ## What is not yet on the board {#sec-scoreboard-pending}
 
 Five measurements would complete the board, and one line is closed; the

@@ -1781,3 +1781,13 @@ interior control @sec-nb-udrv-int-prereg.
 - Rule: never state consistency as an ISLA-only property. State "consistency
   together with exact covariance and without a body centroid"; the ablation
   is consistent (and more so than ISLA) at a 1.2% in-distribution price.
+
+## COST-SWEEP (2026-09-18; results/cost_sweep_gb300_bf16_2026-09-18.json)
+- Compiled path, one GB300, bf16, batch 1, AdamW: step [ms] / peak [GiB] at
+  10k: ISLA default 46/1.3, fused 44/1.3, GeoTransolver 45/2.7, Transolver
+  22/1.8; at 40k: 115/4.7, 47/4.5, 48/10.0, 23/6.6; at 200k (recipe default):
+  529/22.9, 91/21.6, 106/49.3, 65/32.5. Baseline steps flat below 40k tokens.
+- Rule: state cost against tokens, not at one count; ISLA's default path is
+  5x GeoTransolver at 200k and the fused kernel is at parity or better in
+  0.44x the memory; every model fits a GB300 at 200k, GeoTransolver would
+  not fit 80 GB.
