@@ -22,11 +22,11 @@ repository's `book/archive/` directory and does not appear in this book.
 ## The thesis {#sec-verdict}
 
 **ISLA trades a few percent of in-distribution accuracy for a set of exact
-guarantees that no released mesh transformer offers, and the trade is
+guarantees that no other mesh transformer offers, and the trade is
 priced.** Three things are true at once, and the book is organized around
 keeping all three in view:
 
-1. **In distribution, the released baselines are slightly more accurate.**
+1. **In distribution, the baselines are slightly more accurate.**
    With every model given the same inputs and scored on the same instrument,
    GeoTransolver and Transolver lead ISLA on every surface benchmark measured
    on the two production aerodynamics datasets, DrivAerML (cars) and
@@ -37,7 +37,7 @@ keeping all three in view:
    geometries arrive in arbitrary poses ISLA leads baselines that learned
    pose from augmentation. Its relative frame reads nothing from the sample,
    so its prediction is consistent under a change of surface sampling where
-   every configuration that centres on the sampled points collapses.
+   every configuration that centers on the sampled points collapses.
 3. **The gap has an anatomy.** More than half of the headline gap at the
    reference resolution is finite-sample noise that a stratified inference
    draw or more cells removes; about two and a half points are the positional
@@ -94,8 +94,8 @@ rows = [
     ("Surface accuracy, DrivAerML 435 cars, independent 10,000-cell draw", f"{gt10:.4f} / {t10:.4f}", f"{isla10:.4f}", f"{gt10/isla10:.2f} / {t10/isla10:.2f}", f"baselines lead by {pct(gt10/isla10)} and {pct(t10/isla10)}"),
     ("Same checkpoints, stratified 10,000-cell draw", f"{gt_st:.4f} / {t_st:.4f}", f"{isla_st:.4f}", f"{gt_st/isla_st:.2f} / {t_st/isla_st:.2f}", f"gap {pct(gt_st/isla_st)} and {pct(t_st/isla_st)}: half the headline gap was draw noise"),
     ("Scale corner: width 512, 80,000 cells", f"{gt_c:.4f} / {t_c:.4f}", f"{isla_c:.4f}", f"{gt_c/isla_c:.2f} / {t_c/isla_c:.2f}", f"gap {pct(gt_c/isla_c)} and {pct(t_c/isla_c)} at deployment resolution"),
-    ("Every case in a random pose (baselines trained with rotation augmentation; ISLA measured on the legacy centred variant, re-measurement on the reference running)", "—", "—", f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}", f"ISLA leads by {(pose_lead['gt']-1)*100:.0f}% and {(pose_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose['isla']:.2f}x, the baselines' {pose['gt']:.2f}x and {pose['t']:.2f}x"),
-    ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "the reference configuration is consistent; every sample-centred configuration collapses"),
+    ("Every case in a random pose (baselines trained with rotation augmentation; ISLA measured on the legacy centered variant, re-measurement on the reference running)", "—", "—", f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}", f"ISLA leads by {(pose_lead['gt']-1)*100:.0f}% and {(pose_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose['isla']:.2f}x, the baselines' {pose['gt']:.2f}x and {pose['t']:.2f}x"),
+    ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "ISLA is consistent; every sample-centered configuration collapses"),
     ("Interior fields from the surface, DrivAerML: pressure / velocity / eddy viscosity", "GeoTransolver-volume", "ISLA with query tokens", f"{inter['pressure_l2']:.2f} / {inter['velocity_l2']:.2f} / {inter['nut_l2']:.2f}", "ISLA leads on velocity, trails on pressure and eddy viscosity, at a third of the parameters"),
 ]
 out = "| Setting | GeoTransolver / Transolver | ISLA (reference) | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
@@ -103,8 +103,8 @@ for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(": The thesis in six rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML rungs, where the gaps are larger, are not shown (@sec-data-efficiency). Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
-      "above one favours ISLA. ISLA is its reference configuration throughout (relative frame, total-measure "
-      "scale) except the pose row, whose ISLA is the legacy centred variant, the only ISLA measured in random poses so far (@sec-nb-refprops-prereg). Data: "
+      "above one favors ISLA. ISLA is the shipped configuration throughout (relative frame, total-measure "
+      "scale) except the pose row, whose ISLA is the legacy centered variant, the only ISLA measured in random poses so far (@sec-nb-refprops-prereg). Data: "
       "results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json, results/relframe_reduction_2026-09-11.json, "
       "results/quadvar_reduction_2026-09-17.json, results/accuracy_consistency_matrix_2026-09-10.json, "
       "results/corner_wlr_reduction_2026-09-15.json, "
@@ -131,10 +131,10 @@ at the smallest training sets; @sec-data-efficiency has them.
 #|   each model's input frame is taken from the biased sample. Hatched bars:
 #|   every training and validation case is placed in its own random pose;
 #|   the baselines were trained with rotation augmentation, ISLA without
-#|   (ISLA's pose factor was measured on the legacy centred variant, whose
+#|   (ISLA's pose factor was measured on the legacy centered variant, whose
 #|   covariance contracts are identical to the reference's; the reference's
 #|   own posed run is in progress).
-#|   Colours and marks follow the book's key (@fig-key). How to read this:
+#|   Colors and marks follow the book's key (@fig-key). How to read this:
 #|   the top panel is the accuracy ISLA gives up; the bottom panel is what it
 #|   buys. It does not show the HiLiftAeroML rungs, the interior task, or the
 #|   resolution dependence of the top-panel gap (@tbl-thesis).
@@ -143,7 +143,7 @@ at the smallest training sets; @sec-data-efficiency has them.
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 6.2), sharex=True,
                                gridspec_kw=dict(height_ratios=[1, 1.15], hspace=0.12))
 keys = ["isla_ref", "gt", "t"]
-names = ["ISLA\nreference configuration", "GeoTransolver", "Transolver"]
+names = ["ISLA", "GeoTransolver", "Transolver"]
 xs = np.arange(len(keys))
 err = [isla10, gt10, t10]
 for x, k, e in zip(xs, keys, err):
@@ -155,7 +155,7 @@ ax0.set_title("in distribution: lower is better")
 ax0.grid(axis="x", visible=False)
 
 dvals = [dens["isla_relative_frame_meas"], dens["geotransolver_unit"], dens["transolver_unit"]]
-pvals = [pose["isla"], pose["gt"], pose["t"]]   # ISLA pose factor: legacy centred variant (same contracts); reference re-measurement running
+pvals = [pose["isla"], pose["gt"], pose["t"]]   # ISLA pose factor: legacy centered variant (same contracts); reference re-measurement running
 w = 0.3
 for x, k, d, p in zip(xs, keys, dvals, pvals):
     ax1.bar(x - w / 2, d, width=w, **bar_kwargs(k))
@@ -173,7 +173,7 @@ ax1.set_xticks(xs); ax1.set_xticklabels(names, fontsize=9)
 ax1.grid(axis="x", visible=False)
 ax1.text(2.55, 1.0, " 1 = unaffected", va="center", fontsize=8, color=INK2)
 ax1.text(0 + w / 2, pose["isla"] * 1.12, f"{pose['isla']:.2f}x*", ha="center", va="bottom", fontsize=8.5, color=INK2)
-ax1.text(0.5, 0.02, "* pose factor measured on the legacy centred variant, whose contracts are identical; the reference's re-measurement is running", transform=ax1.transAxes, ha="center", va="bottom", fontsize=7.5, color=MUTED)
+ax1.text(0.5, 0.02, "* pose factor measured on the legacy centered variant, whose contracts are identical; the reference's re-measurement is running", transform=ax1.transAxes, ha="center", va="bottom", fontsize=7.5, color=MUTED)
 from matplotlib.patches import Patch
 ax1.legend(handles=[Patch(facecolor=MUTED, label="10:1 sampling-density bias, sample frame"),
                     Patch(facecolor=MUTED, hatch="///", edgecolor="white", label="every case in a random pose")],
@@ -181,22 +181,22 @@ ax1.legend(handles=[Patch(facecolor=MUTED, label="10:1 sampling-density bias, sa
 plt.show()
 ```
 
-## Names, symbols and colours {#sec-key}
+## Names, symbols and colors {#sec-key}
 
-The book uses one name for each thing and one colour for each architecture.
+The book uses one name for each thing and one color for each architecture.
 The names below are canonical; their definitions are in the chapters cited.
 
 | Name | What it is | Where defined |
 |---|---|---|
-| ISLA, **reference configuration** | the architecture as shipped: relative frame, total-measure length scale, the class default | @sec-mt2 |
-| **legacy centred variant** (diagnostic) | the constant-gauge frame the program used before the relative frame: plain-mean centre, fixed length unit. It reads a sample statistic that is not physical knowledge, so it appears only in collapsed diagnostic notes, never in a main result | @sec-mt2-variants |
-| **similarity-gauge variant** | ISLA centred on the measure-weighted centroid with the RMS radius as length unit | @sec-mt2-variants |
+| **ISLA** | the model as shipped, named without qualifier: relative frame, total-measure length unit, the class defaults | @sec-mt2 |
+| **legacy centered variant** (diagnostic) | the constant-gauge frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge, so it appears only in collapsed diagnostic notes, never in a main result | @sec-mt2-variants |
+| **similarity-gauge variant** | ISLA centered on the measure-weighted centroid with the RMS radius as length unit | @sec-mt2-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
-| **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the released slice-attention baselines, never modified; a *research variant* of one carries the surface measure into its pooling to locate a property | @sec-baselines |
+| **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the public slice-attention baselines, named without qualifier and never modified. "GeoTransolver + ISLA's *feature* (ablation)" is a baseline with one of ISLA's features added to isolate an effect; it is not a variant of the public model | @sec-baselines |
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
 | **global vector / scalar inputs** | the problem's global conditions ($K$ directions, $S$ scalars); here $K = 1$, the freestream direction, and $S = 0$ | @sec-mt2-inputs |
 | **measure weight** $w_i$ | the surface area a sampled cell stands for; the quadrature weight of every sum in the model | @sec-mt2-quadrature |
-| **relative frame** | the reference configuration's construction of position: no centre, positions used only as differences to anchors, the total measure as length unit | @sec-mt2-frame |
+| **relative frame** | ISLA's construction of position: no center, positions used only as differences to anchors, the total measure as length unit | @sec-mt2-frame |
 | **slice**, **anchor** | a soft group of tokens, and its measure-weighted mean position and normal | @sec-mt2-slices |
 | **relational invariants** | the scalars that describe a token relative to an anchor | @sec-mt2-relational |
 | **area-weighted relative L2**, **float32 instrument** | the metric and the precision every reported number is scored at | @sec-metrics |
@@ -210,7 +210,7 @@ The names below are canonical; their definitions are in the chapters cited.
 #| fig-cap: >
 #|   The book's visual key. Each architecture keeps its hue in every figure;
 #|   a variant of an architecture is the same hue at a lighter tint with an
-#|   open marker, and an ablation is hatched. Colour is never the only cue:
+#|   open marker, and an ablation is hatched. Color is never the only cue:
 #|   the marker shape and the line style carry the same distinction.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 2.3))
@@ -231,10 +231,10 @@ plt.show()
 
 Two conventions hold in every table and figure. **A ratio between
 architectures is baseline error divided by ISLA error**, so a value above
-one favours ISLA. **Every error is the area-weighted relative L2 of
+one favors ISLA. **Every error is the area-weighted relative L2 of
 @sec-metrics, scored in float32** on the final-epoch checkpoint. A few
 within-grid comparisons (learning-rate grids, resource controls) were scored
-in bfloat16 and are labelled as such in their captions; no bfloat16 number
+in bfloat16 and are labeled as such in their captions; no bfloat16 number
 is compared across architectures.
 
 ## How to read this book {#sec-how-to-read}
@@ -268,7 +268,7 @@ page. The throughline reads completely with all of them closed.
 ## What this book does not claim {#sec-not-claimed}
 
 - **Not that ISLA is more accurate in distribution.** On the surface task the
-  released baselines lead on every rung measured (@sec-scoreboard). Comparisons
+  baselines lead on every rung measured (@sec-scoreboard). Comparisons
   against baselines fed the physical freestream velocity measure the
   protocol's input scale, not the architectures, and appear only as such
   (@sec-part-baseline).
@@ -277,7 +277,7 @@ page. The throughline reads completely with all of them closed.
   percent of cost (@sec-pose). ISLA's pose lead is against baselines that learn
   pose from augmentation, in random poses.
 - **Not that sampling consistency is an invariance.** It is a fine-mesh-limit
-  property: the reference configuration's small degradation under a 10:1 bias is a
+  property: ISLA's small degradation under a 10:1 bias is a
   10,000-cell statement, and on the wings at a fixed angle the bar is not yet
   met at 40,000 cells (@sec-consistency-bench).
 - **Not that the interior lead is unconditional.** It is on velocity only, and

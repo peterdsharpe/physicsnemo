@@ -13,7 +13,7 @@ presentation.
 
 | Part | Chapters | The reader leaves knowing |
 |---|---|---|
-| Front matter | `index.qmd` | the thesis in one paragraph, the trade in one picture, the names and colours, how to read the book |
+| Front matter | `index.qmd` | the thesis in one paragraph, the trade in one picture, the names and colors, how to read the book |
 | I The problem | `01-problem.qmd` | what a boundary-to-field surrogate is, the datasets, the metric, the protocol |
 | II The architecture | `02-isla.qmd`, `04-baselines-and-fair-comparison.qmd` | how ISLA computes, one idea at a time; what the baselines are and what "fair" means |
 | III Using ISLA | `09-using-isla.qmd` | the configurations, the inputs, the recipe, the learning-rate rule, the inference sampler, checkpoints, cost |
@@ -55,17 +55,17 @@ was retracted) lives in the notebook and the status chapter only.
 
 | Say | Never say | Meaning |
 |---|---|---|
-| ISLA, the reference configuration | MT2, MeshTransformer2, "the reference frame model" | `frame_mode="relative"`, `scale_mode="total_measure"`, the class default |
+| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MeshTransformer2 | the definitive model as shipped (`frame_mode="relative"`, `scale_mode="total_measure"`, the class defaults); its configuration is described once in 02 and 09 and never used as a name. A variant is named by its variant name |
 | the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | the reference configuration's construction of position: `frame_mode="relative"` |
-| the legacy centred variant (diagnostic) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"`; cut from every main figure and table on 2026-09-18; appears only in collapsed diagnostic notes, labelled |
+| the legacy centered variant (diagnostic) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"`; cut from every main figure and table on 2026-09-18; appears only in collapsed diagnostic notes, labeled |
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
 | the sample-frame probe | "the probe instrument" alone | the 10,000-cell uniform and 10:1-biased DrivAerML evaluation draws, each model's frame taken from the drawn sample |
 | $M$ slices, $S$ global scalars | $S$ for the slice count | symbol discipline: $M = 256$ slices; $S$ is reserved for global scalars |
 | the similarity-gauge variant | | `frame_mode="centered"`, `similarity_gauge=True` |
 | the weights-off ablation | "uniform ISLA" | `use_measure_weights=False`; diagnostic, never adopted |
 | the raw-coordinate diagnostic | | `raw_coord_channel`; breaks the contracts by design |
-| GeoTransolver, Transolver, GeoTransolver-volume | "the baselines" without naming them; "GT"/"T" outside code | released architectures, never modified |
-| research variant (of a baseline) | | measure-weighted pooling or Horvitz–Thompson centring; locates a property |
+| GeoTransolver, Transolver, GeoTransolver-volume | "GeoTransolver, released"; "the released baselines"; "the baselines" without naming them; "GT"/"T" outside code | the definitive public models, never modified; no qualifier |
+| GeoTransolver + ISLA's <feature> (ablation) | "research variant", "GeoTransolver, measure-weighted pooling" | a baseline with one or more of ISLA's features added to isolate an effect (e.g. "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)"); never a variant of the public model |
 | unit-direction protocol | "udrv" | every model receives the freestream as a unit vector |
 | global vector inputs, global scalar inputs | "drive", "freestream feature" | the problem's global conditions; $K$ vectors, $S$ scalars |
 | boundary cell / point / token | | one sampled surface element and its token |
@@ -85,12 +85,12 @@ $a_{is}$ routing weight; $z_s, m_s$ anchors; $\xi_{is}$ relational
 invariants; $Z_s$ slice state; $\pi_{is}$ read-back weight; $\hat u_i$
 radial basis vector. Definitions use $\equiv$.
 
-## Colour and mark semantics (from `palette.py`)
+## Color and mark semantics (from `palette.py`)
 
-| Concept | Colour | Marker / line | Notes |
+| Concept | Color | Marker / line | Notes |
 |---|---|---|---|
 | ISLA reference | `BLUE` | filled square, solid | |
-| ISLA variants | `BLUE_LIGHT` | open diamond (similarity gauge, dashed); open square dotted is reserved for the legacy centred variant inside diagnostic notes | same hue, lighter |
+| ISLA variants | `BLUE_LIGHT` | open diamond (similarity gauge, dashed); open square dotted is reserved for the legacy centered variant inside diagnostic notes | same hue, lighter |
 | ISLA ablations | `BLUE_PALE`, hatched | | never adopted |
 | GeoTransolver | `RED` | filled circle, solid | also GeoTransolver-volume |
 | Transolver | `AMBER` | filled triangle, dashed | |
@@ -98,7 +98,7 @@ radial basis vector. Definitions use $\equiv$.
 | slices, anchors | `VIOLET` | | concept figures only |
 | queries, interior points | `AQUA` | | concept figures only |
 | contract satisfied | `GREEN` | | |
-| context (grids, reference lines, non-data) | greys | | never encodes a data distinction |
+| context (grids, reference lines, non-data) | grays | | never encodes a data distinction |
 | signed fields | `DIVERGING` (blue–paper–red) | | unsigned fields: viridis |
 
 In Mermaid diagrams: data boxes `fill:#f4f3ee,stroke:#898781`; fixed
@@ -106,7 +106,7 @@ geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned
 maps `fill:#e6f0fb,stroke:#2a78d6`; contracts `stroke:#008300`.
 
 Use `STYLE[key]` / `series_kwargs(key)` / `bar_kwargs(key)` for every data
-series so labels and colours never drift. Prefer direct labels (`label_line`)
+series so labels and colors never drift. Prefer direct labels (`label_line`)
 to legends; when a legend is needed, its text is the canonical name.
 
 ## Figures and tables

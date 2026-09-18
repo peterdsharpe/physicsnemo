@@ -2,22 +2,23 @@
 
 Import this at the top of every ``{python}`` cell that draws:
 
-    from palette import *          # colours, STYLE, house rcParams, helpers
+    from palette import *          # colors, STYLE, house rcParams, helpers
 
 Unlike ``figures.py`` (the offline figure generator), this module never
 switches the matplotlib backend, so it is safe inside Quarto's inline cells.
 
-Colour is semantic and fixed for the whole book. An architecture keeps its
-hue in every chapter; a *variant* of an architecture is the same hue at a
-lighter tint with an open marker; an *ablation* (a configuration measured
-only to price a design choice and never adopted) is the same hue, hatched.
-Colour is never the only cue: marker shape and line style carry the same
-distinction, so every figure survives greyscale and colour-vision deficiency.
+Color is semantic and fixed for the whole book. An architecture keeps its
+hue in every chapter; a *variant* of ISLA is the same hue at a lighter tint with an open
+marker; an *ablation* (ISLA with a feature removed, or a baseline with one of
+ISLA's features added, measured only to isolate an effect and never a model
+anyone ships) is the same hue, lighter or hatched.
+Color is never the only cue: marker shape and line style carry the same
+distinction, so every figure survives grayscale and color-vision deficiency.
 
     ISLA ................ blue,   square,   solid
     GeoTransolver ....... red,    circle,   solid
     Transolver .......... amber,  triangle, dashed
-    context / chrome .... greys (never carries a data distinction)
+    context / chrome .... grays (never carries a data distinction)
     field values ........ BLUE -> paper -> RED diverging map (signed fields)
                           viridis (unsigned fields)
 """
@@ -39,7 +40,7 @@ RED_LIGHT = "#f2a3a2"   # GeoTransolver research variants
 AMBER = "#c98a00"       # Transolver
 AMBER_LIGHT = "#e8c46a" # Transolver research variants
 
-# --- Concept colours (architecture figures, never a data series) -------------
+# --- Concept colors (architecture figures, never a data series) -------------
 VIOLET = "#4a3aa7"      # slices / anchors
 AQUA = "#1baf7a"        # queries / interior points
 GREEN = "#008300"       # satisfied contract, PASS
@@ -59,14 +60,14 @@ SEQUENTIAL = "viridis"
 # Use STYLE[key] wherever that configuration appears so the legend text is the
 # same in every chapter. Labels are the book's canonical names.
 STYLE = {
-    "isla_ref": dict(label="ISLA, reference configuration", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
+    "isla_ref": dict(label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
     "isla_cg": dict(label="ISLA, constant-gauge variant", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
     "isla_sg": dict(label="ISLA, similarity-gauge variant", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
-    "isla_abl": dict(label="ISLA, ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
+    "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
     "gt": dict(label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""),
-    "gt_var": dict(label="GeoTransolver, research variant", color=RED_LIGHT, marker="o", ls=":", mfc="none", hatch=""),
+    "gt_var": dict(label="GeoTransolver + ISLA feature (ablation)", color=RED_LIGHT, marker="o", ls=":", mfc="none", hatch=""),
     "t": dict(label="Transolver", color=AMBER, marker="^", ls="--", mfc="full", hatch=""),
-    "t_var": dict(label="Transolver, research variant", color=AMBER_LIGHT, marker="^", ls=":", mfc="none", hatch=""),
+    "t_var": dict(label="Transolver + ISLA feature (ablation)", color=AMBER_LIGHT, marker="^", ls=":", mfc="none", hatch=""),
 }
 
 

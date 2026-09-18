@@ -6,14 +6,14 @@ operating manual.** It tells you which configuration to run and why, what
 the model needs from your data, the two commands that train and evaluate
 it, the learning-rate rule that lets it scale in width, the inference
 sampler that removes most of the draw noise at a fixed cell budget, and
-what a step costs. Everything here is about the reference configuration
+what a step costs. Everything here is about ISLA
 unless a variant is named; the reasons behind each recommendation are in
 @sec-mt2 and the evidence chapters, cited at the point where they apply.
 
 ## Which configuration {#sec-using-config}
 
-Use the **reference configuration**: the relative frame with the
-total-measure length scale. It is the class default, so `ISLA()` with no
+Use **ISLA as shipped**: the relative frame with the total-measure
+length unit. It is the class default, so `ISLA()` with no
 frame arguments is it, and the recipe's `isla_surface.yaml` states the two
 settings explicitly:
 
@@ -37,15 +37,15 @@ new work (@sec-mt2-variants states the open question about it).
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
-| **reference** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the released baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
-| similarity-gauge variant (measure-weighted centre and RMS radius) | `similarity_gauge: true` on a centred frame | a diagnostic comparison of frame choices | a frame still estimated from the sample; equal accuracy to the reference |
+| **reference** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
+| similarity-gauge variant (measure-weighted center and RMS radius) | `similarity_gauge: true` on a centered frame | a diagnostic comparison of frame choices | a frame still estimated from the sample; equal accuracy to the reference |
 | passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
 
-::: {.callout-note collapse="true" title="The legacy centred variant (diagnostic)"}
-The recipe also carries `isla_surface_constant_gauge`, the centred frame with
+::: {.callout-note collapse="true" title="The legacy centered variant (diagnostic)"}
+The recipe also carries `isla_surface_constant_gauge`, the centered frame with
 a fixed length unit that was the program's configuration before the relative
 frame. It is kept only to reproduce earlier measurements and to serve as the
-diagnostic that shows what a sample-estimated centre costs (its error grows
+diagnostic that shows what a sample-estimated center costs (its error grows
 12x under a 10:1 sampling-density bias). Do not use it for new work.
 :::
 
@@ -112,7 +112,7 @@ the magnitude of every global vector.
 From the recipe root:
 
 ```bash
-# DrivAerML surface, reference configuration
+# DrivAerML surface, ISLA
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=1e-3 compile=false
 
@@ -137,7 +137,7 @@ dataset's native frame predicts a car in any pose (@sec-pose).
 \mathrm{hidden}$.** At width 512 that is $3.75 \times 10^{-4}$. At the
 protocol rate of $10^{-3}$ the relative frame diverges at width 512: the
 routing hardens to one slice per token and the anchors collapse. Under the
-rule it trains cleanly, and the rule costs a centred control at the same
+rule it trains cleanly, and the rule costs a centered control at the same
 corner nothing (its error at $3.75 \times 10^{-4}$ equals its error at
 $10^{-3}$), so the rule is a property of the relative frame, not a
 retuning of the comparison (@sec-nb-corner-wlr-verdict,
@@ -198,7 +198,7 @@ from pathlib import Path
 RES = Path("..") / "results"
 qv = json.load(open(RES / "quadvar_reduction_2026-09-17.json"))["arms"]
 mean = statistics.mean
-names = [("isla_ref", "ISLA, reference configuration"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
+names = [("isla_ref", "ISLA"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
 out = "| model | independent draw | stratified draw | change |\n|---|---:|---:|---:|\n"
 for k, lab in names:
     a = qv[k]; u = a["unif"]["10000"]; ind = mean(u["seeds"]) if isinstance(u, dict) else u
@@ -212,7 +212,7 @@ print(": DrivAerML surface pressure (area-weighted relative L2, float32, 48 vali
 ```
 
 The book keeps the independent draw for its headline comparisons and
-reports the stratified draw as a labelled row (@sec-scoreboard); for a
+reports the stratified draw as a labeled row (@sec-scoreboard); for a
 deployment, use the stratified draw, or more cells.
 
 ::: {.callout-tip collapse="true" title="How many cells"}
@@ -279,7 +279,7 @@ vectors (rotated); scale the points by $k$ and the measure weights by $k^2$
 (unchanged). In float32 the residuals are of order $10^{-5}$ on the
 trained checkpoints; in bf16 autocast several percent, mostly rounding. A residual far above these on your own data means
 the inputs, not the model: normals with inconsistent orientation, weights
-that do not sum to the surface area, or positions that were already centred
+that do not sum to the surface area, or positions that were already centered
 or scaled by something sample-dependent before the model saw them. (The
 model normalizes the normals and the global vectors itself, so their
 magnitudes cannot cause a residual.)

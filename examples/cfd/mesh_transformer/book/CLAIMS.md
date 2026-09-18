@@ -21,10 +21,10 @@ on the full split), 3e-3 for Transolver where stated.
   weight); global vector inputs ĝ_k, k = 1..K (K = 1 in this book: the unit
   freestream direction ĝ_1), and global scalar inputs (S = 0 in this book).
   Reference configuration (the class default; frame_mode="relative",
-  scale_mode="total_measure"): no centre anywhere; the length unit is
+  scale_mode="total_measure"): no center anywhere; the length unit is
   L = sqrt(Σ w_i); the seed is the K invariants n·ĝ_k (one here) plus the S
   global scalars; positions enter only as point-to-anchor differences.
-  The gauge variants (frame_mode="centered") subtract a centre (plain mean
+  The gauge variants (frame_mode="centered") subtract a center (plain mean
   of the sampled points with the constant reference length 8.0 = the
   constant-gauge variant; measure-weighted centroid with the RMS radius =
   the similarity-gauge variant) and carry 3+2K seeds and 6+2K relational
@@ -33,7 +33,7 @@ on the full split), 3e-3 for Transolver where stated.
   the log-measure bias, forms equivariant anchors (weighted mean position and
   mean normal per slice) and 5+K point–anchor relational invariants (six
   here; 6+2K in the gauge variants) that refine routing and are pooled back.
-  Book presentation rules for chapters: `STYLE.md` (nomenclature, colours,
+  Book presentation rules for chapters: `STYLE.md` (nomenclature, colors,
   teaching pattern); shared figure style: `palette.py`. Decoder, reference configuration: the heads
   read directly from the interacting encoder tokens, so a prediction at one
   point depends (weakly, ~7% companion-set sensitivity) on which other points
@@ -293,7 +293,7 @@ surface alone; 435/48 cars; 10k surface tokens, 10k interior query points;
   normals make it worse (1.43x). The exact double-layer kernel is not a
   usable prior for separated flow (potential-flow oracle rel-L2 4.8 vs 0.77
   for predicting the case mean), and its "good" far-field pressure is a
-  zero-output artefact (far-field velocity 16.7x GT).
+  zero-output artifact (far-field velocity 16.7x GT).
 - Interior data efficiency (V0-L, 54 cars): GeoTransolver-volume 0.104 vs
   ISLA-QT 0.126 interior pressure (1.21x; velocity 1.26x; ν_t 1.73x); at 435
   cars 1.03 / 1.16 / 1.71; at 109 cars 1.20 / 1.27 / 1.79 (GT 0.078, ISLA-QT
@@ -339,7 +339,7 @@ stops". Present-tense, no chronology. Key current statements:
   fragility ladders as in chapter 06 Part II.
 - AirFRANS and DrivAerML MT1 results: keep the measured facts (trace
   formulation dominates the DrivAerML gain; kernel dictionary contributes
-  0–8%; within-family OOD behaviour; cross-family zero-shot transfer fails
+  0–8%; within-family OOD behavior; cross-family zero-shot transfer fails
   for every tested checkpoint and is a property of training-data diversity
   for every architecture tested). Drop all campaign narration.
 - Where the line stops: separated 3D aerodynamics (potential-flow oracle
@@ -349,7 +349,7 @@ stops". Present-tense, no chronology. Key current statements:
 ## Review-driven conventions (apply everywhere; these override earlier wording)
 
 - **Ratio convention:** every cross-architecture ratio is written as
-  baseline error ÷ ISLA error, so > 1 favours ISLA. HiLift full split:
+  baseline error ÷ ISLA error, so > 1 favors ISLA. HiLift full split:
   GeoTransolver/ISLA = 1.02 (0.042/0.041). DrivAerML full: GeoTransolver/ISLA
   = 0.92 (ISLA is 1.085x behind; write "ISLA 8.5% behind"). At 35 HiLift cases
   the physical-velocity-protocol factor is **2.8x** (0.392/0.138 = 2.84;
@@ -407,7 +407,7 @@ stops". Present-tense, no chronology. Key current statements:
   standardized field over the sampled points of a case (measure-weighted),
   arithmetic mean over cases. The gauge-pressure form ‖p̂ − p‖/‖p − p_∞‖
   appears ONLY in the reference-predictor and seed-disagreement analyses
-  and must be labelled as a different scale (ISLA 0.25 there ↔ 0.138 on the
+  and must be labeled as a different scale (ISLA 0.25 there ↔ 0.138 on the
   recipe metric).
 - **Paired statistics:** report the 180 case-level pairs (each case scored
   by each architecture's two-seed mean), not 360 seed-pairs; use the exact
@@ -443,11 +443,11 @@ stops". Present-tense, no chronology. Key current statements:
   in the same table. Do not write "front of the pack".
 - **Slope statement (one sentence everywhere):** "a naive power-law
   extrapolation of the two curves puts GeoTransolver at 0.015 and ISLA at
-  0.029 at 5,000 cases, a factor of two in GeoTransolver's favour".
+  0.029 at 5,000 cases, a factor of two in GeoTransolver's favor".
 - **Reference length:** all recipe coordinates are nondimensionalized by
   the dataset's per-case L_ref (5 m on DrivAerML); ISLA's constant gauge
   8.0 is in those nondimensional units (40 m physical on DrivAerML). The
-  interior chapter's distance bands are in metres, converted with L_ref.
+  interior chapter's distance bands are in meters, converted with L_ref.
 - **Resources on the interior task** (results/v0_interior_resources_2026-09-07.json,
   from each lane's train.log): GeoTransolver-volume 27.6M parameters, 8.8 GB
   peak, 10,000 interior tokens only (surface not consumed; inputs coords +
@@ -550,7 +550,7 @@ is in the tree.
   physical-velocity GeoTransolver at 210; the unit-direction GeoTransolver at 35
   cases (0.124) is already below ISLA (0.138), so the multiplier is ≤ 1 and
   is never written as an ISLA advantage. `tbl-data-multiplier`, if kept,
-  is labelled a physical-velocity-protocol table.
+  is labeled a physical-velocity-protocol table.
 - **Both margins, always:** the rule survives with the new content: every
   statement about the 35-case rung names both unit-direction baselines
   (GeoTransolver 0.90, Transolver 0.83, baseline ÷ ISLA). Never headline
@@ -728,7 +728,7 @@ Rules from the independent audit, verified in-session by the coordinator
   12.2% physical error; orderings under the frozen metric stand, ratios of
   means need not survive a different centering. DrivAerML's closure is hybrid
   RANS/LES with a grid/filter-length-dependent modeled viscosity, so
-  query-neighbour features could recover discretization information: a
+  query-neighbor features could recover discretization information: a
   hypothesis, not established.
 - **Forces are against sampled-cell integrals until FORCE-REF.** The recipe
   integrates predictions and labels on the same 10,000 sampled cells
@@ -784,7 +784,7 @@ interior control @sec-nb-udrv-int-prereg.
   accuracy advantage over GeoTransolver or plain Transolver once every model
   receives the freestream at unit scale: at 35 HiLiftAeroML cases the
   unit-direction baselines are 1.1–1.2x more accurate than ISLA, the DrivAerML
-  surface ordering favours GeoTransolver, and the higher HiLift rungs are
+  surface ordering favors GeoTransolver, and the higher HiLift rungs are
   being re-measured (UDRV-L). Its contribution is contracts (exact
   covariance, query-independent passive decode) and the interior
   configuration's lead pending UDRV-INT."
@@ -812,7 +812,7 @@ interior control @sec-nb-udrv-int-prereg.
   baseline's freestream input: "unit-direction GeoTransolver" (the valid comparison) or
   "physical-velocity GeoTransolver" (a protocol measurement). A bare
   "GeoTransolver" on HiLift means unit-direction.
-- **Physical-velocity measurements, labelled so and never quoted as an ISLA
+- **Physical-velocity measurements, labeled so and never quoted as an ISLA
   advantage:** 2.8x (35), 2.2x (210), 1.3x Transolver (210), parity 1.02
   (1,260), 1.8x (4 geometries), 1.4x (21 geometries), 5.0x and 2.55x (fixed
   angle), 180/180 and 118/118 wins, 172/180 and 18/18, the 6x data
@@ -839,7 +839,7 @@ interior control @sec-nb-udrv-int-prereg.
   Every interior ratio is stated "pending UDRV-INT". DrivAerML surface:
   GeoTransolver consumed physical U_inf and still beat ISLA, so its 1.2–1.3x
   and 8.5% leads are LOWER BOUNDS; write "can only move further in
-  GeoTransolver's favour".
+  GeoTransolver's favor".
 - **Mechanism sentence (chapter 4 only):** GeoTransolver's global-context
   projector collapses from ~200 effective slices per head at unit magnitude
   to one slice at 2,679.5 (context max 1,530); Transolver concatenates the
@@ -981,7 +981,7 @@ interior control @sec-nb-udrv-int-prereg.
   ISLA 19.1x. Write "the similarity gauge is the mechanism, at a 10–20% uniform-draw cost".
 - **Physics residuals on the saved interior samples are not meaningful (2026-09-09, transfer
   session H1, research/transfer_program #sec-nb-h1-verdict).** The 10,000-point interior sample
-  (6e-5 of the mesh; neighbours 3–16 cm apart) does not resolve the field: a meshfree Laplacian
+  (6e-5 of the mesh; neighbors 3–16 cm apart) does not resolve the field: a meshfree Laplacian
   of an analytic field is off 12% median / 124% mean, the true velocity's discrete divergence is
   35% of its gradient norm, and pressure recovered from the TRUE velocity misses by 7.7x. Never
   quote a divergence or momentum-residual diagnostic computed on these artifacts; such diagnostics
@@ -1010,8 +1010,8 @@ interior control @sec-nb-udrv-int-prereg.
   group 4 to confirm).** ISLA QT+SDF 0.0547 / 0.0796 / 0.1116; GT-volume (physical velocity) 0.0515 /
   0.1088 / 0.0879 → ISLA ÷ GT 1.06 / 0.73 / 1.27. bf16 inflated GT-volume 20–23% and ISLA 4–7%.
   Write "ISLA leads on interior velocity (27%) and trails on pressure (6%) and eddy viscosity
-  (27%)"; RETIRE "leads on pressure and velocity" and the 0.91x pressure figure except as a labelled
-  bf16 number. Interior ladder, h256, surf10k, density ratios stay bf16-labelled until group 4.
+  (27%)"; RETIRE "leads on pressure and velocity" and the 0.91x pressure figure except as a labeled
+  bf16 number. Interior ladder, h256, surf10k, density ratios stay bf16-labeled until group 4.
 
 - **Interior family, float32 (2026-09-10; results/fp32_reeval/fp32_shift_interior_2026-09-09.json;
   unit-direction GT-volume from the transfer session's same-snapshot re-eval).** Reference row:
@@ -1039,7 +1039,7 @@ interior control @sec-nb-udrv-int-prereg.
   unit GT 0.1884 (0.755; 0.907 vs weights off), unit Transolver 0.1928 (0.773; 0.928), physical GT
   0.4528. Write "baselines ahead by the mean, even by geometry"; weights off −17% persists here.
 - **Few-shot transfer (2026-09-10, transfer session campaign C T3, float32; research/transfer_program
-  #sec-nb-campc-t3-verdict).** Fine-tuning on 20 labelled fastback cases (1,000 steps, lr 1e-3):
+  #sec-nb-campc-t3-verdict).** Fine-tuning on 20 labeled fastback cases (1,000 steps, lr 1e-3):
   GeoTransolver from the unit-direction DrivAerML checkpoint 0.128 vs 0.186 from scratch (31% better);
   ISLA from mt2_v3c (lr 3e-3 checkpoint) 0.187 vs 0.198 (6%). RESOLVED 2026-09-10: the frozen-init
   lane (camp-c-28: source loaded through the fine-tuning hook, one epoch at lr 0, re-evaluated)
@@ -1118,12 +1118,12 @@ interior control @sec-nb-udrv-int-prereg.
   transfer lanes; the SCALE reference-kernel arms) used the reference kernel; float32 evaluation
   is kernel-independent (agreement to 1e-6), so the float32 reporting instrument needs no kernel
   flag; bf16 evaluation of a pre-2026-09-10 checkpoint must still pass `fast_point_softmax=false`.
-  Never pool arms trained on different kernels in one comparison without labelling both (the SCALE
+  Never pool arms trained on different kernels in one comparison without labeling both (the SCALE
   ISLA study labels its fast-kernel 80k and 512×80k arms). Supersedes "stays default False" above.
 - **QTDENS falsified (2026-09-10; float32, 48 cars, two seeds; results/qtdens_reduction_2026-09-10.json).**
   Reference ISLA query-token+SDF: pressure 0.0548 / velocity 0.0801 / ν_t 0.1122 (1.28x
   GeoTransolver-volume's 0.0877); + query-density scalar 0.0542 / 0.0779 / 0.1155 (1.32x);
-  + query-neighbour channel (k=16) 0.0541 / 0.0795 / 0.1138 (1.30x). Bars: ≤ 0.0967 closes, ≥ 0.1099
+  + query-neighbor channel (k=16) 0.0541 / 0.0795 / 0.1138 (1.30x). Bars: ≤ 0.0967 closes, ≥ 0.1099
   fails; both fail. Write "the eddy-viscosity gap is not in query-side inputs at this width; the
   'GeoTransolver reads the mesh density' hypothesis is weakened, not refuted"; never "the gap is
   discretization" or "the gap is capacity" (capacity is the candidate left standing, untested at
@@ -1162,7 +1162,7 @@ interior control @sec-nb-udrv-int-prereg.
   physical soundness (old-guard CFD test), and discretization-invariance tests (biased resampling,
   area-proportional resampling, different mesher) before adoption; in-distribution accuracy alone
   never justifies it. Retired in principle regardless of result: query-density scalar,
-  query-neighbour channel (read sample density). Baselines' density dependence (GT 9.5x, Transolver
+  query-neighbor channel (read sample density). Baselines' density dependence (GT 9.5x, Transolver
   3.9x, GT-volume ball queries) is a first-class comparison axis, stated beside every accuracy claim.
   See @sec-principle.
 - **Interior GT-volume unit-direction, third seed (2026-09-10, fp32).** Seed 44: 0.0509 / 0.1061 / 0.0877;
@@ -1373,9 +1373,9 @@ interior control @sec-nb-udrv-int-prereg.
   0.0522 (0.0519/0.0525; 0.0517), 1.025x. HiLift 35: GT-mw 0.1173 (0.1127/0.1220/0.1173; unweighted 0.1102,
   +6.5%) = 0.85x ISLA; Transolver-mw 0.1217 (+6.6%) = 0.88x ISLA. Both "lead survives". Write "the
   principled baselines keep their lead and are the most density-consistent configurations measured
-  (1.02x)"; ALWAYS add: the probe's CenterMesh centres all inputs by the 40k uniform pool's plain mean
-  BEFORE the biased draw, so the baselines' frame is unbiased from the pipeline while ISLA re-centres
-  on the biased sample — the baselines' pool-mean centring is a sample-statistic frame too (Peter's
+  (1.02x)"; ALWAYS add: the probe's CenterMesh centers all inputs by the 40k uniform pool's plain mean
+  BEFORE the biased draw, so the baselines' frame is unbiased from the pipeline while ISLA re-centers
+  on the biased sample — the baselines' pool-mean centering is a sample-statistic frame too (Peter's
   ruling). HiLift consistency of MW: pending BENCH samplers. Never write "measure semantics transferred"
   until the area-sampler trend is measured for the MW checkpoints.
 - **Gauge at lr 1e-3 on DrivAerML (2026-09-10).** 0.0543 (0.0552/0.0534) vs constant 0.0557 → 0.975x;
@@ -1385,7 +1385,7 @@ interior control @sec-nb-udrv-int-prereg.
   deficit DISTRIBUTED (H5). Write "no single ISLA ingredient carries the cross-family deficit"; never name
   a carrier. Seed spreads 0.17–0.26 on this readout: three seeds minimum, quote spreads. H1 closes when
   the lr 1e-3 gauge pair's zero-shot lands.
-- **MW POST-CENTRE CORRECTION (2026-09-10; $T/transfer/mw_postcenter_density.json).** With CenterMesh
+- **MW POST-CENTER CORRECTION (2026-09-10; $T/transfer/mw_postcenter_density.json).** With CenterMesh
   moved after the biased draw (frame from the biased sample), mw GT 14.3/14.6x, mw Transolver 15.9/15.4x,
   unweighted GT 12.0/11.9x, unweighted Transolver 10.2/13.0x (fp32, 10k). RETIRE "measure-weighted
   baselines are the most density-consistent configurations measured (1.02x)"; the 1.02x was the
@@ -1396,16 +1396,16 @@ interior control @sec-nb-udrv-int-prereg.
   factors with the sample-frame one as headline.
 - **Frame convention for density probes (2026-09-10).** Every density-probe ratio must state its frame
   convention: "pool frame" (pipeline CenterMesh on the uniform reader pool before the biased draw; what
-  the baselines received in campaign E, the scaling corners and BENCH) or "sample frame" (centring after
+  the baselines received in campaign E, the scaling corners and BENCH) or "sample frame" (centering after
   the draw; what a biased mesher delivers; what ISLA computes in-model). The SAMPLE frame is the default
   for all future probes and for headline comparisons. Pool-frame numbers on file: GT 9.5x, Transolver
   3.9x (campaign E); GT 4.2x, Transolver 4.6x (512×80k corner); the BENCH biased/area columns for the
   baselines. Sample-frame: GT 12.0x, Transolver 10–13x, mw GT 14.4x, mw Transolver 15.6x (10k, DrivAerML).
-  Lead sentence to reuse: "with like-for-like frames every configuration that centres on a sample statistic
+  Lead sentence to reuse: "with like-for-like frames every configuration that centers on a sample statistic
   collapses 10–17x; only frames that do not read the sample survive; measure weighting repairs the
   aggregation, the frame is a separate defect, both must be fixed".
 - **BENCH mcenter addendum (2026-09-10; results/consistency_bench/consistency_bench_mcenter_2026-09-10.json).**
-  Measure-centred constant-gauge ISLA: DrivAerML D_area +18% → +3%, D_biased +18% → +3%;
+  Measure-centered constant-gauge ISLA: DrivAerML D_area +18% → +3%, D_biased +18% → +3%;
   HiLift 35 D_area -2% → -0%, D_biased +4% → +1%. First configuration consistent under all three
   samplers (both datasets at 40k; HiLift already at 10k). Write "the constant gauge's sampler dependence was
   entirely its plain-mean centroid". Caution to carry: the metric is evaluated on the sampled points, so the
@@ -1429,7 +1429,7 @@ interior control @sec-nb-udrv-int-prereg.
   yamls; artifact studies/campaign_e_evalonly/campaign_e_density_fp32_sampleframe_2026-09-10.json).** Biased ÷ uniform
   [pool frame]: unit GT 12.14 (12.00/11.93/12.50) [9.5]; Transolver 3e-3 11.61 (10.18/13.04) [3.9]; constant-gauge ISLA
   11.99 (12.39/11.58) [12.1]; gauge ISLA 1.207 (1.195/1.218) [1.21]; weights-off ISLA 19.23 (23.40/15.06) [19.1]. Uniform
-  levels agree between frames to 0.0002; ISLA rows move ≤ 1% (internal centring). SUPERSEDED: "Transolver degrades more
+  levels agree between frames to 0.0002; ISLA rows move ≤ 1% (internal centering). SUPERSEDED: "Transolver degrades more
   gracefully" (3.9x) was a frame artifact. Quote 12.1x / 11.6x / 12.0x / 1.21x / 19.2x as the reference-size density
   sensitivities.
 - **XFAM H1 closed (2026-09-10).** Rate-matched gauge (lr 1e-3) zero-shot fastback 1.068 / 0.768 → 0.918 (spread 0.30). No arm ≤ 0.70; XFAM final: distributed. Ops: AGA `sacct --starttime` parses cluster-local time (UTC−7); a future local time makes it fail silently.
@@ -1474,7 +1474,7 @@ interior control @sec-nb-udrv-int-prereg.
 - **RELFRAME verdict (2026-09-11, fp32; results/relframe_reduction_2026-09-11.json).** No-frame ISLA: DrivAerML
   ref 0.0566 (+1.5%), density 1.21x (sample frame); meas 0.0552 (−0.9%), 1.235x; BENCH D_area +41%→+3.4%,
   D_biased +19%→+2.5% (10k→40k). HiLift 35: 0.1530 / 0.1529 (+11%) — accuracy bar FAILS; falsifier fired:
-  the HiLift price is NOT frame-estimate variance (no frame, same 10–11% as measure centring). Write "the
+  the HiLift price is NOT frame-estimate variance (no frame, same 10–11% as measure centering). Write "the
   1.2x floor is the routing integral's variance under a 10:1 sample, not a frame effect"; write "the
   HiLift price is either positional information lost with the seeds or the plain-mean frame's mesh-density
   content (0.131 body lengths on HiLift, 0.034 DrivAerML; HT-10k noise 0.0065) — FRAME-FULL decides".
@@ -1488,9 +1488,9 @@ interior control @sec-nb-udrv-int-prereg.
   use_area_weighting (HT-centroid frame) — same question as Peter's HT-centroid ruling.
 - **PETER'S FRAME RULING, applied (2026-09-11).** HT centroid acceptable only if it buys significant accuracy;
   at equal accuracy the frame-free construction is preferred. Numbers on file: frame-free (RELFRAME
-  total-measure) 0.0552 = measure-centred 0.0548 = constant 0.0557 on DrivAerML; 0.1530 = 0.1520 on HiLift
+  total-measure) 0.0552 = measure-centered 0.0548 = constant 0.0557 on DrivAerML; 0.1530 = 0.1520 on HiLift
   35. RULE: "reference = RELFRAME (total-measure scale) unless FRAME-FULL passes its joint bar (within 3% of
-  0.1377 at ≤ 1.2x)". Measure-centred frame NOT adopted. Chapters stay "under decision until FRAME-FULL";
+  0.1377 at ≤ 1.2x)". Measure-centered frame NOT adopted. Chapters stay "under decision until FRAME-FULL";
   then apply the rule in chapters 2, 6, 12 and the index reference rows (announce first). Baselines'
   datapipe frame: area-weighted CenterMesh acceptable only if it buys accuracy over the plain mean
   (MWAW lanes, #sec-nb-mwaw-prereg).
@@ -1499,7 +1499,7 @@ interior control @sec-nb-udrv-int-prereg.
   weights 1 / 3 / 8 at edges 0.05 / 0.4 L → expected 10k queries; far band 10% → ~32%, ≥0.4 L 2.2% → ~14%; exact π stored
   as point_data.inclusion_pi; loss is a plain mean (objective reweighted toward the far field, stated). Bars (band units):
   far-band ν_t ≤ 0.085 supported / ≥ 0.095 falsified; near-wall + recipe p/v within 3%. Never write it as adopted before
-  its uniform-sampler consistency check. Status: the older PLANNED QCOUNT node/row (duplicate id) removed in favour of
+  its uniform-sampler consistency check. Status: the older PLANNED QCOUNT node/row (duplicate id) removed in favor of
   the running one.
 - **Campaign A, 210-case rung (2026-09-10, transfer session, fp32, 3 draws × 3 seeds; research/transfer_program/studies/campaign_a_draws/campaign_a_n210_fp32_2026-09-10.json).** Per draw (d1/d2/d3/curated):
   GT unit 0.0542/0.0603/0.0580/0.0539; Transolver unit 0.0557/0.0623/0.0606/0.0578; ISLA 0.0624/0.0665/0.0689/0.0643;
@@ -1568,8 +1568,8 @@ interior control @sec-nb-udrv-int-prereg.
   uniform-trained weights-off is constant gauge at lr 1e-3; matched pair is gauge uniform-on (iw_mt2_gauge) vs gauge area-on (MIX); read the
   triple under the UNIFORM sampler at 40k only (area-sampler uniform-off is collapsed 0.66–0.76; area-trained model off-law swap 1.63x at 10k).
 - **MWAW verdict (2026-09-11, fp32, 48 cars, 10k; results/mwaw_2026-09-11.json).** GT-mwaw 0.0505 vs plain-frame twin 0.0498 (+1.2%);
-  T-mwaw 0.0528 vs 0.0522 (+1.1%) → EQUAL. Sample-frame density: HT centre (cell_measures) 1.04x / 1.03x;
-  raw-area centre 9.2x / 6.0x (count bias — never call use_area_weighting alone "HT" under a biased draw). Write "the
+  T-mwaw 0.0528 vs 0.0522 (+1.1%) → EQUAL. Sample-frame density: HT center (cell_measures) 1.04x / 1.03x;
+  raw-area center 9.2x / 6.0x (count bias — never call use_area_weighting alone "HT" under a biased draw). Write "the
   repaired baselines' density dependence is entirely the datapipe centroid; with an HT-consistent centroid they hold at
   1.03–1.04x, below ISLA's 1.2x floor". RULING QUESTION OPEN: adopt HT CenterMesh as the baselines' frame in the fair
   comparison (recommended) vs prereg "equal → plain frame stays". Chapters report BOTH frames until Peter rules.
@@ -1578,13 +1578,13 @@ interior control @sec-nb-udrv-int-prereg.
   ISLA's convention swap costs 5% at 40k (fine-mesh limit), 45% at 10k, 190% at 2.5k". Triple under uniform at 40k: uniform-on
   gauge 0.0579, area-on gauge 0.0591, constant off 0.0518 (constant on 0.0530) → area-on at the ON level, not the OFF
   level; confounds: off is constant gauge lr 1e-3; area-trained under uniform is off its law. One-line check, not a headline.
-- **FRAME-FULL DrivAerML (2026-09-11, fp32; results/frame_reduction_2026-09-11.json).** centre-only 0.0565 (+1.5%) at 1.20x; centre+scale
+- **FRAME-FULL DrivAerML (2026-09-11, fp32; results/frame_reduction_2026-09-11.json).** center-only 0.0565 (+1.5%) at 1.20x; center+scale
   0.0544 (-2.3%) at 1.13x (both seeds 1.13) → both PASS the DrivAerML joint bar. 1.13x = routing variance with
   the frame variance removed exactly (lowest ISLA ratio measured); write "the frame-estimate variance was ~0.07 of the 1.2x floor, the rest
   is the routing integral". Reference decision UNCHANGED until the HiLift ff lanes (within 3% of 0.1377 at ≤1.2x). Never call FRAME-FULL
   the reference before the HiLift readout.
-- **FRAME-FULL HiLift VERDICT + REFERENCE DECISION (2026-09-11, fp32, 180 val; results/frame_reduction_2026-09-11.json).** ff centre 0.1584/0.1617 → 0.1600
-  (+16.2%); ff centre+scale 0.1590/0.1552 → 0.1571 (+14.1%) vs 0.1377 → both PAY (≥7%), worse than RELFRAME +11%.
+- **FRAME-FULL HiLift VERDICT + REFERENCE DECISION (2026-09-11, fp32, 180 val; results/frame_reduction_2026-09-11.json).** ff center 0.1584/0.1617 → 0.1600
+  (+16.2%); ff center+scale 0.1590/0.1552 → 0.1571 (+14.1%) vs 0.1377 → both PAY (≥7%), worse than RELFRAME +11%.
   Reading: the HiLift price of leaving the plain mean is the MESHER PATTERN (0.131 body lengths), NOT positional information lost with the
   seeds (FRAME-FULL keeps the seeds and pays more). RULE FIRES → **ISLA REFERENCE CONFIGURATION = RELFRAME, total-measure scale**
   (frame_mode=relative, scale_mode=total_measure; rf_*_meas_*): DrivAerML 0.0552, density 1.235x (1.20/1.27), BENCH-consistent both
@@ -1626,10 +1626,10 @@ interior control @sec-nb-udrv-int-prereg.
   recurrence reading → 21 geo ≤ 3%, 210 cases 8–12%; data-quantity reading → both ≤ 3%. Discriminating cell = 210 cases (≥ 8% confirms
   recurrence; ≤ 3% refutes → 35-case price is data quantity). Priors: 21 geo 0.1014; 210 cases 0.0643. Do not grade before both land.
 - **RULING 2026-09-11 (Peter): no back-porting to released baselines.** GeoTransolver and Transolver are stable, released, in use, published; they
-  will NOT be modified. Measure-weighted pooling (MW), HT-centred datapipe (MWAW), query tokens etc. are RESEARCH VARIANTS used only to locate a
+  will NOT be modified. Measure-weighted pooling (MW), HT-centered datapipe (MWAW), query tokens etc. are RESEARCH VARIANTS used only to locate a
   property in the comparison; never write them as recommendations, options, or deployable models. Every transferable finding is written as a pro
   of ISLA, the new architecture. Resolves the open "baselines' frame in the fair comparison" question: released baselines = deployable comparison;
-  MW/MWAW variants = diagnostic, labelled as such wherever they appear.
+  MW/MWAW variants = diagnostic, labeled as such wherever they appear.
 - **RULING QUESTION CLOSED (2026-09-11).** The MWAW line's "RULING QUESTION OPEN: adopt HT CenterMesh as the baselines' frame" is MOOT:
   released GeoTransolver/Transolver are not modified (#sec-nb-ruling-released-baselines). MW / MWAW = "research variant, not the
   released model", diagnostic only; never a recommendation. Transferable findings are written as pros of ISLA. No further baseline
@@ -1714,18 +1714,18 @@ interior control @sec-nb-udrv-int-prereg.
   leaves the ratio unchanged"; the full-data gap is a model property at this protocol. Both halves evaluated at 10k cells. Scoreboard rows stay at 10k
   cells; the 20k numbers are a control. floor_hl_gt_* (physical drive) are stopped and are NOT a comparison.
 - **DEFLECTION SEALED TEST (2026-09-15): FALSIFIED.** On HiLift's deflection split (train 144 milder geometries, sealed test 36 most aggressive, 360 cases, fp32, 2 seeds) ISLA is 1.157x unit-direction GeoTransolver on pressure (1.108x velocity, 1.115x wall shear); degradation test/val 1.23x (ISLA) vs 1.25x (GT), within 0.03 on every field. Never write that ISLA extrapolates better in a geometry parameter; write 'both architectures degrade equally; the in-regime ordering carries through'. A geometry-CLASS split remains untested (no dataset). (#sec-nb-deflection-verdict)
-- **RELATIVE-FRAME DIVERGENCE AT WIDTH 512 (2026-09-15).** The reference configuration diverges at lr 1e-3 at width 512 (10k AND 80k cells; 30-epoch matrix), not at 192; the centered frame at 512 is stable; lr 5e-4 cures. Mechanism: token->slice routing hardens to one slice per token, anchors collapse to the centre (probe of epoch-30 checkpoints). NOT the head-frame singularity (present, gradient never moves the loss). Routing temperature 0.375 only delays by 3 epochs (refuted as fix). Recommendation: lr = 1e-3 x 192/width for ISLA's width ladder (Peter's decision pending). Never write that ISLA 'scales to width 512 at the protocol rate' or that the SCALE relative-frame corner has a valid number. `routing_logit_scale` (default 1.0, bitwise) is a recorded ablation knob, not a setting. (#sec-nb-relframe-divergence-matrix, -mechanism, -locmat2-verdict)
+- **RELATIVE-FRAME DIVERGENCE AT WIDTH 512 (2026-09-15).** The reference configuration diverges at lr 1e-3 at width 512 (10k AND 80k cells; 30-epoch matrix), not at 192; the centered frame at 512 is stable; lr 5e-4 cures. Mechanism: token->slice routing hardens to one slice per token, anchors collapse to the center (probe of epoch-30 checkpoints). NOT the head-frame singularity (present, gradient never moves the loss). Routing temperature 0.375 only delays by 3 epochs (refuted as fix). Recommendation: lr = 1e-3 x 192/width for ISLA's width ladder (Peter's decision pending). Never write that ISLA 'scales to width 512 at the protocol rate' or that the SCALE relative-frame corner has a valid number. `routing_logit_scale` (default 1.0, bitwise) is a recorded ablation knob, not a setting. (#sec-nb-relframe-divergence-matrix, -mechanism, -locmat2-verdict)
 - **MAINLINE PRUNING (2026-09-15).** The research class with all 54 constructor options is preserved at git tag `isla-research-full` (ed4e9e73). The mainline ISLA keeps: out_scalars, out_vectors, hidden, n_layers, n_slices, mlp_ratio, reference_length, use_measure_weights, fast_point_softmax, n_boundary_scalars, n_global_vectors, n_global_scalars, similarity_gauge, query_independent, n_decoder_layers, local_readout_rho, query_tokens, geo_checkpoint, n_query_scalars, query_scalar_scale, query_mass, support_tokens, frame_mode, scale_mode, geo_kernel, eps. Removed (write 'runnable at tag isla-research-full', never 'in the code'): odd_head, parity_fix(+gate), wake_tokens, latent_volume_tokens, raw_coord_channel, scale_conditioning, seed_mode=raw, second_moment_features, anchor_topk, query_density/neighbor features, query_local_features, use_local_features, n_anchors, interior_queries, center_mode measure/global (+frame_center/frame_scale), scale_mode=global, vector_basis true5/true7, measure_weight_power, routing_logit_scale. Checkpoints of kept configurations load unchanged (removed options at their former defaults are accepted).
 - **HiLift 1,260-case rung (2026-09-15).** Unit-direction GeoTransolver 0.0355 (seeds 0.0363/0.0348) vs ISLA constant-gauge prior 0.0405 (mt2_hl_lr1_seed42/43): GT ÷ ISLA 0.878 pressure, 0.900 velocity, 0.904 wall shear (fp32, 180 val). Reference configuration NOT measured at 1,260 (write so). Unit-direction Transolver (lr 3e-3) 0.0385 (seeds 0.0387/0.0383): T ÷ ISLA 0.952 pressure, 0.957 velocity, 0.969 wall shear; T ÷ GT 1.084 (results/udrv_1260_transolver_2026-09-16.json; #sec-nb-udrv-1260-transolver-verdict). Never write 'not yet compared' for this rung. (results/udrv_1260_reduction_2026-09-15.json; #sec-nb-udrv-1260-verdict)
 
 - **RECIPE CONFIG NAMES (2026-09-15).** The plain names carry the reference configuration: conf/model/isla_surface.yaml (relative frame, total-measure scale; formerly isla_surface_reference.yaml) and conf/model/isla_volume.yaml (formerly isla_volume_reference.yaml). The constant gauge is conf/model/isla_surface_constant_gauge.yaml (formerly isla_surface.yaml). isla_surface_reference.yaml and isla_volume_reference.yaml remain as deprecated pointers to the plain files; mt2_surface.yaml is deleted. Reading rule: book or results text written before 2026-09-15 that says isla_surface.yaml means the constant gauge, and text that says isla_surface_reference.yaml means today's isla_surface.yaml. Cluster recipe snapshots (recipe_globin, recipe_relint, ...) predate the rename and keep the old names, so the sbatch scripts against them are unaffected; lanes against a post-rename snapshot use model=isla_surface / model=isla_volume. Guard: unified_external_aero_recipe/tests/test_isla_configs.py composes all four names and the constant gauge. (#sec-nb-config-rename)
 - **MT2 ALIASES REMOVED (2026-09-15).** physicsnemo.experimental.nn.mt2 (import-path alias) and the MeshTransformer2 class alias are deleted from the mainline together with the recipe's mt2_surface.yaml; the only remaining mention of the old name is ISLA._legacy_class_names = ("MeshTransformer2",), which keeps checkpoint FILES written before the 2026-09-07 rename (MeshTransformer2.*.mdlus) loading. Write "ISLA" everywhere; never import nn.mt2 or MeshTransformer2 in new code or text. (#sec-nb-config-rename)
 - **CORNER-WLR VERDICT (2026-09-15): BETWEEN.** Reference configuration at the 512 x 80k DrivAerML corner, trained at the width learning rate 3.75e-4 (its 1e-3 lane diverged; RFDIV): fp32 in-family pressure 0.0442 (seeds 0.0449/0.0434, 48 cars at 80k) = 1.054x GeoTransolver 0.0419, 1.032x constant gauge 0.0428, 1.025x Transolver 0.0431. Parity bar (<=3%) MISSED by 2.4 points; falsifier (>1.10x) NOT fired -> "the reference frame's price at scale", frame decision unchanged. Sample-frame density factor at 80k: 1.05 (GT 10.5, T 14.9, cg 16.6, similarity gauge 1.09) -> consistency bar met. Evaluated at 10k cells (8x coarser than training): 0.0591, density factor 1.85. Write the rate confound every time: the reference at the corner trained at 3.75e-4, the other three arms at their protocol rates, so the 5% may include a rate/progress component; no protocol-rate reference number exists at the corner (it diverged). Never write "the three architectures are within 3% at the corner" without "the reference configuration is 1.05x". (results/corner_wlr_reduction_2026-09-15.json; #sec-nb-corner-wlr-verdict)
-- **CG-WLR VERDICT (2026-09-16): FRAME OWNS THE EXCESS.** Constant-gauge variant at the 512 x 80k corner under lr 3.75e-4: fp32 pressure 0.0424 (seeds 0.0418/0.0429) = 0.990x its 1e-3 value 0.0428 -> the rate costs the centered construction nothing; reference (3.75e-4) / constant gauge (3.75e-4) = 1.042 = matched-rate frame price at scale. The CORNER-WLR rate confound is CLOSED: write "the reference frame's price at scale is about 5% (4.2% at matched rate)" without a rate qualifier. Density factor 14.2 (cg stays sample-inconsistent). The 0.0424 is a CONTROL: it does not enter the scoreboard corner row (which keeps protocol-rate cg 0.0428 and width-rate reference 0.0442, each labelled by its rate); may be cited as "the constant gauge at the width rate is 1.01x GeoTransolver". Width rule measured on both constructions at 512: neutral for centered, necessary for relative. (results/cg_wlr_reduction_2026-09-16.json; #sec-nb-cg-wlr-verdict)
+- **CG-WLR VERDICT (2026-09-16): FRAME OWNS THE EXCESS.** Constant-gauge variant at the 512 x 80k corner under lr 3.75e-4: fp32 pressure 0.0424 (seeds 0.0418/0.0429) = 0.990x its 1e-3 value 0.0428 -> the rate costs the centered construction nothing; reference (3.75e-4) / constant gauge (3.75e-4) = 1.042 = matched-rate frame price at scale. The CORNER-WLR rate confound is CLOSED: write "the reference frame's price at scale is about 5% (4.2% at matched rate)" without a rate qualifier. Density factor 14.2 (cg stays sample-inconsistent). The 0.0424 is a CONTROL: it does not enter the scoreboard corner row (which keeps protocol-rate cg 0.0428 and width-rate reference 0.0442, each labeled by its rate); may be cited as "the constant gauge at the width rate is 1.01x GeoTransolver". Width rule measured on both constructions at 512: neutral for centered, necessary for relative. (results/cg_wlr_reduction_2026-09-16.json; #sec-nb-cg-wlr-verdict)
 - **WIDTH LEARNING-RATE RULE ADOPTED PROVISIONALLY (2026-09-17, engineering decision made autonomously; Peter may overrule).** ISLA protocol learning rate: 1e-3 at hidden 192; above 192, lr = 1e-3 x 192 / hidden (3.75e-4 at 512). Grounds: RFDIV (relative frame diverges at 1e-3 at width 512, mechanism = routing hardening), CORNER-WLR (trains cleanly under the rule), CG-WLR (rule costs the centered variant nothing: 0.0424 vs 0.0428). Recorded in conf/model/isla_surface.yaml comments and the recipe README. Write "under the width learning-rate rule" whenever quoting a width>192 ISLA number. Alternative not pursued yet: a rate-free routing fix (would need its own preregistration). (#sec-nb-lr-rule-decision)
 - **CAP VERDICT (2026-09-17; results/cap_reduction_2026-09-17.json; #sec-nb-cap-verdict).** OVERFIT-1 one-car instrument (constant gauge, seed 42, fp32 at 10k): slices 128/512/1024 -> 0.1058/0.1096/0.1052 vs baseline 0.1064 = NULL (slice hypothesis FALSIFIED; training loss unchanged at 0.0004); width 384 (lr 5e-4) 0.0948 = CARRIES (-10.9%, loss 0.0002; shared axis per SCALE, not ISLA-specific); depth 24 0.1081 NULL; MLP x8 0.1019 NULL (-4.2%). No axis closes (bar 0.0852) -> no 435-car pair. KEY READING: at 40k evaluation cells every ISLA arm is 0.0806-0.0857 vs baselines 0.078/0.079 (1.03-1.10x) while at 10k it is 1.24-1.43x; BENCH unif ladder at 435 cars: ISLA cg 0.0561 (10k) -> 0.0540 (20k) -> 0.0530 (40k) vs GT 0.0509/0.0508/0.0506, T 0.0520/0.0519/0.0518 -> GT/ISLA 0.91 at 10k, 0.955 at 40k. Write "about half of the reference-size DrivAerML deficit is the finite-sample noise of ISLA's slice integrals at 10k query cells; the baselines are flat in count above 10k". Never write "ISLA lacks capacity" without "width is a shared axis". Next: QUAD-VAR (stratified equal-area inference draw, eval-only) with its own prereg.
-- **QUAD-VAR PREREG (2026-09-17; #sec-nb-quadvar-prereg).** Evaluation-only: StratifiedSubsampleMesh (systematic draw along the Morton order of cell centroids; inclusion n/N, weights N/n, same convention as the independent draw) replaces SubsampleMesh at inference; lanes bench/bench_lanes_strat.tsv (cg iw_mt2_lr1e3, reference rf_dr_mt2_meas, GT, Transolver; 10k and 20k), outputs bench_evals/<run>/strat_<count>. Bars: supported if strat-10k <= 0.0546 (cg) / 0.0539 (reference); falsified if >= 0.0555 / 0.0548; baselines must move < 1% (control); strat-20k <= unif-20k. Do not quote any strat number as a scoreboard row until the verdict; if supported it is a labelled row ("stratified inference draw"), never a silent replacement of the 10k iid numbers.
-- **QUAD-VAR VERDICT (2026-09-17; results/quadvar_reduction_2026-09-17.json; #sec-nb-quadvar-verdict).** Stratified (Morton systematic, inclusion n/N) 10k draw, fp32, 48 cars: ISLA cg 0.0537 (0.0545/0.0529) vs iid 0.0561 (bar 0.0546 MET, 79% of the 10k->40k gain); reference 0.0531 (0.0525/0.0537) vs 0.0554 (bar 0.0539 MET); BUT CONTROL FIRED: GT 0.0498 vs 0.0509 (-2.2%), Transolver 0.0509 vs 0.0520 (-2.1%). Reading: ~2 points of every arm = the metric's own finite-sample estimator (shared); ISLA-specific excess = 2.1-2.2 points (~40% of the count slope). GT/ISLA cg 0.907 (iid 10k) -> 0.927 (strat 10k) -> 0.955 (iid 40k). Neither prereg derivation alone right. Stratified draw = recommended inference sampler for all models (free, same convention) but enters the scoreboard ONLY as a complete labelled row; headline ratios stay iid. Write "the ISLA-specific part a better draw removes is about two points"; never "QUAD-VAR closes the gap".
+- **QUAD-VAR PREREG (2026-09-17; #sec-nb-quadvar-prereg).** Evaluation-only: StratifiedSubsampleMesh (systematic draw along the Morton order of cell centroids; inclusion n/N, weights N/n, same convention as the independent draw) replaces SubsampleMesh at inference; lanes bench/bench_lanes_strat.tsv (cg iw_mt2_lr1e3, reference rf_dr_mt2_meas, GT, Transolver; 10k and 20k), outputs bench_evals/<run>/strat_<count>. Bars: supported if strat-10k <= 0.0546 (cg) / 0.0539 (reference); falsified if >= 0.0555 / 0.0548; baselines must move < 1% (control); strat-20k <= unif-20k. Do not quote any strat number as a scoreboard row until the verdict; if supported it is a labeled row ("stratified inference draw"), never a silent replacement of the 10k iid numbers.
+- **QUAD-VAR VERDICT (2026-09-17; results/quadvar_reduction_2026-09-17.json; #sec-nb-quadvar-verdict).** Stratified (Morton systematic, inclusion n/N) 10k draw, fp32, 48 cars: ISLA cg 0.0537 (0.0545/0.0529) vs iid 0.0561 (bar 0.0546 MET, 79% of the 10k->40k gain); reference 0.0531 (0.0525/0.0537) vs 0.0554 (bar 0.0539 MET); BUT CONTROL FIRED: GT 0.0498 vs 0.0509 (-2.2%), Transolver 0.0509 vs 0.0520 (-2.1%). Reading: ~2 points of every arm = the metric's own finite-sample estimator (shared); ISLA-specific excess = 2.1-2.2 points (~40% of the count slope). GT/ISLA cg 0.907 (iid 10k) -> 0.927 (strat 10k) -> 0.955 (iid 40k). Neither prereg derivation alone right. Stratified draw = recommended inference sampler for all models (free, same convention) but enters the scoreboard ONLY as a complete labeled row; headline ratios stay iid. Write "the ISLA-specific part a better draw removes is about two points"; never "QUAD-VAR closes the gap".
 - **QUAD-VAR-HL PREREG (2026-09-17; #sec-nb-quadvar-hl-prereg).** Stratified draw on the HiLift 35-case checkpoints (lad_hl_mt2_super_scarce, rf_hl_mt2_meas_super_scarce, udrv_hl_gt_super_scarce_lr3e3, udrv_hl_transolver_super_scarce_lr3e3; 10k and 20k; lanes bench/bench_lanes_strat_hl.tsv; dataset highlift_bench_super_scarce_strat). Count slopes (BENCH unif): cg 0.1390/0.1367/0.1362, reference 0.1551/-/0.1506, GT 0.1104/0.1103/0.1100, T 0.1148/0.1148/0.1145. Bars: "free improvement on both datasets" if no arm is worse by >1% at either count and ISLA gains stay within the count slope (cg >= 0.1362, reference >= 0.1506); "dataset-specific" if any arm worse by >1% (then narrow the README recommendation to DrivAerML). Prediction: ISLA 1-2% better, baselines <1%, ratios move <= 1 point.
 - **QUAD-VAR-HL VERDICT (2026-09-17; results/quadvar_hl_reduction_2026-09-17.json; #sec-nb-quadvar-hl-verdict).** HiLift 35-case, strat 10k vs iid 10k: cg 0.1371 vs 0.1390 (-1.4%), reference 0.1522 vs 0.1551 (-1.9%), GT 0.1108 vs 0.1104 (+0.35%), T 0.1149 vs 0.1148 (+0.1%); strat 20k: 0.1351 / 0.1497 / 0.1096 / 0.1143. Both ISLA gains inside the count slope (above the iid 40k values 0.1362 / 0.1506; ~2/3 of the slope). FREE IMPROVEMENT ON BOTH DATASETS; GT/cg at 35 cases 0.794 -> 0.808. Baselines flat on HiLift => the DrivAerML 2-point baseline shift was that dataset's metric estimator, not the draw. Write "the stratified draw is never worse and helps the measure-consistent model most"; the HiLift 35-case deficit is not count noise.
 - **DEFICIT ANATOMY (2026-09-17; #sec-nb-deficit-anatomy).** DrivAerML reference-size gap (GT ÷ ISLA cg 0.90-0.91 at 10k iid) = ~2 pts metric estimator (shared) + ~2 pts ISLA draw variance (stratified draw removes) + ~3 pts weight-spread count noise (removed only by more cells; 0.955 at 40k) + 4-5 pts trained-function deficit (width = shared axis; not slices/depth/MLP) + 0 frame price at reference size. Write "about half of the 10k gap is finite-sample noise; at deployment resolution the deficit is 4 to 5%, at the corner 2 to 5%". Never sum these as exact; they are approximate, from different instruments (BENCH ladders, QUAD-VAR, CAP, SCALE). The 35-case HiLift 25-28% is a different mechanism (mesher-pattern cue); do not fold it in.
@@ -1747,15 +1747,26 @@ interior control @sec-nb-udrv-int-prereg.
   residual (that was the CPU small-model probe, now superseded).
 
 ## Ruling 2026-09-18: the constant-gauge variant leaves the main results
-- The legacy centred variant (plain-mean centre, fixed length unit) appears in
-  no main figure or table; only in collapsed notes labelled "(diagnostic)".
+- The legacy centered variant (plain-mean center, fixed length unit) appears in
+  no main figure or table; only in collapsed notes labeled "(diagnostic)".
   Rungs measured only on it (510 and 1,260 wing cases, DrivAerML 14–218
   cars) are "reference not yet measured" in the scoreboard.
 - Pose test and learning-rate grid were measured only on it: chapters label
-  them "measured on the legacy centred variant; re-measurement running"
+  them "measured on the legacy centered variant; re-measurement running"
   until POSE-REF / LR-REF (#sec-nb-refprops-prereg) report.
 - Deficit anatomy on the reference configuration (quadvar_reduction, isla_ref):
   gap 8.0 pts at the independent 10k draw (ratio 0.920); draw variance +1.8;
   count noise +3.1 (→0.968); positional +2.4 (raw-coordinate diagnostic on
   the legacy variant); form remainder +0.8. State "more than half is noise;
   about two and a half points positional; under a point form".
+
+## Naming ruling 2026-09-18 (Peter)
+- "ISLA" alone names the model as shipped; "reference configuration" is not
+  a name (describe the configuration once in chapters 2 and 9). Variants
+  carry their variant name.
+- "GeoTransolver", "Transolver", "GeoTransolver-volume" alone name the public
+  models; never "released" as a qualifier.
+- A baseline with ISLA features added is an *ablation* written as
+  "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe
+  (ablation)"; never "research variant", never "GeoTransolver, measure-weighted
+  pooling" (which reads as a variant of the public model).

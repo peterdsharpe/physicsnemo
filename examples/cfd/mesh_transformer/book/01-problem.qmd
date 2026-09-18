@@ -54,7 +54,7 @@ global scalar input.
 #| fig-cap: >
 #|   The mapping this book studies, on the running example (ideal flow
 #|   around a lifting Joukowski airfoil at 6° incidence, exact closed form).
-#|   Left, the input: boundary cells with their outward normals (grey) and
+#|   Left, the input: boundary cells with their outward normals (gray) and
 #|   measures, plus the one global vector input this instance has, the unit
 #|   freestream direction. Right, the output: the surface pressure
 #|   coefficient along the boundary and the interior pressure field in the
@@ -346,7 +346,7 @@ out = "| sampling of the same airfoil | area-weighted relative L2 (the book's me
 for JJ, lab in ((Ju, "equal-arclength cells"), (Jm, "cells clustered at the leading edge")):
     out += f"| {lab} | {rel_l2(JJ, JJ['w']):.3f} | {rel_l2(JJ, np.ones(len(JJ['w']))):.3f} |\n"
 print(out)
-print(": One prediction error, a smooth bump of amplitude 0.35 in the pressure coefficient centred on the "
+print(": One prediction error, a smooth bump of amplitude 0.35 in the pressure coefficient centered on the "
       "leading edge, scored against the exact Joukowski solution under two samplings of the same surface "
       "with 60 cells each. The area-weighted relative L2 agrees between the samplings to quadrature error; "
       "the per-point relative L2 rises when the mesher places more cells where the error is. "
@@ -371,7 +371,7 @@ norm of the standardized label, and absolute values are comparable only
 within one dataset and one pipeline. The quantity that carries across is
 the *ratio* between two models scored on the same cases. **Every
 cross-architecture ratio in the book is the named baseline's error divided
-by ISLA's error on the same cases, so a ratio above one favours ISLA**;
+by ISLA's error on the same cases, so a ratio above one favors ISLA**;
 this convention is stated here once and not restated per table.
 
 **The reporting instrument is float32 inference on the final-epoch
@@ -379,7 +379,7 @@ checkpoint.** Training runs in bfloat16 (@sec-protocol); scoring in bfloat16
 adds an architecture-dependent offset of several percent to the mean error,
 larger for GeoTransolver and Transolver than for ISLA, so a bfloat16
 comparison would flatter ISLA. No bfloat16 number appears in the book
-without being labelled as such (@sec-nb-fp32-instrument).
+without being labeled as such (@sec-nb-fp32-instrument).
 
 @fig-metric-calibration calibrates the scale of the metric on
 HiLiftAeroML by scoring three parameter-free reference predictors beside
@@ -398,13 +398,13 @@ when it beats the best constant.
 #|   scale (pressure relative to the freestream, p − p_∞, so the error is
 #|   scaled by the pressure variation over the surface, not by its absolute
 #|   level; geometric mean over cases; scored in bfloat16, which predates
-#|   the float32 instrument and is labelled as such; not the recipe metric), for
-#|   three parameter-free reference predictors (grey) and the two released
+#|   the float32 instrument and is labeled as such; not the recipe metric), for
+#|   three parameter-free reference predictors (gray) and the two
 #|   baselines trained on 35 cases, one seed, at the physical-velocity
 #|   input scale. One seed suffices because this is a
 #|   calibration of the metric's scale, not a comparison between
 #|   architectures; the unit-direction comparison on the recipe metric is in
-#|   @sec-data-efficiency. How to read this: the grey bars are the scale of
+#|   @sec-data-efficiency. How to read this: the gray bars are the scale of
 #|   the metric, 1.00 is "predict the freestream pressure everywhere" and
 #|   0.93 is the best any constant per case can do. It does not show
 #|   recipe-metric values, and the baseline bars measure the input scale of
@@ -488,7 +488,7 @@ quantity, 3e-5 in float32 and several percent in bfloat16
 verify each, are tabulated in @sec-mt2-contracts.
 
 A property that is *not* enforced by construction, GeoTransolver's pose
-behaviour for instance, is measured as an accuracy degradation under
+behavior for instance, is measured as an accuracy degradation under
 transformed inputs and reported as a number (@sec-pose), never as a pass.
 
 ### The properties a PDE surrogate should have {#sec-four-properties}
@@ -502,7 +502,7 @@ differ in kind.
 | spatial equivariance | a rigidly moved input gives the rigidly moved output | a float64 contract for ISLA; an accuracy under transformed inputs for GeoTransolver and Transolver, which consume raw coordinates (@sec-pose) |
 | global interaction | every boundary patch can influence every output | by construction in every architecture compared: slice routing over the whole boundary, no neighbourhoods or cutoffs |
 | discretization invariance | the answer does not depend on how the surface was meshed or sampled | measured as robustness to a 10:1 sampling-density bias and as convergence under refinement (@sec-consistency-bench); an acceptance criterion, below |
-| units invariance | no weight sees a metre; the measure enters only as quadrature weight | coordinates nondimensionalized by every model; exact scale covariance a contract for the reference configuration and the similarity-gauge variant only; measure semantics tested by the density probe |
+| units invariance | no weight sees a meter; the measure enters only as quadrature weight | coordinates nondimensionalized by every model; exact scale covariance a contract for ISLA and the similarity-gauge variant only; measure semantics tested by the density probe |
 
 ### Discretization invariance is an acceptance criterion, not a metric {#sec-principle}
 
@@ -557,7 +557,7 @@ a comparison that departs from it says so in the same sentence.**
 
 Because the rungs of a ladder share one rate and one schedule, a difference
 between rungs is a difference in data and nothing else. When a result
-favours one architecture, the strongest controls for the other (a higher
+favors one architecture, the strongest controls for the other (a higher
 learning rate, doubled epochs, a same-family architecture without the
 geometry encoder) are run under the same recipe before the result is stated.
 

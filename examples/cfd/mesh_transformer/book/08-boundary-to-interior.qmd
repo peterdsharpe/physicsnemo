@@ -1,8 +1,8 @@
 # Boundary to interior: predicting the flow from the surface {#sec-interior}
 
 **On the one task that asks for the flow rather than the wall pressure,
-how an architecture treats an interior point decides the result.** ISLA's
-reference configuration admits its interior queries as interacting tokens
+how an architecture treats an interior point decides the result.** ISLA
+admits its interior queries as interacting tokens
 and gives them the signed distance to the wall, the same input
 GeoTransolver's volume configuration receives. On the 48 DrivAerML
 validation cars, in float32, it leads GeoTransolver-volume on interior
@@ -85,7 +85,7 @@ keep = np.abs(zeta - complex(-0.08, 0.08)) > abs(1 - complex(-0.08, 0.08)) * 1.0
 q = q[keep][:140]
 ax.plot(q[:, 0], q[:, 1], "o", ms=4, mfc=AQUA, mec="white", mew=0.6, zorder=5)
 ax.text(-2.5, 1.35, "input: boundary sample (black), interior query points (aqua)", fontsize=9.5, color=INK)
-ax.text(-2.5, -1.4, "target: the field at the query points (colour: exact $C_p$)", fontsize=9.5, color=INK2)
+ax.text(-2.5, -1.4, "target: the field at the query points (color: exact $C_p$)", fontsize=9.5, color=INK2)
 sm = plt.cm.ScalarMappable(norm=norm, cmap=DIVERGING); sm.set_array([])
 cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.02); cb.set_label("pressure coefficient $C_p$ [–]", color=INK2)
 plt.show()
@@ -111,7 +111,7 @@ mean-subtracted field, so an eddy-viscosity value of 0.10 is not a 10% error
 in physical $\nu_t$: orderings under this frozen metric stand, but the
 number is not a physical percentage. The reported value is the arithmetic
 mean over the 48 cars; ratios are GeoTransolver-volume's error divided by
-the ISLA arm's, so above one favours ISLA (@sec-metrics).
+the ISLA arm's, so above one favors ISLA (@sec-metrics).
 
 **Protocol.** 500 epochs, learning rate 1e-3 for every arm, bfloat16
 training, no augmentation, two seeds unless a row says three, float32
@@ -171,7 +171,7 @@ chapter's ISLA is the interacting one.
 
 | architecture | what an interior point is | what it knows about the geometry | query independence |
 |---|---|---|---|
-| GeoTransolver-volume | an interacting token, routed to slices with the other 9,999 interior points | its signed distance to the wall and the nearest wall normal; ball-query features over neighbouring interior points at six radii; no surface tokens | no |
+| GeoTransolver-volume | an interacting token, routed to slices with the other 9,999 interior points | its signed distance to the wall and the nearest wall normal; ball-query features over neighboring interior points at six radii; no surface tokens | no |
 | ISLA, passive decode | a passive reader: four read blocks that consult the surface-encoder's slice states and boundary tokens | the relational invariants of its position against the surface anchors and a unit normal at the query (a covariant blend of anchor normals, or the wall normal from the signed-distance gradient) | yes, exactly |
 | ISLA, query tokens (reference) | an interacting token in the encoder alongside the surface tokens, with a learned type embedding and routing weight | the same relational invariants, plus the wall normal and the signed distance as a query scalar | no |
 | exact-kernel decoder (an earlier design of this program) | the evaluation point of a discretized boundary integral with learned densities on the exact Laplace kernels | the whole boundary, through the kernels | yes, exactly |
@@ -221,7 +221,7 @@ field, and the passive decode trails by a factor of three.**
 rows = [
     ("GeoTransolver-volume: interior points as interacting tokens with signed distance and wall normal; no surface tokens", "none", "27.6M",
      {f: rel["gt_vol_unit"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA, reference configuration: query tokens + signed distance (relative frame, total-measure scale, corrected boundary measure)", "10,000 cells", "8.9M",
+    ("ISLA: query tokens + signed distance (relative frame, total-measure scale, corrected boundary measure)", "10,000 cells", "8.9M",
      {f: rel["relint2"][f]["seeds"] for f, _ in FIELDS}),
     ("ISLA, similarity-gauge variant: query tokens + signed distance", "10,000 cells", "8.9M",
      {f: rel["ref_surf10k_gauge"][f]["seeds"] for f, _ in FIELDS}),
@@ -246,7 +246,7 @@ print(out)
 print(": Interior relative L2 error on the 48 DrivAerML validation cars in float32 (arithmetic mean over cars, then over "
       "seeds; per-seed pressure in parentheses), 10,000 interior queries per car, 500 epochs, learning rate 1e-3. The "
       "boundary-sample column names which surface sample the ISLA and exact-kernel arms consumed; GeoTransolver-volume "
-      "reads none. Ratios are GeoTransolver-volume ÷ arm, so above one favours the ISLA arm. The arms are not "
+      "reads none. Ratios are GeoTransolver-volume ÷ arm, so above one favors the ISLA arm. The arms are not "
       "resource-matched and do not receive the same inputs (the collapsed note in @sec-interior-task). Data: "
       "results/relint2_reduction_2026-09-14.json (GeoTransolver-volume and the three query-token + signed-distance rows); "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (the rest). {#tbl-interior}")
@@ -258,11 +258,11 @@ print(": Interior relative L2 error on the 48 DrivAerML validation cars in float
 #|   Interior pressure error by architecture on the 48 DrivAerML validation
 #|   cars, float32. Bars are seed means of the per-car arithmetic-mean
 #|   relative L2; dots are the individual seeds. The label above each bar is
-#|   the ratio GeoTransolver-volume ÷ arm (above one favours the ISLA arm).
-#|   Colours follow the book's key: GeoTransolver-volume red, ISLA's reference
+#|   the ratio GeoTransolver-volume ÷ arm (above one favors the ISLA arm).
+#|   Colors follow the book's key: GeoTransolver-volume red, ISLA's reference
 #|   configuration blue, its similarity-gauge variant light blue, the passive
 #|   decodes hatched light blue, and the exact-kernel decoder (an earlier
-#|   design, not one of the book's architectures) grey. How to read this: it
+#|   design, not one of the book's architectures) gray. How to read this: it
 #|   shows the pressure column of @tbl-interior only; velocity and eddy
 #|   viscosity rank the arms the same way except among the query-token arms,
 #|   where every signed-distance arm leads on velocity and trails on eddy
@@ -355,7 +355,7 @@ configuration is the control: its predictions at the sentinels are
 identical whatever else is queried. Data:
 results/isla_qt_companion_dependence_2026-09-08.json. {#tbl-interior-companion}
 
-Read against the headline: the reference configuration's pressure deficit
+Read against the headline: ISLA's pressure deficit
 to GeoTransolver-volume is a few thousandths of relative L2 and its
 velocity lead a few hundredths; querying a fifth of the training count
 costs more than either margin, and querying twice the training count gains
@@ -394,10 +394,10 @@ not a measured cause.
 #|   bands fixed before evaluation; within each band the per-car relative L2
 #|   is computed over that band's points and averaged over the 48 cars. Lines
 #|   are ratios of two-seed means (GeoTransolver-volume ÷ arm: above one
-#|   favours the arm); small markers are the paired per-seed ratios (filled
+#|   favors the arm); small markers are the paired per-seed ratios (filled
 #|   = seed 42, open = seed 43). Left, pressure; right, velocity. The
 #|   percentage under each band is its share of the sampled points. The large
-#|   hollow grey marker is the exact-kernel decoder's far-band pressure, whose
+#|   hollow gray marker is the exact-kernel decoder's far-band pressure, whose
 #|   output there is identically zero (see @sec-interior-negatives); it is
 #|   not evidence of accuracy. How to read this: a falling line means the arm
 #|   loses more ground as queries move away from the body. It does not show
@@ -423,11 +423,11 @@ for ax, field, title in zip(axes, ("pressure", "velocity"), ("pressure $C_p$", "
         ratio = [gi["mean"] / ai["mean"] for ai, gi in zip(a, g)]
         ax.plot(range(3), ratio, color=color, ls=ls, lw=1.8, zorder=3)
         for i, (ai, gi) in enumerate(zip(a, g)):
-            artefact = key == "mt1k_vol" and field == "pressure" and bands[i] == "far"
+            artifact = key == "mt1k_vol" and field == "pressure" and bands[i] == "far"
             for s_idx, mfc in enumerate((color, "white")):
                 r = gi["seeds"][s_idx] / ai["seeds"][s_idx]
-                ax.plot([i], [r], marker="o", ms=8 if artefact else 5, ls="none", mfc="white" if artefact else mfc,
-                        mec=color, mew=1.6 if artefact else 1.2, zorder=4)
+                ax.plot([i], [r], marker="o", ms=8 if artifact else 5, ls="none", mfc="white" if artifact else mfc,
+                        mec=color, mew=1.6 if artifact else 1.2, zorder=4)
         labels.append([math.log10(ratio[-1]), name, color])
     labels.sort()
     for j in range(1, len(labels)):
@@ -446,7 +446,7 @@ plt.tight_layout(); plt.show()
 
 The near-wall band, where a local-detail deficit would show first, is the
 passive decode's *best* band on every field. The reading is mechanical:
-ISLA's slices and anchors are surface-centred and its read blocks consult
+ISLA's slices and anchors are surface-centered and its read blocks consult
 slice states and boundary tokens, so a query 10 m into the wake has nothing
 off-surface to read, while GeoTransolver-volume's interior tokens supply
 that context to each other. Two cautions about the far band: it holds a few
@@ -598,7 +598,7 @@ a training-time sampling law is not a deployable remedy
 (results/farwake_far_field_shells_2026-09-11.json). *Query-side inputs:*
 measure-weighted surface-patch integrals at three radii around each query
 leave eddy viscosity unchanged within the falsifier; a query-density scalar
-and a nearest-neighbour channel gain nothing, and both read the
+and a nearest-neighbor channel gain nothing, and both read the
 discretization rather than the physics, so they are excluded by the
 principle of @sec-principle regardless of the result
 (results/qtdens_reduction_2026-09-10.json).
@@ -627,10 +627,10 @@ print(": The interior standings below full data (ISLA similarity-gauge variant, 
 change in data with the inputs matched, is what GeoTransolver-volume's
 parameters still buy. Two qualifications bound it: the metric is on the
 standardized viscosity, so a ratio there is an ordering under that
-centring and not a physical percentage; and DrivAerML's closure is a hybrid
+centering and not a physical percentage; and DrivAerML's closure is a hybrid
 RANS/LES model whose modeled viscosity depends on a grid or filter length,
-so a query's neighbours in the volume mesh carry information about the
-discretization as well as the flow. The null of the density and neighbour
+so a query's neighbors in the volume mesh carry information about the
+discretization as well as the flow. The null of the density and neighbor
 channels weakens the reading that GeoTransolver-volume's local aggregation
 recovers discretization rather than a physical wall feature, without ruling
 out a mechanism those channels do not reproduce.

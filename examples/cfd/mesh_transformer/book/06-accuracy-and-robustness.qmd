@@ -1,6 +1,6 @@
 # Accuracy at full data, and robustness {#sec-full-data}
 
-**At full DrivAerML data the released baselines are a few percent more
+**At full DrivAerML data the baselines are a few percent more
 accurate than ISLA; off the tuned operating point, ISLA is the
 configuration that survives.** With every model fed the same inputs and
 scored in float32, GeoTransolver and Transolver lead ISLA's reference
@@ -8,9 +8,9 @@ configuration on surface pressure by 7 to 10% on a 10,000-cell draw, a gap
 whose measured parts are laid out in @sec-deficit-anatomy. What separates
 the architectures is what happens when the evaluation departs from the
 training conditions. Under a 10:1 sampling-density bias ISLA's relative
-frame degrades 1.2x where every configuration that centres on the sampled
+frame degrades 1.2x where every configuration that centers on the sampled
 points degrades 10 to 16x; under refinement it converges toward one answer
-while the released baselines do not; in arbitrary poses ISLA's exact
+while the baselines do not; in arbitrary poses ISLA's exact
 covariance is worth 6% and 19% against rotation-augmented baselines; and it
 holds its accuracy across a decade of learning rate where GeoTransolver
 loses several-fold (@sec-robustness-lr). Across a flow-regime boundary
@@ -19,9 +19,9 @@ nothing tested generalizes.
 The metric everywhere is the area-weighted relative L2 of surface pressure
 in float32 (@sec-metrics), and a ratio is baseline ÷ ISLA, above one
 favouring ISLA. Every ISLA number in this chapter's figures and tables is
-the reference configuration unless a collapsed note says otherwise; the
-program's earlier configuration, the legacy centred variant (plain-mean
-centre, constant length unit; @sec-mt2-variants), appears only inside such
+ISLA unless a collapsed note says otherwise; the
+program's earlier configuration, the legacy centered variant (plain-mean
+center, constant length unit; @sec-mt2-variants), appears only inside such
 notes, where a mechanism was first established on it. The scoreboard
 (@sec-scoreboard) has every DrivAerML row with seeds and artifacts; this
 chapter explains what stands behind the rows.
@@ -95,13 +95,13 @@ g, cg, t, sg = (SC[k] for k in ("geotransolver_unit_512x80k", "isla_constant_gau
 ref_c = CW["in_family_80k_seed_mean"]
 print(f"At hidden width 512 and 80,000 sampled cells per car, in float32 and two seeds, GeoTransolver scores {g['in_family']:.4f}, "
       f"Transolver {t['in_family']:.4f}, the similarity-gauge variant {sg['in_family']:.4f}, "
-      f"and the reference configuration, which trains there only under the width learning-rate rule of @sec-using-lr, {ref_c:.4f} "
-      f"(GeoTransolver ÷ reference {g['in_family']/ref_c:.2f}). The legacy centred variant (diagnostic) scores {cg['in_family']:.4f} "
+      f"and ISLA, which trains there only under the width learning-rate rule of @sec-using-lr, {ref_c:.4f} "
+      f"(GeoTransolver ÷ reference {g['in_family']/ref_c:.2f}). The legacy centered variant (diagnostic) scores {cg['in_family']:.4f} "
       f"at the protocol rate and {CGW['cg_wlr_80k_seed_mean']:.4f} retrained at the reference's rate, so the reference's corner excess "
       f"({(CGW['ratio_reference_wlr_to_cg_wlr']-1)*100:.0f}%) is the frame's and not the rate's. Training cost in GPU-hours: "
-      f"GeoTransolver {g['gpu_hours']:.1f}, Transolver {t['gpu_hours']:.1f}, legacy centred variant {cg['gpu_hours']:.1f}. Density "
+      f"GeoTransolver {g['gpu_hours']:.1f}, Transolver {t['gpu_hours']:.1f}, legacy centered variant {cg['gpu_hours']:.1f}. Density "
       f"factor at the corner, sample frame: GeoTransolver {g['density_factor']:.1f}x, Transolver {t['density_factor']:.1f}x, "
-      f"similarity-gauge variant {sg['density_factor']:.2f}x, reference {CW['density_factor_80k']:.2f}x, legacy centred variant "
+      f"similarity-gauge variant {sg['density_factor']:.2f}x, reference {CW['density_factor_80k']:.2f}x, legacy centered variant "
       f"{cg['density_factor']:.1f}x. Deploy an 80,000-cell model "
       "at its training count: queried at 10,000 cells the corner models are well above their native error. Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json (scale corner), results/corner_wlr_reduction_2026-09-15.json, "
@@ -109,7 +109,7 @@ print(f"At hidden width 512 and 80,000 sampled cells per car, in float32 and two
 ```
 :::
 
-The reference configuration is not yet trained on the 510- and 1,260-case
+ISLA is not yet trained on the 510- and 1,260-case
 wing rungs, which the scoreboard lists among the measurements still to be
 made (@sec-scoreboard). The comparison above is fair by the criteria of
 @sec-fair-comparison, and narrow: two or three seeds, one validation split
@@ -157,8 +157,8 @@ print(f"2. **More cells.** From the stratified 10,000-cell draw to an independen
       "cells or a weight-changing quadrature can reduce; retraining under an area-proportional draw buys only a few percent.\n")
 print(f"What remains at 40,000 cells, {(1 - r_ind40) * 100:.1f} points, is the trained function's deficit. Two further experiments "
       "split it:\n")
-print(f"3. **Raw coordinates as a diagnostic.** Appending each cell's centred coordinates and normal to ISLA's seeds, which breaks "
-      f"the contracts by design, recovers {p_pos:.1f} points at 435 cars (measured on the legacy centred variant, whose frame the "
+print(f"3. **Raw coordinates as a diagnostic.** Appending each cell's centered coordinates and normal to ISLA's seeds, which breaks "
+      f"the contracts by design, recovers {p_pos:.1f} points at 435 cars (measured on the legacy centered variant, whose frame the "
       "raw channel presupposes). That is the price of denying the model absolute position, and it is the honest cost of exact pose "
       f"invariance and sampling consistency. The diagnostic's own density factor rises to {eqp['density_factor']:.0f}x, showing what "
       "it reads; it is never a configuration.")
@@ -166,10 +166,10 @@ print(f"4. **Routing multiplicity.** Transolver's physics attention routes each 
       f"ISLA routes it once. On a one-car overfitting instrument, eight independent routings per block lower ISLA's one-car floor by "
       f"{heads_gain:.0%} relative to a same-code single-routing control, monotone in the head count, and put it below both baselines "
       f"at 40,000 evaluation cells. The remaining {p_form:.1f} point is therefore attributed to the single-routing form; whether the "
-      "gain transfers to 435 cars is a running study (@sec-program-status), and until it lands the reference configuration is "
+      "gain transfers to 435 cars is a running study (@sec-program-status), and until it lands ISLA is "
       "single-routing.\n")
-print("The frame contributes nothing at the reference size: the centred frames the program measured sit within 1 to 2% of the "
-      "reference, and at the scale corner the reference's excess against a rate-matched centred frame is the same few percent "
+print("The frame contributes nothing at the reference size: the centered frames the program measured sit within 1 to 2% of the "
+      "reference, and at the scale corner the reference's excess against a rate-matched centered frame is the same few percent "
       "(the scale-corner note above).")
 ```
 
@@ -180,11 +180,11 @@ print("The frame contributes nothing at the reference size: the centred frames t
 #|   cars, 48 validation cars, float32). The horizontal axis is GeoTransolver
 #|   ÷ ISLA on surface pressure; 1.0 is parity. The leftmost marker is the
 #|   scoreboard's instrument, an independent 10,000-cell draw, GeoTransolver
-#|   against ISLA's reference configuration. Each bar is one measured part of the gap, in the
+#|   against ISLA. Each bar is one measured part of the gap, in the
 #|   order it was isolated: the draw variance of ISLA's slice integrals (the
 #|   same checkpoints under a stratified draw), the weight-spread count noise
 #|   (the same checkpoints at 40,000 cells), the positional information the
-#|   contracts deny (a raw-coordinate diagnostic on the legacy centred
+#|   contracts deny (a raw-coordinate diagnostic on the legacy centered
 #|   variant, measured at 10,000 cells and shown against the fine-sample
 #|   residual), and the remainder, which
 #|   the one-car routing-multiplicity study attributes to the single-routing
@@ -200,7 +200,7 @@ print("The frame contributes nothing at the reference size: the centred frames t
 parts = [
     ("draw variance of ISLA's slice integrals\n(stratified draw of the same 10,000 cells)", r_ind10, r_strat10, BLUE_LIGHT, ""),
     ("weight-spread count noise\n(40,000 cells instead of 10,000)", r_strat10, r_ind40, BLUE_LIGHT, ""),
-    ("positional information the contracts deny\n(raw-coordinate diagnostic on the legacy centred variant, 10,000 cells)", r_ind40, r_pos, BLUE_PALE, "///"),
+    ("positional information the contracts deny\n(raw-coordinate diagnostic on the legacy centered variant, 10,000 cells)", r_ind40, r_pos, BLUE_PALE, "///"),
     (f"single-routing form (remainder; eight routings\nlower the one-car floor by {heads_gain:.0%})", r_pos, 1.0, VIOLET, ""),
 ]
 fig, ax = plt.subplots(figsize=(10.4, 4.8))
@@ -211,10 +211,10 @@ for yy, (label, a, b, c, h) in zip(y, parts):
 ax.axvline(1.0, color=INK2, lw=1.0, zorder=2); ax.text(1.0, len(parts) - 0.35, " parity", fontsize=8.5, color=INK2, va="bottom")
 for xv, lab, yy in ((r_ind10, f"independent 10,000-cell draw\n{r_ind10:.3f}", 3.55), (r_strat10, f"stratified 10,000\n{r_strat10:.3f}", 2.55), (r_ind40, f"independent 40,000\n{r_ind40:.3f}", 1.55)):
     ax.plot([xv], [yy - 0.45], marker="v", ms=7, color=INK, zorder=5); ax.text(xv, yy - 0.25, lab, ha="center", fontsize=8, color=INK2, path_effects=halo())
-ax.text(0.9, -0.85, "the frame: 0 points at the reference size (centred frames within 1 to 2% of the reference)", fontsize=8.5, color=MUTED, va="center")
+ax.text(0.9, -0.85, "the frame: 0 points at the reference size (centered frames within 1 to 2% of the reference)", fontsize=8.5, color=MUTED, va="center")
 ax.set_xlim(0.895, 1.03); ax.set_ylim(-1.3, len(parts) + 0.2)
 ax.set_xticks([0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02])
-ax.set_xlabel("GeoTransolver ÷ ISLA, surface pressure error [–]  (1 = parity; higher favours ISLA)")
+ax.set_xlabel("GeoTransolver ÷ ISLA, surface pressure error [–]  (1 = parity; higher favors ISLA)")
 ax.set_yticks(y); ax.set_yticklabels([p[0] for p in parts], fontsize=9); ax.grid(axis="y", visible=False)
 ax.set_title("where the DrivAerML gap comes from, measured piece by piece")
 plt.show()
@@ -233,12 +233,12 @@ pattern where geometries recur (@sec-data-efficiency), and is priced there.
 configuration it was measured on, its error across a decade of learning
 rate stays close to its best where GeoTransolver's grows several-fold one
 grid step above its best rate.** The measurement was made on the legacy
-centred variant and is being re-measured on the reference configuration
+centered variant and is being re-measured on ISLA
 (@sec-nb-refprops-prereg); its grid, figure and numbers are in the collapsed
 note. Robustness to learning rate is not robustness to seed: ISLA has the
 larger seed-to-seed prediction spread on both datasets (@sec-shared-floor).
 
-::: {.callout-note collapse="true" title="The learning-rate grid (diagnostic, legacy centred variant)"}
+::: {.callout-note collapse="true" title="The learning-rate grid (diagnostic, legacy centered variant)"}
 ```{python}
 #| label: setup-lr
 #| include: false
@@ -277,7 +277,7 @@ print(f"**Across the learning-rate grid ISLA's worst point is within {idr['worst
       f"{ihl['worst_over_best']:.2f}x on HiLiftAeroML, while GeoTransolver degrades {min(gd['step'], gh['step']):.1f} to "
       f"{max(gd['step'], gh['step']):.1f}x by seed mean one grid step above its best rate ({seed_lo:.0f} to {seed_hi:.0f}x by "
       "individual seed).** The grid is {1e-3, 3e-3, 1e-2} on DrivAerML and {1e-3, 3e-3} on HiLift, two seeds per cell (three to "
-      "five in the DrivAerML 3e-3 cell), ISLA's legacy centred variant, bfloat16 evaluation on identical points (valid for a "
+      "five in the DrivAerML 3e-3 cell), ISLA's legacy centered variant, bfloat16 evaluation on identical points (valid for a "
       "within-grid comparison; @sec-metrics).")
 ```
 
@@ -286,13 +286,13 @@ print(f"**Across the learning-rate grid ISLA's worst point is within {idr['worst
 #| fig-cap: >
 #|   Learning-rate robustness at full data. Validation surface-pressure error
 #|   (log axis, bfloat16 evaluation) against learning rate for GeoTransolver
-#|   (red circles) and ISLA's legacy centred variant (open light-blue squares; diagnostic);
+#|   (red circles) and ISLA's legacy centered variant (open light-blue squares; diagnostic);
 #|   small markers are seeds, lines join seed means. Left: DrivAerML, 435
 #|   training cars. Right: the HiLiftAeroML full split, 1,260 training cases.
 #|   The GeoTransolver lanes consumed the physical freestream velocity, which
 #|   is neutral on DrivAerML and the input hazard of @sec-part-baseline on
 #|   HiLiftAeroML, so the right panel's red series is not a comparison with
-#|   ISLA. How to read this: the vertical spread of one colour across the grid
+#|   ISLA. How to read this: the vertical spread of one color across the grid
 #|   is that architecture's sensitivity to learning rate. It does not show
 #|   seed sensitivity at a fixed rate, which is larger for ISLA
 #|   (@sec-shared-floor), nor any rate below 1e-3. Instrument: bfloat16
@@ -305,11 +305,11 @@ fig, axs = plt.subplots(1, 2, figsize=(9.0, 4.6), sharey=True)
 for ax, grid, title in zip(axs, (dr, hlg), ("DrivAerML, 435 training cars", "HiLiftAeroML full split, 1,260 training cases")):
     for arch in ("gt", "isla_cg"):
         c = STYLE[arch]["color"]; lrs = sorted(grid[arch]); means = [mean(grid[arch][lr]) for lr in lrs]
-        ax.plot(lrs, means, **series_kwargs(arch, lw=2.0, ms=7, label=("ISLA, legacy centred variant (diagnostic)" if arch == "isla_cg" else STYLE[arch]["label"])), zorder=3)
+        ax.plot(lrs, means, **series_kwargs(arch, lw=2.0, ms=7, label=("ISLA, legacy centered variant (diagnostic)" if arch == "isla_cg" else STYLE[arch]["label"])), zorder=3)
         for lr in lrs:
             ax.scatter([lr] * len(grid[arch][lr]), grid[arch][lr], color=c, s=16, alpha=0.9, zorder=4)
         xm = (lrs[-2] * lrs[-1]) ** 0.5; ym = (means[-2] * means[-1]) ** 0.5
-        txt = f"{'ISLA, legacy centred variant' if arch == 'isla_cg' else STYLE[arch]['label']}\nworst ÷ best = {max(means) / min(means):.2f}x"
+        txt = f"{'ISLA, legacy centered variant' if arch == 'isla_cg' else STYLE[arch]['label']}\nworst ÷ best = {max(means) / min(means):.2f}x"
         off = (-10, 6, "right", "bottom") if arch == "gt" else ((6, -10, "left", "top") if ax is axs[0] else (0, -12, "center", "top"))
         ax.annotate(txt, (xm, ym), xytext=off[:2], textcoords="offset points", color=c, fontsize=8.5, fontweight="bold",
                     ha=off[2], va=off[3], path_effects=halo())
@@ -344,7 +344,7 @@ GeoTransolver's best rate must be found per dataset.
 ## Sampling-density robustness {#sec-robustness-density}
 
 **Under a 10:1 spatially biased sampling density ISLA's relative frame
-degrades 1.2x; every configuration that centres its coordinates on the
+degrades 1.2x; every configuration that centers its coordinates on the
 sampled points, GeoTransolver and Transolver among them, degrades 10 to
 16x.** The probe evaluates a trained DrivAerML
 model on the 48 validation cars with surface points drawn ten times more
@@ -353,59 +353,59 @@ Horvitz–Thompson measure weights so that every weighted integral is
 unbiased; the readout is the error under the biased draw divided by the
 same model's error under uniform sampling at 10,000 points. A ratio of 1
 means the prediction depends only on the surface and not on how it was
-sampled. Every ratio states its frame: the *sample frame* centres each
+sampled. Every ratio states its frame: the *sample frame* centers each
 model's coordinates on the biased sample itself, which is what a biased
 mesher delivers and what ISLA computes inside the model; the *pool frame*
-hands a model an unbiased centre it would not have in deployment and
+hands a model an unbiased center it would not have in deployment and
 appears only where it is the value on file.
 
 The mechanism is the one taught in @sec-mt2-frame. The reference
 configuration has no origin: translation invariance comes from
 point-to-anchor differences and the length unit is the total surface
 measure, an integral the biased draw estimates without bias. GeoTransolver
-and Transolver consume coordinates centred by the datapipe on the plain
+and Transolver consume coordinates centered by the datapipe on the plain
 mean of the sampled points, which moves by 0.94 RMS radii under the 10:1
 bias, and every downstream quantity moves with it.
 
 ```{python}
 #| label: tbl-density
 #| output: asis
-rows = [("ISLA, reference configuration", MR["isla_relative_frame_meas"]),
+rows = [("ISLA", MR["isla_relative_frame_meas"]),
         ("ISLA, similarity-gauge variant", MR["isla_similarity_gauge_lr1e3"]),
         ("GeoTransolver", MR["geotransolver_unit"]),
         ("Transolver", MR["transolver_unit"]),
-        ("GeoTransolver, measure-weighted pooling (research variant)", MR["geotransolver_unit_mw"]),
-        ("Transolver, measure-weighted pooling (research variant)", MR["transolver_unit_mw"])]
+        ("GeoTransolver + ISLA's measure-weighted pooling (ablation)", MR["geotransolver_unit_mw"]),
+        ("Transolver + ISLA's measure-weighted pooling (ablation)", MR["transolver_unit_mw"])]
 out = "| configuration | uniform 10,000-cell error | biased ÷ uniform, sample frame |\n|---|---:|---:|\n"
 for lab, r in rows:
     out += f"| {lab} | {r['in_family']:.4f} | {r['density_factor']:.2f}x |\n"
-for lab, k in (("GeoTransolver, measure-weighted pooling and Horvitz–Thompson-centred frame (research variant)", "mwaw_dr_gt_unit_lr1e3"),
-               ("Transolver, measure-weighted pooling and Horvitz–Thompson-centred frame (research variant)", "mwaw_dr_transolver_unit_lr3e3")):
+for lab, k in (("GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", "mwaw_dr_gt_unit_lr1e3"),
+               ("Transolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", "mwaw_dr_transolver_unit_lr3e3")):
     r = MW[k]
     out += f"| {lab} | {r['infamily_mean']:.4f} | {r['probe_sfht']['ratio_mean']:.2f}x |\n"
 print(out)
 print(": Sampling-density robustness on DrivAerML, float32, 48 validation cars, 10,000 cells: surface-pressure error under uniform "
       "sampling, and the same checkpoint's error under 10:1 biased inclusion with exact Horvitz–Thompson weights divided by its "
       "uniform error, input frame from the biased sample (seed means; 1.0 means sampling-independent predictions). The "
-      "measure-weighted and Horvitz–Thompson-centred baselines are research variants that locate where the sensitivity lives; the "
-      "released GeoTransolver and Transolver are the two plain baseline rows. Data: "
+      "measure-weighted and Horvitz–Thompson-centered baselines are ablations that locate where the sensitivity lives; the "
+      "GeoTransolver and Transolver are the two plain baseline rows. Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json (provenance per row inside), results/mwaw_2026-09-11.json. {#tbl-density}")
 ```
 
 Two things follow. The sensitivity is the **frame, not the aggregation**:
 measure-weighted pooling leaves the baselines at 14 to 16x, and an unbiased
-centre alone brings them to 1.03 to 1.04x. ISLA's residual 1.2x is the
+center alone brings them to 1.03 to 1.04x. ISLA's residual 1.2x is the
 **variance of its measure-weighted routing integral** under a 10:1 sample,
 not a frame effect. The scope is one bias pattern at one ratio on one
 dataset; the benchmark below varies the sampling law and the count.
 
-::: {.callout-note collapse="true" title="What the legacy centred variant and the weights-off ablation add (diagnostic)"}
+::: {.callout-note collapse="true" title="What the legacy centered variant and the weights-off ablation add (diagnostic)"}
 ```{python}
 #| label: para-density-legacy
 #| output: asis
-print(f"The legacy centred variant, which centres on the plain mean of the sampled points, degrades "
+print(f"The legacy centered variant, which centers on the plain mean of the sampled points, degrades "
       f"{MR['isla_reference_constant_gauge']['density_factor']:.1f}x under the same probe, the same collapse as the baselines, and "
-      f"the collapse is the centre and nothing else: the same checkpoint evaluated with a measure-weighted centre reads "
+      f"the collapse is the center and nothing else: the same checkpoint evaluated with a measure-weighted center reads "
       f"{MR['isla_constant_gauge_mcenter']['density_factor']:.2f}x, and handed the exact frame of the full geometry it reads "
       f"{MR['isla_frame_full_frame']['density_factor']:.2f}x, so the frame estimate accounts for about "
       f"{MR['isla_relative_frame_meas']['density_factor'] - MR['isla_frame_full_frame']['density_factor']:.2f} of the reference's "
@@ -419,7 +419,7 @@ print(f"The legacy centred variant, which centres on the plain mean of the sampl
 
 **No configuration gives the same field under a different sampling of the
 same surface at 10,000 cells; ISLA's relative frame converges toward it as
-the sample grows, and the released GeoTransolver and Transolver do not.**
+the sample grows, and GeoTransolver and Transolver do not.**
 The consistency benchmark asks the question the principle of @sec-principle
 poses: does a model converge to one field under refinement, and to the same
 field under two sampling laws? Every checkpoint was evaluated in float32 on
@@ -439,9 +439,9 @@ sees the same integral under all three.
 #|   for three samplers (columns) and two validation sets (rows); a curve
 #|   approaching 1 converges to the uniform-sampling answer. Uniform sampling
 #|   (left) converges for every arm. Under the area-proportional sampler
-#|   (middle) the ISLA arms fall toward 1 while the released baselines are
+#|   (middle) the ISLA arms fall toward 1 while the baselines are
 #|   flat. Under the 10:1 bias (right) the ISLA arms approach the uniform
-#|   answer at 40,000 cells. The reference configuration was benchmarked from
+#|   answer at 40,000 cells. ISLA was benchmarked from
 #|   10,000 cells, so its curves start there. How to read this: only the
 #|   trend with count is interpretable under the area sampler, whose weights
 #|   span four decades and leave refined regions unsampled at small counts,
@@ -495,13 +495,13 @@ def D(arm, sampler, count="40000"):
 def conv(arm, sampler):
     t = A[arm]["table"][sampler]; lo = "2500" if "2500" in t else "10000"
     return t[lo]["pressure_l2"]["mean"] / t["40000"]["pressure_l2"]["mean"]
-rows = [("DrivAerML", "ISLA, reference configuration", "rf_dr_mt2_meas"),
+rows = [("DrivAerML", "ISLA", "rf_dr_mt2_meas"),
         ("DrivAerML", "ISLA, similarity-gauge variant (lr 3e-3)", "iw_mt2_gauge"),
         ("DrivAerML", "GeoTransolver", "uw_gt_unit_lr1e3"), ("DrivAerML", "Transolver", "uw_transolver_unit_lr3e3"),
-        ("DrivAerML", "GeoTransolver, measure-weighted pooling (research variant; pool frame)", "mw_dr_gt_unit_lr1e3"), ("DrivAerML", "Transolver, measure-weighted pooling (research variant; pool frame)", "mw_dr_transolver_unit_lr3e3"),
-        ("HiLift 35", "ISLA, reference configuration", "rf_hl_mt2_meas_super_scarce"),
+        ("DrivAerML", "GeoTransolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_dr_gt_unit_lr1e3"), ("DrivAerML", "Transolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_dr_transolver_unit_lr3e3"),
+        ("HiLift 35", "ISLA", "rf_hl_mt2_meas_super_scarce"),
         ("HiLift 35", "GeoTransolver", "udrv_hl_gt_super_scarce_lr3e3"), ("HiLift 35", "Transolver", "udrv_hl_transolver_super_scarce_lr3e3"),
-        ("HiLift 35", "GeoTransolver, measure-weighted pooling (research variant; pool frame)", "mw_hl_gt_super_scarce_lr3e3"), ("HiLift 35", "Transolver, measure-weighted pooling (research variant; pool frame)", "mw_hl_transolver_super_scarce_lr3e3")]
+        ("HiLift 35", "GeoTransolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_hl_gt_super_scarce_lr3e3"), ("HiLift 35", "Transolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_hl_transolver_super_scarce_lr3e3")]
 def table_rows(rows):
     out = "| validation set | configuration | uniform 40k error | area ÷ uniform − 1 at 40k | bias ÷ uniform − 1 at 40k | area-curve fall, first count → 40k |\n|---|---|---:|---:|---:|---:|\n"
     for ds, label, arm in rows:
@@ -509,12 +509,12 @@ def table_rows(rows):
         out += f"| {ds} | {label} | {u40:.4f} | {D(arm,'area'):+.0%} | {D(arm,'biased'):+.1%} | {conv(arm,'area'):.2f}x |\n"
     return out
 print(table_rows(rows))
-print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. The reference configuration passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; the released GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centred on the drawn sample their frame collapses, and holds only when the centre is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for the reference configuration). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf companions. {#tbl-consistency-40k}")
+print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. ISLA passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centered on the drawn sample their frame collapses, and holds only when the center is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for ISLA). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf companions. {#tbl-consistency-40k}")
 ```
 
 Three readings, in order of weight. **Consistency in the fine-mesh limit is
 a property of the measure-weighted estimator standing on a frame that
-reads no sample statistic.** The reference configuration has that frame by
+reads no sample statistic.** ISLA has that frame by
 construction and shows the property: on DrivAerML its area-sampler and bias
 dependence fall from +41% and +19% at 10,000 cells to +3.4% and +2.5% at
 40,000; on the 35-case HiLift rung it is within 1.3% and 0.9% at 40,000;
@@ -523,12 +523,12 @@ bar there. **No configuration is consistent at the 10,000 cells of the
 book's accuracy numbers**, and a factor-of-ten probe understates how far
 each stands from consistency, since a different mesher changes the local
 density by thousands. **On the wings, whose refinement spans more decades
-than the cars', the sample-centred configurations do not converge within
+than the cars', the sample-centered configurations do not converge within
 40,000 cells**; their HiLift rows report the distance, not a verdict.
 
-::: {.callout-note collapse="true" title="The centred diagnostics on the same benchmark (legacy centred variant, its measure-centred repair, and the weights-off ablation)"}
-The legacy centred variant reads the sampling distribution by 90% or more,
-like the released baselines, and its dependence is entirely its plain-mean
+::: {.callout-note collapse="true" title="The centered diagnostics on the same benchmark (legacy centered variant, its measure-centered repair, and the weights-off ablation)"}
+The legacy centered variant reads the sampling distribution by 90% or more,
+like the baselines, and its dependence is entirely its plain-mean
 centroid: replacing that centroid by its Horvitz–Thompson estimate gives the
 same field under all three samplers. A relative-frame diagnostic with a
 constant length unit instead of the total measure is shown for the scale
@@ -540,12 +540,12 @@ all.
 #| output: asis
 #| code-fold: true
 A.update(json.load(open(RES / "consistency_bench" / "consistency_bench_mcenter_2026-09-10.json"))["arms"])
-legacy = [("DrivAerML", "ISLA, legacy centred variant (diagnostic)", "iw_mt2_lr1e3"),
-          ("DrivAerML", "ISLA, legacy centred variant with measure-weighted centring (diagnostic)", "cg_dr_mt2_mcenter"),
+legacy = [("DrivAerML", "ISLA, legacy centered variant (diagnostic)", "iw_mt2_lr1e3"),
+          ("DrivAerML", "ISLA, legacy centered variant with measure-weighted centering (diagnostic)", "cg_dr_mt2_mcenter"),
           ("DrivAerML", "ISLA, relative frame with a constant length unit (diagnostic)", "rf_dr_mt2_ref"),
           ("DrivAerML", "ISLA, weights-off ablation", "now_mt2_lr1e3"),
-          ("HiLift 35", "ISLA, legacy centred variant (diagnostic)", "lad_hl_mt2_super_scarce"),
-          ("HiLift 35", "ISLA, legacy centred variant with measure-weighted centring (diagnostic)", "cg_hl_mt2_mcenter_super_scarce"),
+          ("HiLift 35", "ISLA, legacy centered variant (diagnostic)", "lad_hl_mt2_super_scarce"),
+          ("HiLift 35", "ISLA, legacy centered variant with measure-weighted centering (diagnostic)", "cg_hl_mt2_mcenter_super_scarce"),
           ("HiLift 35", "ISLA, relative frame with a constant length unit (diagnostic)", "rf_hl_mt2_ref_super_scarce"),
           ("HiLift 35", "ISLA, weights-off ablation", "a35_hl_mt2_noweights")]
 print(table_rows(legacy))
@@ -570,7 +570,7 @@ geometries arrive in arbitrary poses that exactness is worth 6% against
 GeoTransolver and 19% against Transolver trained with rotation
 augmentation; when every case is in a native pose, or a canonical frame can
 be computed, it is a contract and not an accuracy edge.** The pose
-measurement was made on the legacy centred variant, whose covariance
+measurement was made on the legacy centered variant, whose covariance
 contract is the same as the reference's; the reference's re-measurement is
 running (@sec-nb-refprops-prereg). With every DrivAerML case in its own
 random pose, that ISLA, trained without augmentation, scores 0.0566 (1.01x
@@ -596,7 +596,7 @@ so the contract is exercised at deployment only under float32 inference
 
 ## Query independence and its price {#sec-query-independence}
 
-**In its reference configuration ISLA's prediction at a surface point
+**As shipped, ISLA's prediction at a surface point
 depends weakly on which other points were sampled with it, about 7%
 against 2% for GeoTransolver; the optional passive decoder removes that
 dependence exactly, at a 3.0 to 3.7x cost in accuracy.** Holding a shared
@@ -605,7 +605,7 @@ sample moves the predictions on the prefix by about 7% for ISLA and 2% for
 GeoTransolver. The passive decoder (@sec-mt2-passive) replaces the readout
 with read blocks that never write back, so a point evaluated alone gives the
 same answer, to float64 roundoff, as in a batch of 10,000. Its price on
-DrivAerML surface pressure, measured against the legacy centred variant
+DrivAerML surface pressure, measured against the legacy centered variant
 (the comparator of that study, within 2% of the reference in distribution),
 is 3.5 to 3.7x at the same learning rate (0.203 to 0.211 against 0.0577)
 and 3.0 to 3.3x against a 6,500-token interacting control. The consequence is a choice, not a
@@ -638,7 +638,7 @@ covers the rows the float32 matrix does not: zero-shot transfer to a
 held-out vehicle family, canonicalized and rotation-augmented
 GeoTransolver, and two-family training. The frontier is stated as a
 matrix, not a column: every accuracy number sits beside the same
-checkpoint's behaviour when the sampling, the pose or the vehicle family
+checkpoint's behavior when the sampling, the pose or the vehicle family
 changes (@sec-principle).
 
 ```{python}
@@ -651,9 +651,9 @@ def f(v, fmt):
     return "not measured" if v is None else fmt.format(v)
 out = ("| configuration | in-family error | density 10:1 (x) | pose, random SO(3) (x) "
        "| zero-shot fastback | few-shot gain from pretraining |\n|---|---:|---:|---:|---:|---:|\n")
-LABEL = {"geotransolver_unit": "GeoTransolver", "geotransolver_unit_mw": "GeoTransolver, measure-weighted pooling (research variant)",
-         "transolver_unit": "Transolver", "transolver_unit_mw": "Transolver, measure-weighted pooling (research variant)",
-         "isla_relative_frame_meas": "ISLA, reference configuration", "isla_similarity_gauge_lr1e3": "ISLA, similarity-gauge variant"}
+LABEL = {"geotransolver_unit": "GeoTransolver", "geotransolver_unit_mw": "GeoTransolver + ISLA's measure-weighted pooling (ablation)",
+         "transolver_unit": "Transolver", "transolver_unit_mw": "Transolver + ISLA's measure-weighted pooling (ablation)",
+         "isla_relative_frame_meas": "ISLA", "isla_similarity_gauge_lr1e3": "ISLA, similarity-gauge variant"}
 for key in ("isla_relative_frame_meas", "isla_similarity_gauge_lr1e3", "geotransolver_unit", "geotransolver_unit_mw", "transolver_unit", "transolver_unit_mw"):
     r = M["rows"][key]
     pose = f(r["pose_factor"], "{:.2f}") + (" (augmented)" if r.get("pose_note") else "")
@@ -666,7 +666,7 @@ for key in ("geotransolver_unit_512x80k", "isla_similarity_gauge_512x80k", "tran
     r = sc[key]
     out += (f"| {CLABEL[key]} | {r['in_family']:.4f} | {r['density_factor']:.1f} | not measured "
             f"| not measured | {r['gpu_hours']:.1f} GPU-h |\n")
-out += (f"| ISLA, reference configuration, 512 × 80k, width learning rate | {cw['in_family_80k_seed_mean']:.4f} | {cw['density_factor_80k']:.1f} | not measured | not measured | — |\n")
+out += (f"| ISLA, 512 × 80k, width learning rate | {cw['in_family_80k_seed_mean']:.4f} | {cw['density_factor_80k']:.1f} | not measured | not measured | — |\n")
 print(out)
 print(": Accuracy beside consistency on DrivAerML at full data, float32, unit-direction inputs for every architecture. "
       "In-family: surface-pressure error on 48 validation cars at 10,000 cells. Density: error under 10:1 biased sampling with exact "
@@ -674,7 +674,7 @@ print(": Accuracy beside consistency on DrivAerML at full data, float32, unit-di
       "pose over the architecture's canonical-pose error; baselines trained with rotation augmentation, ISLA without. Zero-shot "
       "fastback: error on 99 SHIFT-SUV fastback cases never trained on (1.0 is the mean predictor). Few-shot gain: improvement over "
       "training from scratch after fine-tuning on 20 fastback cases. ISLA's pose factor and zero-shot transfer were measured on the "
-      "legacy centred variant (@sec-pose-contract, @tbl-frontier) and are not repeated here. The "
+      "legacy centered variant (@sec-pose-contract, @tbl-frontier) and are not repeated here. The "
       "scale-corner rows are evaluated at 80,000 cells; the corner factors are sample-frame values (the artifact also carries the "
       "baselines' pool-frame values, 4.2x and 4.6x). The last column is training cost in GPU-hours. Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell inside), results/corner_wlr_reduction_2026-09-15.json. {#tbl-consistency-matrix}")
@@ -685,12 +685,12 @@ of @sec-principle can name, and they split the story in two. Accuracy: once GeoT
 carry the surface measure in their slice pooling they keep their
 in-distribution lead on both datasets, so ISLA's contracts do not buy
 accuracy at the reference size. Consistency: the pooling repair does not
-touch the frame, and with the centre taken from the biased sample the
+touch the frame, and with the center taken from the biased sample the
 weighted baselines degrade 14 to 16x. Under a like-for-like frame only
 ISLA's frames that read no biased statistic survive, and the frame is the
 whole of the density story at 10,000 cells for every architecture. The
-measure-weighted and Horvitz–Thompson-centred baselines are research
-variants that locate that property; the released models are the ones
+measure-weighted and Horvitz–Thompson-centered baselines are research
+variants that locate that property; the baselines are the ones
 compared and are not modified.
 
 ::: {.callout-note collapse="true" title="The bfloat16 frontier: zero-shot transfer, canonical frames, two families"}
@@ -727,10 +727,10 @@ rows = [
     ("GeoTransolver (9.0M), native frame", 1.0, gt_zs, f"{gt_dens:.1f}x", f"{min(gt_pose):.0f}–{max(gt_pose):.0f}x", GT_MEM),
     ("GeoTransolver, rotation augmentation", rot_in / gt10, rot_zs, "not measured", f"{rot_pose:.2f}", GT_MEM),
     ("GeoTransolver, canonical frame", canon_in / gt10, None, "not measured", "1.00 (canonicalized)", GT_MEM),
-    ("ISLA (8.9M), legacy centred variant (diagnostic)", mt2c_in / gt10, mt2c_zs, f"{min(mt2_dens_const):.1f}–{max(mt2_dens_const):.1f}x", f"{mt2_pose:.2f} (exact)", MT2_MEM),
+    ("ISLA (8.9M), legacy centered variant (diagnostic)", mt2c_in / gt10, mt2c_zs, f"{min(mt2_dens_const):.1f}–{max(mt2_dens_const):.1f}x", f"{mt2_pose:.2f} (exact)", MT2_MEM),
     ("ISLA (8.9M), similarity-gauge variant", gauge_in / gt10, gauge_zs, f"{mean(mt2_dens_gauge):.2f}x", "1.00 (exact)", MT2_MEM),
     ("GeoTransolver, two families", gtm_in / gt10, gtm_zs, "not measured", "not measured", GT_MEM),
-    ("ISLA, two families, legacy centred variant (diagnostic)", mt2m_in / gt10, mt2m_zs, "not measured", "1.00 (exact)", MT2_MEM),
+    ("ISLA, two families, legacy centered variant (diagnostic)", mt2m_in / gt10, mt2m_zs, "not measured", "1.00 (exact)", MT2_MEM),
 ]
 out = "| configuration | in-family (× GeoTransolver) | zero-shot (fastback) | density (10:1) | pose (random SO(3)) | peak memory at 10k tokens |\n|---|---|---|---|---|---|\n"
 for (n, i, z, d, r_, m) in rows:
@@ -764,7 +764,7 @@ that both architectures approach a common floor set by the protocol at
 this token count.** Three measurements stand behind that sentence.
 
 - **The shared residual.** Two GeoTransolver and two ISLA full-split
-  checkpoints (ISLA in its legacy centred variant) were evaluated on bit-identical validation points and their
+  checkpoints (ISLA in its legacy centered variant) were evaluated on bit-identical validation points and their
   pressure residual fields averaged point by point; the measure-weighted
   energy of the mean residual divided by the mean of the four residual
   energies is 0.71 on DrivAerML and 0.70 on HiLift (1.0 would mean
@@ -803,11 +803,11 @@ HiLiftAeroML ships two curated partitions along that axis. The **aoa split**
 trains on 788 cases at angles of 12° or less, validates on 112 further
 low-angle cases, and holds a sealed test set of all 900 cases at 14° or
 more. The **stall split** partitions by flow state: 942 training and 135
-validation cases labelled pre-stall, and a sealed test set of 723
+validation cases labeled pre-stall, and a sealed test set of 723
 post-stall cases. In each the validation set is in-regime, so validation
 error measures how well the model learned the regime it saw and test error
 how far it carries beyond it. Training follows the frozen protocol with
-ISLA in its legacy centred variant, two seeds (the reference configuration
+ISLA in its legacy centered variant, two seeds (ISLA
 is not trained on these splits; the finding does not depend on the frame).
 The GeoTransolver lanes on
 these splits consumed the physical freestream velocity, the input hazard of
@@ -839,10 +839,10 @@ times less accurate across the boundary.
 #|   line is one seed, joining its in-regime validation error to its
 #|   sealed-test error; filled markers are the first seed, open markers the
 #|   second; red circles GeoTransolver, light-blue squares ISLA's legacy
-#|   centred variant (diagnostic). Each end carries the seed mean and each pair the
+#|   centered variant (diagnostic). Each end carries the seed mean and each pair the
 #|   seed-mean ratio. How to read this: from either side of a regime boundary
 #|   both architectures lose about a factor of ten; the vertical offset between
-#|   the colours is not a comparison (the GeoTransolver lanes consumed the
+#|   the colors is not a comparison (the GeoTransolver lanes consumed the
 #|   physical freestream velocity). It does not show per-case statistics or
 #|   any field other than pressure. Data:
 #|   results/hilift_ladder_reduction_2026-09-03.json,
@@ -850,7 +850,7 @@ times less accurate across the boundary.
 #| code-fold: true
 lad = json.load(open(RES / "hilift_ladder_reduction_2026-09-03.json"))
 sealed = json.load(open(RES / "hilift_sealed_test_2026-09-04.json")); runs = sealed["runs"]
-ARCH = {"gt": ("gt", "GeoTransolver"), "mt2": ("isla_cg", "ISLA, legacy centred variant")}
+ARCH = {"gt": ("gt", "GeoTransolver"), "mt2": ("isla_cg", "ISLA, legacy centered variant")}
 seeds = (42, 43); n_val = {"aoa": 112, "stall": 135}
 panels = [("aoa", "angle-of-attack extrapolation\n(train at 12° or less, test at 14° or more)"), ("stall", "stall extrapolation\n(train pre-stall, test post-stall)")]
 X_VAL, X_TEST = 0.0, 1.0
@@ -917,7 +917,7 @@ n_test = []
 for s in (42, 43):
     r = b1[f"b1_hl_mt2_stall_rawcoord_seed{s}"]; n_test.append(r["stall_test"]["n"])
     lines.append(f"| ISLA with a raw-coordinate channel, seed {s} | {r['val']['pressure_l2']:.4f} | {r['stall_test']['pressure_l2']:.3f} | {r['d_axis']:.1f} |")
-for arch, name in (("mt2", "ISLA, legacy centred variant, seed mean"), ("gt", "GeoTransolver, seed mean")):
+for arch, name in (("mt2", "ISLA, legacy centered variant, seed mean"), ("gt", "GeoTransolver, seed mean")):
     v, t, d = ref(arch); lines.append(f"| {name} | {v:.4f} | {t:.3f} | {d:.1f} |")
 caption = (": The raw-coordinate diagnostic on the stall split against the rows of @tbl-hilift-ood. Preregistered bars: raw coordinates "
            "carry the ratio if d ≤ 11.0 and test error < 0.245; they do not if d ≥ 12.0 or test error ≥ 0.255. The diagnostic's "

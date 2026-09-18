@@ -1,6 +1,6 @@
 # The baselines, and what a fair comparison means {#sec-baselines}
 
-**ISLA is measured against the two released slice-attention transformers
+**ISLA is measured against the two public slice-attention transformers
 with the strongest record on industrial aerodynamics, GeoTransolver and
 Transolver, under one protocol that fixes everything except the
 architecture.** The baselines are strong, not straw: GeoTransolver has at
@@ -41,7 +41,7 @@ ISLA beside them.
 ```{mermaid}
 %%| label: fig-family-diagram
 %%| fig-cap: >
-%%|   What each architecture is handed, and where they differ. Grey boxes
+%%|   What each architecture is handed, and where they differ. Gray boxes
 %%|   are data; the routing mechanism (solid blue) is shared by the whole
 %%|   family. GeoTransolver and Transolver receive coordinates in the
 %%|   dataset's frame and the freestream as a vector; ISLA receives only
@@ -56,7 +56,7 @@ flowchart LR
 
     subgraph B["GeoTransolver / Transolver"]
         direction TB
-        B1["per point: centred coordinates, unit normal<br/>global: freestream vector (unit direction under the protocol)"]:::data
+        B1["per point: centered coordinates, unit normal<br/>global: freestream vector (unit direction under the protocol)"]:::data
         B2["GeoTransolver only: geometry encoder,<br/>global-context projector"]:::learned
         B3["physics attention × layers:<br/>softmax routing of points into slices,<br/>attention among slices, scatter back"]:::learned
         B4["linear head: pressure, wall shear"]:::learned
@@ -73,7 +73,7 @@ flowchart LR
 ```
 
 **GeoTransolver** is the recipe's default surface model. Per surface
-point it receives the coordinates, centred on the case, and the unit normal
+point it receives the coordinates, centered on the case, and the unit normal
 as a six-channel feature; the freestream vector is a three-channel global
 feature. Its *geometry encoder* takes the coordinates a second time through
 a dedicated embedding path that conditions the slice attention; the
@@ -94,9 +94,9 @@ configurations side by side.
 
 | architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at 10,000 tokens |
 |---|---|---|--:|--:|--:|--:|--:|
-| GeoTransolver | centred coordinates, unit normal; coordinates again through the geometry encoder | freestream vector through the global-context projector: the unit direction under the protocol | 12 | 256 | 256 | 9.0M | 2.70 GiB |
-| Transolver | centred coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not measured |
-| ISLA (reference configuration) | position, unit normal, measure weight, through invariants and anchors only | unit freestream direction | 12 | 192 | 256 | 8.9M | 1.30 GiB with the geometry recompute; 1.94 GiB without |
+| GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | freestream vector through the global-context projector: the unit direction under the protocol | 12 | 256 | 256 | 9.0M | 2.70 GiB |
+| Transolver | centered coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not measured |
+| ISLA | position, unit normal, measure weight, through invariants and anchors only | unit freestream direction | 12 | 192 | 256 | 8.9M | 1.30 GiB with the geometry recompute; 1.94 GiB without |
 
 : The three architectures compared on the aerodynamic datasets. *Per-point
 inputs*: channels attached to each of the 10,000 sampled surface cells per
@@ -169,7 +169,7 @@ arms = [
     ("GeoTransolver, unit direction, lr 3e-3 (its best at this rung)", fp([f"udrv_hl_gt_super_scarce_lr3e3_seed{s}" for s in (42, 43)])),
     ("Transolver, physical velocity, lr 3e-3", fp([f"t1_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
     ("Transolver, unit direction, lr 3e-3", fp([f"udrv_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
-    ("ISLA, reference configuration", [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]),
+    ("ISLA", [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]),
 ]
 isla_ref = mean(arms[5][1])
 out = "| arm | surface pressure error, seed mean (seeds) | baseline ÷ ISLA reference |\n|---|---|---:|\n"
@@ -225,7 +225,7 @@ training recipe in @sec-protocol.
 3. **Learning rate chosen per architecture on the full split, by validation,
    before any ladder or ablation ran, then frozen.** Where a baseline had no
    full-split run on a dataset it was trained at both grid rates on the
-   small rungs and is reported at the better, a choice that favours the
+   small rungs and is reported at the better, a choice that favors the
    baseline (@sec-lr-protocol).
 4. **Every architecture receives the freestream as the unit direction**
    (@sec-part-baseline).
@@ -268,7 +268,7 @@ in footprint.
 
 @tbl-token-control is the token-count control behind rule 1. It compares
 ISLA against itself at two cell counts, at one shared learning rate that is
-not ISLA's best; it was run on the legacy centred variant (diagnostic), a
+not ISLA's best; it was run on the legacy centered variant (diagnostic), a
 within-model control whose reading does not depend on the frame. The 8% it
 shows is the price of fewer sampled points per case, and the reason the
 protocol fixes tokens for every architecture.
@@ -282,18 +282,18 @@ mt2_const_10k = [p(f"ref_mt2_v3c_seed{s}") for s in (42, 43)]
 mt2_const_6500 = [p(f"iw_mt2_v3c_r6500_seed{s}") for s in (42, 43)]
 gt_10k = [p(f"ref_gt_fixed_seed{s}") for s in (42, 43)]
 ratio = mean(mt2_const_6500) / mean(mt2_const_10k)
-rows = [("ISLA, legacy centred variant (diagnostic)", "10,000", mt2_const_10k, 1.0),
-        ("ISLA, legacy centred variant (diagnostic)", "6,500", mt2_const_6500, ratio),
+rows = [("ISLA, legacy centered variant (diagnostic)", "10,000", mt2_const_10k, 1.0),
+        ("ISLA, legacy centered variant (diagnostic)", "6,500", mt2_const_6500, ratio),
         ("GeoTransolver", "10,000", gt_10k, None)]
 out = "| architecture | tokens per case | surface pressure error (seed 42 / 43) | relative to ISLA at 10,000 |\n|---|--:|---|--:|\n"
 for n, t, v, r in rows:
     out += f"| {n} | {t} | {v[0]:.4f} / {v[1]:.4f} | {'—' if r is None else f'{r:.2f}x'} |\n"
 print(out)
 print(": The token-count control on DrivAerML: area-weighted relative L2 of surface pressure, mean over the 48 "
-      "validation cars, scored in bfloat16 (labelled: this table predates the float32 instrument and compares ISLA "
+      "validation cars, scored in bfloat16 (labeled: this table predates the float32 instrument and compares ISLA "
       "with itself), at learning rate 3e-3 for every row. The last column divides the row's seed mean by that of ISLA "
       "at 10,000 tokens. How to read this: a token-count control, not a matched-memory comparison, and a within-model "
-      "control run on the legacy centred variant, so its reading is the token count's, not the frame's; wall shear moves the "
+      "control run on the legacy centered variant, so its reading is the token count's, not the frame's; wall shear moves the "
       "same way. Data: results/instrument_wave_reduction_2026-09-01.json. {#tbl-token-control}")
 ```
 
@@ -306,7 +306,7 @@ are equally good, so equivariance is a contract about what the model needs
 at inference, not an accuracy advantage.** Against baselines that learn pose
 from rotation augmentation instead, ISLA leads when every car arrives in a
 random pose (@sec-scoreboard-pose; that measurement was made on the legacy
-centred variant, and the reference configuration's re-measurement is
+centered variant, and ISLA's re-measurement is
 running, @sec-nb-refprops-prereg).
 
 The two phrases mean different things. A model is *equivariant by
@@ -346,7 +346,7 @@ out += row("trained in the recipe frame, canonicalized at inference only", eval_
 out += row("trained and evaluated in the canonical frame", tr_in, tr_orb)
 print(out)
 print(f": Pose dependence of GeoTransolver on DrivAerML: area-weighted relative L2 of surface pressure over the 48 "
-      f"validation cars, learning rate 3e-3, 500 epochs, seed 42 / seed 43, scored in bfloat16 (labelled: these runs "
+      f"validation cars, learning rate 3e-3, 500 epochs, seed 42 / seed 43, scored in bfloat16 (labeled: these runs "
       f"predate the float32 instrument and are used only for within-architecture pose factors); the parenthesized factor divides the seed "
       f"mean by the in-pose seed mean of the first row ({ref:.4f}). Across three seeds of the recipe-frame model the "
       f"orbit penalty spans {min(orbit_ratios):.0f} to {max(orbit_ratios):.0f}x. How to read this: ISLA is not shown "
@@ -387,13 +387,13 @@ learning rate, so a protocol sharing one rate would measure tuning luck
 instead of architecture.** One grid step above its best rate,
 GeoTransolver's seed-mean error grows 9.0x on DrivAerML and 6.5x on
 HiLiftAeroML; the table in the note below computes each factor from its
-artifact. ISLA's side of the grid was measured on the legacy centred variant
-(1.1x and 1.14x); the reference configuration's grid is being re-measured
+artifact. ISLA's side of the grid was measured on the legacy centered variant
+(1.1x and 1.14x); ISLA's grid is being re-measured
 (@sec-nb-refprops-prereg), and the point here is procedural: each
 architecture runs at its own best rate. The grids are plotted as a
 robustness result in @sec-robustness-lr (@fig-lr-robustness).
 
-::: {.callout-note collapse="true" title="The learning-rate grids behind the rule (ISLA rows: legacy centred variant, diagnostic)"}
+::: {.callout-note collapse="true" title="The learning-rate grids behind the rule (ISLA rows: legacy centered variant, diagnostic)"}
 
 ```{python}
 #| label: tbl-lr-sensitivity
@@ -413,7 +413,7 @@ dr["isla"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for
                     + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
 hlg = {"gt": {1e-3: [hl[f"gt_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"gt_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]},
        "isla": {1e-3: [hl[f"mt2_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"mt2_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]}}
-name = {"gt": "GeoTransolver", "isla": "ISLA, legacy centred variant (diagnostic)"}
+name = {"gt": "GeoTransolver", "isla": "ISLA, legacy centered variant (diagnostic)"}
 out = "| dataset | architecture | best rate (error) | one grid step above (error) | degradation |\n|---|---|---|---|---:|\n"
 for ds, grid, steps in (("DrivAerML, 435 cars", dr, [1e-3, 3e-3, 1e-2]), ("HiLiftAeroML, 1,260 cases", hlg, [1e-3, 3e-3])):
     for arch in ("gt", "isla"):
@@ -425,7 +425,7 @@ for ds, grid, steps in (("DrivAerML, 435 cars", dr, [1e-3, 3e-3, 1e-2]), ("HiLif
         out += f"| {ds} | {name[arch]} | {f(best)} ({m[best]:.4f}) | {f(above)} ({m[above]:.4f}) | {m[above]/m[best]:.2f}x |\n"
 print(out)
 print(": Learning-rate sensitivity on the full splits: area-weighted relative L2 of surface pressure, seed means, "
-      "scored in bfloat16 (labelled: these grids predate the float32 instrument and are used only for "
+      "scored in bfloat16 (labeled: these grids predate the float32 instrument and are used only for "
       "within-architecture degradation factors), 500 epochs, 10,000 cells; DrivAerML grid {1e-3, 3e-3, 1e-2}, "
       "HiLiftAeroML grid {1e-3, 3e-3}. The HiLiftAeroML grid fed GeoTransolver the physical velocity, so its "
       "degradation there is a physical-velocity measurement. How to read this: the ratio in the last column is the "

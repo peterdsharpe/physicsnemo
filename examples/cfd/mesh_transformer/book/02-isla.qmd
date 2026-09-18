@@ -46,13 +46,13 @@ survive separated three-dimensional flow (@sec-interior-negatives).
 
 ```{mermaid}
 %%| fig-cap: >
-%%|   The ISLA forward pass. Grey boxes are data; dashed blue boxes are fixed
+%%|   The ISLA forward pass. Gray boxes are data; dashed blue boxes are fixed
 %%|   geometric maps with no parameters; solid blue boxes are learned. From
 %%|   the length scale to the last slice layer, nothing but invariant scalars
 %%|   is computed; the one place a vector is rebuilt is the output basis. The
 %%|   passive decoder on the right is optional (@sec-mt2-passive). How to read
-%%|   this: it is the reference configuration; the gauge variants
-%%|   (@sec-mt2-variants) insert a centring step before the length scale.
+%%|   this: it is ISLA; the gauge variants
+%%|   (@sec-mt2-variants) insert a centering step before the length scale.
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
     classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
@@ -105,7 +105,7 @@ fields at query points.** Per case, the inputs are:
 
 The outputs are one or more scalar fields (surface pressure, in every
 surface result of the book) and one or more vector fields (wall shear
-stress) at query points. In the reference configuration the queries *are*
+stress) at query points. In ISLA the queries *are*
 the surface sample and each point receives its own prediction; with the
 passive decoder (@sec-mt2-passive) queries can be any positions, on or off
 the surface.
@@ -115,7 +115,7 @@ the surface.
 #| fig-cap: >
 #|   What one token carries, on the running airfoil example. Each boundary
 #|   cell (black dot at its midpoint) has a position, a unit outward normal
-#|   (grey arrow) and a measure weight (the cell's length here, its area in
+#|   (gray arrow) and a measure weight (the cell's length here, its area in
 #|   three dimensions; drawn as the thickness of the boundary segment). The
 #|   one global vector input of this book is the freestream direction (black
 #|   arrow). How to read this: nothing else enters the model; in particular
@@ -179,8 +179,8 @@ the measure-weighted means agree.
 #|   Two samplings of one airfoil, and the mean pressure coefficient each
 #|   gives. Left: equal-arclength cells. Right: the same shape with cells
 #|   clustered at the leading edge, as a mesher resolving the suction peak
-#|   would. Colour is the surface pressure coefficient. The plain mean over
-#|   points (grey) moves between the two samplings because the second
+#|   would. Color is the surface pressure coefficient. The plain mean over
+#|   points (gray) moves between the two samplings because the second
 #|   sampling has more points where the pressure is low; the measure-weighted
 #|   mean (blue) is a quadrature estimate of the same integral and moves
 #|   only by the quadrature error. How to read this: the slice sums inside
@@ -255,7 +255,7 @@ poor frame.
 Where a point is, ISLA states only *relative to other things*: the scaled
 positions $r_i$ are used solely in differences $r_i - z_s$ against slice
 anchors (idea 3), so a common shift of every point cancels exactly and
-translation invariance needs no centring. The one scalar a token starts
+translation invariance needs no centering. The one scalar a token starts
 with, its **seed**, is the orientation of its normal against each global
 direction,
 
@@ -273,14 +273,14 @@ from the relational invariants of idea 4.
 #| fig-cap: >
 #|   Why the frame must not be a point statistic. The two samplings of
 #|   @fig-isla-quadrature, overlaid. The plain mean of the sampled positions
-#|   (open grey markers) moves toward the leading edge when the sampling is
-#|   clustered there, so a model whose coordinates are centred on it sees the
+#|   (open gray markers) moves toward the leading edge when the sampling is
+#|   clustered there, so a model whose coordinates are centered on it sees the
 #|   whole body displaced. The measure-weighted centroid (blue) and the total
 #|   measure (the length unit, printed) are integrals and agree between the
 #|   samplings to quadrature error. How to read this: ISLA's reference
-#|   configuration uses no centre at all and only the length unit; the
-#|   legacy centred variant (a diagnostic, @sec-mt2-variants) used the grey
-#|   centre and collapsed under a sampling-density bias.
+#|   configuration uses no center at all and only the length unit; the
+#|   legacy centered variant (a diagnostic, @sec-mt2-variants) used the gray
+#|   center and collapsed under a sampling-density bias.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
 clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
@@ -344,7 +344,7 @@ by its relation to this constellation (idea 4) instead of by coordinates.
 #| label: fig-isla-slices
 #| fig-cap: >
 #|   Soft slices and their anchors, illustrated with six slices on the
-#|   airfoil. Each cell is coloured by the slice that gives it the most
+#|   airfoil. Each cell is colored by the slice that gives it the most
 #|   weight; the routing here is a hand-made function of position along the
 #|   surface, standing in for the learned logits. Stars are the anchors, the
 #|   measure-weighted mean position of each slice, with the slice's mean
@@ -356,8 +356,8 @@ by its relation to this constellation (idea 4) instead of by coordinates.
 JJ = joukowski(n_cells=80)
 s_arc = np.concatenate([[0], np.cumsum(JJ["w"])]); s_mid = (s_arc[:-1] + s_arc[1:]) / 2; total = s_arc[-1]
 n_sl = 6
-centres = (np.arange(n_sl) + 0.5) / n_sl * total
-d = np.abs(s_mid[:, None] - centres[None, :]); d = np.minimum(d, total - d)
+centers = (np.arange(n_sl) + 0.5) / n_sl * total
+d = np.abs(s_mid[:, None] - centers[None, :]); d = np.minimum(d, total - d)
 logits = -(d / (0.06 * total)) ** 2
 lw_ = np.log(JJ["w"])[:, None]
 a = np.exp(logits + lw_); a /= a.sum(axis=0, keepdims=True)          # softmax over points, per slice
@@ -380,7 +380,7 @@ Routing normalizes over points so that a slice is an *average*, with the
 measure bias making it a quadrature average. Reading back (idea 5)
 normalizes over slices instead, with no measure bias, because there a point
 is choosing *where to read*, not how much it weighs. Adding a constant to
-every $\ell_i$ cancels in the routing ratio; in the reference configuration
+every $\ell_i$ cancels in the routing ratio; in ISLA
 the same constant also rescales $L$, which is why the reference is invariant
 to a joint geometric rescale rather than to a weight rescale alone
 (@sec-mt2-contracts).
@@ -511,7 +511,7 @@ independent routings per block, each with its own anchors and invariants;
 on a one-car overfitting instrument eight heads lowered ISLA's floor by 19%
 relative to a same-code single-routing control, and a run at 435 cars is in
 progress (@sec-nb-formheads-verdict, @sec-program-status). Until that
-verdict lands, the reference configuration is single-routing.
+verdict lands, ISLA is single-routing.
 :::
 
 ## Idea 6: vectors from an equivariant basis {#sec-mt2-heads}
@@ -534,7 +534,7 @@ Three of the basis vectors are directions the token already has: the global
 direction(s), its own normal, and $\hat u_i$, the **radial** direction from
 the token's own soft anchor to the token (a separate routing softmax assigns
 the token to slices and $u_i = r_i - \sum_s \beta_{is} z_s$; a difference of
-positions, so no centre appears). These already span space generically. The
+positions, so no center appears). These already span space generically. The
 complements $e_\theta(\hat u, \hat a)$, the part of $-\hat a$ orthogonal to
 $\hat u$, and $e_\phi = \hat u \times e_\theta$ keep the expansion well
 conditioned where the three are nearly coplanar, and they are left
@@ -558,7 +558,7 @@ fig, ax = plt.subplots(figsize=(8.0, 3.8))
 clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.3, 1.5)
 ax.plot(JJ["xy"][:, 0], JJ["xy"][:, 1], color=BASELINE, lw=1.2)
 i = 18; xi, ni = JJ["mid"][i], JJ["nrm"][i]
-beta = np.exp(-((s_mid[i] - centres) / (0.35 * total)) ** 2); beta /= beta.sum()   # a soft assignment spread over slices
+beta = np.exp(-((s_mid[i] - centers) / (0.35 * total)) ** 2); beta /= beta.sum()   # a soft assignment spread over slices
 anchor = (beta[:, None] * z).sum(axis=0); u = xi - anchor; u_hat = u / np.linalg.norm(u)
 e_th = -(ni - (ni @ u_hat) * u_hat); e_th_hat = e_th / np.linalg.norm(e_th)
 ax.plot(*anchor, marker="*", ms=16, color=VIOLET, mec=INK, mew=0.6, zorder=6)
@@ -585,7 +585,7 @@ and they live at the git tag `isla-research-full`.
 ## The forward pass on one page {#sec-mt2-forward}
 
 The symbols above are tied to the identifiers in
-`physicsnemo/experimental/nn/isla/model.py`; the reference configuration is
+`physicsnemo/experimental/nn/isla/model.py`; ISLA is
 `frame_mode="relative"`, `scale_mode="total_measure"`, the class default.
 
 | symbol | code | meaning |
@@ -636,17 +636,17 @@ book reports instead admits queries as interacting tokens
 ## The similarity-gauge variant, and the frame question {#sec-mt2-variants}
 
 **One documented variant replaces the relative frame with a frame estimated
-from the sample: the similarity-gauge variant centres on the measure-weighted
+from the sample: the similarity-gauge variant centers on the measure-weighted
 centroid and scales by the measure-weighted RMS radius, both integrals of
 the geometry.** It is selected by `frame_mode="centered"` with
-`similarity_gauge=True`, subtracts its centre $c$ before scaling, $r_i =
+`similarity_gauge=True`, subtracts its center $c$ before scaling, $r_i =
 (x_i - c)/L$, and differs from the reference in three places: its seed is
 $3 + 2K$ scalars (the rotation invariants of $\{r_i, \hat n_i, \hat
-g_k\}$, which now include the distance from the centre and its direction
+g_k\}$, which now include the distance from the center and its direction
 cosines); its relational invariants gain $1 + K$ more that describe the
-anchor's position relative to the centre; and its head's radial basis vector
-is the direction from the centre instead of from the token's anchor. Because
-the centre and the length unit are integrals, it is exactly covariant under
+anchor's position relative to the center; and its head's radial basis vector
+is the direction from the center instead of from the token's anchor. Because
+the center and the length unit are integrals, it is exactly covariant under
 rigid motions and rescaling and consistent under a change of sampling, like
 the reference. What it adds is information: every token learns where it is
 relative to the body's centroid.
@@ -660,15 +660,15 @@ relative frame presumes none of this. Whether the extra information buys
 measurable accuracy on closed single bodies is an open measurement
 (@sec-program-status); the deliberation is recorded in the notebook.
 
-::: {.callout-note collapse="true" title="The centred construction, in symbols"}
-With a centre $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
+::: {.callout-note collapse="true" title="The centered construction, in symbols"}
+With a center $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
 the seed becomes the $3 + 2K$ rotation invariants of $\{r_i, \hat n_i,
 \hat g_k\}$ up to parity (the complete set for $K = 1$),
 $$
 s_i = \big[\,\lvert r_i\rvert,\ \log\lvert r_i\rvert,\ \hat r_i\!\cdot\!\hat g_k,\ \hat r_i\!\cdot\!\hat n_i,\ \hat n_i\!\cdot\!\hat g_k,\ \sigma\,\big],
 $$
 and the relational invariants gain $\lvert z_s\rvert$ and $\hat z_s\cdot\hat
-g_k$ (the anchor's position relative to the centre), broadcast to every
+g_k$ (the anchor's position relative to the center), broadcast to every
 token: $6 + 2K$ in all. The head's radial vector is $\hat r_i$. The
 similarity-gauge variant sets, with $\tilde w_i = w_i / \sum_j w_j$,
 $$
@@ -677,12 +677,12 @@ $$
 and holds at 1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
 :::
 
-::: {.callout-note collapse="true" title="The legacy centred variant (diagnostic)"}
-Before the relative frame, the program's configuration was a centred frame
-with the plain mean of the sampled points as centre and a constant length
+::: {.callout-note collapse="true" title="The legacy centered variant (diagnostic)"}
+Before the relative frame, the program's configuration was a centered frame
+with the plain mean of the sampled points as center and a constant length
 unit (`frame_mode="centered"`, `scale_mode="reference_length"`,
 `reference_length` 8.0 in the recipe's nondimensional units, 40 m physical
-on DrivAerML). The plain mean is a mesher statistic, the grey marker of
+on DrivAerML). The plain mean is a mesher statistic, the gray marker of
 @fig-isla-frame: under a 10:1 sampling-density bias it moves by a large
 fraction of the body length, every downstream invariant leaves its trained
 range, and the error grows 12x where the reference grows 1.2x. It reads a
@@ -706,16 +706,16 @@ input and weights.
 | contract | test | tolerance |
 |---|---|---|
 | rotation covariance: scalars unchanged, vectors $v \mapsto vQ^\top$ for a proper rotation $Q$ | `test_rotation_equivariance`, `test_qi_rotation_equivariance` | $10^{-10}$ |
-| translation invariance, with no centring anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
+| translation invariance, with no centering anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
 | geometric-scale invariance: points $\times k$, areas $\times k^2$ leave every output unchanged, while areas alone do not | `test_relative_frame_contracts` | $10^{-12}$ |
-| the default is the reference configuration | `test_default_is_relative_total_measure` | exact |
+| the default is ISLA | `test_default_is_relative_total_measure` | exact |
 | query independence in the passive decoder: 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
 | off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
 | gauge variants: weight-scale invariance; similarity gauge: geometric-scale equivariance | `test_measure_weight_scale_invariance`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
 | every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
-| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; a centred frame with a fixed length unit is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
+| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; a centered frame with a fixed length unit is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
@@ -725,7 +725,7 @@ input and weights.
   have the opposite pair.
 - **Reflection covariance of vectors** (see idea 6).
 - **The magnitude of a global vector input**: discarded by design.
-- **Query independence in the reference configuration.** Every surface
+- **Query independence in ISLA.** Every surface
   point is an interacting token; on DrivAerML at matched token counts the
   prediction at a shared 5,000-cell prefix changes by 6.8% when the
   companion points change (GeoTransolver 2%). The exact contract is bought
@@ -811,28 +811,28 @@ results/v0_interior_resources_2026-09-07.json).
 
 **No single ingredient of ISLA carries its accuracy; the largest single
 effect measured is 16%. The relative frame buys consistency under a change
-of sampling at a price of 0 to 14.5% against a sample-centred frame
+of sampling at a price of 0 to 14.5% against a sample-centered frame
 depending on the rung, and exact query independence costs 3.0 to 3.7x.**
 Each line below carries one number and the section that defines the
 measurement; ablation ratios are a variant's pressure error over the
 unablated model's (0.138) in the single-factor ablation at 35 HiLiftAeroML
-training cases, two seeds, which was run on the legacy centred variant
+training cases, two seeds, which was run on the legacy centered variant
 (@sec-mechanism), greater than one meaning worse.
 
 | choice | what it buys | what it costs | where |
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
 | exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 6% and 19% lead in random poses | adding raw coordinates does not help at 35 wing cases (1.04x with the channel, 0.99x with raw seeds; every ablation keeps an invariant path through the relational invariants, so these do not show invariants are dispensable); at 435 cars the contracts deny about 2.5 points of positional information against the baselines | @sec-pose, @sec-deficit-anatomy |
-| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x; that collapse is the plain-mean centre alone (the legacy centred checkpoint with a measure-weighted centre swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the released baselines stay at 3 to 7x | against the legacy centred variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
+| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centered configurations degrade 10 to 16x; that collapse is the plain-mean center alone (the legacy centered checkpoint with a measure-weighted center swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the baselines stay at 3 to 7x | against the legacy centered variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
 | measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
-| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centred variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
+| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centered variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | about two points of form against multi-head routing on the one-car instrument; under study | @sec-nb-formheads-verdict |
 
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}
 | flag (default) | what it changes |
 |---|---|
 | `frame_mode` (`"relative"`) | the reference; `"centered"` selects the gauge variants. Checkpoints store their constructor arguments and load in the configuration that trained them |
-| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (the legacy centred variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
+| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (the legacy centered variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
 | `similarity_gauge` (off) | the similarity-gauge variant; requires `frame_mode="centered"` |
 | `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
 | `use_relational_geo` (on) | the relational invariants in routing and read-back |
