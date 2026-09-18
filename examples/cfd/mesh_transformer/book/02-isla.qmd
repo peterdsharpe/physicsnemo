@@ -279,8 +279,8 @@ from the relational invariants of idea 4.
 #|   measure (the length unit, printed) are integrals and agree between the
 #|   samplings to quadrature error. How to read this: ISLA's reference
 #|   configuration uses no centre at all and only the length unit; the
-#|   constant-gauge variant uses the grey centre and is the configuration that
-#|   collapses under a sampling-density bias (@sec-scoreboard-consistency).
+#|   legacy centred variant (a diagnostic, @sec-mt2-variants) used the grey
+#|   centre and collapsed under a sampling-density bias.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
 clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
@@ -633,34 +633,32 @@ book reports instead admits queries as interacting tokens
 (@sec-interior-query-tokens).
 :::
 
-## The gauge variants {#sec-mt2-variants}
+## The similarity-gauge variant, and the frame question {#sec-mt2-variants}
 
-**Two documented variants replace the relative frame with a frame
-estimated from the sample; both are selected by `frame_mode="centered"` and
-both carry the sample's point distribution into the forward pass.** They
-subtract a centre $c$ before scaling, $r_i = (x_i - c)/L$, and differ from
-the reference in three places: the seed is $3 + 2K$ scalars (the rotation
-invariants of $\{r_i, \hat n_i, \hat g_k\}$, which now includes the distance
-from the centre and its direction cosines); the relational invariants gain
-$1 + K$ more that describe the anchor's position relative to the centre; and
-the head's radial basis vector is the direction from the centre instead of
-from the token's anchor.
+**One documented variant replaces the relative frame with a frame estimated
+from the sample: the similarity-gauge variant centres on the measure-weighted
+centroid and scales by the measure-weighted RMS radius, both integrals of
+the geometry.** It is selected by `frame_mode="centered"` with
+`similarity_gauge=True`, subtracts its centre $c$ before scaling, $r_i =
+(x_i - c)/L$, and differs from the reference in three places: its seed is
+$3 + 2K$ scalars (the rotation invariants of $\{r_i, \hat n_i, \hat
+g_k\}$, which now include the distance from the centre and its direction
+cosines); its relational invariants gain $1 + K$ more that describe the
+anchor's position relative to the centre; and its head's radial basis vector
+is the direction from the centre instead of from the token's anchor. Because
+the centre and the length unit are integrals, it is exactly covariant under
+rigid motions and rescaling and consistent under a change of sampling, like
+the reference. What it adds is information: every token learns where it is
+relative to the body's centroid.
 
-- **The constant-gauge variant** (`scale_mode="reference_length"`) centres
-  on the plain mean of the sampled points and scales by a constant
-  (`reference_length`, 8.0 in the recipe's nondimensional units). The plain
-  mean is the grey marker of @fig-isla-frame: under a 10:1 sampling-density
-  bias it moves by a large fraction of the body length and every downstream
-  invariant leaves its trained range. It is behind the constant-gauge
-  columns of the evidence chapters and is named wherever a number comes
-  from it.
-- **The similarity-gauge variant** (`similarity_gauge=True`) centres on the
-  measure-weighted centroid and scales by the measure-weighted RMS radius,
-  both integrals; it is exactly equivariant to a geometric rescale and
-  consistent under sampling, and remains a frame estimated from the sample.
-
-The reference configuration is preferred because it estimates nothing;
-@sec-mt2-design prices the choice.
+The reference is preferred on principle, not on a measured accuracy
+difference. A PDE does not know what "the body" is, and the area-weighted
+centroid of a surface is not a point the physics distinguishes; for an open
+or truncated boundary, a multi-body scene, or a boundary with structure at
+every scale, that centroid is an artifact of where the domain was cut. The
+relative frame presumes none of this. Whether the extra information buys
+measurable accuracy on closed single bodies is an open measurement
+(@sec-program-status); the deliberation is recorded in the notebook.
 
 ::: {.callout-note collapse="true" title="The centred construction, in symbols"}
 With a centre $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
@@ -672,17 +670,28 @@ $$
 and the relational invariants gain $\lvert z_s\rvert$ and $\hat z_s\cdot\hat
 g_k$ (the anchor's position relative to the centre), broadcast to every
 token: $6 + 2K$ in all. The head's radial vector is $\hat r_i$. The
-constant-gauge variant sets $c = \frac{1}{N}\sum_i x_i$ and $L =
-L_{\mathrm{ref}} = 8.0$ in the recipe's nondimensional units (the recipe
-divides coordinates by a per-case reference length before the model sees
-them, 5 m on DrivAerML, so 8.0 is 40 m physical). The similarity-gauge
-variant sets, with $\tilde w_i = w_i / \sum_j w_j$,
+similarity-gauge variant sets, with $\tilde w_i = w_i / \sum_j w_j$,
 $$
 c = \sum_i \tilde w_i\, x_i, \qquad L = \Big(\sum_i \tilde w_i\, \lvert x_i - c\rvert^2\Big)^{1/2},
 $$
-integrals rather than point averages. Its accuracy is within a few percent
-of the constant-gauge variant's (1.08x at 35 wing cases) and it holds at
-1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
+and holds at 1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
+:::
+
+::: {.callout-note collapse="true" title="The legacy centred variant (diagnostic)"}
+Before the relative frame, the program's configuration was a centred frame
+with the plain mean of the sampled points as centre and a constant length
+unit (`frame_mode="centered"`, `scale_mode="reference_length"`,
+`reference_length` 8.0 in the recipe's nondimensional units, 40 m physical
+on DrivAerML). The plain mean is a mesher statistic, the grey marker of
+@fig-isla-frame: under a 10:1 sampling-density bias it moves by a large
+fraction of the body length, every downstream invariant leaves its trained
+range, and the error grows 12x where the reference grows 1.2x. It reads a
+sample statistic that is not physical knowledge, so it is cut from every
+main result of this book and appears only in collapsed notes like this one,
+where it is the diagnostic that locates a mechanism (the plain-mean collapse;
+the single-factor ablation of @sec-mechanism, which was run on it). Its
+recipe configuration `isla_surface_constant_gauge` is kept to reproduce
+those measurements.
 :::
 
 ## The contracts, as tests {#sec-mt2-contracts}
@@ -706,7 +715,7 @@ input and weights.
 | gauge variants: weight-scale invariance; similarity gauge: geometric-scale equivariance | `test_measure_weight_scale_invariance`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
 | pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
 | every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
-| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; the constant-gauge variant is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
+| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; a centred frame with a fixed length unit is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
@@ -802,28 +811,28 @@ results/v0_interior_resources_2026-09-07.json).
 
 **No single ingredient of ISLA carries its accuracy; the largest single
 effect measured is 16%. The relative frame buys consistency under a change
-of sampling at a price of 0 to 14.5% against the constant-gauge variant
+of sampling at a price of 0 to 14.5% against a sample-centred frame
 depending on the rung, and exact query independence costs 3.0 to 3.7x.**
 Each line below carries one number and the section that defines the
 measurement; ablation ratios are a variant's pressure error over the
-constant-gauge variant's (0.138) in the single-factor ablation at 35
-HiLiftAeroML training cases, two seeds (@sec-mechanism), greater than one
-meaning worse.
+unablated model's (0.138) in the single-factor ablation at 35 HiLiftAeroML
+training cases, two seeds, which was run on the legacy centred variant
+(@sec-mechanism), greater than one meaning worse.
 
 | choice | what it buys | what it costs | where |
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
 | exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 6% and 19% lead in random poses | adding raw coordinates does not help at 35 wing cases (1.04x with the channel, 0.99x with raw seeds; every ablation keeps an invariant path through the relational invariants, so these do not show invariants are dispensable); at 435 cars the contracts deny about 2.5 points of positional information against the baselines | @sec-pose, @sec-deficit-anatomy |
-| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x; the constant-gauge collapse is the plain-mean centre alone (the same checkpoint with a measure-weighted centre goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the released baselines stay at 3 to 7x | against the constant-gauge variant: 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
+| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x; that collapse is the plain-mean centre alone (the legacy centred checkpoint with a measure-weighted centre swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the released baselines stay at 3 to 7x | against the legacy centred variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
 | measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
-| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting constant-gauge variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
+| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centred variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | about two points of form against multi-head routing on the one-car instrument; under study | @sec-nb-formheads-verdict |
 
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}
 | flag (default) | what it changes |
 |---|---|
 | `frame_mode` (`"relative"`) | the reference; `"centered"` selects the gauge variants. Checkpoints store their constructor arguments and load in the configuration that trained them |
-| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (constant-gauge variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
+| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (the legacy centred variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
 | `similarity_gauge` (off) | the similarity-gauge variant; requires `frame_mode="centered"` |
 | `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
 | `use_relational_geo` (on) | the relational invariants in routing and read-back |

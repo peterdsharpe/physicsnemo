@@ -18786,3 +18786,67 @@ surface-pressure error under the stratified draw, and the seed ranges.
 ahead with overlapping seed ranges. A recovery of a full point would be a
 surprise worth a follow-up on the wings, where the reference's price
 against the constant gauge is larger.
+
+## 2026-09-18 — Ruling and preregistration: the constant-gauge variant leaves the main results; POSE-REF and LR-REF re-measure the two headline properties on the reference configuration {#sec-nb-refprops-prereg}
+
+**Ruling (Peter, 2026-09-18).** The constant-gauge variant, a centred frame
+with a fixed length unit that was the program's reference until the
+relative frame replaced it, is cut from the book's main results: no row of
+the standing table, no series in the scoreboard figures, no column of the
+ladder. It improves in-distribution accuracy by reading a sample statistic
+(the plain mean of the sampled points) that is not physical knowledge and
+does not generalize to general PDE cases, the same reason the weights-off
+ablation was never adopted. It may remain as a labelled diagnostic in
+collapsed notes where a mechanism needs it (the plain-mean collapse under a
+sampling-density bias, the single-factor ablation at 35 wing cases). Peter
+raised the same objection in principle against the similarity-gauge
+variant: the area-weighted centroid of a two-dimensional manifold is not a
+meaningful point in three-dimensional space and "the body" is not a
+well-posed notion for a PDE. That deliberation is open (SG-REF is running
+and the notebook will carry the argument); the constant-gauge cut is not.
+
+**Consequence.** Two headline properties of ISLA were measured only on the
+constant-gauge variant: the pose test (every case in its own random SO(3)
+pose; ISLA at 1.01x its in-pose error, 6% and 19% ahead of the augmented
+baselines; research/transfer_program/studies/campaign_b_pose) and the
+learning-rate grid (ISLA within 1.55x of its best across a decade of rate
+where GeoTransolver degrades 9x by seed mean). Until re-measured, those
+rows carry the label "measured on the legacy centred variant" in the book.
+The contracts of the two configurations are identical, so the pose
+*degradation* should transfer exactly; the in-pose accuracy and the
+learning-rate response are properties of the trained function and need the
+measurement.
+
+**Instrument.** Six lanes of the reference configuration at 435 DrivAerML
+cars, 10,000 cells, 500 epochs, bf16, lean class and the same recipe copy
+as the reference seeds (`kernel/refprops_aga.sbatch`): two seeds with every
+training and validation case in its own random pose (dataset
+`drivaer_ml_surface_pose`, learning rate 1e-3), and two seeds each at
+learning rates 3e-3 and 1e-2 in the native frame. Readout in float32 on the
+48 validation cars: the posed error against the reference's in-pose error
+(0.0552, two seeds) and against the augmented baselines' posed errors
+(0.0602, 0.0676); the learning-rate errors against the reference at 1e-3.
+
+**Bars, written before the run.**
+
+- **POSE-REF supports**: the posed reference is within 3% of its in-pose
+  error (the contract at work; the bf16 training residual measured by
+  PREC-RES is the expected source of the gap) and below both augmented
+  baselines by at least 5%. The pose row of the standing table then reads on
+  the reference and the label is removed.
+- **POSE-REF falsifies**: the posed reference exceeds its in-pose error by
+  more than 5%; then something in the recipe's posed datapipe or the
+  training path is not covariant and is investigated before the row is
+  restored.
+- **LR-REF supports**: the reference's worst error over {1e-3, 3e-3, 1e-2}
+  is within 1.6x of its best (the constant-gauge value), so the
+  learning-rate robustness claim transfers; the section then reads on the
+  reference.
+- **LR-REF falsifies**: a divergence (loss not finite, or error above 2x
+  the 1e-3 value) at 3e-3 or 1e-2. Given the width-512 divergence mechanism
+  (routing hardening at high effective rate), a divergence at 1e-2 would not
+  surprise and would be reported as the reference's rate ceiling.
+
+**Prediction.** POSE-REF supports (posed within 2%). LR-REF: 3e-3 within
+1.2x, 1e-2 between 1.3x and divergence; the claim narrows from "a decade"
+to "half a decade" for the reference.

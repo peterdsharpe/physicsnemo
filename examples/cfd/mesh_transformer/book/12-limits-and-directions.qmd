@@ -27,11 +27,11 @@ section; this chapter adds only the limits.
 
 | result | where |
 |---|---|
-| On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA at every rung measured: 35, 210, 510 and 1,260 random training cases, 4 and 21 training geometries, and the fixed angle. | @sec-data-efficiency, @sec-scoreboard |
+| On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA's reference configuration at every rung where it is measured: 35 and 210 random training cases, 4 and 21 training geometries, and the fixed angle. | @sec-data-efficiency, @sec-scoreboard |
 | On DrivAerML the released baselines lead at full data by a few percent, and the size of the gap depends on how it is measured; its anatomy is known. | @sec-full-data, @sec-deficit-anatomy |
-| Rotation and translation covariance are exact by construction; with every case in a random pose ISLA leads the augmented baselines. | @sec-pose, @sec-mt2-contracts |
+| Rotation and translation covariance are exact by construction; with every case in a random pose ISLA leads the augmented baselines (measured on the legacy centred variant; re-measurement on the reference configuration running, @sec-nb-refprops-prereg). | @sec-pose, @sec-mt2-contracts |
 | The relative frame is consistent under a change of surface sampling where every sample-centred configuration collapses, and the measure-weighted ISLA arms are the only ones that converge under refinement. | @sec-consistency-bench, @sec-scoreboard-consistency |
-| Training is stable across a decade of learning rate; the step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-mt2-cost |
+| Training is stable across a decade of learning rate (measured on the legacy centred variant; re-measurement on the reference configuration running, @sec-nb-refprops-prereg); the step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-mt2-cost |
 | On the interior task ISLA leads GeoTransolver-volume on velocity at a third of the parameters, trails on pressure and eddy viscosity, and leads on two of three fields at matched parameters. | @sec-interior |
 | Nothing tested generalizes across a flow-regime boundary. | @sec-regime-extrapolation |
 | Cross-family transfer is a property of the training data for every architecture tested. | @sec-limits-transfer |
@@ -40,10 +40,11 @@ section; this chapter adds only the limits.
 
 ### The HiLiftAeroML ladder: what its curves measure {#sec-limits-data-efficiency}
 
-**The unit-direction baselines lie below both ISLA configurations at every
-rung of the ladder, at a ratio that narrows from the smallest training set
-to the largest; the ladder is a statement about the range of data every
-production CFD dataset in this program occupies, not a scaling law.** The
+**The unit-direction baselines lie below ISLA's reference configuration at
+both rungs where it is measured, at a ratio that narrows from the smaller
+training set to the larger; the ladder is a statement about the range of
+data every production CFD dataset in this program occupies, not a scaling
+law.** The
 quantity throughout is the surface-pressure relative L2 of @sec-metrics
 averaged over the 180 validation cases shared by every rung, in float32.
 
@@ -54,59 +55,52 @@ averaged over the 180 validation cases shared by every rung, in float32.
 #|   pressure error on the shared 180-case validation set against the number
 #|   of training cases, log-log, float32; marks are seed means and small dots
 #|   the individual seeds. ISLA's reference configuration (filled blue
-#|   squares) is trained at 35 and 210 cases; its constant-gauge variant (open
-#|   blue squares, dotted) at all four rungs; GeoTransolver (red circles) and
-#|   Transolver (amber triangles, dashed) at all four rungs, each at its
-#|   declared learning rate. How to read this: the baselines lie below both
-#|   ISLA curves at every rung; the reference configuration is not measured
-#|   at 510 or 1,260 cases, so its ratio there is not known. It does not show
-#|   the geometry and fixed-angle splits (@sec-scoreboard). Protocol: 10,000
+#|   squares), GeoTransolver (red circles) and Transolver (amber triangles,
+#|   dashed) at the two rungs where the reference is trained, 35 and 210
+#|   cases, each at its declared learning rate. How to read this: the
+#|   baselines lie below the reference at both rungs; the reference
+#|   configuration is not measured at 510 or 1,260 cases, so those rungs are
+#|   not shown and its ratio there is not known. It does not show the
+#|   geometry and fixed-angle splits (@sec-scoreboard). Protocol: 10,000
 #|   sampled cells per case, 500 epochs, bfloat16 training, no augmentation.
 #|   Data: results/fp32_reeval/fp32_shift_2026-09-09.json,
 #|   results/fp32_reeval/fp32_shift_35_2026-09-09.json,
 #|   results/udrvl_210_reduction_2026-09-10.json,
-#|   results/udrvl_510_reduction_2026-09-12.json,
-#|   results/udrv_1260_reduction_2026-09-15.json,
-#|   results/udrv_1260_transolver_2026-09-16.json,
 #|   results/relframe_reduction_2026-09-11.json,
 #|   results/frame_reduction_2026-09-11.json.
 #| code-fold: true
 J = lambda p: json.load(open(RES / p))
 fpall = J("fp32_reeval/fp32_shift_2026-09-09.json")["runs"]; fp35 = J("fp32_reeval/fp32_shift_35_2026-09-09.json")["runs"]
-u210 = J("udrvl_210_reduction_2026-09-10.json"); u510 = J("udrvl_510_reduction_2026-09-12.json")["arms_fp32"]
-u1260 = J("udrv_1260_reduction_2026-09-15.json")["summary"]["pressure_l2"]; u1260t = J("udrv_1260_transolver_2026-09-16.json")["summary"]["pressure_l2"]
+u210 = J("udrvl_210_reduction_2026-09-10.json")
 rf = J("relframe_reduction_2026-09-11.json")["hilift_val"]; ff = J("frame_reduction_2026-09-11.json")["hilift_val"]
 p32 = lambda runs, names: [runs[n]["fields"]["pressure_l2"]["fp32_mean"] for n in names]
 a210 = u210["three_seed_addendum_fp32"]
 series = {
     "isla_ref": {35: [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)],
                  210: [ff[f"rf_hl_mt2_meas_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]},
-    "isla_cg": {35: p32(fp35, [f"lad_hl_mt2_super_scarce_seed{s}" for s in (42, 43, 44)]),
-                210: u210["arms_fp32"]["isla"]["seed_pressure"], 510: u510["isla_prior"]["seed_pressure"],
-                1260: u1260["isla_seeds"]},
     "gt": {35: p32(fp35, [f"udrv_hl_gt_super_scarce_lr3e3_seed{s}" for s in (42, 43)]),
-           210: a210["gt_unit_lr1e3"]["seed_pressure"], 510: u510["gt_unit"]["seed_pressure"], 1260: u1260["gt_seeds"]},
+           210: a210["gt_unit_lr1e3"]["seed_pressure"]},
     "t": {35: p32(fp35, [f"udrv_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)]),
-          210: a210["transolver_unit_lr3e3"]["seed_pressure"], 510: u510["transolver_unit_lr3e3"]["seed_pressure"],
-          1260: u1260t["transolver_seeds"]},
+          210: a210["transolver_unit_lr3e3"]["seed_pressure"]},
 }
 fig, ax = plt.subplots(figsize=(7.6, 4.9))
-for key in ("isla_ref", "isla_cg", "gt", "t"):
+for key in ("isla_ref", "gt", "t"):
     d = series[key]; xs = sorted(d)
     ax.plot(xs, [mean(d[x]) for x in xs], **series_kwargs(key, zorder=3))
     for x in xs:
         ax.scatter([x] * len(d[x]), d[x], s=12, color=STYLE[key]["color"], zorder=4)
-lines = ["baseline ÷ ISLA constant-gauge variant (seed means)"]
-for x in (35, 210, 510, 1260):
-    ref = mean(series["isla_cg"][x])
+lines = ["baseline ÷ ISLA reference configuration (seed means)"]
+for x in (35, 210):
+    ref = mean(series["isla_ref"][x])
     lines.append(f"{x:,} cases: GeoTransolver {mean(series['gt'][x])/ref:.2f}, Transolver {mean(series['t'][x])/ref:.2f}")
+lines.append("510 and 1,260 cases: reference not yet measured")
 note(ax, "\n".join(lines), loc="lower left")
 ax.legend(loc="upper right", fontsize=8.5)
 ax.set_xscale("log"); ax.set_yscale("log")
 ax.set_xticks([35, 210, 510, 1260]); ax.set_xticklabels(["35", "210", "510", "1,260"])
-ax.set_yticks([0.03, 0.04, 0.06, 0.1, 0.15]); ax.set_yticklabels(["0.03", "0.04", "0.06", "0.10", "0.15"])
+ax.set_yticks([0.04, 0.06, 0.1, 0.15]); ax.set_yticklabels(["0.04", "0.06", "0.10", "0.15"])
 ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-ax.set_xlim(25, 1800); ax.set_ylim(0.028, 0.2)
+ax.set_xlim(25, 1800); ax.set_ylim(0.035, 0.2)
 ax.set_xlabel("training cases [count]"); ax.set_ylabel("surface pressure error, area-weighted relative L2 [–]")
 ax.set_title("HiLiftAeroML nested splits, unit-direction protocol, float32")
 ax.grid(True, which="major"); ax.grid(False, which="minor")
@@ -116,21 +110,22 @@ fig.tight_layout(); plt.show()
 Three facts bound what the curves can say.
 
 - **The reference configuration is measured at two rungs.** At 510 and
-  1,260 cases only the constant-gauge variant is trained, and the reference
-  trails it by about a tenth where validation geometries recur in training
-  (@sec-deficit-anatomy), so the reference's ratio on the two largest rungs
-  is not known and is expected to be lower than the variant's.
+  1,260 cases it is not yet trained, so its ratio on the two largest rungs
+  is not known; the baselines' curves continue to those rungs
+  (@sec-scoreboard), and the expectation from the recurrence reading below
+  is a ratio somewhat lower than at 210 cases.
 - **Every seed at a rung trains on the same curated subset**, so the seed
   bands measure initialization, not the choice of training cases.
   Geometry-stratified redraws of the 35- and 210-case training sets put the
   GeoTransolver ÷ ISLA ratio inside a band that stays below one on every
   draw (@sec-scoreboard), so the curated draws are typical.
-- **The flattening toward 1,260 cases is not a token floor.** Both
-  GeoTransolver and the constant-gauge variant retrained at 20,000 cells per
-  case improve by about the same factor and their ratio does not move
-  (@sec-scoreboard-protocol); the two architectures share most of their
-  residual on identical points at that rung (@sec-shared-floor), so the
-  floor is the labels' or the protocol's, not one architecture's.
+- **The flattening toward 1,260 cases is not a token floor.** Retrained at
+  20,000 cells per case, GeoTransolver and ISLA (the legacy centred variant,
+  used here as a diagnostic) improve by about the same factor and their
+  ratio does not move (@sec-scoreboard-protocol); the two architectures
+  share most of their residual on identical points at that rung
+  (@sec-shared-floor), so the floor is the labels' or the protocol's, not
+  one architecture's.
 
 ### The HiLift accuracy figures are validation-set figures {#sec-limits-validation}
 
@@ -182,12 +177,13 @@ removed without breaking a contract.** The decomposition itself is
   routings per block remove most of it, and whether that transfers to the
   full training set is the open run (@sec-program-status).
 - **The relative frame's price on the wings is mesher pattern.** Against
-  the constant-gauge variant the reference pays nothing on DrivAerML and on
-  the never-seen-geometry rungs, and about a tenth where validation
-  geometries recur in training. Two diagnostics with an exact full-geometry
-  frame pay more than the reference, so the price is not positional
-  information but the mesh-density content of the plain-mean centre, which
-  is reusable when a wing returns and a liability when it does not
+  the legacy centred variant (a diagnostic here: a plain-mean centre with a
+  fixed length unit) the reference pays nothing on DrivAerML and on the
+  never-seen-geometry rungs, and about a tenth where validation geometries
+  recur in training. Two diagnostics with an exact full-geometry frame pay
+  more than the reference, so the price is not positional information but
+  the mesh-density content of the plain-mean centre, which is reusable when
+  a wing returns and a liability when it does not
   (@sec-nb-frame-full-verdict). The fixed angle is the one
   never-seen-geometry rung where the reference still pays; the reading that
   a single freestream direction makes the mesher's refinement pattern a
@@ -314,9 +310,9 @@ ISLA, so above one favours ISLA.
 | question | what would settle it | bar |
 |---|---|---|
 | Does the routing-multiplicity gain measured on one car transfer to the full DrivAerML training set? | the reference configuration with 4 and 8 routings per block at 435 cars, two seeds, on the sample-frame probe (10,000 cells, uniform and 10:1-biased draws) | closes the form gap at or below the value the anatomy assigns to a model without the form deficit; carries at a 2% gain; null under 1% (@sec-nb-heads435-prereg) |
-| What is the reference configuration's ratio on the two largest HiLift rungs? | the reference trained at 510 and 1,260 cases under the frozen protocol | reported as measured; the prediction from the recurrence reading is a ratio about a tenth below the constant-gauge variant's |
+| What is the reference configuration's ratio on the two largest HiLift rungs? | the reference trained at 510 and 1,260 cases under the frozen protocol | reported as measured; the prediction from the recurrence reading is a ratio somewhat below the 210-case value |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
-| Is the width learning-rate rule a scaling law or a one-corner fix? | a width ladder at fixed cells with the rule applied | clean training at every width and a ratio to the constant-gauge variant that does not widen (@sec-using-lr) |
+| Is the width learning-rate rule a scaling law or a one-corner fix? | a width ladder at fixed cells with the rule applied | clean training at every width and a ratio to GeoTransolver that does not widen (@sec-using-lr) |
 | What is the covariance residual of a trained checkpoint on the GPU bfloat16 path? | rotate the inputs of a trained checkpoint under the recipe's own autocast | reported as measured; it is the number "exact" means in deployment |
 | Does the architecture work on a problem that is not external aerodynamics? | a steady-conduction or Laplace acceptance case with $K = 0$ global vectors and a diffusivity as the global scalar | the contract tests pass and the error is at the level of the same-size baseline on that problem |
 | Does either architecture extrapolate across geometry classes? | a split across classes rather than along one parameter of one family | none of this book's datasets provides one |

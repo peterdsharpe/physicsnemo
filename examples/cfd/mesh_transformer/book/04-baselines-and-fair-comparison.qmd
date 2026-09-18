@@ -153,8 +153,8 @@ The trained consequence, at 35 HiLiftAeroML training cases with the same
 cases, seeds and budget in both arms, is in @tbl-unit-vs-physical: each
 baseline fed the unit direction is more accurate than its physical-velocity
 twin on every one of the 180 validation cases, by a median factor above
-three, and the unit-direction baselines are ahead of both ISLA
-configurations.
+three, and the unit-direction baselines are ahead of ISLA's reference
+configuration.
 
 ```{python}
 #| label: tbl-unit-vs-physical
@@ -170,7 +170,6 @@ arms = [
     ("Transolver, physical velocity, lr 3e-3", fp([f"t1_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
     ("Transolver, unit direction, lr 3e-3", fp([f"udrv_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
     ("ISLA, reference configuration", [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]),
-    ("ISLA, constant-gauge variant", fp([f"lad_hl_mt2_super_scarce_seed{s}" for s in (42, 43, 44)])),
 ]
 isla_ref = mean(arms[5][1])
 out = "| arm | surface pressure error, seed mean (seeds) | baseline ÷ ISLA reference |\n|---|---|---:|\n"
@@ -269,9 +268,10 @@ in footprint.
 
 @tbl-token-control is the token-count control behind rule 1. It compares
 ISLA against itself at two cell counts, at one shared learning rate that is
-not ISLA's best, on the constant-gauge variant; the 8% it shows is the price
-of fewer sampled points per case, and the reason the protocol fixes tokens
-for every architecture.
+not ISLA's best; it was run on the legacy centred variant (diagnostic), a
+within-model control whose reading does not depend on the frame. The 8% it
+shows is the price of fewer sampled points per case, and the reason the
+protocol fixes tokens for every architecture.
 
 ```{python}
 #| label: tbl-token-control
@@ -282,8 +282,8 @@ mt2_const_10k = [p(f"ref_mt2_v3c_seed{s}") for s in (42, 43)]
 mt2_const_6500 = [p(f"iw_mt2_v3c_r6500_seed{s}") for s in (42, 43)]
 gt_10k = [p(f"ref_gt_fixed_seed{s}") for s in (42, 43)]
 ratio = mean(mt2_const_6500) / mean(mt2_const_10k)
-rows = [("ISLA, constant-gauge variant", "10,000", mt2_const_10k, 1.0),
-        ("ISLA, constant-gauge variant", "6,500", mt2_const_6500, ratio),
+rows = [("ISLA, legacy centred variant (diagnostic)", "10,000", mt2_const_10k, 1.0),
+        ("ISLA, legacy centred variant (diagnostic)", "6,500", mt2_const_6500, ratio),
         ("GeoTransolver", "10,000", gt_10k, None)]
 out = "| architecture | tokens per case | surface pressure error (seed 42 / 43) | relative to ISLA at 10,000 |\n|---|--:|---|--:|\n"
 for n, t, v, r in rows:
@@ -292,7 +292,8 @@ print(out)
 print(": The token-count control on DrivAerML: area-weighted relative L2 of surface pressure, mean over the 48 "
       "validation cars, scored in bfloat16 (labelled: this table predates the float32 instrument and compares ISLA "
       "with itself), at learning rate 3e-3 for every row. The last column divides the row's seed mean by that of ISLA "
-      "at 10,000 tokens. How to read this: a token-count control, not a matched-memory comparison; wall shear moves the "
+      "at 10,000 tokens. How to read this: a token-count control, not a matched-memory comparison, and a within-model "
+      "control run on the legacy centred variant, so its reading is the token count's, not the frame's; wall shear moves the "
       "same way. Data: results/instrument_wave_reduction_2026-09-01.json. {#tbl-token-control}")
 ```
 
@@ -304,7 +305,9 @@ about a percent of accuracy cost. Against a canonicalized baseline the two
 are equally good, so equivariance is a contract about what the model needs
 at inference, not an accuracy advantage.** Against baselines that learn pose
 from rotation augmentation instead, ISLA leads when every car arrives in a
-random pose (@sec-scoreboard-pose).
+random pose (@sec-scoreboard-pose; that measurement was made on the legacy
+centred variant, and the reference configuration's re-measurement is
+running, @sec-nb-refprops-prereg).
 
 The two phrases mean different things. A model is *equivariant by
 construction* when every operation inside it commutes with rigid motions, so
@@ -381,12 +384,16 @@ frame, the contract also earns accuracy (@sec-scoreboard-pose).
 
 **The architectures lose very different amounts of accuracy at a wrong
 learning rate, so a protocol sharing one rate would measure tuning luck
-instead of architecture.** @tbl-lr-sensitivity reads the full-split rate
-grids of both datasets: one grid step above its best rate GeoTransolver's
-seed-mean error grows 9.0x on DrivAerML and 6.5x on HiLiftAeroML, ISLA's
-1.1x and 1.14x (the table computes each factor from its artifact). The full
-grids are plotted as a robustness result in @sec-robustness-lr
-(@fig-lr-robustness); here the point is procedural.
+instead of architecture.** One grid step above its best rate,
+GeoTransolver's seed-mean error grows 9.0x on DrivAerML and 6.5x on
+HiLiftAeroML; the table in the note below computes each factor from its
+artifact. ISLA's side of the grid was measured on the legacy centred variant
+(1.1x and 1.14x); the reference configuration's grid is being re-measured
+(@sec-nb-refprops-prereg), and the point here is procedural: each
+architecture runs at its own best rate. The grids are plotted as a
+robustness result in @sec-robustness-lr (@fig-lr-robustness).
+
+::: {.callout-note collapse="true" title="The learning-rate grids behind the rule (ISLA rows: legacy centred variant, diagnostic)"}
 
 ```{python}
 #| label: tbl-lr-sensitivity
@@ -406,7 +413,7 @@ dr["isla"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for
                     + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
 hlg = {"gt": {1e-3: [hl[f"gt_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"gt_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]},
        "isla": {1e-3: [hl[f"mt2_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"mt2_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]}}
-name = {"gt": "GeoTransolver", "isla": "ISLA, constant-gauge variant"}
+name = {"gt": "GeoTransolver", "isla": "ISLA, legacy centred variant (diagnostic)"}
 out = "| dataset | architecture | best rate (error) | one grid step above (error) | degradation |\n|---|---|---|---|---:|\n"
 for ds, grid, steps in (("DrivAerML, 435 cars", dr, [1e-3, 3e-3, 1e-2]), ("HiLiftAeroML, 1,260 cases", hlg, [1e-3, 3e-3])):
     for arch in ("gt", "isla"):
@@ -426,6 +433,8 @@ print(": Learning-rate sensitivity on the full splits: area-weighted relative L2
       "results/instrument_wave_reduction_2026-09-01.json, results/mixedres_training_2026-07-31/sweep/"
       "{round3_reduction,mt2_v3c_reduction,mega_reduction}.json, results/highlift_wave_reduction.json. {#tbl-lr-sensitivity}")
 ```
+
+:::
 
 Two consequences are built into the protocol. Because GeoTransolver's best
 rate differs between datasets, "best rate per architecture, chosen on the

@@ -31,15 +31,23 @@ model:
   geo_checkpoint: true        # rebuild per-slice geometry in backward: same numbers, half the memory
 ```
 
-The configuration table below is the whole decision. The two variants exist
-because the program measured them; they are not recommended for new work.
+The configuration table below is the whole decision. The similarity-gauge
+variant exists because the program measured it; it is not recommended for
+new work (@sec-mt2-variants states the open question about it).
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
 | **reference** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the released baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
-| constant-gauge variant (plain-mean centre, fixed length) | `isla_surface_constant_gauge` | reproducing a measurement that used it | consistency under a change of sampling: 12x error growth under a 10:1 density bias (@sec-scoreboard-consistency) |
 | similarity-gauge variant (measure-weighted centre and RMS radius) | `similarity_gauge: true` on a centred frame | a diagnostic comparison of frame choices | a frame still estimated from the sample; equal accuracy to the reference |
 | passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
+
+::: {.callout-note collapse="true" title="The legacy centred variant (diagnostic)"}
+The recipe also carries `isla_surface_constant_gauge`, the centred frame with
+a fixed length unit that was the program's configuration before the relative
+frame. It is kept only to reproduce earlier measurements and to serve as the
+diagnostic that shows what a sample-estimated centre costs (its error grows
+12x under a 10:1 sampling-density bias). Do not use it for new work.
+:::
 
 ::: {.callout-tip collapse="true" title="Checkpoints remember their configuration"}
 Every checkpoint stores its constructor arguments, so a model saved under a
@@ -129,9 +137,9 @@ dataset's native frame predicts a car in any pose (@sec-pose).
 \mathrm{hidden}$.** At width 512 that is $3.75 \times 10^{-4}$. At the
 protocol rate of $10^{-3}$ the relative frame diverges at width 512: the
 routing hardens to one slice per token and the anchors collapse. Under the
-rule it trains cleanly, and the rule costs the constant-gauge variant
-nothing at the same corner (its error at $3.75 \times 10^{-4}$ equals its
-error at $10^{-3}$), so the rule is a property of the frame, not a
+rule it trains cleanly, and the rule costs a centred control at the same
+corner nothing (its error at $3.75 \times 10^{-4}$ equals its error at
+$10^{-3}$), so the rule is a property of the relative frame, not a
 retuning of the comparison (@sec-nb-corner-wlr-verdict,
 @sec-nb-cg-wlr-verdict). Within a decade of rate at width 192 ISLA is
 stable where GeoTransolver degrades several-fold (@sec-robustness-lr).
@@ -190,7 +198,7 @@ from pathlib import Path
 RES = Path("..") / "results"
 qv = json.load(open(RES / "quadvar_reduction_2026-09-17.json"))["arms"]
 mean = statistics.mean
-names = [("isla_ref", "ISLA, reference configuration"), ("isla_cg", "ISLA, constant-gauge variant"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
+names = [("isla_ref", "ISLA, reference configuration"), ("gt_unit", "GeoTransolver"), ("transolver_unit", "Transolver")]
 out = "| model | independent draw | stratified draw | change |\n|---|---:|---:|---:|\n"
 for k, lab in names:
     a = qv[k]; u = a["unif"]["10000"]; ind = mean(u["seeds"]) if isinstance(u, dict) else u

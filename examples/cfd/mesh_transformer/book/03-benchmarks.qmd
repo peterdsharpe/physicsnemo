@@ -28,31 +28,28 @@ the protocol behind a particular row.
 - **A ratio is baseline error divided by ISLA error**, so a value above one
   favours ISLA. Where a rung was run on several random training draws, the
   ratio carries the 90% interval over draws, which is the uncertainty to read.
-- **Which ISLA.** The reference configuration (relative frame, total-measure
-  scale; @sec-mt2) wherever it is measured, with the constant-gauge variant
-  (@sec-mt2-variants) beside it; two rungs have only the variant and say so.
+- **Which ISLA.** Every ISLA number in this chapter's figures and tables is
+  the reference configuration (relative frame, total-measure scale;
+  @sec-mt2); the legacy centred variant appears only in collapsed diagnostic
+  notes.
 
 ::: {.callout-note collapse="true" title="The detail behind those four rules"}
 Learning rates: GeoTransolver 3e-3 on the 35-case wing rung and 1e-3
 elsewhere; Transolver 3e-3 everywhere; ISLA 1e-3 at width 192 and the width
-rule above it (@sec-using-lr). At 1,260 wing cases GeoTransolver and ISLA's
-constant-gauge variant were also trained at 20,000 cells: each improves by
-about 5% and their ratio does not move, so the rows are not a cell-count
-floor (@sec-nb-w2c-floor-verdict). The reference configuration is measured
-on eight of the ten surface rungs: 35 and 210 wing cases, 4 and 21 training
+rule above it (@sec-using-lr). At 1,260 wing cases GeoTransolver and the
+legacy centred variant (diagnostic) were also trained at 20,000 cells: each
+improves by about 5% and their ratio does not move, so the wing rungs are
+not a cell-count floor (@sec-nb-w2c-floor-verdict). The reference configuration is measured
+on eight surface rungs: 35 and 210 wing cases, 4 and 21 training
 geometries, the fixed angle, DrivAerML at 435 cars under the independent
-and the stratified inference draw, and the corner; on 510 and 1,260 wing
-cases only the constant-gauge variant is measured. The reference
-configuration's price against that variant splits by whether the validation
-geometries recur in training: none on DrivAerML, 3% at the corner, 1% and 5%
-at 4 and 21 never-seen geometries, 11% at 35 and 210 cases, and 14.5% at the
-fixed angle, where a single freestream direction makes the mesher's
-refinement pattern a reusable cue (@sec-full-data). Two further
-configurations appear where they inform the reading: the baselines with the
+and the stratified inference draw, and the corner; the rungs measured only
+on the legacy centred variant are listed in @sec-scoreboard-pending, and the
+properties first measured on that variant are being re-measured on the
+reference configuration (@sec-nb-refprops-prereg). One further family of
+configurations appears where it informs the reading: the baselines with the
 surface measure carried in their slice pooling, research variants that
 locate a property (the released GeoTransolver and Transolver are not
-modified, @sec-part-baseline), and ISLA with its measure weights off, an
-ablation that reads the mesh density and is never adopted (@sec-principle).
+modified, @sec-part-baseline).
 :::
 
 ```{python}
@@ -154,7 +151,7 @@ S["dr435"] = dict(
     isla_cg=fp(fpdr, [f"iw_mt2_lr1e3_seed{s}" for s in (42, 43, 44)]),
     isla_ref=[rf["drivaer_val"][f"rf_dr_mt2_meas_seed{s}"]["pressure_l2"] for s in (42, 43)],
     gt_mw=MAT["rows"]["geotransolver_unit_mw"]["in_family_seeds"], t_mw=MAT["rows"]["transolver_unit_mw"]["in_family_seeds"],
-    paired=("36 of 48 (GeoTransolver against the constant-gauge variant); Transolver not reduced per case", "@sec-full-data-accuracy"),
+    paired=("36 of 48 for GeoTransolver against the legacy centred variant (diagnostic; not reduced against the reference); Transolver not reduced per case", "@sec-full-data-accuracy"),
     draws=None,
     src="results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json; results/relframe_reduction_2026-09-11.json; results/accuracy_consistency_matrix_2026-09-10.json")
 sc = MAT["scale_corner"]["rows"]
@@ -182,7 +179,7 @@ def ratio(b, i): return mean(b) / mean(i)
 import sys; sys.path.insert(0, ".")
 from palette import *
 defl = J("deflection_sealed_test_2026-09-15.json")   # HiLift deflection split: sealed test on the 20% most aggressive geometries
-lad = J("ladder_reduction.json")                      # DrivAerML data-efficiency ladder (constant-gauge variant vs GeoTransolver, physical velocity)
+lad = J("ladder_reduction.json")                      # DrivAerML data-efficiency ladder (legacy centred variant vs GeoTransolver, physical velocity; diagnostic note only)
 ```
 
 ## Surface pressure: every rung on one axis {#sec-scoreboard-surface}
@@ -201,67 +198,55 @@ the surface rungs are the pose test and the interior task, where ISLA leads.
 #|   same validation cases (GeoTransolver red circles, Transolver amber
 #|   triangles), so markers left of the line at 1 favour the baseline and
 #|   markers right of it favour ISLA. Filled markers divide by ISLA's
-#|   reference configuration; open markers divide by the constant-gauge
-#|   variant, which on the 510- and 1,260-case rows is the only ISLA
-#|   measured. Horizontal bars at 35 and 210 cases are the 90% interval of
-#|   the ratio over four random training draws; other rows carry the
-#|   seed-mean ratio only. The bottom rows are the pose test (baselines
-#|   trained with rotation augmentation, ISLA without, every case in a random
-#|   pose) and the interior task (GeoTransolver-volume divided by ISLA with
-#|   query tokens and the signed distance). How to read this: it shows
-#|   ratios, not absolute accuracy, and says nothing about consistency under
-#|   a change of sampling (@fig-scoreboard-density). Float32 throughout.
+#|   reference configuration; the two open-marker rows divide by a variant,
+#|   named in the row label, where the reference is not yet measured. Every
+#|   row carries the seed-mean ratio. The bottom rows are the pose test
+#|   (baselines trained with rotation augmentation, ISLA without, every case
+#|   in a random pose; ISLA measured on the legacy centred variant, the
+#|   reference configuration's re-measurement is running,
+#|   @sec-nb-refprops-prereg) and the interior task (GeoTransolver-volume
+#|   divided by ISLA with query tokens and the signed distance). How to read
+#|   this: it shows ratios, not absolute accuracy, and says nothing about
+#|   consistency under a change of sampling (@fig-scoreboard-density).
+#|   Float32 throughout.
 #|   Data: the files listed in @tbl-scoreboard-surface, plus
-#|   research/transfer_program/studies/campaign_a_draws/campaign_a_n{35,210}_fp32_2026-09-10.json,
 #|   research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json,
 #|   results/relint2_reduction_2026-09-14.json and
 #|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json.
 #| code-fold: true
-rows = []  # (label, gt_ratio, t_ratio, filled, gt_ci, t_ci)
-def add(label, key, against):
-    s = S[key]; i = s[against]
-    ci = s["draws"]
-    rows.append((label, ratio(s["gt"], i), (ratio(s["t"], i) if s["t"] else None), against == "isla_ref",
-                 (ci[0]["ci90"] if ci and against == "isla_cg" else None),
-                 (ci[1]["ci90"] if ci and against == "isla_cg" else None)))
-add("HiLift, 35 cases — vs reference configuration", "hl35", "isla_ref")
-add("HiLift, 35 cases — vs constant-gauge variant", "hl35", "isla_cg")
-add("HiLift, 210 cases — vs reference configuration", "hl210", "isla_ref")
-add("HiLift, 210 cases — vs constant-gauge variant", "hl210", "isla_cg")
-add("HiLift, 510 cases — vs constant-gauge variant", "hl510", "isla_cg")
-add("HiLift, 1,260 cases — vs constant-gauge variant", "hl1260", "isla_cg")
-add("HiLift, 4 training geometries — vs reference configuration", "geo4", "isla_ref")
-add("HiLift, 4 training geometries — vs constant-gauge variant", "geo4", "isla_cg")
-add("HiLift, 21 training geometries — vs reference configuration", "geo21", "isla_ref")
-add("HiLift, 21 training geometries — vs constant-gauge variant", "geo21", "isla_cg")
-add("HiLift, fixed angle 12° — vs reference configuration", "fixed", "isla_ref")
-add("HiLift, fixed angle 12° — vs constant-gauge variant", "fixed", "isla_cg")
-add("DrivAerML, 435 cars — vs reference configuration", "dr435", "isla_ref")
-add("DrivAerML, 435 cars — vs constant-gauge variant", "dr435", "isla_cg")
-add("DrivAerML, 435 cars, stratified inference draw — vs reference configuration", "dr435_strat", "isla_ref")
-add("DrivAerML, 435 cars, stratified inference draw — vs constant-gauge variant", "dr435_strat", "isla_cg")
-add("DrivAerML, 512 wide × 80k cells — vs reference configuration (width learning rate)", "corner", "isla_ref")
-add("DrivAerML, 512 wide × 80k cells — vs constant-gauge variant", "corner", "isla_cg")
+rows = []  # (label, gt_ratio, t_ratio, filled)
+def add(label, key):
+    s = S[key]; i = s["isla_ref"]
+    rows.append((label, ratio(s["gt"], i), (ratio(s["t"], i) if s["t"] else None), True))
+add("HiLift, 35 cases", "hl35")
+add("HiLift, 210 cases", "hl210")
+add("HiLift, 4 training geometries", "geo4")
+add("HiLift, 21 training geometries", "geo21")
+add("HiLift, fixed angle 12°", "fixed")
+add("DrivAerML, 435 cars", "dr435")
+add("DrivAerML, 435 cars, stratified inference draw", "dr435_strat")
+add("DrivAerML, 512 wide × 80k cells (width learning rate)", "corner")
+n_surface = len(rows)
 pB = poseB["arms"]
-rows.append(("DrivAerML, every case in a random pose — vs constant-gauge variant", pB["gt_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"],
-             pB["transolver_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"], False, None, None))
+rows.append(("DrivAerML, every case in a random pose — ISLA measured on the legacy centred variant", pB["gt_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"],
+             pB["transolver_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"], False))
 def intf(keys, f): return mean(fp(fpint, keys, f))
 gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]
 for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
-    rows.append((f"DrivAerML interior, {lab} — vs reference configuration", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None, True, None, None))
-    rows.append((f"DrivAerML interior, {lab} — vs similarity-gauge variant", intf(gtv, f) / intf(isq, f), None, False, None, None))
-fig, ax = plt.subplots(figsize=(9.6, 6.8))
+    rows.append((f"DrivAerML interior, {lab}", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None, True))
+    rows.append((f"DrivAerML interior, {lab} — vs the similarity-gauge interior variant", intf(gtv, f) / intf(isq, f), None, False))
+fig, ax = plt.subplots(figsize=(9.6, 5.6))
 y = list(range(len(rows)))[::-1]
-for yy, (label, rg, rt, filled, cg, ct) in zip(y, rows):
-    for r, key, ci, dy in ((rg, "gt", cg, 0.12), (rt, "t", ct, -0.12)):
+for yy, (label, rg, rt, filled) in zip(y, rows):
+    for r, key, dy in ((rg, "gt", 0.12), (rt, "t", -0.12)):
         if r is None: continue
         c, mk = STYLE[key]["color"], STYLE[key]["marker"]
-        if ci: ax.plot(ci, [yy + dy, yy + dy], color=c, lw=3, alpha=0.35, solid_capstyle="butt", zorder=2)
         ax.plot([r], [yy + dy], marker=mk, ms=8, mfc=(c if filled else "white"), mec=c, mew=1.8, ls="none", zorder=4)
         ax.annotate(f"{r:.2f}", (r, yy + dy), xytext=(0, 7 if dy > 0 else -11), textcoords="offset points", ha="center", fontsize=7.5, color=c)
 ax.axvline(1.0, color=INK2, lw=1.2, zorder=1)
 ax.axvspan(0.95, 1.05, color=GRID, alpha=0.6, zorder=0)
-for sep in (6.5, 5.5):  # separate surface rungs / pose / interior
+n_rows = len(rows)
+for sep in (n_rows - n_surface - 0.5, n_rows - n_surface - 1.5):  # separate surface rungs / pose / interior
     ax.axhline(sep, color=BASELINE, lw=0.8, ls=":", zorder=1)
 ax.set_yticks(y); ax.set_yticklabels([r[0] for r in rows], fontsize=8.5)
 ax.set_xscale("log"); ax.set_xlim(0.62, 1.45)
@@ -273,8 +258,8 @@ ax.set_ylim(-0.7, y[0] + 0.7)
 from matplotlib.lines import Line2D
 ax.legend(handles=[Line2D([], [], **{k: v for k, v in series_kwargs("gt", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="GeoTransolver ÷ ISLA"),
                    Line2D([], [], **{k: v for k, v in series_kwargs("t", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="Transolver ÷ ISLA"),
-                   Line2D([], [], marker="s", ls="none", mfc=INK2, mec=INK2, ms=7, label="filled: ÷ reference configuration"),
-                   Line2D([], [], marker="s", ls="none", mfc="white", mec=INK2, mew=1.6, ms=7, label="open: ÷ a variant"),
+                   Line2D([], [], marker="s", ls="none", mfc=INK2, mec=INK2, ms=7, label="filled: ÷ ISLA reference configuration"),
+                   Line2D([], [], marker="s", ls="none", mfc="white", mec=INK2, mew=1.6, ms=7, label="open: ÷ the variant named in the row"),
                    mpl.patches.Patch(facecolor=GRID, label="parity within 5%")],
           loc="upper right", fontsize=8, ncol=1)
 fig.tight_layout()
@@ -291,24 +276,23 @@ the same rungs as absolute error.
 #| fig-cap: >
 #|   The surface settings as absolute error. Bars are seed means of the
 #|   surface-pressure error (lower is better) for GeoTransolver (red),
-#|   Transolver (amber), ISLA's constant-gauge variant (light blue) and ISLA's
-#|   reference configuration (blue, where measured); dots are the individual
-#|   seeds. Panels share no vertical scale, since the rungs differ by an order
+#|   Transolver (amber) and ISLA's reference configuration (blue); dots are
+#|   the individual seeds. Panels share no vertical scale, since the rungs differ by an order
 #|   of magnitude in error. How to read this: the ordering within a panel is
 #|   the benchmark result; the level across panels reflects how hard each
 #|   split is (few geometries, or a single angle), not architecture. Float32.
 #|   Data: as @tbl-scoreboard-surface.
 #| code-fold: true
-keys = ["hl35", "hl210", "hl510", "hl1260", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"]
-short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases", "hl510": "HiLift, 510 cases", "hl1260": "HiLift, 1,260 cases",
+REF_KEYS = ["hl35", "hl210", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"]  # rungs where the reference configuration is measured
+keys = REF_KEYS
+short = {"hl35": "HiLift, 35 cases", "hl210": "HiLift, 210 cases",
          "geo4": "HiLift, 4 geometries", "geo21": "HiLift, 21 geometries", "fixed": "HiLift, fixed angle", "dr435": "DrivAerML, 435 cars",
          "dr435_strat": "DrivAerML, stratified draw", "corner": "DrivAerML, 512 × 80k"}
-fig, axs = plt.subplots(2, 5, figsize=(13.6, 6.0))
+fig, axs = plt.subplots(2, 4, figsize=(12.0, 6.0))
 axs = axs.ravel()
 for ax, key in zip(axs, keys):
     s = S[key]
-    arms = [("Geo-\nTransolver", s["gt"], "gt"), ("Transolver", s["t"], "t"), ("ISLA\nconstant\ngauge", s["isla_cg"], "isla_cg")]
-    if s["isla_ref"]: arms.append(("ISLA\nreference", s["isla_ref"], "isla_ref"))
+    arms = [("Geo-\nTransolver", s["gt"], "gt"), ("Transolver", s["t"], "t"), ("ISLA\nreference", s["isla_ref"], "isla_ref")]
     xs = list(range(len(arms))); means = [mean(v) for _, v, _ in arms]
     for x_, (_, v, k) in zip(xs, arms):
         ax.bar(x_, mean(v), width=0.62, zorder=2, **bar_kwargs(k))
@@ -319,7 +303,7 @@ for ax, key in zip(axs, keys):
     ax.set_title(short[key], fontsize=9.5)
     ax.set_ylim(0, max(means) * 1.28); ax.grid(axis="x", visible=False)
     ax.tick_params(axis="y", labelsize=8)
-axs[0].set_ylabel("surface pressure error [–]"); axs[5].set_ylabel("surface pressure error [–]")
+axs[0].set_ylabel("surface pressure error [–]"); axs[4].set_ylabel("surface pressure error [–]")
 fig.tight_layout()
 plt.show()
 ```
@@ -330,36 +314,26 @@ plt.show()
 def fmt(v):
     if not v: return "pending"
     return f"{mean(v):.4f}" + (" (" + " / ".join(f"{x:.4f}" for x in v) + ")" if len(v) > 1 else "")
-def rat(b, s, ci):
-    if not b: return "pending"
-    parts = []
-    if s["isla_ref"]: parts.append(f"**{ratio(b, s['isla_ref']):.2f}**")
-    parts.append(f"{ratio(b, s['isla_cg']):.2f}" + (f" [{ci['ci90'][0]:.2f}–{ci['ci90'][1]:.2f}]" if ci else ""))
-    return " ‖ ".join(parts)
-out = ("| setting | GeoTransolver | Transolver | ISLA, reference configuration | ISLA, constant-gauge variant | GeoTransolver ÷ ISLA (reference ‖ constant gauge) | Transolver ÷ ISLA (reference ‖ constant gauge) | validation cases where the baseline is lower |\n"
-       "|---|---|---|---|---|---:|---:|---|\n")
-for key in ("hl35", "hl210", "hl510", "hl1260", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"):
+def rat(b, s):
+    return f"**{ratio(b, s['isla_ref']):.2f}**" if b else "pending"
+out = ("| setting | GeoTransolver | Transolver | ISLA, reference configuration | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | validation cases where the baseline is lower |\n"
+       "|---|---|---|---|---:|---:|---|\n")
+for key in REF_KEYS:
     s = S[key]
-    ref = f"**{fmt(s['isla_ref'])}**" if s["isla_ref"] else "not measured"
-    cg, ct = s["draws"] if s["draws"] else (None, None)
-    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | {ref} | {fmt(s['isla_cg'])} "
-            f"| {rat(s['gt'], s, cg)} | {rat(s['t'], s, ct)} | {s['paired'][0]} |\n")
+    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | **{fmt(s['isla_ref'])}** "
+            f"| {rat(s['gt'], s)} | {rat(s['t'], s)} | {s['paired'][0]} |\n")
 print(out)
 print(": Surface-pressure error (area-weighted relative L2, float32, final-epoch checkpoints; seed "
       "values in parentheses, the corner row lists seed means of two seeds) on every rung where the "
-      "unit-direction baselines and ISLA are both measured. The ratio columns give baseline ÷ ISLA "
-      "against the reference configuration in bold where it is measured and against the constant-gauge "
-      "variant everywhere; brackets are the 90% interval of the constant-gauge ratio over four random "
-      "training draws (35 and 210 cases; at 35 cases the draws used GeoTransolver at 1e-3). "
+      "unit-direction baselines and ISLA's reference configuration are both measured. The ratio columns "
+      "give baseline ÷ ISLA (above one favours ISLA). "
       "The corner row is width 512 and 80,000 cells per car for all arms (60.2M, 35.9M and 23.9M "
       "parameters), evaluated at 80,000 cells; the reference configuration there trained at the width "
-      "learning rate 3.75e-4 (@sec-using-lr), the other arms at their protocol rates; the constant-gauge "
-      "variant retrained at 3.75e-4 scores the same as at 1e-3, so the rate costs it nothing and the "
-      "reference configuration's excess at the corner is the frame's (@sec-nb-cg-wlr-verdict). The "
+      "learning rate 3.75e-4 (@sec-using-lr), the other arms at their protocol rates. The "
       "stratified-draw row queries the same 435-car checkpoints with a systematic sample along the Morton "
       "order of the cells, the inference sampler of @sec-using-sampler; the independent-draw rows are the "
       "book's headline ratios. Data: "
-      + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
+      + "; ".join(sorted({S[k]['src'] for k in REF_KEYS})) + ". {#tbl-scoreboard-surface}")
 ```
 
 The DrivAerML gap at the reference size has a measured anatomy, about half of it finite-sample noise that the stratified draw or more cells removes (@sec-deficit-anatomy); the larger gaps at 35 wing cases are a different mechanism, the mesher-pattern cue where validation geometries recur in training (@sec-full-data).
@@ -384,16 +358,14 @@ of every configuration measured (@sec-scoreboard-consistency,
 @sec-limits-mechanism).
 :::
 
-### Two further surface settings {#sec-scoreboard-other}
+### The sealed deflection split {#sec-scoreboard-other}
 
 **Across a sealed geometry boundary both architectures degrade by the same
-factor and the in-regime ordering carries through; below full data on
-DrivAerML GeoTransolver leads by 1.2 to 1.3x.** @tbl-scoreboard-other holds
-the two surface settings that do not fit the ladder above: the wing
+factor and the in-regime ordering carries through.** @tbl-scoreboard-other
+holds the one surface setting that does not fit the ladder above: the wing
 deflection split, which trains on the 80% of geometries with the milder
 flap-and-slat settings and evaluates once, sealed, on the 20% most
-aggressive (@sec-limits-regime), and the DrivAerML data-efficiency ladder,
-which trains nested subsets of the training cars (@sec-de-drivaerml).
+aggressive (@sec-limits-regime).
 
 ```{python}
 #| label: tbl-scoreboard-other
@@ -403,21 +375,39 @@ def sd(v): return " / ".join(f"{x:.4f}" for x in v)
 out = ("| setting | GeoTransolver | ISLA | GeoTransolver ÷ ISLA | reading |\n|---|---|---|---:|---|\n"
        f"| HiLift deflection split, in-regime validation | {dg['val_mean']:.4f} ({sd(dg['val_seeds'])}) | reference configuration {di['val_mean']:.4f} ({sd(di['val_seeds'])}) | {dg['val_mean']/di['val_mean']:.2f} | the baseline leads in regime |\n"
        f"| HiLift deflection split, sealed test (360 cases, 36 most aggressive geometries) | {dg['test_mean']:.4f} ({sd(dg['test_seeds'])}) | reference configuration {di['test_mean']:.4f} ({sd(di['test_seeds'])}) | {dg['test_mean']/di['test_mean']:.2f} | test ÷ validation degradation {di['degradation_d']:.2f}x (ISLA) and {dg['degradation_d']:.2f}x (GeoTransolver): both cross the boundary equally |\n")
+print(out)
+print(": The sealed deflection split: surface-pressure error, float32, two seeds, unit-direction "
+      "GeoTransolver against ISLA's reference configuration, on the in-regime validation cases and on the "
+      "sealed high-deflection test set. Data: results/deflection_sealed_test_2026-09-15.json. {#tbl-scoreboard-other}")
+```
+
+::: {.callout-note collapse="true" title="Rungs measured only on the legacy centred variant (diagnostic)"}
+Three surface settings were measured before the reference configuration
+existed, on the legacy centred variant (plain-mean centre, fixed length
+unit; @sec-mt2-variants), and are not re-measured yet
+(@sec-scoreboard-pending). They are kept here as diagnostics of the
+baselines' lead at those sizes, not as ISLA rows.
+
+```{python}
+#| label: tbl-scoreboard-legacy-rungs
+#| output: asis
+out = "| setting | GeoTransolver | Transolver | legacy centred variant (diagnostic) | GeoTransolver ÷ variant | Transolver ÷ variant |\n|---|---|---|---|---:|---:|\n"
+for key in ("hl510", "hl1260"):
+    s = S[key]
+    out += (f"| {s['title']} | {fmt(s['gt'])} | {fmt(s['t'])} | {fmt(s['isla_cg'])} | {ratio(s['gt'], s['isla_cg']):.2f} | {ratio(s['t'], s['isla_cg']):.2f} |\n")
 for n in (14, 27, 54, 109, 218):
     g = [lad[f"lad_gt_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
     m = [lad[f"lad_mt2_n{n}_seed{s}"]["infamily"] for s in (42, 43)]
-    out += (f"| DrivAerML, {n} training cars | {mean(g):.3f} ({sd(g)}) | constant-gauge variant {mean(m):.3f} ({sd(m)}) | {mean(g)/mean(m):.2f} | "
-            + ("the two tie" if abs(mean(g)/mean(m) - 1) < 0.03 else "the baseline leads") + " |\n")
+    out += f"| DrivAerML, {n} training cars (bfloat16; GeoTransolver with the physical velocity) | {mean(g):.3f} ({sd(g)}) | not run | {mean(m):.3f} ({sd(m)}) | {mean(g)/mean(m):.2f} | — |\n"
 print(out)
-print(": Two surface settings outside the ladder of @tbl-scoreboard-surface. Deflection rows: surface-pressure "
-      "error, float32, two seeds, unit-direction GeoTransolver against ISLA's reference configuration, on the "
-      "in-regime validation cases and on the sealed high-deflection test set. DrivAerML ladder rows: "
-      "bfloat16 evaluation on identical points, two seeds, learning rate 3e-3 for both architectures (the "
-      "frozen protocol of that ladder), GeoTransolver fed the physical freestream velocity, which on this "
-      "dataset costs it nothing (its unit-direction twin at 435 cars is within 1%, @sec-de-drivaerml); ISLA is "
-      "the constant-gauge variant, the reference configuration being trained on DrivAerML only at 435 cars. "
-      "Data: results/deflection_sealed_test_2026-09-15.json; results/ladder_reduction.json. {#tbl-scoreboard-other}")
+print(": Wing rungs at 510 and 1,260 training cases (float32, two seeds each, the unit-direction protocol) and the "
+      "DrivAerML data-efficiency ladder (bfloat16 evaluation on identical points, two seeds, learning rate 3e-3 for "
+      "both architectures, GeoTransolver fed the physical freestream velocity, which on this dataset costs it "
+      "nothing, @sec-de-drivaerml), all with the legacy centred variant as the ISLA arm. Data: "
+      "results/udrvl_510_reduction_2026-09-12.json; results/udrv_1260_reduction_2026-09-15.json; "
+      "results/udrv_1260_transolver_2026-09-16.json; results/ladder_reduction.json. {#tbl-scoreboard-legacy-rungs}")
 ```
+:::
 
 ## Interior fields from the surface {#sec-scoreboard-interior}
 
@@ -522,7 +512,10 @@ and it is conditional on the setting: in a canonical frame the same
 baselines lead (@sec-scoreboard-surface), and GeoTransolver trained in a
 canonicalized frame is pose-invariant at a 1% cost (@sec-pose). ISLA's
 rotation and translation covariance is exact by construction
-(@sec-mt2-contracts) and needs no augmentation.
+(@sec-mt2-contracts) and needs no augmentation. The ISLA in this test is the
+legacy centred variant; the reference configuration holds the same contracts
+exactly and its re-measurement in random poses is running
+(@sec-nb-refprops-prereg).
 
 ```{python}
 #| label: tbl-scoreboard-pose
@@ -531,7 +524,7 @@ C = poseB["canonical"]; A = poseB["arms"]
 def seeds(d): return " / ".join(f"{v['pressure_l2']:.4f}" for v in d["runs"].values())
 rows = [("GeoTransolver, trained with rotation augmentation", C["gt"], A["gt_aug"]),
         ("Transolver, trained with rotation augmentation", C["transolver_lr3e3"], A["transolver_aug"]),
-        ("ISLA, constant-gauge variant, no augmentation", C["isla"], A["isla"])]
+        ("ISLA, no augmentation (measured on the legacy centred variant; reference configuration running)", C["isla"], A["isla"])]
 out = "| architecture | canonical pose | every case in a random pose | posed ÷ canonical | baseline ÷ ISLA, posed |\n|---|---|---|---:|---:|\n"
 for label, c, a in rows:
     out += (f"| {label} | {c['pressure_mean']:.4f} | {a['pressure_mean']:.4f} ({seeds(a)}) | {a['pressure_mean']/c['pressure_mean']:.2f} "
@@ -550,7 +543,7 @@ print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, floa
 
 **Every configuration that centres its coordinates on a statistic of the
 sampled points, whichever architecture it belongs to, degrades 10 to 16x
-(the weights-off ablation 19x) when the same surface is resampled with a 10:1 front-to-back density bias;
+when the same surface is resampled with a 10:1 front-to-back density bias;
 frames that read nothing from the sample hold at 1.1 to 1.2x, and the
 baselines join that group once their datapipe centres on an unbiased
 estimate of the geometric centroid.** Consistency in the fine-mesh limit is
@@ -576,9 +569,9 @@ mesher would deliver.
 #|   unbiased by the pipeline (pool frame); the two rows marked "HT-centred
 #|   datapipe" are baselines retrained with the datapipe centring on the
 #|   Horvitz–Thompson estimate of the geometric centroid. Colour follows the
-#|   book's key: ISLA blue (variants lighter, the weights-off ablation
-#|   hatched), GeoTransolver red, Transolver amber, research variants in the
-#|   lighter tints. How to read this: a bar near 1 means the configuration's
+#|   book's key: ISLA blue (the similarity-gauge variant lighter),
+#|   GeoTransolver red, Transolver amber, research variants in the lighter
+#|   tints. How to read this: a bar near 1 means the configuration's
 #|   answer does not depend on the sampling law at this count; it does not
 #|   rank in-distribution accuracy, which is in @tbl-scoreboard-surface. Data:
 #|   results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell
@@ -587,8 +580,6 @@ mesher would deliver.
 R = MAT["rows"]
 items = [  # (label, sample-frame factor, pool-frame factor or None, style key)
     ("ISLA, reference configuration", R["isla_relative_frame_meas"]["density_factor"], None, "isla_ref"),
-    ("ISLA, exact full-geometry frame (diagnostic)", R["isla_frame_full_frame"]["density_factor"], None, "isla_sg"),
-    ("ISLA, constant gauge with measure-weighted centring (diagnostic)", R["isla_constant_gauge_mcenter"]["density_factor"], None, "isla_sg"),
     ("ISLA, similarity-gauge variant", R["isla_similarity_gauge_lr1e3"]["density_factor"], None, "isla_sg"),
     ("GeoTransolver, measure-weighted pooling, HT-centred datapipe (research variant)", mwaw["runs"]["mwaw_dr_gt_unit_lr1e3"]["probe_sfht"]["ratio_mean"], None, "gt_var"),
     ("Transolver, measure-weighted pooling, HT-centred datapipe (research variant)", mwaw["runs"]["mwaw_dr_transolver_unit_lr3e3"]["probe_sfht"]["ratio_mean"], None, "t_var"),
@@ -596,10 +587,8 @@ items = [  # (label, sample-frame factor, pool-frame factor or None, style key)
     ("Transolver, released", R["transolver_unit"]["density_factor"], R["transolver_unit"]["density_factor_pipeline_frame"], "t"),
     ("GeoTransolver, measure-weighted pooling (research variant)", R["geotransolver_unit_mw"]["density_factor"], R["geotransolver_unit_mw"]["density_factor_pipeline_frame"], "gt_var"),
     ("Transolver, measure-weighted pooling (research variant)", R["transolver_unit_mw"]["density_factor"], R["transolver_unit_mw"]["density_factor_pipeline_frame"], "t_var"),
-    ("ISLA, constant-gauge variant (plain-mean centring)", R["isla_reference_constant_gauge"]["density_factor"], None, "isla_cg"),
-    ("ISLA, weights-off ablation (not adopted)", R["isla_weights_off_ablation"]["density_factor"], None, "isla_abl"),
 ]
-fig, ax = plt.subplots(figsize=(10.6, 5.8))
+fig, ax = plt.subplots(figsize=(10.6, 4.6))
 y = list(range(len(items)))[::-1]
 ax.axvspan(1.0, 1.5, color=GRID, alpha=0.7, zorder=0)
 for yy, (label, sf, pf, k) in zip(y, items):
@@ -614,7 +603,7 @@ ax.set_xscale("log"); ax.set_xlim(0.9, 45)
 ax.set_xticks([1, 1.5, 2, 5, 10, 20]); ax.set_xticklabels(["1", "1.5", "2", "5", "10", "20"])
 ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 ax.axvline(1.0, color=INK2, lw=1.0, zorder=1)
-ax.set_xlabel("error under 10:1 biased sampling ÷ error under uniform sampling, sample frame [–]", fontsize=9.5)
+ax.set_xlabel("error under 10:1 biased sampling ÷ error under uniform sampling [–]\n(sample frame: each model's input frame taken from the drawn points)", fontsize=9.5)
 ax.grid(axis="y", visible=False)
 fig.tight_layout()
 plt.show()
@@ -639,10 +628,7 @@ def cell(arms, arm):
     return f"{D(arms, arm, 'area'):+.0%} / {D(arms, arm, 'biased'):+.0%}"
 rows = [
     ("ISLA, reference configuration", "in-model, none", (Brf, "rf_dr_mt2_meas"), (Brf, "rf_hl_mt2_meas_super_scarce")),
-    ("ISLA, constant gauge with measure-weighted centring (diagnostic)", "in-model, HT centroid", (Bmc, "cg_dr_mt2_mcenter"), (Bmc, "cg_hl_mt2_mcenter_super_scarce")),
     ("ISLA, similarity-gauge variant (lr 3e-3)", "in-model, HT centroid and scale", (B0, "iw_mt2_gauge"), None),
-    ("ISLA, constant-gauge variant", "in-model, plain mean", (B0, "iw_mt2_lr1e3"), (B0, "lad_hl_mt2_super_scarce")),
-    ("ISLA, weights-off ablation", "in-model, plain mean", (B0, "now_mt2_lr1e3"), (B0, "a35_hl_mt2_noweights")),
     ("GeoTransolver, released", "pipeline pool mean (unbiased)", (B0, "uw_gt_unit_lr1e3"), (B0, "udrv_hl_gt_super_scarce_lr3e3")),
     ("Transolver, released", "pipeline pool mean (unbiased)", (B0, "uw_transolver_unit_lr3e3"), (B0, "udrv_hl_transolver_super_scarce_lr3e3")),
     ("GeoTransolver, measure-weighted pooling (research variant)", "pipeline pool mean (unbiased)", (Bmw, "mw_dr_gt_unit_lr1e3"), (Bmw, "mw_hl_gt_super_scarce_lr3e3")),
@@ -661,9 +647,37 @@ print(": Sampling-distribution dependence at 40,000 cells, float32, two seeds: t
       "would not deliver (their sample-frame sensitivity is the bar in @fig-scoreboard-density), while "
       "ISLA computes its frame in the model from the drawn points. With the frame held, measure "
       "weighting makes the baselines' aggregation consistent; the frame is the separate defect. Data: "
-      "results/consistency_bench/consistency_bench_2026-09-10.json and its _mw, _mcenter and _rf "
+      "results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf "
       "companions. {#tbl-scoreboard-bench}")
 ```
+
+::: {.callout-note collapse="true" title="The legacy centred variant and the weights-off ablation under the same probes (diagnostic)"}
+These rows establish one mechanism: a frame centred on the plain mean of
+the sampled points collapses under a change of sampling law, and nothing
+else in the model does, since the same checkpoint re-evaluated with a
+measure-weighted centre, or given the exact frame of the full geometry,
+holds with the reference configuration.
+
+```{python}
+#| label: tbl-scoreboard-legacy-consistency
+#| output: asis
+legacy = [
+    ("legacy centred variant (plain-mean centre)", R["isla_reference_constant_gauge"]["density_factor"], (B0, "iw_mt2_lr1e3"), (B0, "lad_hl_mt2_super_scarce")),
+    ("the same checkpoint with a measure-weighted centre", R["isla_constant_gauge_mcenter"]["density_factor"], (Bmc, "cg_dr_mt2_mcenter"), (Bmc, "cg_hl_mt2_mcenter_super_scarce")),
+    ("the same checkpoint given the exact full-geometry frame", R["isla_frame_full_frame"]["density_factor"], None, None),
+    ("weights-off ablation (never adopted)", R["isla_weights_off_ablation"]["density_factor"], (B0, "now_mt2_lr1e3"), (B0, "a35_hl_mt2_noweights")),
+]
+out = "| configuration (diagnostic) | 10:1 density bias, sample frame: biased ÷ uniform | 40,000 cells, DrivAerML: area / biased | 40,000 cells, HiLift 35 cases: area / biased |\n|---|---:|---:|---:|\n"
+for label, df, dr, hl in legacy:
+    out += f"| {label} | {df:.2f}x | {cell(*dr) if dr else 'not run'} | {cell(*hl) if hl else 'not run'} |\n"
+print(out)
+print(": The legacy centred variant under the two consistency instruments of this section, and the "
+      "weights-off ablation, which reads the mesher's cell pattern and collapses hardest of every "
+      "configuration measured. Data: results/accuracy_consistency_matrix_2026-09-10.json; "
+      "results/consistency_bench/consistency_bench_2026-09-10.json and its _mcenter companion. "
+      "{#tbl-scoreboard-legacy-consistency}")
+```
+:::
 
 Read together, the two instruments say one thing: the sampling-law
 dependence of every architecture at the reference size lives in the input
@@ -718,16 +732,22 @@ print(": Training cost of the three architectures on one instrument and one exec
 
 ## What is not yet on the board {#sec-scoreboard-pending}
 
-Four measurements would complete the board, and one line is closed; the
+Five measurements would complete the board, and one line is closed; the
 live status of each is in @sec-program-status.
 
-- **ISLA's reference configuration on 510 and 1,260 wing cases.** Those rows
-  carry the constant-gauge variant only; the reference configuration's price
-  against it on rungs where validation geometries recur is 11%, so the
-  reference is expected to trail there by more than the variant does.
+- **ISLA's reference configuration on 510 and 1,260 wing cases**: not yet
+  measured. The unit-direction baselines' values on those rungs are in
+  results/udrvl_510_reduction_2026-09-12.json,
+  results/udrv_1260_reduction_2026-09-15.json and
+  results/udrv_1260_transolver_2026-09-16.json.
+- **The reference configuration in random poses and across the
+  learning-rate grid.** Both properties were first measured on the legacy
+  centred variant; the re-measurement on the reference configuration is
+  running (@sec-nb-refprops-prereg).
 - **The reference configuration below full data on DrivAerML**, on the
-  surface ladder and the interior ladder; both carry the constant-gauge or
-  similarity-gauge variant only (@tbl-scoreboard-other, @tbl-scoreboard-interior).
+  surface ladder and the interior ladder; both were measured on ISLA
+  variants that this chapter no longer reports as rows
+  (@tbl-scoreboard-interior).
 - **The baselines' consistency with a Horvitz–Thompson centroid on the
   wings.** It is measured on DrivAerML only, and only as a research variant.
 - **Multi-head slice routing at 435 cars.** On a one-car instrument eight

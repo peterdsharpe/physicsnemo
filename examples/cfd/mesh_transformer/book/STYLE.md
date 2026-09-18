@@ -57,7 +57,7 @@ was retracted) lives in the notebook and the status chapter only.
 |---|---|---|
 | ISLA, the reference configuration | MT2, MeshTransformer2, "the reference frame model" | `frame_mode="relative"`, `scale_mode="total_measure"`, the class default |
 | the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | the reference configuration's construction of position: `frame_mode="relative"` |
-| the constant-gauge variant | "prior reference", "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"` |
+| the legacy centred variant (diagnostic) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"`; cut from every main figure and table on 2026-09-18; appears only in collapsed diagnostic notes, labelled |
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
 | the sample-frame probe | "the probe instrument" alone | the 10,000-cell uniform and 10:1-biased DrivAerML evaluation draws, each model's frame taken from the drawn sample |
 | $M$ slices, $S$ global scalars | $S$ for the slice count | symbol discipline: $M = 256$ slices; $S$ is reserved for global scalars |
@@ -90,7 +90,7 @@ radial basis vector. Definitions use $\equiv$.
 | Concept | Colour | Marker / line | Notes |
 |---|---|---|---|
 | ISLA reference | `BLUE` | filled square, solid | |
-| ISLA variants | `BLUE_LIGHT` | open square (constant gauge, dotted) / open diamond (similarity gauge, dashed) | same hue, lighter |
+| ISLA variants | `BLUE_LIGHT` | open diamond (similarity gauge, dashed); open square dotted is reserved for the legacy centred variant inside diagnostic notes | same hue, lighter |
 | ISLA ablations | `BLUE_PALE`, hatched | | never adopted |
 | GeoTransolver | `RED` | filled circle, solid | also GeoTransolver-volume |
 | Transolver | `AMBER` | filled triangle, dashed | |

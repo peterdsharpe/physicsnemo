@@ -1745,3 +1745,17 @@ interior control @sec-nb-udrv-int-prereg.
   material; mostly rounding. Rule: chapters say "infer in float32 where a
   contract is load-bearing"; never write "about a percent" for the bf16
   residual (that was the CPU small-model probe, now superseded).
+
+## Ruling 2026-09-18: the constant-gauge variant leaves the main results
+- The legacy centred variant (plain-mean centre, fixed length unit) appears in
+  no main figure or table; only in collapsed notes labelled "(diagnostic)".
+  Rungs measured only on it (510 and 1,260 wing cases, DrivAerML 14–218
+  cars) are "reference not yet measured" in the scoreboard.
+- Pose test and learning-rate grid were measured only on it: chapters label
+  them "measured on the legacy centred variant; re-measurement running"
+  until POSE-REF / LR-REF (#sec-nb-refprops-prereg) report.
+- Deficit anatomy on the reference configuration (quadvar_reduction, isla_ref):
+  gap 8.0 pts at the independent 10k draw (ratio 0.920); draw variance +1.8;
+  count noise +3.1 (→0.968); positional +2.4 (raw-coordinate diagnostic on
+  the legacy variant); form remainder +0.8. State "more than half is noise;
+  about two and a half points positional; under a point form".
