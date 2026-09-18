@@ -212,7 +212,10 @@ model implementation runs on all of them.
 Every comparison feeds the models the vehicle surface only, the information
 diet of every published baseline on the dataset. The recipe assigns 435
 variants to training and 48 to validation; the remaining variant is in
-neither. Every experiment samples 10,000 surface cells per car per step.
+neither. Every experiment in the evidence chapters samples 10,000 surface
+cells per case per step, the program's exploration budget; the recipe's
+default is 200,000, and the reporting comparison at that count is training
+(@sec-scoreboard-tokens states what the budget does to the standing).
 The surface task predicts pressure and wall shear at those cells
 (@sec-full-data); the interior task predicts pressure, velocity and
 turbulent viscosity at 10,000 interior query points from the surface alone
@@ -544,7 +547,7 @@ a comparison that departs from it says so in the same sentence.**
 
 | item | setting |
 |---|---|
-| tokens per case | 10,000 sampled surface cells per case per step, every architecture |
+| tokens per case | 10,000 sampled surface cells per case per step, every architecture (the exploration budget; the reporting protocol is the recipe default of 200,000, @sec-scoreboard-tokens) |
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
 | augmentation | none |
