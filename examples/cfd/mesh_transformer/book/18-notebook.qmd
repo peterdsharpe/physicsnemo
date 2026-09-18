@@ -18426,7 +18426,59 @@ factor shows what it reads.
 what remains unattributed is about two points that the form owns, and no
 single cheap experiment isolates them further without changing the
 architecture. The program's accuracy question at the reference size is
-closed at this resolution; the book states the trade in the verdict. If supported, the
+closed at this resolution; the book states the trade in the verdict.
+
+## 2026-09-17 — Preregistration, FORM-HEADS: multi-head slice routing, the one structural difference to Transolver's physics attention that the capacity ladder did not cover {#sec-nb-formheads-prereg}
+
+**Setting.** After EQ-PRICE about two points of GeoTransolver ÷ ISLA on
+DrivAerML belong to the slice-attention form itself, and on the one-car
+instrument ISLA's floor is 1.31x Transolver's even though both are slice
+attention. CAP excluded the slice count, depth and MLP width. The
+structural difference left is how many ways a token is routed per layer:
+Transolver's physics attention routes each token through 8 heads × 256
+slices per layer (`n_head: 8`, `slice_num: 256` in the recipe); ISLA routes
+it once through 256 slices. A single soft assignment that hardens toward
+one slice per token (@sec-nb-relframe-divergence-mechanism) leaves each
+token one read-back state per layer; H routings give it H.
+
+**The change.** The research option `n_heads` on branch `isla-heads`
+(commit 2f647149; cluster snapshot `code_heads`): each slice block runs H
+independent routings, each with its own assignment logits, its own
+equivariant anchors and relational invariants, and slice states of width
+`hidden / H`, read back side by side into the same broadcast. Every
+quantity is an invariant or an equivariant anchor exactly as in the single
+routing, so the contracts hold (a contract test at H = 4 passes), and
+`n_heads = 1` is the original routing bitwise with unchanged parameter
+names (verified against the mainline). Geometry work scales with H; the
+parameter count is nearly unchanged (the assignment grows H-fold, the
+per-slice MLP shrinks H-fold).
+
+**The instrument.** The OVERFIT-1 one-car floor as in CAP: one DrivAerML
+car, 64 cached 10,000-cell views, 20,000 single-sample steps, bfloat16,
+constant gauge (a lean-class config `isla_cg_heads` in the frozen
+`recipe_ovf`: centered frame, `reference_length` 8.0), seed 42; float32
+evaluation at 10,000 and 40,000 cells. Three lanes: `h1` (the same-code
+single-routing control; the CAP baseline was trained on an older snapshot,
+so the control removes any code-version difference), `h4` and `h8`
+(`ovf_dr_isla_h{1,4,8}_seed42_v64`; launcher `overfit_heads_aga.sbatch`).
+
+**Bars, written before the run**, on the float32 10,000-cell readout
+against the `h1` control (expected near the CAP baseline 0.1064):
+
+- **Closes the floor**: `h8` (or `h4`) at or below 0.0852, within 1.05x of
+  Transolver's one-car floor; the form gap is the head count and a 435-car
+  pair follows.
+- **Carries**: at or below 0.90 × `h1` (a gain of at least 10%); reported
+  as a partial carrier with its geometry cost.
+- **Null**: at or above 0.95 × `h1`.
+- **Control sanity**: `h1` within 3% of the CAP baseline 0.1064; a larger
+  difference is a code-version effect and is investigated before the heads
+  are read.
+
+**Prediction.** Heads carry: `h8` lowers the one-car floor by 10 to 20%
+and the training loss with it, monotone in H; if `h8` is null, the form
+gap is not in the routing multiplicity and the next candidate is the
+read-back (a soft read-back separate from the aggregation routing). If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
