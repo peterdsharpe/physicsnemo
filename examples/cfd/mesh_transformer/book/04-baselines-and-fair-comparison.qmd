@@ -72,7 +72,7 @@ flowchart LR
     end
 ```
 
-**GeoTransolver** is the recipe's reference surface model. Per surface
+**GeoTransolver** is the recipe's default surface model. Per surface
 point it receives the coordinates, centred on the case, and the unit normal
 as a six-channel feature; the freestream vector is a three-channel global
 feature. Its *geometry encoder* takes the coordinates a second time through
@@ -343,7 +343,8 @@ out += row("trained in the recipe frame, canonicalized at inference only", eval_
 out += row("trained and evaluated in the canonical frame", tr_in, tr_orb)
 print(out)
 print(f": Pose dependence of GeoTransolver on DrivAerML: area-weighted relative L2 of surface pressure over the 48 "
-      f"validation cars, learning rate 3e-3, 500 epochs, seed 42 / seed 43; the parenthesized factor divides the seed "
+      f"validation cars, learning rate 3e-3, 500 epochs, seed 42 / seed 43, scored in bfloat16 (labelled: these runs "
+      f"predate the float32 instrument and are used only for within-architecture pose factors); the parenthesized factor divides the seed "
       f"mean by the in-pose seed mean of the first row ({ref:.4f}). Across three seeds of the recipe-frame model the "
       f"orbit penalty spans {min(orbit_ratios):.0f} to {max(orbit_ratios):.0f}x. How to read this: ISLA is not shown "
       f"because its orbit and in-pose predictions agree to roundoff by construction; wall shear behaves the same way. "
@@ -381,8 +382,9 @@ frame, the contract also earns accuracy (@sec-scoreboard-pose).
 **The architectures lose very different amounts of accuracy at a wrong
 learning rate, so a protocol sharing one rate would measure tuning luck
 instead of architecture.** @tbl-lr-sensitivity reads the full-split rate
-grids of both datasets: one grid step above its best rate GeoTransolver
-degrades by a factor of six to nine, ISLA by about a tenth. The full
+grids of both datasets: one grid step above its best rate GeoTransolver's
+seed-mean error grows 9.0x on DrivAerML and 6.5x on HiLiftAeroML, ISLA's
+1.1x and 1.14x (the table computes each factor from its artifact). The full
 grids are plotted as a robustness result in @sec-robustness-lr
 (@fig-lr-robustness); here the point is procedural.
 

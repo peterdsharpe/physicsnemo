@@ -56,7 +56,11 @@ was retracted) lives in the notebook and the status chapter only.
 | Say | Never say | Meaning |
 |---|---|---|
 | ISLA, the reference configuration | MT2, MeshTransformer2, "the reference frame model" | `frame_mode="relative"`, `scale_mode="total_measure"`, the class default |
+| the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | the reference configuration's construction of position: `frame_mode="relative"` |
 | the constant-gauge variant | "prior reference", "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"` |
+| form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
+| the sample-frame probe | "the probe instrument" alone | the 10,000-cell uniform and 10:1-biased DrivAerML evaluation draws, each model's frame taken from the drawn sample |
+| $M$ slices, $S$ global scalars | $S$ for the slice count | symbol discipline: $M = 256$ slices; $S$ is reserved for global scalars |
 | the similarity-gauge variant | | `frame_mode="centered"`, `similarity_gauge=True` |
 | the weights-off ablation | "uniform ISLA" | `use_measure_weights=False`; diagnostic, never adopted |
 | the raw-coordinate diagnostic | | `raw_coord_channel`; breaks the contracts by design |

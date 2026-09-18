@@ -35,14 +35,15 @@ keeping all three in view:
 2. **ISLA's guarantees are exact and they earn accuracy where they matter.**
    Rotation and translation covariance hold by construction, so when
    geometries arrive in arbitrary poses ISLA leads baselines that learned
-   pose from augmentation. Its reference frame reads nothing from the sample,
+   pose from augmentation. Its relative frame reads nothing from the sample,
    so its prediction is consistent under a change of surface sampling where
    every configuration that centres on the sampled points collapses.
 3. **The gap has an anatomy.** About half of the headline gap at the
    reference resolution is finite-sample noise that a stratified inference
    draw or more cells removes; about two and a half points are the positional
    information the invariance contracts deny the model; about two points are
-   the single-routing form of slice attention. Each part was measured by an
+   the *form* of its slice attention, the structural choice of one routing
+   per layer where Transolver uses several. Each part was measured by an
    experiment designed to isolate it (@sec-deficit-anatomy).
 
 ```{python}
@@ -93,13 +94,13 @@ rows = [
     ("Same checkpoints, stratified 10,000-cell draw", f"{gt_st:.4f} / {t_st:.4f}", f"{isla_st:.4f}", f"{gt_st/isla_st:.2f} / {t_st/isla_st:.2f}", f"gap {pct(gt_st/isla_st)} and {pct(t_st/isla_st)}: half the headline gap was draw noise"),
     ("Scale corner: width 512, 80,000 cells", f"{gt_c:.4f} / {t_c:.4f}", f"{isla_c:.4f}", f"{gt_c/isla_c:.2f} / {t_c/isla_c:.2f}", f"gap {pct(gt_c/isla_c)} and {pct(t_c/isla_c)} at deployment resolution"),
     ("Every case in a random pose (baselines trained with rotation augmentation)", "—", "—", f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}", f"ISLA leads by {(pose_lead['gt']-1)*100:.0f}% and {(pose_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose['isla']:.2f}x, the baselines' {pose['gt']:.2f}x and {pose['t']:.2f}x"),
-    ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "the reference frame is consistent; every sample-centred configuration collapses"),
+    ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "the reference configuration is consistent; every sample-centred configuration collapses"),
     ("Interior fields from the surface, DrivAerML: pressure / velocity / eddy viscosity", "GeoTransolver-volume", "ISLA with query tokens", f"{inter['pressure_l2']:.2f} / {inter['velocity_l2']:.2f} / {inter['nut_l2']:.2f}", "ISLA leads on velocity, trails on pressure and eddy viscosity, at a third of the parameters"),
 ]
 out = "| Setting | GeoTransolver / Transolver | ISLA (reference) | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
-print(": The thesis in six rows. Errors are the area-weighted relative L2 of surface pressure "
+print(": The thesis in six rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML rungs, where the gaps are larger, are not shown (@sec-data-efficiency). Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
       "above one favours ISLA. ISLA is its reference configuration throughout (relative frame, total-measure "
       "scale); the pose row uses the constant-gauge variant, the only ISLA measured there. Data: "
@@ -184,18 +185,21 @@ The names below are canonical; their definitions are in the chapters cited.
 | Name | What it is | Where defined |
 |---|---|---|
 | ISLA, **reference configuration** | the architecture as shipped: relative frame, total-measure length scale, the class default | @sec-mt2 |
-| **constant-gauge variant** | ISLA centred on the plain mean of the sampled points with a fixed length unit; behind several early measurements | @sec-mt2-variants |
+| **constant-gauge variant** | ISLA centred on the plain mean of the sampled points with a fixed length unit; named wherever a number comes from it | @sec-mt2-variants |
 | **similarity-gauge variant** | ISLA centred on the measure-weighted centroid with the RMS radius as length unit | @sec-mt2-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
 | **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the released slice-attention baselines, never modified; a *research variant* of one carries the surface measure into its pooling to locate a property | @sec-baselines |
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
 | **global vector / scalar inputs** | the problem's global conditions ($K$ directions, $S$ scalars); here $K = 1$, the freestream direction, and $S = 0$ | @sec-mt2-inputs |
 | **measure weight** $w_i$ | the surface area a sampled cell stands for; the quadrature weight of every sum in the model | @sec-mt2-quadrature |
+| **relative frame** | the reference configuration's construction of position: no centre, positions used only as differences to anchors, the total measure as length unit | @sec-mt2-frame |
 | **slice**, **anchor** | a soft group of tokens, and its measure-weighted mean position and normal | @sec-mt2-slices |
 | **relational invariants** | the scalars that describe a token relative to an anchor | @sec-mt2-relational |
 | **area-weighted relative L2**, **float32 instrument** | the metric and the precision every reported number is scored at | @sec-metrics |
 | **rung** | one training-set size on the data-efficiency ladder ("the 35-case rung") | @sec-data-efficiency |
 | **deficit anatomy** | the decomposition of the in-distribution gap into measured parts | @sec-deficit-anatomy |
+| **form** | a structural choice of the architecture (one routing per layer, the head basis) as opposed to its capacity or its inputs | @sec-deficit-anatomy |
+| **one-car floor** | the error a model reaches when trained to convergence on a single car; a capacity measurement, not a benchmark | @sec-limits-mechanism |
 
 ```{python}
 #| label: fig-key
@@ -224,8 +228,10 @@ plt.show()
 Two conventions hold in every table and figure. **A ratio between
 architectures is baseline error divided by ISLA error**, so a value above
 one favours ISLA. **Every error is the area-weighted relative L2 of
-@sec-metrics, scored in float32** on the final-epoch checkpoint; no
-bfloat16 number appears in the book.
+@sec-metrics, scored in float32** on the final-epoch checkpoint. A few
+within-grid comparisons (learning-rate grids, resource controls) were scored
+in bfloat16 and are labelled as such in their captions; no bfloat16 number
+is compared across architectures.
 
 ## How to read this book {#sec-how-to-read}
 
@@ -267,7 +273,7 @@ page. The throughline reads completely with all of them closed.
   percent of cost (@sec-pose). ISLA's pose lead is against baselines that learn
   pose from augmentation, in random poses.
 - **Not that sampling consistency is an invariance.** It is a fine-mesh-limit
-  property: the reference frame's small degradation under a 10:1 bias is a
+  property: the reference configuration's small degradation under a 10:1 bias is a
   10,000-cell statement, and on the wings at a fixed angle the bar is not yet
   met at 40,000 cells (@sec-consistency-bench).
 - **Not that the interior lead is unconditional.** It is on velocity only, and

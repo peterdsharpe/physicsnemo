@@ -41,9 +41,8 @@ layers are the same kind of object as Transolver's, with two additions
 that this chapter explains: the routing weights carry the surface measure,
 and every token knows where it is only relative to the slice anchors. The
 opposite design, enforcing physical structure inside every layer with typed
-scalar and vector streams or analytic boundary-integral kernels, was built
-in this program and fails on separated three-dimensional flow
-(@sec-interior-negatives).
+scalar and vector streams or analytic boundary-integral kernels, does not
+survive separated three-dimensional flow (@sec-interior-negatives).
 
 ```{mermaid}
 %%| fig-cap: >
@@ -85,7 +84,8 @@ flowchart TB
 fields at query points.** Per case, the inputs are:
 
 - $N$ sampled boundary points $x_i \in \mathbb{R}^3$, each with a unit
-  outward normal $n_i$ and a **measure weight** $w_i > 0$, the surface area
+  outward normal $n_i$ (a hat, $\hat n_i$, marks a unit vector below; the
+  model renormalizes the normals it is given) and a **measure weight** $w_i > 0$, the surface area
   the point stands for, so that $\sum_i w_i f(x_i) \approx \int f\,dA$. In
   the protocol of @sec-protocol, $N = 10{,}000$ per case.
 - **Global vector inputs** $g_k \in \mathbb{R}^3$, $k = 1,\dots,K$:
@@ -449,8 +449,8 @@ plt.show()
 ```
 
 The invariants do two jobs in a layer. A linear map of $\xi_{is}$ to one
-scalar **refines the routing**, $\lambda'_{is} = \lambda_{is} + w_g \cdot
-\xi_{is} + b_g$, so that a slice can prefer tokens that are near its anchor,
+scalar, with a learned weight vector $w_g$ and bias $b_g$, **refines the
+routing**, $\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is} + b_g$, so that a slice can prefer tokens that are near its anchor,
 or upwind of it, or facing it, and the routing weights $a'_{is}$ are
 recomputed with the same measure-weighted softmax. And they are **pooled
 back** to the token (idea 5) so it learns where it sits relative to the
@@ -489,10 +489,10 @@ slices contain, and where it sits relative to their anchors. Twelve such
 layers, pre-LayerNorm with residual connections, are the encoder.
 
 ::: {.callout-note collapse="true" title="Pool first, then project: the identity that sets ISLA's memory"}
-Each layer holds the invariants $\xi_{is}$ as a tensor of shape $(B, N, S,
-6)$. Projecting each pair to width 96 and then pooling would make autograd
-store a $(B, N, S, 96)$ tensor per layer, about 0.5 GB in bf16 at $N =
-10{,}000$ and $S = 256$, or 5.9 GB across 12 layers. Because the projection
+Each layer holds the invariants $\xi_{is}$ as a tensor of shape $(B, N, M,
+6)$, with $M = 256$ the slice count. Projecting each pair to width 96 and then pooling would make autograd
+store a $(B, N, M, 96)$ tensor per layer, about 0.5 GB in bf16 at $N =
+10{,}000$ and $M = 256$, or 5.9 GB across 12 layers. Because the projection
 is affine and $\pi_{is}$ sums to one over slices,
 $\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \sum_s \pi_{is} \xi_{is} + b_f$,
 so pooling first gives the identical tensor while saving only $(B, N, 6)$.
@@ -532,7 +532,7 @@ $$
 
 Three of the basis vectors are directions the token already has: the global
 direction(s), its own normal, and $\hat u_i$, the **radial** direction from
-the token's own soft anchor to the token (a dedicated routing head assigns
+the token's own soft anchor to the token (a separate routing softmax assigns
 the token to slices and $u_i = r_i - \sum_s \beta_{is} z_s$; a difference of
 positions, so no centre appears). These already span space generically. The
 complements $e_\theta(\hat u, \hat a)$, the part of $-\hat a$ orthogonal to
@@ -608,22 +608,34 @@ The symbols above are tied to the identifiers in
 With `query_independent=True` the encoder runs unchanged on the surface and
 its final state is summarized once into slice states and anchors. Each query
 $q$ is placed in the same length scale, seeded the same way, and passed
-through four **read blocks** that form the same relational invariants
-against the final anchors, route over slices, read the slice states, and
-read the encoder states near the query with a measure-weighted Gaussian
-kernel of width `local_readout_rho` (0.02 length units). Nothing in a read
-block writes into the encoder, so the prediction at a query depends on the
-surface and that query alone; this is the exact query-independence contract,
-and it costs 3.0 to 3.7x in surface accuracy (@sec-query-independence). For
-queries off the surface (`interior_queries=True`) a normal is synthesized
-equivariantly from the anchor normals. The interior configuration that the
+through four **read blocks**. A read block forms the same relational
+invariants $\xi_{qs}$ against the final anchors, routes over slices, and
+reads the slice states and the pooled invariants,
+$$
+\pi_{qs} = \mathrm{softmax}_s\big(W_a\,\mathrm{LN}(h_q) + w_g\!\cdot \xi_{qs}\big), \qquad
+h_q \leftarrow h_q + W_b\,[\,h_q;\ \textstyle\sum_s \pi_{qs} Z_s;\ W_f \sum_s \pi_{qs}\, \xi_{qs} + b_f\,],
+$$
+then reads the encoder states near the query with a measure-weighted
+Gaussian kernel of width $\varrho$ (`local_readout_rho`, 0.02 length units),
+$$
+u_q = \frac{\sum_i w_i\, e^{-\lvert r_q - r_i\rvert^2/\varrho^2}\, h_i}
+{\sum_i w_i\, e^{-\lvert r_q - r_i\rvert^2/\varrho^2}}, \qquad
+h_q \leftarrow h_q + W_l\,[\,h_q;\ u_q\,],
+$$
+followed by the residual MLP. Nothing in a read block writes into the
+encoder, so the prediction at a query depends on the surface and that query
+alone; this is the exact query-independence contract, and it costs 3.0 to
+3.7x in surface accuracy (@sec-query-independence). For queries off the
+surface (`interior_queries=True`) a normal is synthesized equivariantly as
+the soft assignment of $r_q$ to the anchors applied to the anchor normals;
+supplied `query_normals` override it. The interior configuration that the
 book reports instead admits queries as interacting tokens
 (@sec-interior-query-tokens).
 :::
 
 ## The gauge variants {#sec-mt2-variants}
 
-**Two documented variants replace the frame-free construction with a frame
+**Two documented variants replace the relative frame with a frame
 estimated from the sample; both are selected by `frame_mode="centered"` and
 both carry the sample's point distribution into the forward pass.** They
 subtract a centre $c$ before scaling, $r_i = (x_i - c)/L$, and differ from
@@ -639,16 +651,39 @@ from the token's anchor.
   (`reference_length`, 8.0 in the recipe's nondimensional units). The plain
   mean is the grey marker of @fig-isla-frame: under a 10:1 sampling-density
   bias it moves by a large fraction of the body length and every downstream
-  invariant leaves its trained range. This variant was the program's
-  reference until the relative frame replaced it and is behind the
-  constant-gauge columns of the evidence chapters.
+  invariant leaves its trained range. It is behind the constant-gauge
+  columns of the evidence chapters and is named wherever a number comes
+  from it.
 - **The similarity-gauge variant** (`similarity_gauge=True`) centres on the
   measure-weighted centroid and scales by the measure-weighted RMS radius,
   both integrals; it is exactly equivariant to a geometric rescale and
   consistent under sampling, and remains a frame estimated from the sample.
 
-The reference configuration is preferred at equal accuracy because it
-estimates nothing; @sec-mt2-design prices the choice.
+The reference configuration is preferred because it estimates nothing;
+@sec-mt2-design prices the choice.
+
+::: {.callout-note collapse="true" title="The centred construction, in symbols"}
+With a centre $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
+the seed becomes the $3 + 2K$ rotation invariants of $\{r_i, \hat n_i,
+\hat g_k\}$ up to parity (the complete set for $K = 1$),
+$$
+s_i = \big[\,\lvert r_i\rvert,\ \log\lvert r_i\rvert,\ \hat r_i\!\cdot\!\hat g_k,\ \hat r_i\!\cdot\!\hat n_i,\ \hat n_i\!\cdot\!\hat g_k,\ \sigma\,\big],
+$$
+and the relational invariants gain $\lvert z_s\rvert$ and $\hat z_s\cdot\hat
+g_k$ (the anchor's position relative to the centre), broadcast to every
+token: $6 + 2K$ in all. The head's radial vector is $\hat r_i$. The
+constant-gauge variant sets $c = \frac{1}{N}\sum_i x_i$ and $L =
+L_{\mathrm{ref}} = 8.0$ in the recipe's nondimensional units (the recipe
+divides coordinates by a per-case reference length before the model sees
+them, 5 m on DrivAerML, so 8.0 is 40 m physical). The similarity-gauge
+variant sets, with $\tilde w_i = w_i / \sum_j w_j$,
+$$
+c = \sum_i \tilde w_i\, x_i, \qquad L = \Big(\sum_i \tilde w_i\, \lvert x_i - c\rvert^2\Big)^{1/2},
+$$
+integrals rather than point averages. Its accuracy is within a few percent
+of the constant-gauge variant's (1.08x at 35 wing cases) and it holds at
+1.2x under the 10:1 density bias (@sec-scoreboard-consistency).
+:::
 
 ## The contracts, as tests {#sec-mt2-contracts}
 
@@ -669,8 +704,9 @@ input and weights.
 | off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
 | gauge variants: weight-scale invariance; similarity gauge: geometric-scale equivariance | `test_measure_weight_scale_invariance`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-9}$ / $10^{-10}$ |
-| pool-then-project equals project-then-pool; geometry recompute is exact | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact |
+| pool-then-project equals project-then-pool; the geometry recompute reproduces outputs and gradients | `test_geo_pool_then_project_is_exact`, `test_geo_checkpoint_is_exact` | $10^{-12}$ / exact (outputs), $10^{-11}$ (gradients) |
 | every parameter receives a gradient (five configurations); heads run under bf16 autocast | `test_all_parameters_receive_gradients`, `test_head_variants_run_under_bf16_autocast` | exact / finite |
+| removing the relational invariants (`use_relational_geo=False`) keeps the contracts; the constant-gauge variant is *not* invariant to a geometric rescale | `test_a35b_ablation_flags_run_and_differ`, `test_similarity_gauge_geometric_scale_equivariance` | $10^{-10}$ / changes by $> 10^{-3}$ |
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
@@ -689,8 +725,11 @@ input and weights.
   configuration.** A query's routing weight is a learned factor times the
   geometric mean of the source weights, so halving every source cell shifts
   the balance between surface and queries (3.7 to 9.1% in a float64 probe
-  where the surface model moves by $10^{-15}$). The interior model is
-  therefore deployed at its training query count (@sec-interior-companion).
+  where the surface model moves by $10^{-15}$). The uniform-rescale
+  contracts cannot detect this. Count augmentation during training reduces
+  the dependence on the request size by about 40% at a 3.7% cost and does
+  not remove it, so the interior model is deployed at its training query
+  count (@sec-interior-companion).
 - **Composition of optional channels.** Each optional channel preserves the
   contracts alone; not every pair composes (the similarity gauge with the
   local-feature channel is not scale-equivariant; the passive decoder with
@@ -730,7 +769,7 @@ bf16).
 | eager, geometry recompute on | 87 | 1.28x | 1.52 (4.07) |
 | eager, point softmax in its middle-dimension layout (`fast_point_softmax=False`) | 245 | 3.61x | 1.52 (4.07) |
 
-: Training-step cost of ISLA's execution paths against GeoTransolver on the same path, one GB300, bf16 autocast, batch of one case, 10,000 tokens, AdamW step included, median of measured steps; memory is the peak allocated during the step. At 40,000 tokens the default compiled step is 2.2x GeoTransolver's (119 against 53 ms) and the fused kernel brings it to parity (52 ms) at 4.5 against 10.0 GiB. Data: results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json. {#tbl-mt2-cost}
+: Training-step cost of ISLA's execution paths against GeoTransolver on the same path, one GB300, bf16 autocast, batch of one case, 10,000 tokens, AdamW step included, median of measured steps; memory is the peak allocated during the step. At 40,000 tokens the default compiled step is 2.2x GeoTransolver's (119 against 53 ms); the fused kernel brings it to parity (52 ms) at 4.5 against 10.0 GiB, and the compiler's autotuned mode alone reaches 41 ms. The last row is the layout the trained checkpoints ran and is the source of every larger ISLA step-time ratio measured before the compiled path. Data: results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json. {#tbl-mt2-cost}
 
 ::: {.callout-note collapse="true" title="Where the memory goes"}
 Hooking every tensor autograd stores and grouping by shape, about three
@@ -740,34 +779,39 @@ the (points × slices × 3) separations and their unit versions, the (points
 softmaxes; the token path is the remaining quarter. Every geometric tensor
 is a cheap elementwise function of a few small inputs (positions, normals,
 the global directions, the anchors), so the recipe rebuilds them in the
-backward pass (`geo_checkpoint`); outputs and gradients are bitwise
-identical and peak memory falls 2.3x for a 1.16x step time on the eager path
-(results/isla_memory_recompute_2026-09-07.json). What remains is the token
-path and the routing softmaxes, the one per-slice quantity the backward pass
-needs. The passive decoder adds 1.1M parameters; the query-token interior
-configuration adds only a type embedding and a routing weight but spans
-every token with the per-slice geometry (0.28 s per step at 10,000 interior
-queries; results/v0_interior_resources_2026-09-07.json).
+backward pass (`geo_checkpoint`, one recompute region per layer); on the
+bf16 GPU path the outputs and gradients are bitwise identical to the
+stored-activation path and peak memory falls 2.3x for a 1.16x step time on
+the eager path (results/isla_memory_recompute_2026-09-07.json). What
+remains is the token path and the routing softmaxes, the one per-slice
+quantity the backward pass needs, so ISLA's memory is close to linear in
+tokens per case. The passive decoder adds four read blocks (1.1M
+parameters, 9.9M in all; 4.9 GB reserved by the training logger at 10,000
+interior queries); the query-token interior configuration adds only a type
+embedding and a routing weight (8.9M) but spans every token with the
+per-slice geometry (6.0 GB and 0.28 s per step at 10,000 interior queries;
+results/v0_interior_resources_2026-09-07.json).
 :::
 
 ## What each design choice costs and buys {#sec-mt2-design}
 
 **No single ingredient of ISLA carries its accuracy; the largest single
-effect measured is 16%. The reference frame buys consistency under a change
+effect measured is 16%. The relative frame buys consistency under a change
 of sampling at a price of 0 to 14.5% against the constant-gauge variant
 depending on the rung, and exact query independence costs 3.0 to 3.7x.**
 Each line below carries one number and the section that defines the
 measurement; ablation ratios are a variant's pressure error over the
-constant-gauge variant's in the single-factor ablation at 35 HiLiftAeroML
-training cases (@sec-mechanism), greater than one meaning worse.
+constant-gauge variant's (0.138) in the single-factor ablation at 35
+HiLiftAeroML training cases, two seeds (@sec-mechanism), greater than one
+meaning worse.
 
 | choice | what it buys | what it costs | where |
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
-| exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 6% and 19% lead in random poses | adding raw coordinates does not help in distribution (1.04x, 0.99x); the contracts deny about 2.5 points of positional information at 435 cars | @sec-pose, @sec-deficit-anatomy |
-| the frame-free reference frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x | 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle | @sec-scoreboard-consistency, @sec-full-data |
-| measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells | @sec-principle, @sec-deficit-anatomy |
-| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on surface pressure; 3.1x on interior pressure | @sec-query-independence |
+| exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 6% and 19% lead in random poses | adding raw coordinates does not help at 35 wing cases (1.04x with the channel, 0.99x with raw seeds; every ablation keeps an invariant path through the relational invariants, so these do not show invariants are dispensable); at 435 cars the contracts deny about 2.5 points of positional information against the baselines | @sec-pose, @sec-deficit-anatomy |
+| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centred configurations degrade 10 to 16x; the constant-gauge collapse is the plain-mean centre alone (the same checkpoint with a measure-weighted centre goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the released baselines stay at 3 to 7x | against the constant-gauge variant: 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
+| measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
+| passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting constant-gauge variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | about two points of form against multi-head routing on the one-car instrument; under study | @sec-nb-formheads-verdict |
 
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}

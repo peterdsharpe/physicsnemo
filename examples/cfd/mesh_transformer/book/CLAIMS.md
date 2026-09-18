@@ -175,9 +175,11 @@ Artifacts: `results/hilift_ladder_reduction_2026-09-03.json`,
   behind. GeoTransolver at lr 1e-3: 0.0548 (0.0546/0.0550); ISLA at lr 3e-3:
   0.0633. Transolver (surface recipe) has 6.0M parameters.
 - Learning-rate robustness (DrivAerML, lr ∈ {1e-3, 3e-3, 1e-2}, 2 seeds):
-  GeoTransolver degrades 4–14x at 1e-2; ISLA 1.55x. On HiLift full,
-  GeoTransolver at 3e-3 destabilizes (0.148/0.397) where ISLA spans
-  0.040–0.049.
+  GeoTransolver degrades 9.0x at 1e-2 by seed mean (4–14x by individual
+  seed); ISLA worst ÷ best 1.55x. On HiLift full, GeoTransolver at 3e-3
+  degrades 6.5x by seed mean (0.148/0.397 per seed) where ISLA spans
+  0.040–0.049 (1.14x). State seed-mean factors in chapters; the per-seed
+  range only with "by individual seed".
 - Sampling-density robustness (10:1 biased density, DrivAerML): ISLA with
   similarity gauge 1.20x degradation; ISLA constant gauge 13–14.5x;
   GeoTransolver 3.6x; exact-kernel MT1 about 1.8x (1.6–2.2x over three seeds). In-family accuracy with

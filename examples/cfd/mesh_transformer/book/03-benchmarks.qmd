@@ -5,9 +5,9 @@ float32 instrument, GeoTransolver and Transolver are at least as accurate as
 ISLA on every in-distribution surface benchmark measured, by 2% at the
 512-wide, 80,000-cell corner and by up to 28% at 35 wing cases; ISLA leads
 where geometries arrive in arbitrary poses, on interior velocity, and on
-consistency under a change of surface sampling, where its reference frame
-degrades 1.2x against 10 to 19x for every configuration that centres its
-coordinates on the sampled points.** This chapter is the standing on one
+consistency under a change of surface sampling, where its relative frame
+degrades 1.2x against 10 to 16x (19x for the weights-off ablation) for
+every configuration that centres its coordinates on the sampled points.** This chapter is the standing on one
 page. Every cross-architecture measurement of the book appears here,
 computed from the same result files the evidence chapters use, so a reader
 who needs the standing and not the derivation can stop after this chapter
@@ -73,7 +73,7 @@ fpint = J("fp32_reeval/fp32_shift_interior_2026-09-09.json")["runs"]
 u210 = J("udrvl_210_reduction_2026-09-10.json")
 g21 = J("geo210_all_arms_2026-09-10.json")
 rf = J("relframe_reduction_2026-09-11.json")
-ff = J("frame_reduction_2026-09-11.json")  # FRAME-FULL + RELFRAME-LADDER reductions (hilift_val keyed by run id)
+ff = J("frame_reduction_2026-09-11.json")  # full-geometry-frame and reference-configuration ladder reductions (hilift_val keyed by run id)
 MAT = J("accuracy_consistency_matrix_2026-09-10.json")
 mwaw = J("mwaw_2026-09-11.json")
 mwx = J("mw_w4dr_xfam_reduction_2026-09-10.json")["mw"]
@@ -109,7 +109,7 @@ S["hl210"] = dict(
     isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)],
     paired=(f"{a210['gt_unit_lr1e3']['lower_than_isla_on']} of 180, {a210['transolver_unit_lr3e3']['lower_than_isla_on']} of 180", "results/udrvl_210_reduction_2026-09-10.json"),
     draws=(campA210["gt_over_isla_n210"], campA210["transolver_over_isla_n210"]),
-    src="results/udrvl_210_reduction_2026-09-10.json (three-seed addendum)")
+    src="results/udrvl_210_reduction_2026-09-10.json")
 S["hl510"] = dict(
     title="HiLiftAeroML, 510 training cases (180 validation cases)",
     gt=u510["arms_fp32"]["gt_unit"]["seed_pressure"], t=u510["arms_fp32"]["transolver_unit_lr3e3"]["seed_pressure"],
@@ -131,7 +131,7 @@ S["geo4"] = dict(
     isla_cg=fp(fpall, [f"geo_hl_mt2_geometry_super_scarce_seed{s}" for s in (42, 43)]),
     isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_geometry_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)],
     paired=(f"{ud['paired']['isla_geo40_vs_gt_unit_geo40']['cases_where_second_is_lower']} of 180 (9 of 18 geometries); Transolver not reduced per case", "results/udrv_reduction_2026-09-09d.json"),
-    draws=None, src="results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json (reference configuration, RELFRAME-LADDER)")
+    draws=None, src="results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json")
 S["geo21"] = dict(
     title="HiLiftAeroML, 21 training geometries (18 held-out geometries, 180 cases)",
     gt=g21["arms_fp32"]["gt_unit"]["seed_pressure"], t=g21["arms_fp32"]["transolver_unit_lr3e3"]["seed_pressure"],
@@ -146,7 +146,7 @@ S["fixed"] = dict(
     isla_cg=fp(fpall, [f"mech_hl_mt2_single_aoa_12_seed{s}" for s in (42, 43)]),
     isla_ref=[ff["hilift_val"][f"rf_hl_mt2_meas_single_aoa_12_seed{s}"]["pressure_l2"] for s in (42, 43, 44)],
     paired=("18 of 18 geometries, 18 of 18", "results/udrv_reduction_2026-09-09b.json"),
-    draws=None, src="results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json (reference configuration, RELFRAME-LADDER)")
+    draws=None, src="results/fp32_reeval/fp32_shift_2026-09-09.json; results/frame_reduction_2026-09-11.json")
 S["dr435"] = dict(
     title="DrivAerML, 435 training cars (48 validation cars)",
     gt=fp(fpdr, [f"uw_gt_unit_lr1e3_seed{s}" for s in (42, 43, 44)]),
@@ -362,23 +362,17 @@ print(": Surface-pressure error (area-weighted relative L2, float32, final-epoch
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
 ```
 
-The DrivAerML gap at the reference size has a measured anatomy: of the nine
-to ten points by which the baselines lead at 10,000 independently drawn
-cells, about half is finite-sample noise that the stratified draw or more
-cells removes, about two and a half points are the positional information
-the invariance contracts deny the model, and about two are the
-single-routing form of slice attention; the frame contributes nothing on
-DrivAerML at this size (@sec-deficit-anatomy). The 25 to 28% at 35 wing
-cases is a different mechanism, the mesher-pattern cue where validation
-geometries recur in training (@sec-full-data).
+The DrivAerML gap at the reference size has a measured anatomy, about half of it finite-sample noise that the stratified draw or more cells removes (@sec-deficit-anatomy); the larger gaps at 35 wing cases are a different mechanism, the mesher-pattern cue where validation geometries recur in training (@sec-full-data).
 
 ::: {.callout-note collapse="true" title="Two configurations that are deliberately not rows"}
 The measure-weighted baselines, research variants that carry the same
 quadrature measure in their slice pooling that ISLA does, keep the lead: at
 35 wing cases they score
 `{python} f"{mean(S['hl35']['gt_mw']):.3f}"` and
-`{python} f"{mean(S['hl35']['t_mw']):.3f}"` (three seeds each; a 6.5% price
-for the measure) against the reference configuration's
+`{python} f"{mean(S['hl35']['t_mw']):.3f}"` (three seeds each; a
+`{python} f"{(mean(S['hl35']['gt_mw'])/mean(S['hl35']['gt'])-1)*100:.0f}"` to
+`{python} f"{(mean(S['hl35']['t_mw'])/mean(S['hl35']['t'])-1)*100:.0f}%"` price for the measure against
+their unit-direction counterparts) against the reference configuration's
 `{python} f"{mean(S['hl35']['isla_ref']):.3f}"`, and on DrivAerML
 `{python} f"{mean(S['dr435']['gt_mw']):.4f}"` and
 `{python} f"{mean(S['dr435']['t_mw']):.4f}"` at no price against
@@ -555,8 +549,8 @@ print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, floa
 ## Consistency under a change of surface sampling {#sec-scoreboard-consistency}
 
 **Every configuration that centres its coordinates on a statistic of the
-sampled points, whichever architecture it belongs to, degrades 10 to 19x
-when the same surface is resampled with a 10:1 front-to-back density bias;
+sampled points, whichever architecture it belongs to, degrades 10 to 16x
+(the weights-off ablation 19x) when the same surface is resampled with a 10:1 front-to-back density bias;
 frames that read nothing from the sample hold at 1.1 to 1.2x, and the
 baselines join that group once their datapipe centres on an unbiased
 estimate of the geometric centroid.** Consistency in the fine-mesh limit is
@@ -675,13 +669,15 @@ Read together, the two instruments say one thing: the sampling-law
 dependence of every architecture at the reference size lives in the input
 frame, not in the attention. Measure weighting in the slice pooling repairs
 the aggregation for the Transolver family at no accuracy cost on DrivAerML
-and 6.5% on the wings; a frame that is a property of the geometry rather
+and at `{python} f"{(mean(S['hl35']['gt_mw'])/mean(S['hl35']['gt'])-1)*100:.0f}"` to
+`{python} f"{(mean(S['hl35']['t_mw'])/mean(S['hl35']['t'])-1)*100:.0f}%"` on the wings at 35
+cases; a frame that is a property of the geometry rather
 than of the sample, whether ISLA's relative frame or a Horvitz–Thompson
 centroid in the baselines' datapipe, removes the rest. The Horvitz–Thompson
 centred baselines are research variants that locate the property; the
 released GeoTransolver and Transolver keep their plain-mean frame
 (@sec-part-baseline), so the deployable comparison is the released baselines
-against ISLA's reference frame. On the wings the reference frame's
+against ISLA's reference configuration. On the wings the relative frame's
 convergence is measured on the fixed-angle split: from 2,500 to 40,000 cells
 its area-sampler deviation falls from +45% to +2.6% and its biased-sampler
 deviation from +81% to +5.5%, converging but not yet at the bias bar at

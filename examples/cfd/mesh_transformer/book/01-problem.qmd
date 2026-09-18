@@ -163,11 +163,12 @@ from data is the subject of @sec-mt2 (ISLA) and @sec-baselines
 
 ### What varies within a dataset {#sec-parametric}
 
-A dataset is a family of cases, and the families differ in what varies. On
-DrivAerML and SHIFT-SUV only the geometry varies: every car sits in the same
+A dataset is a family of cases, and the families differ in what varies
+(the datasets themselves are introduced in @sec-datasets). On DrivAerML and
+SHIFT-SUV, the two car datasets, only the geometry varies: every car sits in the same
 freestream, so the global vector input is a constant and the operator is
 learned as a function of shape alone. On HiLiftAeroML the global vector
-input is itself a variable: each wing geometry is simulated at ten angles of
+input is itself a variable: each wing geometry of that dataset is simulated at ten angles of
 attack, so $\hat g_1$ changes from case to case and the model must represent
 how the field depends on it, from attached flow through stall. Coordinates
 enter only in nondimensional form, scaled by the dataset's per-case reference
@@ -382,17 +383,22 @@ without being labelled as such (@sec-nb-fp32-instrument).
 
 @fig-metric-calibration calibrates the scale of the metric on
 HiLiftAeroML by scoring three parameter-free reference predictors beside
-the trained architectures. It uses the gauge-pressure scale, on which
-predicting the freestream pressure everywhere scores exactly 1.00 by
-construction; a model has learned something about a case only when it beats
-the best constant.
+the trained architectures. It uses the gauge-pressure scale, pressure
+measured relative to the freestream pressure, so the error is normalized by
+the pressure variation over the surface rather than by its absolute level;
+on that scale predicting the freestream pressure everywhere scores exactly
+1.00 by construction, and a model has learned something about a case only
+when it beats the best constant.
 
 ```{python}
 #| label: fig-metric-calibration
 #| fig-cap: >
 #|   What a relative L2 error means, calibrated on HiLiftAeroML. Pressure
 #|   relative L2 on the 180 shared validation cases on the gauge-pressure
-#|   scale (p − p_∞, geometric mean over cases; not the recipe metric), for
+#|   scale (pressure relative to the freestream, p − p_∞, so the error is
+#|   scaled by the pressure variation over the surface, not by its absolute
+#|   level; geometric mean over cases; scored in bfloat16, which predates
+#|   the float32 instrument and is labelled as such; not the recipe metric), for
 #|   three parameter-free reference predictors (grey) and the three
 #|   architectures trained on 35 cases, one seed, at the physical-velocity
 #|   input scale for the two baselines. One seed suffices because this is a
@@ -470,26 +476,16 @@ not.
 ### Contracts are exact tests, not metrics {#sec-fidelity-columns}
 
 **A structural property an architecture claims is asserted to roundoff in
-float64 as a unit test, never averaged into a score.** A property either
-holds to roundoff or is not claimed; what the float64 test certifies is the
-algebraic construction, and the residual on the bfloat16 path the recipe
-trains in is a separate measured quantity (@sec-mt2-contracts). The
-contracts tested in this book, all on ISLA:
-
-- **rotation and translation covariance**: a rigidly moved input produces
-  the rigidly moved output;
-- **similarity covariance**: the same under a positive rescale of the
-  geometry (positions by $k$, measures by $k^2$), which the reference
-  configuration and the similarity-gauge variant hold and the
-  constant-gauge variant does not;
-- **measure-scale invariance**: multiplying every cell measure by one
-  constant leaves the output unchanged; the two gauge variants hold it and
-  the reference configuration, whose length unit is the total measure,
-  holds similarity covariance in its place;
-- **query independence**: the prediction at a point does not depend on
-  which other points are in the query batch; ISLA holds it only in its
-  passive-decoder configuration (@sec-mt2-passive), not in the reference
-  configuration behind the surface results, whose tokens interact.
+float64 as a unit test, never averaged into a score.** A contract is a
+statement such as "a rigidly moved input produces the rigidly moved
+output": it either holds to roundoff on random weights and a random point
+cloud or it is not claimed, so it is a property of the code rather than of
+any trained checkpoint. That is what makes it worth more than a small
+measured degradation: it holds for every input, including the ones no
+validation set contains. What the float64 test certifies is the algebraic
+construction; the residual on the bfloat16 path the recipe trains in is a
+separate measured quantity. The contracts ISLA holds, and the tests that
+verify each, are tabulated in @sec-mt2-contracts.
 
 A property that is *not* enforced by construction, GeoTransolver's pose
 behaviour for instance, is measured as an accuracy degradation under
@@ -552,7 +548,7 @@ a comparison that departs from it says so in the same sentence.**
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
 | augmentation | none |
-| learning rate | one rate per architecture per dataset, chosen by validation on the dataset's full split before any smaller-split experiment ran and never retuned per rung: ISLA $10^{-3}$ on both datasets; GeoTransolver $10^{-3}$ on HiLiftAeroML and $3 \times 10^{-3}$ on DrivAerML; Transolver $3 \times 10^{-3}$. Where a baseline was run at two rates on a small rung it is reported at the better (@sec-fair-comparison). Above width 192, ISLA uses the width rule of @sec-using-lr |
+| learning rate | each architecture at its declared rate, chosen by validation on the dataset's full split before any smaller-split experiment ran: ISLA $10^{-3}$; GeoTransolver $10^{-3}$; Transolver $3 \times 10^{-3}$. One stated exception: on the 35-case HiLiftAeroML rung GeoTransolver was run at both $10^{-3}$ and $3 \times 10^{-3}$ and is reported at the better, $3 \times 10^{-3}$ (@sec-fair-comparison). Above width 192, ISLA uses the width rule of @sec-using-lr |
 | global vector input | the freestream as a unit direction, for every architecture (@sec-part-baseline) |
 | seeds | two or more (42 and 43 unless stated), reported individually beside the mean |
 | checkpoint | the final epoch; no selection on validation error |
@@ -573,8 +569,9 @@ chosen on the full split by validation; Transolver's rate was chosen per
 small-data rung on it; the ablations that followed earlier readouts were
 designed after reading it; and the choice of which results to present was
 made with it in view. The HiLiftAeroML test splits were spent only on the
-regime-extrapolation evaluations and the raw-coordinate discriminator of
-@sec-regime-extrapolation, and because those test sets cover every geometry
+regime-extrapolation evaluations and one diagnostic run alongside them (a
+variant of ISLA given raw coordinates, @sec-regime-extrapolation), and
+because those test sets cover every geometry
 (@sec-splits), the remaining test manifests are held out per checkpoint but
 are not program-level confirmations (@sec-limits-validation).
 :::

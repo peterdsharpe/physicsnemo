@@ -30,7 +30,7 @@ section; this chapter adds only the limits.
 | On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA at every rung measured: 35, 210, 510 and 1,260 random training cases, 4 and 21 training geometries, and the fixed angle. | @sec-data-efficiency, @sec-scoreboard |
 | On DrivAerML the released baselines lead at full data by a few percent, and the size of the gap depends on how it is measured; its anatomy is known. | @sec-full-data, @sec-deficit-anatomy |
 | Rotation and translation covariance are exact by construction; with every case in a random pose ISLA leads the augmented baselines. | @sec-pose, @sec-mt2-contracts |
-| The reference frame is consistent under a change of surface sampling where every sample-centred configuration collapses, and the measure-weighted ISLA arms are the only ones that converge under refinement. | @sec-consistency-bench, @sec-scoreboard-consistency |
+| The relative frame is consistent under a change of surface sampling where every sample-centred configuration collapses, and the measure-weighted ISLA arms are the only ones that converge under refinement. | @sec-consistency-bench, @sec-scoreboard-consistency |
 | Training is stable across a decade of learning rate; the step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-mt2-cost |
 | On the interior task ISLA leads GeoTransolver-volume on velocity at a third of the parameters, trails on pressure and eddy viscosity, and leads on two of three fields at matched parameters. | @sec-interior |
 | Nothing tested generalizes across a flow-regime boundary. | @sec-regime-extrapolation |
@@ -172,14 +172,16 @@ removed without breaking a contract.** The decomposition itself is
   (@sec-deficit-anatomy).
 - **The surface deficit is representational, not a shortage of training
   cases.** With the data axis removed (one case, 64 resampled views, trained
-  to its floor), ISLA's floor is above both baselines' by more than the
+  to convergence: the error reached this way is the model's *one-car
+  floor*, a measurement of capacity rather than of generalization), ISLA's
+  floor is above both baselines' by more than the
   35-case gap on both datasets; the deficit sits on the smooth, large-cell
   regions that dominate the area-weighted metric, not at the gaps between
   wing elements (@sec-nb-overfit-verdict). Which part of the representation
   carries it is partly known: on the one-car instrument, eight independent
   routings per block remove most of it, and whether that transfers to the
   full training set is the open run (@sec-program-status).
-- **The reference frame's price on the wings is mesher pattern.** Against
+- **The relative frame's price on the wings is mesher pattern.** Against
   the constant-gauge variant the reference pays nothing on DrivAerML and on
   the never-seen-geometry rungs, and about a tenth where validation
   geometries recur in training. Two diagnostics with an exact full-geometry
@@ -309,7 +311,7 @@ ISLA, so above one favours ISLA.
 
 | question | what would settle it | bar |
 |---|---|---|
-| Does the routing-multiplicity gain measured on one car transfer to the full DrivAerML training set? | the reference configuration with 4 and 8 routings per block at 435 cars, two seeds, on the probe instrument | closes the form gap at or below the value the anatomy assigns to a model without the form deficit; carries at a 2% gain; null under 1% (@sec-nb-heads435-prereg) |
+| Does the routing-multiplicity gain measured on one car transfer to the full DrivAerML training set? | the reference configuration with 4 and 8 routings per block at 435 cars, two seeds, on the sample-frame probe (10,000 cells, uniform and 10:1-biased draws) | closes the form gap at or below the value the anatomy assigns to a model without the form deficit; carries at a 2% gain; null under 1% (@sec-nb-heads435-prereg) |
 | What is the reference configuration's ratio on the two largest HiLift rungs? | the reference trained at 510 and 1,260 cases under the frozen protocol | reported as measured; the prediction from the recurrence reading is a ratio about a tenth below the constant-gauge variant's |
 | Do the 35-case ratios hold on cases no decision has read? | the 35-case ISLA and unit-direction baseline checkpoints scored once on the 360-case sealed test | the validation ratios reproduced within their seed spread |
 | Is the width learning-rate rule a scaling law or a one-corner fix? | a width ladder at fixed cells with the rule applied | clean training at every width and a ratio to the constant-gauge variant that does not widen (@sec-using-lr) |
@@ -326,7 +328,7 @@ ISLA, so above one favours ISLA.
 | Cost at scale | parity with GeoTransolver's step at 10,000 tokens in half the memory on the compiled path; the exact fused geometry kernel brings 40,000 tokens to parity (@sec-mt2-cost) | the fused kernel is single-routing only; the gap below GeoTransolver's footprint is headroom for more tokens or a wider model |
 | The in-distribution price of the measure weights | its mechanism is estimator variance in the slice states, removable by more cells or by the stratified inference draw (@sec-using-sampler) | a variance-reduced consistent quadrature at a fixed cell budget beyond stratification; the weights themselves are not the target (@sec-principle) |
 | Sampling conventions | the measure-weighted ISLA arms are the only ones whose convention-swap penalty converges under refinement; the released baselines' does not (@sec-consistency-bench) | at 10,000 cells no architecture is consistent across conventions; the fine-mesh limit is within a few percent of reached at 40,000 |
-| Query-count consistency of the interior decode | count augmentation reduces the dependence by about 40% at a small cost | a query-mass convention that does not scale with the count, described in @sec-mt2-contracts and not yet trained |
+| Query-count consistency of the interior decode | count augmentation reduces the dependence by about 40% at a small cost | a query-mass convention that does not scale with the count: the total query mass a learned fraction of the total source measure, divided by the query count, so that neither refining the source nor changing the request size moves the balance between surface and queries (the defect it removes is stated in @sec-mt2-contracts); not yet trained |
 
 ## What would change the recommendation {#sec-review-roads}
 
@@ -340,7 +342,7 @@ a property of the frame, not of the architecture: every configuration that
 centres its coordinates on a statistic of the sampled points collapses
 under a sampling-density bias when the frame is taken from the biased
 sample, the released baselines included, and only frames that do not read
-the sample hold, the reference frame among them and the research variants
+the sample hold, the relative frame among them and the research variants
 of the baselines given a Horvitz–Thompson centre (@sec-scoreboard-consistency).
 Those research variants locate the property; the released GeoTransolver and
 Transolver are stable, in use and published, and are not modified, so
@@ -369,6 +371,6 @@ GeoTransolver-volume on eddy viscosity.
 If neither fires, the recommendation stands as written, with the bounds of
 this chapter attached: the program's ISLA-specific claims are exact
 covariance and its lead in arbitrary poses, consistency under sampling as a
-property of the reference frame, the passive query-independent decode at
+property of the relative frame, the passive query-independent decode at
 its measured price, the interior velocity lead, and the cost figures of
 @sec-mt2-cost, and no surface-accuracy claim in a known frame.
