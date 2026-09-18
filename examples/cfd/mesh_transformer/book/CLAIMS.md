@@ -1800,3 +1800,8 @@ interior control @sec-nb-udrv-int-prereg.
 - Ruling (Peter): the reporting protocol is the recipe default, 200,000
   cells per case (PROTO-200K running); 10,000 is the exploration count and
   is labeled as such wherever its numbers appear.
+- Ruling 2026-09-18 (Peter): 200,000 cells per case is the protocol
+  everywhere except deliberate scaling studies; the fleet re-running every
+  evidence lane is P200KFLEET (#sec-nb-proto200k-fleet-prereg). Until a row's
+  200,000-cell lanes report, its 10,000-cell number is labeled "exploration
+  budget".

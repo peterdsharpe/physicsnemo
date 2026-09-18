@@ -19263,3 +19263,47 @@ single-routing, total-measure control.
 
 **Prediction.** Anatomy holds at the upper edge: GeoTransolver ÷ ISLA about
 0.98 to 0.99, Transolver ÷ ISLA about 1.02.
+
+## 2026-09-18 — Ruling and preregistration, PROTO-200K-FLEET: every evidence lane re-run at the recipe default of 200,000 cells per case {#sec-nb-proto200k-fleet-prereg}
+
+**Ruling (Peter, 2026-09-18).** The 200,000-cell budget is the protocol
+everywhere, not only for the 435-car DrivAerML row: every training lane
+behind the book's evidence is re-run at the recipe default, for ISLA,
+GeoTransolver and Transolver, two seeds each, with the exceptions of the
+deliberate scaling studies (width and token ladders), which vary the budget
+on purpose and keep their counts. Configuration decisions that are being
+made at the exploration budget (multi-head routing, the RMS length unit,
+the similarity gauge) are finished there first and their winners then join
+the 200,000-cell fleet; they are not part of it today.
+
+**Lanes.** DrivAerML: the 435-car surface trio (already running,
+@sec-nb-proto200k-prereg), the pose test (baselines with rotation
+augmentation, ISLA without), the small-data ladder (27, 54, 109, 218 cars),
+and the interior task (ISLA with query tokens and GeoTransolver-volume).
+HiLiftAeroML: the seven surface rungs (35, 210, 510 and 1,260 cases; 4 and
+21 training geometries; the fixed angle) and the deflection split. The
+manifest with every run identifier, dataset, learning rate and first job
+identifier is kept on the cluster at `kernel/p200k_fleet/manifest.tsv` and
+copied into `results/` once the launch is accepted. Wall-clock is
+data-loading-bound: the 435-car DrivAerML lanes run at about one minute per
+epoch for the baselines and under two for ISLA, so the fleet completes over
+days, the 1,260-case wing rung last.
+
+**Bars, written before the runs.** Each lane's bar is the one its 10,000-cell
+predecessor had, restated at the new budget; two fleet-level bars decide what
+the book says about the budget itself:
+
+- **The budget was the gap**: on every DrivAerML row GeoTransolver ÷ ISLA
+  is at or above 0.97 and on the wing rungs the ratio rises by at least 0.03
+  against its 10,000-cell value; the thesis's in-distribution clause is then
+  restated at the reporting protocol.
+- **The wings differ**: the DrivAerML rows close while the wing rungs move by
+  less than 0.03; then the wing deficit is not count noise and its
+  mechanism (the mesher pattern where validation geometries recur in
+  training) is the next study.
+- Any lane whose 200,000-cell error exceeds its 10,000-cell error is a
+  training defect and is investigated before its row is written.
+
+**Prediction.** The budget was the gap on DrivAerML (0.98 at 435 cars); the
+wing rungs rise by 0.03 to 0.05 but stay below 0.95 where validation
+geometries recur in training.
