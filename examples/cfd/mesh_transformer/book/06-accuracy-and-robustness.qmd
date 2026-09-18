@@ -558,8 +558,10 @@ principal frame. Where those fail, on a geometry with a degenerate inertia
 tensor or in a setting without a global flow direction, the canonicalized
 model has no frame to compute, the augmented model pays the 20 to 31%
 above, and the equivariant one is unaffected. ISLA's covariance is exact by
-algebraic construction and verified to roundoff in float64 (@sec-mt2-contracts);
-its residual on the bfloat16 trained path is not yet measured.
+algebraic construction and verified to roundoff in float64; on the trained
+GPU path it holds to 3e-5 in float32 and to about 4% under bf16 autocast,
+so the contract is exercised at deployment only under float32 inference
+(@sec-mt2-contracts).
 
 ## Query independence and its price {#sec-query-independence}
 

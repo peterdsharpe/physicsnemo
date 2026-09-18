@@ -205,11 +205,13 @@ removed without breaking a contract.** The decomposition itself is
   deficit is capacity too and more cars will not close it, and the pressure
   standing reverses with the data fixed, so what pressure lead ISLA has at
   full data is generalization across cars (@sec-interior-open).
-- **The finite-precision residual on the trained GPU path is not
-  measured.** The contracts are verified in float64; a CPU probe under
-  bfloat16 autocast gives a rotation residual of about a percent. The
-  residual of a trained checkpoint under the recipe's own autocast on the
-  GPU is a quantity to measure, not to assert (@sec-mt2-contracts).
+- **The contracts are exact in float32 and not in bf16.** On the trained
+  GPU path the rotation and translation residual is 3e-5 at worst in
+  float32 and 4% (pressure) to 7% (wall shear) under the bf16 autocast the
+  recipe trains with, mostly ordinary rounding (2.3% with no motion at all).
+  A bf16 deployment does not exercise the contracts at the level the book
+  claims for them; float32 inference does (@sec-mt2-contracts,
+  @sec-using-sampler).
 
 ### Regime extrapolation fails for every architecture tested {#sec-limits-regime}
 

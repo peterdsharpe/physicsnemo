@@ -156,8 +156,12 @@ python src/infer.py model=isla_surface dataset=drivaer_ml_surface \
 
 Report in float32. The recipe trains under bf16 autocast, and every number
 in this book is a float32 inference on the final-epoch checkpoint
-(@sec-metrics); bf16 inference adds a precision residual of about a percent
-that is not the model's.
+(@sec-metrics). A bf16 inference differs from the float32 one by about 2%
+of the prediction from rounding alone, and under a rigid motion of the
+input its prediction moves by about 4% (pressure) and 7% (wall shear),
+where the float32 prediction moves by 3e-5 (@sec-mt2-contracts). Where the
+pose or the sampling-consistency contract is load-bearing, infer in
+float32.
 
 **For inference at a fixed cell budget, draw the cells with the stratified
 sampler.** Replace the dataset's `SubsampleMesh` stage with the recipe's
@@ -264,8 +268,8 @@ The contracts are exact properties of the code (@sec-mt2-contracts), and
 each is cheap to verify on a loaded checkpoint: rotate and translate the
 inputs by a random rigid motion and compare the scalars (unchanged) and the
 vectors (rotated); scale the points by $k$ and the measure weights by $k^2$
-(unchanged). In float32 the residuals are of order $10^{-6}$; in bf16
-autocast about a percent. A residual far above these on your own data means
+(unchanged). In float32 the residuals are of order $10^{-5}$ on the
+trained checkpoints; in bf16 autocast several percent, mostly rounding. A residual far above these on your own data means
 the inputs, not the model: normals with inconsistent orientation, weights
 that do not sum to the surface area, or positions that were already centred
 or scaled by something sample-dependent before the model saw them. (The

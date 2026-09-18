@@ -1,0 +1,604 @@
+{
+  "study": "PREC-RES: finite-precision residual of the rotation and translation contracts on the GPU trained path (prereg #sec-nb-precres-prereg)",
+  "instrument": "two reference-configuration checkpoints (435 DrivAerML cars, seeds 42/43, epoch 500), 10,000-cell uniform sample-frame probe, validation split, first 12 cars; random proper rotation + one-body-diagonal translation; float32 and bf16 autocast on one GB300; residuals relative L2 in the training (normalized) output space",
+  "bars": {
+    "float32_exact": "< 1e-4 every car",
+    "bf16_negligible": "mean scalar residual < 0.5%",
+    "bf16_material": "mean scalar residual > 2%"
+  },
+  "reduction": {
+    "float32": {
+      "scalar_residual": {
+        "mean_over_seeds": 7.4185439586926805e-06,
+        "per_seed_mean": [
+          6.205862651616674e-06,
+          8.631225265768686e-06
+        ],
+        "max_over_cars": 2.9534523491747677e-05
+      },
+      "vector_residual": {
+        "mean_over_seeds": 1.3538656181329618e-05,
+        "per_seed_mean": [
+          1.2656210515160637e-05,
+          1.44211018474986e-05
+        ],
+        "max_over_cars": 3.930834645871073e-05
+      },
+      "scalar_vs_fp32_unrotated": {
+        "mean_over_seeds": 0.0,
+        "per_seed_mean": [
+          0.0,
+          0.0
+        ],
+        "max_over_cars": 0.0
+      },
+      "vector_vs_fp32_unrotated": {
+        "mean_over_seeds": 0.0,
+        "per_seed_mean": [
+          0.0,
+          0.0
+        ],
+        "max_over_cars": 0.0
+      }
+    },
+    "bfloat16": {
+      "scalar_residual": {
+        "mean_over_seeds": 0.04153435855793456,
+        "per_seed_mean": [
+          0.03314105669657389,
+          0.04992766041929523
+        ],
+        "max_over_cars": 0.08917001634836197
+      },
+      "vector_residual": {
+        "mean_over_seeds": 0.06962630664929748,
+        "per_seed_mean": [
+          0.06092493639638027,
+          0.07832767690221469
+        ],
+        "max_over_cars": 0.12340599298477173
+      },
+      "scalar_vs_fp32_unrotated": {
+        "mean_over_seeds": 0.023332656050721802,
+        "per_seed_mean": [
+          0.022634541150182486,
+          0.024030770951261122
+        ],
+        "max_over_cars": 0.03188774362206459
+      },
+      "vector_vs_fp32_unrotated": {
+        "mean_over_seeds": 0.04312828555703163,
+        "per_seed_mean": [
+          0.04156501994778713,
+          0.044691551166276135
+        ],
+        "max_over_cars": 0.05583113431930542
+      }
+    }
+  },
+  "verdict": {
+    "float32_exact_on_trained_path": true,
+    "bf16_class": "material",
+    "bf16_scalar_residual_over_noise_floor": 1.780095607960144,
+    "sqrt2_reference": 1.4142135623730951,
+    "reading": "bf16 rotation residual is a material fraction of the reported errors; against the unrotated bf16-vs-float32 difference it is 1.4x (seed 42) to 2.1x (seed 43) the noise floor, sqrt(2) being pure independent precision noise, so most of it is precision noise and a part is symmetry-specific"
+  },
+  "per_checkpoint": {
+    "rf_dr_mt2_meas_seed42": {
+      "study": "PREC-RES: finite-precision residual of the rotation+translation contracts on the GPU trained path",
+      "checkpoint": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/rf_dr_mt2_meas_seed42/checkpoints",
+      "epoch": 500,
+      "device": "NVIDIA GB300",
+      "overrides": [
+        "model=isla_surface_reference",
+        "dataset=drivaer_probe_unif2_sf",
+        "run_id=rf_dr_mt2_meas_seed42",
+        "infer_split=val",
+        "sampling_resolution=10000",
+        "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs",
+        "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/precres/hydra_rf_dr_mt2_meas_seed42"
+      ],
+      "n_cases": 12,
+      "seed": 0,
+      "definition": "scalar: ||p(Qx+t)-p(x)||/||p(x)||; vector: ||v(Qx+t)-v(x)Q^T||/||v(x)||; Q random proper rotation, t random shift of one body diagonal; outputs in training (normalized) space; *_vs_fp32_unrotated: the precision noise floor with no symmetry involved",
+      "summary": {
+        "float32": {
+          "scalar_residual": {
+            "mean": 6.205862651616674e-06,
+            "max": 1.1903841368621215e-05,
+            "min": 2.6514539968047757e-06
+          },
+          "vector_residual": {
+            "mean": 1.2656210515160637e-05,
+            "max": 2.357452831347473e-05,
+            "min": 5.367473477235762e-06
+          },
+          "scalar_vs_fp32_unrotated": {
+            "mean": 0.0,
+            "max": 0.0,
+            "min": 0.0
+          },
+          "vector_vs_fp32_unrotated": {
+            "mean": 0.0,
+            "max": 0.0,
+            "min": 0.0
+          }
+        },
+        "bfloat16": {
+          "scalar_residual": {
+            "mean": 0.03314105669657389,
+            "max": 0.04689253866672516,
+            "min": 0.023628544062376022
+          },
+          "vector_residual": {
+            "mean": 0.06092493639638027,
+            "max": 0.07245951890945435,
+            "min": 0.04896930977702141
+          },
+          "scalar_vs_fp32_unrotated": {
+            "mean": 0.022634541150182486,
+            "max": 0.0262652225792408,
+            "min": 0.01926405541598797
+          },
+          "vector_vs_fp32_unrotated": {
+            "mean": 0.04156501994778713,
+            "max": 0.045397475361824036,
+            "min": 0.03598259016871452
+          }
+        }
+      },
+      "per_case": [
+        {
+          "index": 15,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 4.659665592043893e-06,
+            "vector_residual": 9.947901162377093e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03269270062446594,
+            "vector_residual": 0.05875178053975105,
+            "scalar_vs_fp32_unrotated": 0.022697895765304565,
+            "vector_vs_fp32_unrotated": 0.04340392351150513
+          }
+        },
+        {
+          "index": 18,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 8.287481250590645e-06,
+            "vector_residual": 1.49253964991658e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.036996468901634216,
+            "vector_residual": 0.06537935137748718,
+            "scalar_vs_fp32_unrotated": 0.024577289819717407,
+            "vector_vs_fp32_unrotated": 0.04180911183357239
+          }
+        },
+        {
+          "index": 21,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 1.1903841368621215e-05,
+            "vector_residual": 2.357452831347473e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.04689253866672516,
+            "vector_residual": 0.072080597281456,
+            "scalar_vs_fp32_unrotated": 0.022470301017165184,
+            "vector_vs_fp32_unrotated": 0.042357999831438065
+          }
+        },
+        {
+          "index": 33,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 2.7778778530773707e-06,
+            "vector_residual": 5.367473477235762e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.029931077733635902,
+            "vector_residual": 0.05145249515771866,
+            "scalar_vs_fp32_unrotated": 0.024824947118759155,
+            "vector_vs_fp32_unrotated": 0.044891342520713806
+          }
+        },
+        {
+          "index": 51,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 6.3249003687815275e-06,
+            "vector_residual": 1.4128839211480226e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.036172084510326385,
+            "vector_residual": 0.06909111887216568,
+            "scalar_vs_fp32_unrotated": 0.021363845095038414,
+            "vector_vs_fp32_unrotated": 0.03796953335404396
+          }
+        },
+        {
+          "index": 55,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 7.090151029842673e-06,
+            "vector_residual": 1.4656424355052877e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03188207000494003,
+            "vector_residual": 0.05914989113807678,
+            "scalar_vs_fp32_unrotated": 0.02048628218472004,
+            "vector_vs_fp32_unrotated": 0.03910980001091957
+          }
+        },
+        {
+          "index": 66,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 4.660382728616241e-06,
+            "vector_residual": 1.0076289072458167e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.030429687350988388,
+            "vector_residual": 0.06065238639712334,
+            "scalar_vs_fp32_unrotated": 0.021657029166817665,
+            "vector_vs_fp32_unrotated": 0.04143684729933739
+          }
+        },
+        {
+          "index": 77,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 3.05668504552159e-06,
+            "vector_residual": 5.496528956427937e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.023628544062376022,
+            "vector_residual": 0.04896930977702141,
+            "scalar_vs_fp32_unrotated": 0.02096151001751423,
+            "vector_vs_fp32_unrotated": 0.039704881608486176
+          }
+        },
+        {
+          "index": 79,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 9.646392754802946e-06,
+            "vector_residual": 2.028978087764699e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03450791910290718,
+            "vector_residual": 0.07245951890945435,
+            "scalar_vs_fp32_unrotated": 0.01926405541598797,
+            "vector_vs_fp32_unrotated": 0.03598259016871452
+          }
+        },
+        {
+          "index": 88,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 5.242916813585907e-06,
+            "vector_residual": 1.076538501365576e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.030806271359324455,
+            "vector_residual": 0.05601724982261658,
+            "scalar_vs_fp32_unrotated": 0.024197794497013092,
+            "vector_vs_fp32_unrotated": 0.04379171505570412
+          }
+        },
+        {
+          "index": 92,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 2.6514539968047757e-06,
+            "vector_residual": 5.74935756958439e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03005017340183258,
+            "vector_residual": 0.0508941188454628,
+            "scalar_vs_fp32_unrotated": 0.0262652225792408,
+            "vector_vs_fp32_unrotated": 0.042925018817186356
+          }
+        },
+        {
+          "index": 107,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 8.168603017111309e-06,
+            "vector_residual": 1.6896621673367918e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.033703144639730453,
+            "vector_residual": 0.06620141863822937,
+            "scalar_vs_fp32_unrotated": 0.02284832112491131,
+            "vector_vs_fp32_unrotated": 0.045397475361824036
+          }
+        }
+      ]
+    },
+    "rf_dr_mt2_meas_seed43": {
+      "study": "PREC-RES: finite-precision residual of the rotation+translation contracts on the GPU trained path",
+      "checkpoint": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/rf_dr_mt2_meas_seed43/checkpoints",
+      "epoch": 500,
+      "device": "NVIDIA GB300",
+      "overrides": [
+        "model=isla_surface_reference",
+        "dataset=drivaer_probe_unif2_sf",
+        "run_id=rf_dr_mt2_meas_seed43",
+        "infer_split=val",
+        "sampling_resolution=10000",
+        "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs",
+        "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/precres/hydra_rf_dr_mt2_meas_seed43"
+      ],
+      "n_cases": 12,
+      "seed": 0,
+      "definition": "scalar: ||p(Qx+t)-p(x)||/||p(x)||; vector: ||v(Qx+t)-v(x)Q^T||/||v(x)||; Q random proper rotation, t random shift of one body diagonal; outputs in training (normalized) space; *_vs_fp32_unrotated: the precision noise floor with no symmetry involved",
+      "summary": {
+        "float32": {
+          "scalar_residual": {
+            "mean": 8.631225265768686e-06,
+            "max": 2.9534523491747677e-05,
+            "min": 3.081717977693188e-06
+          },
+          "vector_residual": {
+            "mean": 1.44211018474986e-05,
+            "max": 3.930834645871073e-05,
+            "min": 5.863462320121471e-06
+          },
+          "scalar_vs_fp32_unrotated": {
+            "mean": 0.0,
+            "max": 0.0,
+            "min": 0.0
+          },
+          "vector_vs_fp32_unrotated": {
+            "mean": 0.0,
+            "max": 0.0,
+            "min": 0.0
+          }
+        },
+        "bfloat16": {
+          "scalar_residual": {
+            "mean": 0.04992766041929523,
+            "max": 0.08917001634836197,
+            "min": 0.02618718519806862
+          },
+          "vector_residual": {
+            "mean": 0.07832767690221469,
+            "max": 0.12340599298477173,
+            "min": 0.05277381092309952
+          },
+          "scalar_vs_fp32_unrotated": {
+            "mean": 0.024030770951261122,
+            "max": 0.03188774362206459,
+            "min": 0.019381895661354065
+          },
+          "vector_vs_fp32_unrotated": {
+            "mean": 0.044691551166276135,
+            "max": 0.05583113431930542,
+            "min": 0.037963658571243286
+          }
+        }
+      },
+      "per_case": [
+        {
+          "index": 15,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 4.524658379523316e-06,
+            "vector_residual": 7.986052878550254e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.04092548415064812,
+            "vector_residual": 0.06796785444021225,
+            "scalar_vs_fp32_unrotated": 0.03188774362206459,
+            "vector_vs_fp32_unrotated": 0.05583113431930542
+          }
+        },
+        {
+          "index": 18,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 9.373138709634077e-06,
+            "vector_residual": 1.4681681932415813e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.037081241607666016,
+            "vector_residual": 0.06471674889326096,
+            "scalar_vs_fp32_unrotated": 0.022338835522532463,
+            "vector_vs_fp32_unrotated": 0.0412285178899765
+          }
+        },
+        {
+          "index": 21,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 2.9534523491747677e-05,
+            "vector_residual": 3.930834645871073e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.08917001634836197,
+            "vector_residual": 0.11928386986255646,
+            "scalar_vs_fp32_unrotated": 0.021653229370713234,
+            "vector_vs_fp32_unrotated": 0.039476729929447174
+          }
+        },
+        {
+          "index": 33,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 3.505936092551565e-06,
+            "vector_residual": 6.268182005442213e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03167073428630829,
+            "vector_residual": 0.057279713451862335,
+            "scalar_vs_fp32_unrotated": 0.026092177256941795,
+            "vector_vs_fp32_unrotated": 0.04622584208846092
+          }
+        },
+        {
+          "index": 51,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 8.179235010175034e-06,
+            "vector_residual": 1.5049633475427981e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03869049623608589,
+            "vector_residual": 0.06901472806930542,
+            "scalar_vs_fp32_unrotated": 0.026231978088617325,
+            "vector_vs_fp32_unrotated": 0.04666836932301521
+          }
+        },
+        {
+          "index": 55,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 1.0006306183640845e-05,
+            "vector_residual": 1.586968392075505e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.0718829482793808,
+            "vector_residual": 0.10634090006351471,
+            "scalar_vs_fp32_unrotated": 0.019381895661354065,
+            "vector_vs_fp32_unrotated": 0.037963658571243286
+          }
+        },
+        {
+          "index": 66,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 4.686295142164454e-06,
+            "vector_residual": 9.833916010393295e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.03909407556056976,
+            "vector_residual": 0.0688665360212326,
+            "scalar_vs_fp32_unrotated": 0.022643189877271652,
+            "vector_vs_fp32_unrotated": 0.04626394435763359
+          }
+        },
+        {
+          "index": 77,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 3.3717021779011702e-06,
+            "vector_residual": 5.863462320121471e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.028422823175787926,
+            "vector_residual": 0.05480244755744934,
+            "scalar_vs_fp32_unrotated": 0.021989040076732635,
+            "vector_vs_fp32_unrotated": 0.04390392825007439
+          }
+        },
+        {
+          "index": 79,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 9.895106813928578e-06,
+            "vector_residual": 2.0925097487634048e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.07648493349552155,
+            "vector_residual": 0.08807684481143951,
+            "scalar_vs_fp32_unrotated": 0.02150304988026619,
+            "vector_vs_fp32_unrotated": 0.03989504650235176
+          }
+        },
+        {
+          "index": 88,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 6.872310223116074e-06,
+            "vector_residual": 1.1080006515840068e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.039847198873758316,
+            "vector_residual": 0.0674026757478714,
+            "scalar_vs_fp32_unrotated": 0.02667766623198986,
+            "vector_vs_fp32_unrotated": 0.048195865005254745
+          }
+        },
+        {
+          "index": 92,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 3.081717977693188e-06,
+            "vector_residual": 6.3799052441027015e-06,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.02618718519806862,
+            "vector_residual": 0.05277381092309952,
+            "scalar_vs_fp32_unrotated": 0.02047121897339821,
+            "vector_vs_fp32_unrotated": 0.042469024658203125
+          }
+        },
+        {
+          "index": 107,
+          "n_tokens": 10000,
+          "float32": {
+            "scalar_residual": 1.0543772987148259e-05,
+            "vector_residual": 1.9807253920589574e-05,
+            "scalar_vs_fp32_unrotated": 0.0,
+            "vector_vs_fp32_unrotated": 0.0
+          },
+          "bfloat16": {
+            "scalar_residual": 0.07967478781938553,
+            "vector_residual": 0.12340599298477173,
+            "scalar_vs_fp32_unrotated": 0.027499226853251457,
+            "vector_vs_fp32_unrotated": 0.04817655310034752
+          }
+        }
+      ]
+    }
+  }
+}

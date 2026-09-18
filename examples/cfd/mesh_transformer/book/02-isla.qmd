@@ -743,10 +743,15 @@ input and weights.
   channel removes it at a known cost and is a research option; the collision
   is not established as the cause of any measured deficit.
 - **Finite-precision residual on the deployed path.** The tests run in
-  float64; the recipe trains under bf16 autocast, where a CPU probe of the
-  scalar rotation residual gives 1.2 to 1.3% against $6 \times 10^{-7}$ in
-  float32. "Exact" describes the algebra; the residual on the GPU trained
-  path is not yet measured (@sec-program-status).
+  float64. On the trained GPU path in float32 the contracts hold to 3e-5 at
+  worst over 24 validation cars (two checkpoints, random rigid motions).
+  Under the bf16 autocast the recipe trains with, the residual is material:
+  4% of the pressure prediction and 7% of the wall-shear vector on average,
+  against a 2.3% rounding difference between bf16 and float32 with no
+  motion at all, so most of it is ordinary bf16 rounding. "Exact" describes
+  the algebra and the float32 path; where a contract is load-bearing, infer
+  in float32 (@sec-using-sampler; results/precres_2026-09-18.json,
+  @sec-nb-precres-verdict).
 :::
 
 ## Cost {#sec-mt2-cost}

@@ -18689,3 +18689,48 @@ checkpoint, minutes.
 plain precision noise rather than a symmetry-breaking path. If so the book
 states the bf16 residual as measured and recommends float32 inference where
 the contract is load-bearing, which the recipe already does for reporting.
+
+## 2026-09-18 — Verdict, PREC-RES: the contracts are exact to 3e-5 on the trained GPU path in float32; under bf16 autocast the rotation residual is 4% on pressure and 7% on wall shear, material, and mostly precision noise {#sec-nb-precres-verdict}
+
+**Setting.** The preregistration (@sec-nb-precres-prereg) asked how far
+from exact ISLA's rotation and translation contracts are on the trained
+GPU path, in float32 and under the bf16 autocast the recipe trains with,
+using the two reference-configuration checkpoints trained on 435 DrivAerML
+cars, twelve validation cars each, a random proper rotation plus a
+translation of one body diagonal, on one GB300
+(results/precres_2026-09-18.json).
+
+**What we saw.** In **float32 the contracts hold on the trained path**:
+the relative residual of the pressure prediction under the rigid motion is
+7e-6 on average and 3e-5 at worst over the twenty-four cars, and of the
+wall-shear vector 1.4e-5 on average and 4e-5 at worst, against the bar of
+1e-4 on every car. Under **bf16 autocast the residual is material**: 3.3%
+(seed 42) and 5.0% (seed 43) of the pressure prediction on average, 8.9% on
+the worst car, and 6.1% and 7.8% of the wall-shear vector; the bar for
+"material" was 2%. The noise floor with no symmetry involved, the relative
+difference between the bf16 and the float32 prediction on the unrotated
+inputs, is 2.3% for pressure and 4.3% for wall shear. Two independent bf16
+evaluations differ by $\sqrt 2$ times that floor if the error is pure
+rounding, 3.3%; seed 42's residual equals it and seed 43's is 1.5 times it,
+so most of the bf16 residual is ordinary bf16 rounding of a 12-layer
+network, and a smaller part is symmetry-specific (the rounding of the
+relational invariants and the anchors differs between the two poses).
+
+**Why it matters.** The book's statement "exact by algebraic construction;
+the residual on the deployed path is a measured quantity" now has its
+number. In float32 the algebra is what runs. In bf16 the residual is of the
+same order as the pose test's reading (ISLA in random poses at 1.01x its
+in-pose error, measured in float32) and about half of ISLA's whole
+in-distribution error, so a bf16 deployment does not exercise the contract
+at the level the book claims for it, and a bf16 prediction carries a 2.3%
+rounding perturbation on its own, which is the reason the float32 reporting
+instrument was adopted. The recommendation in the Using-ISLA chapter is
+therefore: infer in float32 wherever the pose or consistency contract is
+load-bearing, and treat bf16 inference as a 2 to 4% perturbation of the
+prediction in any pose.
+
+**What's next.** Nothing further is needed for the mainline. A float16
+autocast probe (which the recipe does not use) or a bf16 probe with the
+routing softmax and geometry region kept in float32 would show whether the
+residual can be removed at part of bf16's cost; it is not queued, because
+the deployed answer is float32 inference.

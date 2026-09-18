@@ -1734,3 +1734,14 @@ interior control @sec-nb-udrv-int-prereg.
 - **FORM-HEADS PREREG (2026-09-17; #sec-nb-formheads-prereg).** Research option n_heads on branch isla-heads (2f647149; snapshot code_heads): H independent routings per block, head-split states hidden/H, per-head anchors/invariants; H=1 bitwise = mainline. One-car instrument (constant gauge via recipe_ovf/conf/model/isla_cg_heads.yaml, seed 42): lanes ovf_dr_isla_h1/h4/h8_seed42_v64 (h1 = same-code control). Bars on fp32 10k vs h1: closes <= 0.0852; carries <= 0.90 x h1; null >= 0.95 x h1; control sanity h1 within 3% of 0.1064. Prediction: heads carry 10-20%. n_heads is NOT in the mainline until it earns its place at 435 cars.
 - **FORM-HEADS VERDICT (2026-09-18; results/formheads_reduction_2026-09-18.json; #sec-nb-formheads-verdict).** One-car instrument, lean class: h1 control 0.1069 (sanity vs CAP 0.1064: ok), h4 0.1012 (0.951x), h8 0.0869 (0.813x = CARRIES; misses closes 0.0852 by 0.0017); monotone in H. At 40k eval: h8 0.0729 < GT 0.0780 < T 0.0793 (first ISLA arm below both baselines on an in-distribution fit). Cost: h8 ~4.7x wall time of h1 (geometry per head). Write "the form gap is the routing multiplicity"; n_heads stays on branch isla-heads until HEADS-435.
 - **HEADS-435 PREREG (2026-09-18; #sec-nb-heads435-prereg).** Reference configuration + n_heads 4/8 at 435 cars (hd_dr_isla_ref_h{4,8}_seed{42,43}; code_heads + recipe_globin isla_surface_reference; lr 1e-3; kernel/heads435_aga.sbatch; eval kernel/heads435_eval_aga.sbatch on the probe at 10k). Comparators: reference 0.0554, cg 0.0561, T 0.0520, GT 0.0509. Bars (h8 mean, unif 10k): closes <= 0.0530 (promote to mainline, scoreboard row); carries <= 0.0543 (documented variant); null >= 0.0549; density factor must stay 1.05-1.3. Prediction: h8 carries 0.0538-0.0543.
+
+## PREC-RES (2026-09-18; results/precres_2026-09-18.json)
+- Contracts on the trained GPU path, float32: rotation+translation residual
+  7e-6 mean / 3e-5 max (pressure), 1.4e-5 / 4e-5 (wall shear), 24 cars, two
+  reference checkpoints. State: "exact on the float32 path (3e-5 at worst)".
+- bf16 autocast: residual 4.2% pressure / 7.0% wall shear mean over seeds
+  (3.3% and 5.0% per seed; 8.9% worst car); unrotated bf16-vs-fp32
+  difference 2.3% / 4.3% (pure rounding gives sqrt(2)x that). Verdict:
+  material; mostly rounding. Rule: chapters say "infer in float32 where a
+  contract is load-bearing"; never write "about a percent" for the bf16
+  residual (that was the CPU small-model probe, now superseded).
