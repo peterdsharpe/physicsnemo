@@ -18326,6 +18326,11 @@ MIX adds is that area-proportional training buys only 3.5%, so the
 weight-spread row is bounded and is not the lever it was thought to be
 (@sec-nb-overfit-routing-probe).
 
+*Addendum, 2026-09-17 (EQ-PRICE).* The trained-function row splits
+further: about two and a half of its points are positional information
+the contracts deny (a raw-coordinate diagnostic recovers 2.4 points,
+@sec-nb-eqprice-verdict) and about two are the form.
+
 **How to state the case.** At the reference size ISLA's in-distribution
 surface deficit on DrivAerML is 9 to 10% on the scoreboard's instrument,
 of which about half is finite-sample noise that vanishes with cells or a
@@ -18381,7 +18386,47 @@ constant gauge 0.0561, Transolver 0.0520, GeoTransolver 0.0509) and the
 
 **Prediction.** Null or low partial (a gain of at most 2 points), as at
 35 cases: the deficit is the form. Cost: two lanes of about seven
-GPU-hours. If supported, the
+GPU-hours.
+
+## 2026-09-17 — Verdict, EQ-PRICE: raw coordinates recover 2.4 of the 4 to 5 trained-function points at 435 cars (partial); the invariance contracts cost about two and a half points in-distribution, the rest of the deficit is the form {#sec-nb-eqprice-verdict}
+
+**What was run.** The two lanes of @sec-nb-eqprice-prereg trained to 500
+epochs without incident and were evaluated in float32 on the sample-frame
+probe at 10,000 cells (results/eqprice_reduction_2026-09-17.json).
+
+**What we saw** (pressure rel-L2, 48 validation cars):
+
+| arm | uniform 10k (seeds) | GeoTransolver ÷ arm | Transolver ÷ arm | density factor (10:1 bias) |
+|---|---|---|---|---|
+| constant gauge (benchmark) | 0.0561 | 0.907 | 0.926 | 12 |
+| **constant gauge + raw coordinates** | **0.0547** (0.0553 / 0.0540) | **0.931** | 0.950 | 13.2 |
+| Transolver | 0.0520 | | | 15 |
+| GeoTransolver | 0.0509 | | | 10.5 |
+
+**Against the bars.** *Partial*, at the low end the prediction named: the
+raw-coordinate channel lowers the error by 2.6% and moves GeoTransolver ÷
+ISLA by 2.4 points, from 0.907 to 0.931, against the positional-information
+bar of 0.0525 (not reached) and the null bar of 0.0550 (cleared by 0.0003,
+inside the seed spread of 0.0013). The density factor rises to 13.2, as
+expected of a model that reads the centred position of a biased sample.
+
+**Reading.** Of the 4 to 5 trained-function points of
+@sec-nb-deficit-anatomy, about two and a half are the information the
+invariance contracts deny the model (the absolute position of each cell),
+and about two are the slice-attention form itself, shared with the width
+axis. That is the honest price of the contracts on DrivAerML at the
+reference size: two and a half points of in-distribution ratio, bought
+with exact pose invariance (a 6 to 19% lead when geometries arrive in
+arbitrary poses, @sec-verdict) and sampling consistency (1.05 to 1.2
+against 10 to 16 under a density bias). The raw-coordinate arm is a
+diagnostic and stays one: it breaks SE(3) by design and its own density
+factor shows what it reads.
+
+**What follows.** The trained-function deficit is now itself decomposed;
+what remains unattributed is about two points that the form owns, and no
+single cheap experiment isolates them further without changing the
+architecture. The program's accuracy question at the reference size is
+closed at this resolution; the book states the trade in the verdict. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
