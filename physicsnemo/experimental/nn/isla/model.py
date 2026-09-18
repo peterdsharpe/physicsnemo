@@ -556,6 +556,31 @@ def _kernel_readout(q_r, src_r, src_h, src_w, rho, eps, logspace: bool = False):
     return torch.cat(outs, dim=1)
 
 
+
+def rms_pairwise_distance(
+    points: torch.Tensor, measure_weights: torch.Tensor | None, eps: float = 1e-8
+) -> torch.Tensor:
+    """Measure-weighted RMS pairwise distance of a sampled boundary, shape (B, 1, 1).
+
+    ``L^2 = sum_ij w~_i w~_j |x_i - x_j|^2`` with ``w~ = w / sum(w)`` (uniform
+    weights when ``measure_weights`` is ``None``), evaluated in O(N) through the
+    variance identity ``L^2 = 2 sum_i w~_i |x_i - c|^2`` with ``c`` the weighted
+    mean. A normalized two-point statistic: it converges under refinement of any
+    boundary whose normalized measure converges (including fractal boundaries
+    whose total measure diverges), is invariant to a uniform rescale of the
+    weights, and is covariant under a geometric rescale. The mean ``c`` is an
+    intermediate of this scalar only; no centre is exposed.
+    """
+    b, n = points.shape[0], points.shape[1]
+    if measure_weights is None:
+        w = points.new_ones(b, n, 1)
+    else:
+        w = measure_weights.reshape(b, n, 1).to(points.dtype)
+    w_n = w / w.sum(dim=1, keepdim=True).clamp_min(eps)
+    c = (w_n * points).sum(dim=1, keepdim=True)
+    var = (w_n * (points - c).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
+    return (2.0 * var).sqrt().clamp_min(eps)
+
 class ISLA(Module):
     r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
 
@@ -632,7 +657,14 @@ class ISLA(Module):
             and similarity-gauge variants).
         scale_mode: ``"total_measure"`` (reference): divide positions by the
             square root of the total quadrature measure, an integral of the
-            geometry; ``"reference_length"``: divide by ``reference_length``.
+            geometry; ``"rms_distance"`` (candidate reference, under
+            validation): divide by the measure-weighted RMS pairwise distance
+            of the sample, ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the
+            weights normalized to one, a *normalized* two-point statistic
+            that converges under refinement of a boundary whose total measure
+            does not (a fractal boundary) and that names no centre; it is
+            also invariant to a uniform rescale of the weights alone;
+            ``"reference_length"``: divide by ``reference_length``.
         geo_kernel: ``"eager"`` (default, the reference implementation) or
             ``"fused"`` (exact Triton kernel for the per-layer geometry region,
             CUDA only, opt-in; one global vector only).
@@ -763,14 +795,14 @@ class ISLA(Module):
             )
         self.frame_mode = frame_mode
         self.relative_frame = frame_mode == "relative"
-        if scale_mode not in ("reference_length", "total_measure"):
+        if scale_mode not in ("reference_length", "total_measure", "rms_distance"):
             hint = (
                 f" (scale_mode='global' is a research option preserved at git tag {RESEARCH_TAG!r})"
                 if scale_mode == "global"
                 else ""
             )
             raise ValueError(
-                f"scale_mode must be 'reference_length' or 'total_measure', got {scale_mode!r}{hint}"
+                f"scale_mode must be 'reference_length', 'total_measure' or 'rms_distance', got {scale_mode!r}{hint}"
             )
         self.scale_mode = scale_mode
         if similarity_gauge and scale_mode != "reference_length":
@@ -1128,6 +1160,14 @@ class ISLA(Module):
                 .clamp_min(self.eps)
                 .sqrt()
             )
+        elif self.scale_mode == "rms_distance":
+            ### LEN-RMS (2026-09-18): the measure-weighted RMS pairwise distance,
+            ### computed through the variance identity sum_ij w_i w_j |x_i-x_j|^2
+            ### = 2 sum_i w_i |x_i - c|^2 with c the weighted mean (used only
+            ### inside this scalar; the frame keeps no centre). Normalized
+            ### weights make it converge under refinement where the total
+            ### measure diverges, and make it invariant to a weight rescale.
+            gauge = rms_pairwise_distance(points, measure_weights, self.eps)
         elif self.similarity_gauge:
             gauge = (
                 (

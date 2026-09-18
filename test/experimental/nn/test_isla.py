@@ -1211,3 +1211,105 @@ def test_legacy_options_non_default_values_raise_naming_the_tag(kw):
 def test_unknown_constructor_argument_raises_type_error():
     with pytest.raises(TypeError, match="unexpected keyword argument 'nonsense'"):
         ISLA(hidden=32, n_layers=1, n_slices=8, nonsense=1)
+
+
+def test_rms_distance_scale_contracts():
+    """LEN-RMS: the relative frame with the RMS-pairwise-distance length unit keeps
+    exact translation invariance and rotation covariance, is invariant to a
+    geometric rescale of the points (with or without the matching weight rescale)
+    AND to a uniform rescale of the weights alone (which the total-measure unit is
+    not), and needs no centre."""
+    pts, nrm, drv, w = _frame_cloud()
+    torch.manual_seed(1)
+    m = (
+        ISLA(
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            frame_mode="relative",
+            scale_mode="rms_distance",
+        )
+        .double()
+        .eval()
+    )
+    shift = torch.tensor([300.0, -70.0, 1100.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
+        assert torch.isfinite(base).all()
+        assert torch.allclose(
+            m(points=pts + shift, normals=nrm, global_vectors=drv, measure_weights=w),
+            base,
+            atol=1e-12,
+        )
+        q = _rotation()
+        rot = m(points=pts @ q.T, normals=nrm @ q.T, global_vectors=drv @ q.T, measure_weights=w)
+        assert torch.allclose(rot[..., :1], base[..., :1], atol=1e-10)
+        assert torch.allclose(rot[..., 1:4], base[..., 1:4] @ q.T, atol=1e-10)
+        assert torch.allclose(
+            m(points=pts * 2.5, normals=nrm, global_vectors=drv, measure_weights=w * 2.5**2),
+            base,
+            atol=1e-10,
+        )
+        assert torch.allclose(
+            m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w * 137.0),
+            base,
+            atol=1e-10,
+        )  # weight rescale alone: invariant (the unit is normalized)
+        assert torch.allclose(
+            m(points=pts * 2.5, normals=nrm, global_vectors=drv, measure_weights=w),
+            base,
+            atol=1e-10,
+        )  # a rescale of the points alone is invariant too: the unit is a length of the sample and the
+        # routing bias log w is uniform-rescale invariant, so weights and positions decouple
+    torch.manual_seed(1)
+    m_tm = ISLA(hidden=64, n_layers=2, n_slices=16, frame_mode="relative", scale_mode="total_measure").double().eval()
+    with torch.no_grad():
+        base_tm = m_tm(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
+        assert not torch.allclose(
+            m_tm(points=pts, normals=nrm, global_vectors=drv, measure_weights=w * 137.0),
+            base_tm,
+            atol=1e-3,
+        )  # the total-measure unit is NOT invariant to a weight rescale; the contrast this option removes
+
+
+def _koch_curve(level: int):
+    """Koch curve (plane z = 0) as a polyline of 4**level segments on the unit base."""
+    import math
+
+    pts = [torch.tensor([0.0, 0.0]), torch.tensor([1.0, 0.0])]
+    rot = torch.tensor(
+        [[math.cos(math.pi / 3), -math.sin(math.pi / 3)], [math.sin(math.pi / 3), math.cos(math.pi / 3)]]
+    )
+    for _ in range(level):
+        new = [pts[0]]
+        for a, b in zip(pts[:-1], pts[1:]):
+            d = b - a
+            p1 = a + d / 3
+            p3 = a + 2 * d / 3
+            p2 = p1 + rot @ (d / 3)
+            new += [p1, p2, p3, b]
+        pts = new
+    xy = torch.stack(pts).double()
+    mids = (xy[:-1] + xy[1:]) / 2
+    seg = (xy[1:] - xy[:-1]).norm(dim=-1)
+    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=torch.float64)], dim=-1)[None], seg[None]
+
+
+def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
+    """LEN-RMS: on a fractal boundary refined dyadically, the total measure grows
+    without bound ((4/3)^level for the Koch curve) while the RMS pairwise distance
+    converges: the relative differences between successive levels fall below 1e-3
+    from level 4 on, and the last two levels agree to 1e-4."""
+    from physicsnemo.experimental.nn.isla.model import rms_pairwise_distance
+
+    totals, rms = [], []
+    for level in range(0, 7):
+        pts, w = _koch_curve(level)
+        totals.append(w.sum().item())
+        rms.append(rms_pairwise_distance(pts, w).item())
+    for a, b in zip(totals[:-1], totals[1:]):
+        assert abs(b / a - 4.0 / 3.0) < 1e-6  # the measure diverges geometrically (float64 polyline arithmetic)
+    rel = [abs(b - a) / a for a, b in zip(rms[:-1], rms[1:])]
+    assert all(r < 1e-3 for r in rel[4:]), rel
+    assert rel[-1] < 1e-4, rel
+    assert rms[-1] > 0.3  # a finite length of the order of the base
