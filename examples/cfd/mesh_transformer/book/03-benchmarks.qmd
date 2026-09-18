@@ -52,10 +52,11 @@ spread at 35 cases and is the uncertainty to read.
 **Which ISLA.** ISLA's reference configuration is the relative frame with
 the total-measure length scale (@sec-mt2-forward): no centroid, no sample
 statistic anywhere in the frame, so its output does not depend on how the
-surface was sampled. It is measured on seven of the eight surface rungs
+surface was sampled. It is measured on eight of the nine surface rungs
 below: 35 and 210 HiLift cases, 4 and 21 training geometries, the fixed
-angle, DrivAerML at 435 cars, and the 512-wide, 80,000-cell corner (under
-the width learning rate). Its price against the constant-gauge
+angle, DrivAerML at 435 cars under the independent and the stratified
+inference draw, and the 512-wide, 80,000-cell corner (under the width
+learning rate). Its price against the constant-gauge
 variant (@sec-mt2-variants) splits by whether the validation geometries
 recur in training: none on DrivAerML at the reference size, 3% at the
 corner (4% at a matched learning rate, @sec-nb-cg-wlr-verdict), 1% at 4
@@ -190,6 +191,13 @@ S["corner"] = dict(
     isla_cg=[sc["isla_constant_gauge_512x80k"]["in_family"]], isla_ref=cw["in_family_80k_seeds"],
     paired=("not reduced per case", ""), draws=None,
     src="results/accuracy_consistency_matrix_2026-09-10.json (scale corner; two seeds per arm, seed means); results/corner_wlr_reduction_2026-09-15.json (reference configuration at the corner)")
+qv = J("quadvar_reduction_2026-09-17.json")["arms"]  # stratified (Morton-ordered systematic) inference draw, same inclusion law, 10k cells
+S["dr435_strat"] = dict(
+    title="DrivAerML, 435 cars, stratified inference draw at 10,000 cells (all models)",
+    gt=qv["gt_unit"]["strat"]["10000"]["seeds"], t=qv["transolver_unit"]["strat"]["10000"]["seeds"],
+    isla_cg=qv["isla_cg"]["strat"]["10000"]["seeds"], isla_ref=qv["isla_ref"]["strat"]["10000"]["seeds"],
+    paired=("not reduced per case", ""), draws=None,
+    src="results/quadvar_reduction_2026-09-17.json (stratified draw; the same checkpoints as the 435-car row)")
 
 def ratio(b, i): return mean(b) / mean(i)
 ```
@@ -297,6 +305,8 @@ add("HiLift, fixed angle 12° — vs reference ISLA", "fixed", "isla_ref")
 add("HiLift, fixed angle 12° — vs constant-gauge variant", "fixed", "isla_cg")
 add("DrivAerML, 435 cars — vs reference ISLA", "dr435", "isla_ref")
 add("DrivAerML, 435 cars — vs constant-gauge variant", "dr435", "isla_cg")
+add("DrivAerML, 435 cars, stratified inference draw — vs reference ISLA", "dr435_strat", "isla_ref")
+add("DrivAerML, 435 cars, stratified inference draw — vs constant-gauge variant", "dr435_strat", "isla_cg")
 add("DrivAerML, 512 wide × 80k cells — vs reference ISLA (width learning rate)", "corner", "isla_ref")
 add("DrivAerML, 512 wide × 80k cells — vs constant-gauge variant", "corner", "isla_cg")
 # pose: baselines with augmentation in random poses ÷ ISLA without, in random poses
@@ -348,7 +358,7 @@ def rat(b, s, ci):
     return " ‖ ".join(parts)
 out = ("| setting | GeoTransolver | Transolver | ISLA, reference configuration | ISLA, constant-gauge variant | GeoTransolver ÷ ISLA (reference ‖ constant gauge) | Transolver ÷ ISLA (reference ‖ constant gauge) | validation cases where the baseline is lower |\n"
        "|---|---|---|---|---|---:|---:|---|\n")
-for key in ("hl35", "hl210", "hl510", "hl1260", "geo4", "geo21", "fixed", "dr435", "corner"):
+for key in ("hl35", "hl210", "hl510", "hl1260", "geo4", "geo21", "fixed", "dr435", "dr435_strat", "corner"):
     s = S[key]
     ref = f"**{fmt(s['isla_ref'])}**" if s["isla_ref"] else "not yet measured"
     cg, ct = s["draws"] if s["draws"] else (None, None)
@@ -358,9 +368,9 @@ print(out)
 print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed values in "
       "parentheses; the corner row lists seed means of two seeds) on every rung where the "
       "unit-direction baselines and ISLA are both measured. The ratio columns give baseline ÷ ISLA "
-      "against the reference configuration in bold on the seven rungs where it is measured (35 and "
-      "210 HiLift cases, 4 and 21 training geometries, the fixed angle, 435 DrivAerML cars, the "
-      "512 × 80k corner) and "
+      "against the reference configuration in bold on the eight rungs where it is measured (35 and "
+      "210 HiLift cases, 4 and 21 training geometries, the fixed angle, 435 DrivAerML cars under the "
+      "independent and the stratified inference draw, the 512 × 80k corner) and "
       "against the constant-gauge variant on every rung; brackets are the 90% interval of the "
       "constant-gauge ratio over four random training draws (35 and 210 cases; at 35 cases the "
       "draws used GeoTransolver's 1e-3 lane). GeoTransolver runs at 3e-3 on the 35-case rung and "
@@ -371,7 +381,10 @@ print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed va
       "the protocol rate 1e-3, the other arms at their protocol rates (@sec-nb-corner-wlr-verdict); the "
       "constant-gauge variant retrained at 3.75e-4 scores 0.0424, so the rate costs it nothing and the "
       "reference's excess is the frame's (@sec-nb-cg-wlr-verdict; control, not a row). "
-      "The 27–218-car DrivAerML ladder has no unit-direction "
+      "The stratified-draw row queries the same 435-car checkpoints with a systematic sample along the "
+      "Morton order of the cells (same inclusion law and weights as the independent draw): every model "
+      "improves, the baselines by 2% and ISLA by 4% (@sec-nb-quadvar-verdict); the headline ratios of this "
+      "book are the independent-draw rows. The 27–218-car DrivAerML ladder has no unit-direction "
       "baseline measurement and is not listed. Data: "
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
 ```

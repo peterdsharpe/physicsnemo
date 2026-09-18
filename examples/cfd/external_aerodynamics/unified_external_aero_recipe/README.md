@@ -367,6 +367,16 @@ the centered variant nothing (measured at 512 × 80,000 cells on
 DrivAerML; the book's notebook records the divergence mechanism and both
 controls).
 
+**Inference sampler.** For inference at a fixed cell budget, replace the
+dataset's `SubsampleMesh` stage with the recipe's `StratifiedSubsampleMesh`
+(`src/domain_transforms.py`): a systematic draw along the Morton order of
+the cell centroids with the same uniform-over-cells inclusion law and
+weights, so nothing about the trained model or its estimand changes, only
+the variance of the draw. On DrivAerML at 10,000 cells it lowers every
+model's float32 pressure error (GeoTransolver and Transolver by 2%, ISLA
+by 4%); the book records it as a labelled scoreboard row and keeps the
+independent draw for its headline comparisons.
+
 **Data-to-model mapping** (surface reference):
 
 ```yaml

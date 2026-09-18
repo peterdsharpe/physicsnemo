@@ -18159,7 +18159,64 @@ can reduce. An equal-*area* stratification would remove the weight spread
 but is a convention swap for these checkpoints, which MIX prices at 1.9x
 for ISLA; it is not run here. The bars above stand as written; the two
 derivations are separated by whether the stratified 10,000-cell draw
-lands above or below 0.0546. If supported, the
+lands above or below 0.0546.
+
+## 2026-09-17 — Verdict, QUAD-VAR: the stratified draw lowers ISLA's 10,000-cell error by 4% (both ISLA bars met) but also lowers the baselines' by 2%, so the control fired and the ISLA-specific recovery is about two points of the count slope {#sec-nb-quadvar-verdict}
+
+**What was run.** The sixteen evaluation lanes of @sec-nb-quadvar-prereg
+(job 779184, `recipe_bench` with `StratifiedSubsampleMesh`, float32, 48
+DrivAerML validation cars, each checkpoint under its training snapshot):
+the constant-gauge and reference ISLA pairs, the GeoTransolver and
+Transolver pairs, each queried at 10,000 and 20,000 cells drawn
+systematically along the Morton order with the uniform-over-cells
+inclusion law (results/quadvar_reduction_2026-09-17.json). Comparators are
+the same checkpoints' independent-draw values from the consistency
+benchmark.
+
+**What we saw** (pressure rel-L2, two-seed means):
+
+| arm | independent 10k | independent 20k | independent 40k | **stratified 10k** (seeds) | stratified 20k | stratified 10k ÷ independent 10k | share of the 10k-to-40k gain recovered |
+|---|---|---|---|---|---|---|---|
+| ISLA constant gauge | 0.0561 | 0.0540 | 0.0530 | **0.0537** (0.0545 / 0.0529) | 0.0533 | 0.957 | 0.79 |
+| ISLA reference | 0.0554 | not measured | 0.0523 | **0.0531** (0.0525 / 0.0537) | 0.0527 | 0.959 | 0.73 |
+| GeoTransolver | 0.0509 | 0.0508 | 0.0506 | **0.0498** (0.0494 / 0.0501) | 0.0502 | 0.978 | control: moved 2.2% |
+| Transolver | 0.0520 | 0.0519 | 0.0518 | **0.0509** (0.0508 / 0.0511) | 0.0516 | 0.979 | control: moved 2.1% |
+
+**Against the bars.** Both ISLA arms meet the *supported* bar (constant
+gauge 0.0537 against 0.0546; reference 0.0531 against 0.0539), and the
+consistency bar holds (every stratified 20,000-cell value is at or below
+the independent one). But the **control fired**: GeoTransolver and
+Transolver, flat in the count under independent draws, improve by 2.2%
+and 2.1% under the stratified draw. Per the preregistration the strong
+ISLA reading is withheld, and the honest decomposition is this: about two
+points of every arm's improvement is the *metric's* own estimator, the
+area-weighted relative L2 over a finite sample, which a spatially even
+sample also estimates with less noise and less ratio bias; the part
+specific to ISLA is the excess over the baselines' shift, 2.1 to 2.2
+points at 10,000 cells, or about 40% of ISLA's 10,000-to-40,000 count
+slope. Under the stratified draw GeoTransolver ÷ ISLA (constant gauge)
+moves from 0.907 to 0.927, two of the 4.8 points that separate the
+independent 10,000-cell ratio from the 40,000-cell one.
+
+**Which derivation was right.** Neither alone. The variance reading of
+@sec-nb-cap-verdict predicted a recovery of at least half the slope from
+the draw alone; the weight-spread derivation predicted a small gain. The
+ISLA-specific gain is real and about 40% of the slope, the remainder being
+the weight-spread term that only more cells or a weight-changing quadrature
+can reduce, and the shared two points are a property of the metric, not of
+any architecture.
+
+**What follows.** The stratified draw is a strict improvement for every
+model at no cost (same token budget, same inclusion law, same training),
+so it is the recipe's recommended inference sampler; it enters the
+scoreboard only as a complete labelled row ("stratified inference draw,
+all architectures"), never as a silent replacement of the independent-draw
+numbers, and this book's headline ratios remain the independent-draw
+ones. Record: the ISLA-specific part of the reference-size DrivAerML
+deficit that a better draw can remove is about two points of ratio; the
+rest of the count slope is the Horvitz–Thompson weight spread of a
+uniform-over-cells sample, which is bounded by MIX at a few percent and by
+the width axis as a shared capacity effect. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
