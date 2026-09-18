@@ -1770,3 +1770,14 @@ interior control @sec-nb-udrv-int-prereg.
   "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe
   (ablation)"; never "research variant", never "GeoTransolver, measure-weighted
   pooling" (which reads as a variant of the public model).
+
+## STEELMAN (2026-09-18; results/steelman_reduction_2026-09-18.json)
+- GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe
+  (ablation): uniform 10k 0.0509 (GeoTransolver 0.0503); area ÷ uniform
+  1.108 / 1.042 / 1.012 and biased ÷ uniform 1.120 / 1.015 / 1.005 at
+  2,500 / 10,000 / 40,000 cells. Transolver counterpart: 0.0531; 1.097 /
+  1.044 / 1.010 and 1.100 / 1.013 / 1.001. ISLA on the same benchmark: 1.60 /
+  1.06 (area) and 1.23 / 1.03 (biased) at 10,000 / 40,000.
+- Rule: never state consistency as an ISLA-only property. State "consistency
+  together with exact covariance and without a body centroid"; the ablation
+  is consistent (and more so than ISLA) at a 1.2% in-distribution price.

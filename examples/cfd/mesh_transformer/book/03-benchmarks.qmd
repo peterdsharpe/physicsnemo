@@ -694,28 +694,51 @@ GeoTransolver and Transolver keep their plain-mean frame
 against ISLA.
 
 A reader of @fig-scoreboard-density will ask why one would not simply use
-GeoTransolver with measure-weighted pooling and the Horvitz–Thompson-centered
-datapipe. One could, and the figure is the evidence that consistency under a
-change of sampling is not ISLA's property alone: it belongs to two choices
-any slice-attention model can make, the measure in the pooling and a frame
-taken from integrals of the surface. The ablation pays nothing for
-them in distribution (its uniform-draw error is
+GeoTransolver with ISLA's measure-weighted pooling and the
+Horvitz–Thompson-centered datapipe. One could, and the figure is the
+evidence that consistency under a change of sampling is not ISLA's property
+alone: it belongs to two choices any slice-attention model can make, the
+measure in the pooling and a frame taken from integrals of the surface. The
+ablation pays little for them in distribution (its uniform-draw error is
 `{python} f"{mean(mwaw['runs']['mwaw_dr_gt_unit_lr1e3']['probe_sfht']['unif']):.4f}"`
 against GeoTransolver's
-`{python} f"{mean(S['dr435']['gt']):.4f}"`). What it buys consistency
-with is a body centroid: the datapipe centers every coordinate on the
-measure-weighted centroid of the surface, a point the physics does not
-distinguish and that is ill-posed for an open, truncated or multi-body
-boundary, and the model then consumes absolute positions in that frame in
-every layer. That is the construct ISLA declines
-(@sec-mt2-variants). It also does not make the model covariant: its pose
-behavior still comes from augmentation or a canonical frame. The
-comparison the book makes is therefore not "consistent against
-inconsistent" but "consistent and exactly covariant without any centroid,
-at a measured price in distribution" against "consistent with a centroid,
-position-informed, not covariant". The ablation has been measured
-on this probe only; its behavior under refinement across samplers and in
-random poses is not yet measured (@sec-scoreboard-pending). On the wings the relative frame's
+`{python} f"{mean(S['dr435']['gt']):.4f}"`), and under the refinement
+benchmark it is consistent at every count, and more consistent than ISLA
+(@tbl-scoreboard-steelman). What it buys consistency with is a body
+centroid: the datapipe centers every coordinate on the measure-weighted
+centroid of the surface, a point the physics does not distinguish and that
+is ill-posed for an open, truncated or multi-body boundary, and the model
+then consumes absolute positions in that frame in every layer. That is the
+construct ISLA declines (@sec-mt2-variants). It also does not make the
+model covariant: its pose behavior still comes from augmentation or a
+canonical frame. The comparison the book makes is therefore not "consistent
+against inconsistent" but "consistent and exactly covariant without any
+centroid, at a measured price in distribution" against "consistent with a
+centroid, position-informed, not covariant".
+
+```{python}
+#| label: tbl-scoreboard-steelman
+#| output: asis
+SM = J("steelman_reduction_2026-09-18.json")["arms"]
+RFB = J("consistency_bench/consistency_bench_rf_2026-09-11.json")["arms"]["rf_dr_mt2_meas"]["table"]
+def dev(arm, s, c): return SM[arm]["deviation_over_unif"][s][str(c)]["mean"]
+out = "| model | uniform error, 10,000 cells | area ÷ uniform at 2,500 / 10,000 / 40,000 | biased ÷ uniform at 2,500 / 10,000 / 40,000 |\n|---|---:|---:|---:|\n"
+for arm, lab in (("gt_ht", "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)"), ("t_ht", "Transolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)")):
+    out += f"| {lab} | {SM[arm]['table']['unif']['10000']['mean']:.4f} | " + " / ".join(f"{dev(arm,'area',c):.3f}" for c in (2500, 10000, 40000)) + " | " + " / ".join(f"{dev(arm,'biased',c):.3f}" for c in (2500, 10000, 40000)) + " |\n"
+isla_u = {c: RFB["unif"][c]["pressure_l2"]["mean"] for c in ("10000", "40000")}
+out += (f"| ISLA | {isla_u['10000']:.4f} | — / {RFB['area']['10000']['pressure_l2']['mean']/isla_u['10000']:.3f} / {RFB['area']['40000']['pressure_l2']['mean']/isla_u['40000']:.3f} "
+        f"| — / {RFB['biased']['10000']['pressure_l2']['mean']/isla_u['10000']:.3f} / {RFB['biased']['40000']['pressure_l2']['mean']/isla_u['40000']:.3f} |\n")
+print(out)
+print(": The steel-man of the consistency claim: the two baseline ablations that adopt ISLA's measure semantics and an "
+      "integral (Horvitz–Thompson) centroid, through the refinement benchmark (float32, 48 DrivAerML validation cars, "
+      "two seeds each, seed means), with ISLA on the same benchmark for context. A deviation of 1.000 is exact consistency; "
+      "the benchmark's bar is 3% at 40,000 cells. How to read this: the ablations are consistent at every count and more "
+      "consistent than ISLA; the comparison ISLA makes is covariance and center-freeness on top of consistency, not "
+      "consistency alone. ISLA's 2,500-cell row is not in its benchmark artifact. Data: results/steelman_reduction_2026-09-18.json; "
+      "results/consistency_bench/consistency_bench_rf_2026-09-11.json. {#tbl-scoreboard-steelman}")
+```
+
+On the wings the relative frame's
 convergence is measured on the fixed-angle split: from 2,500 to 40,000 cells
 its area-sampler deviation falls from +45% to +2.6% and its biased-sampler
 deviation from +81% to +5.5%, converging but not yet at the bias bar at
@@ -759,10 +782,6 @@ print(": Training cost of the three architectures on one instrument and one exec
 Five measurements would complete the board, and one line is closed; the
 live status of each is in @sec-program-status.
 
-- **The Horvitz–Thompson-centered baseline ablations** under the
-  refinement benchmark (2,500 to 40,000 cells, three samplers) and in random
-  poses; they are measured on the 10,000-cell density probe only. This is the
-  steel-man of the consistency claim and is queued as an evaluation-only run.
 - **ISLA on 510 and 1,260 wing cases**: not yet
   measured. The unit-direction baselines' values on those rungs are in
   results/udrvl_510_reduction_2026-09-12.json,

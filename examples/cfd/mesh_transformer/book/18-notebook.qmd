@@ -19042,3 +19042,44 @@ pooling is a quadrature, so the same mechanism that makes ISLA's arms
 converge applies; the biased-sampler deviation at 40,000 will be a little
 larger than ISLA's because the raw coordinates still see the sample's point
 distribution through the attention.
+
+## 2026-09-18 — Verdict, STEELMAN: GeoTransolver and Transolver with ISLA's measure-weighted pooling and an HT-centered datapipe are consistent under refinement at every count, within 1.2% of uniform at 40,000 cells, and more consistent than ISLA {#sec-nb-steelman-verdict}
+
+**Setting.** The preregistration (@sec-nb-steelman-prereg) sent the four
+checkpoints of GeoTransolver + ISLA's measure-weighted pooling + HT-centered
+datapipe (ablation) and its Transolver counterpart through the refinement
+benchmark: uniform, area-proportional and 10:1-biased samplers at 2,500,
+10,000 and 40,000 cells, float32, 48 DrivAerML validation cars, in the
+HT-centered datapipe convention (results/steelman_reduction_2026-09-18.json).
+
+**What we saw.** The **consistent** bar is met for both arms with room to
+spare. For the GeoTransolver ablation the area-sampler error divided by the
+uniform error falls 1.108 → 1.042 → 1.012 from 2,500 to 40,000 cells and
+the biased-sampler ratio 1.120 → 1.015 → 1.005; for the Transolver ablation
+1.097 → 1.044 → 1.010 and 1.100 → 1.013 → 1.001. Both deviations fall
+monotonically with count and are within 1.2% at 40,000. In distribution the
+GeoTransolver ablation scores 0.0509 on the uniform 10,000-cell draw against
+GeoTransolver's 0.0503, a 1.2% price, just outside the 1% accuracy bar; the
+Transolver ablation 0.0531 against 0.0517. For context, ISLA on the same
+benchmark deviates 1.06 (area) and 1.03 (biased) at 40,000 cells and 1.60
+and 1.23 at 10,000, so the ablations are **more consistent than ISLA at
+every count**, and the prediction that their biased-sampler deviation would
+exceed ISLA's was wrong.
+
+**Why it matters.** Sampling consistency is fully portable to the
+Transolver family: the two ingredients, a quadrature in the pooling and a
+frame taken from an integral of the surface, make GeoTransolver consistent
+at a 1.2% in-distribution price, and its consistency under refinement is
+better than ISLA's, presumably because its raw coordinates in the centered
+frame give every token a stable absolute position while ISLA's tokens locate
+themselves through routed anchors that themselves move with the sample. The
+book's consistency claim is therefore restated: what ISLA offers is
+consistency **together with** exact covariance and **without** a body
+centroid; the consistency alone is not an ISLA advantage over a GeoTransolver
+willing to adopt ISLA's measure semantics and a centroid frame. The
+scoreboard chapter's steel-man paragraph carries the numbers, and the
+"not yet on the board" list drops the entry.
+
+**What's next.** The pose test for these ablations (they are not covariant;
+the interesting number is their posed error against ISLA's) is the one
+remaining steel-man measurement and is queued behind the running lanes.
