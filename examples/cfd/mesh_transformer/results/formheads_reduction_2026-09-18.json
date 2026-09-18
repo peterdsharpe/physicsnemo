@@ -1,0 +1,74 @@
+{
+  "study": "FORM-HEADS: multi-head slice routing on the OVERFIT-1 DrivAerML one-car instrument (lean class, constant gauge via isla_cg_heads, seed 42, 20k steps, 64 views); bars against the same-code h1 control",
+  "instrument": "float32 pressure rel-L2 on the training car at 10,000 cells (readout) and 40,000 cells; bf16 twins recorded",
+  "bars": {
+    "closes": 0.0852,
+    "carries_rel_h1": 0.9,
+    "null_rel_h1": 0.95
+  },
+  "comparators": {
+    "baseline_isla_256": {
+      "r10000": 0.10637380182743073,
+      "r40000": 0.08567748963832855,
+      "tail20_loss": 0.00035309999999999996
+    },
+    "gt_unit": {
+      "r10000": 0.07656722515821457,
+      "r40000": 0.07798849046230316
+    },
+    "transolver_unit": {
+      "r10000": 0.08112707734107971,
+      "r40000": 0.0793411061167717
+    }
+  },
+  "arms": {
+    "h1": {
+      "run": "ovf_dr_isla_h1_seed42_v64",
+      "axis": "n_heads",
+      "value": 1,
+      "r10000": 0.1069420725107193,
+      "r40000": 0.08137073367834091,
+      "r10000_bf16": 0.10877235233783722,
+      "tail20_loss": 0.0003589,
+      "ratio_to_baseline": 1.0053422052566146
+    },
+    "h4": {
+      "run": "ovf_dr_isla_h4_seed42_v64",
+      "axis": "n_heads",
+      "value": 4,
+      "r10000": 0.10117904841899872,
+      "r40000": 0.0750923752784729,
+      "r10000_bf16": 0.10282152146100998,
+      "tail20_loss": 0.0003097,
+      "ratio_to_baseline": 0.9511651053249051
+    },
+    "h8": {
+      "run": "ovf_dr_isla_h8_seed42_v64",
+      "axis": "n_heads",
+      "value": 8,
+      "r10000": 0.08690357953310013,
+      "r40000": 0.0729280486702919,
+      "r10000_bf16": 0.08912448585033417,
+      "tail20_loss": 0.00149645,
+      "ratio_to_baseline": 0.8169641212418358
+    }
+  },
+  "axes": {
+    "n_heads": {
+      "top_rung": "h8",
+      "r10000": 0.08690357953310013,
+      "ratio_to_h1": 0.8126229227920506,
+      "verdict": "carries",
+      "ladder": {
+        "h1": 0.1069420725107193,
+        "h4": 0.10117904841899872,
+        "h8": 0.08690357953310013
+      }
+    }
+  },
+  "control": {
+    "h1_r10000": 0.1069420725107193,
+    "h1_over_cap_baseline": 1.0053422052566146,
+    "sanity": "ok"
+  }
+}

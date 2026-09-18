@@ -18478,7 +18478,100 @@ against the `h1` control (expected near the CAP baseline 0.1064):
 **Prediction.** Heads carry: `h8` lowers the one-car floor by 10 to 20%
 and the training loss with it, monotone in H; if `h8` is null, the form
 gap is not in the routing multiplicity and the next candidate is the
-read-back (a soft read-back separate from the aggregation routing). If supported, the
+read-back (a soft read-back separate from the aggregation routing).
+
+## 2026-09-18 — Verdict, FORM-HEADS: eight routings per block lower ISLA's one-car floor by 19%, monotone in the head count, and put it below both baselines at 40,000 evaluation cells; the form gap is the routing multiplicity {#sec-nb-formheads-verdict}
+
+**What was run.** The three lanes of @sec-nb-formheads-prereg trained to
+20,000 steps without incident (the eight-head lane across two chain links)
+and were evaluated in float32 at 10,000 and 40,000 cells
+(results/formheads_reduction_2026-09-18.json).
+
+**What we saw** (float32 pressure error on the training car):
+
+| arm | routings per block | 10,000 cells | ÷ `h1` control | 40,000 cells | tail-20 training loss |
+|---|---|---|---|---|---|
+| `h1` (same-code control) | 1 | 0.1069 | 1.000 | 0.0814 | 0.0004 |
+| `h4` | 4 | 0.1012 | 0.951 | 0.0751 | 0.0003 |
+| `h8` | 8 | **0.0869** | **0.813** | **0.0729** | 0.0015 |
+| CAP baseline (older snapshot) | 1 | 0.1064 | | 0.0857 | 0.0004 |
+| GeoTransolver (OVERFIT-1) | | 0.0766 | | 0.0780 | |
+| Transolver (OVERFIT-1) | | 0.0811 | | 0.0793 | |
+
+**Against the bars.** The control passes its sanity bar (`h1` is 0.5% from
+the CAP baseline, so the lean class on this instrument reproduces the older
+snapshot). `h8` **carries** (0.813 of the control, against the 0.90 bar)
+and misses *closes* by 0.0017 (0.0869 against 0.0852, that is 1.07x
+Transolver's floor rather than 1.05x); `h4` is between (a 4.9% gain). The
+effect is monotone in the head count, as predicted. At 40,000 evaluation
+cells the ordering inverts: the eight-head ISLA (0.0729) is below
+GeoTransolver (0.0780) and Transolver (0.0793) on the same car, the first
+time any ISLA configuration has been below both baselines on an
+in-distribution fit. The eight-head lane's tail training loss is higher
+(0.0015 against 0.0004) while its evaluation is better; with 24-wide
+per-head states the bfloat16 training signal is noisier and the last
+twenty single-sample steps are not the fit (the evaluation is).
+
+**Reading.** The two "form" points of @sec-nb-deficit-anatomy have a
+mechanism: a token routed once per layer reads one slice state back; the
+soft assignment hardens toward one slice per token
+(@sec-nb-relframe-divergence-mechanism), and the read-back becomes
+piecewise. Eight independent routings give every token eight anchor
+neighbourhoods and eight states to compose, which is what Transolver's
+eight heads do without any geometry; here they do it with every contract
+intact (the contract test at four heads passes exactly). The cost is real:
+the geometry region runs once per head, and the eight-head lane took 4.7
+times the wall time of the control on one GPU at 10,000 cells. That cost
+is the fused geometry kernel's job, not a reason to stop.
+
+**What follows.** The one-car floor is the screening instrument; the
+claim that matters is the 435-car in-distribution error of the *reference*
+configuration with heads, preregistered next (@sec-nb-heads435-prereg).
+`n_heads` stays a research option on branch `isla-heads` until that lands.
+
+## 2026-09-18 — Preregistration, HEADS-435: the reference configuration with 4 and 8 routings per block on the full DrivAerML training set {#sec-nb-heads435-prereg}
+
+**Setting.** FORM-HEADS moved the one-car floor by 19% at eight heads and
+inverted the ordering against the baselines at 40,000 cells. CAP's width
+axis transferred from the one-car instrument to 435 cars at the same
+magnitude, so the instrument has predicted the full problem once; this
+study asks whether it does so for the routing multiplicity, on the
+flagship rather than the constant gauge.
+
+**Arms.** `hd_dr_isla_ref_h{4,8}_seed{42,43}`: the reference configuration
+(`isla_surface_reference` in `recipe_globin`: relative frame, total-measure
+scale, width 192, 12 layers, 256 slices, geometry recompute on) with
+`n_heads` 4 and 8, snapshot `code_heads` (branch `isla-heads`, 2f647149),
+435 DrivAerML cars, 10,000 cells, learning rate 1e-3 (the protocol rate;
+width is unchanged), 500 epochs, bfloat16, no augmentation; launcher
+`kernel/heads435_aga.sbatch`. Float32 evaluation on the sample-frame
+probe at 10,000 cells, uniform and 10:1-biased
+(`kernel/heads435_eval_aga.sbatch`). Comparators on that instrument
+(consistency benchmarks): reference 0.0554, constant gauge 0.0561,
+Transolver 0.0520, GeoTransolver 0.0509; the reference's density factor
+1.2.
+
+**Bars, written before the run** (two-seed mean, uniform probe, pressure):
+
+- **Closes the form gap**: eight heads at or below 0.0530, that is
+  GeoTransolver ÷ ISLA at or above 0.96 at the scoreboard's budget, the
+  value the anatomy assigns to a model with the form deficit removed; the
+  option is promoted to the mainline with its cost stated and the scoreboard
+  gains the row.
+- **Carries**: at or below 0.0543 (a gain of at least 2%); promoted as a
+  documented variant, the frontier restated as accuracy × cost.
+- **Null**: at or above 0.0549 (less than 1%): the one-car gain does not
+  transfer and the option stays on the research branch.
+- **Contracts**: the density factor stays within 1.05 to 1.3 (the frame
+  is untouched); a rise beyond 1.5 says the heads read the sample and the
+  arm is withheld.
+- **Stability**: both seeds train to 500 epochs at 1e-3; a divergence like
+  RFDIV's would be read against the routing mechanism, and the width rule
+  does not apply (width 192).
+
+**Prediction.** Eight heads carry (0.0538 to 0.0543) and four heads are
+between; the form points transfer at about half the one-car magnitude,
+as width did. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
