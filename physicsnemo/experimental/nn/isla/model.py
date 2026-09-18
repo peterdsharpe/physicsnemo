@@ -289,6 +289,7 @@ class _SliceBlock(nn.Module):
         relative_frame: bool = False,
         geo_kernel: str = "eager",
         n_global_vectors: int = 1,
+        n_heads: int = 1,
     ) -> None:
         super().__init__()
         self.use_relational_geo = use_relational_geo
@@ -303,6 +304,18 @@ class _SliceBlock(nn.Module):
         ### invariants (|z_s|, zhat_s.g_k) are gone and the geo width is 5 + K.
         self.relative_frame = bool(relative_frame)
         self.n_geo = _geo_width(n_global_vectors, self.relative_frame)
+        ### FORM-HEADS (2026-09-17): H independent routings per block, each with its
+        ### own slice anchors, relational invariants and head-split slice states of
+        ### width hidden // H, read back side by side (Transolver's physics attention
+        ### routes each token H = 8 ways per layer; ISLA routed it once). n_heads = 1
+        ### is the original single routing, bitwise, with unchanged parameter names.
+        self.n_heads = int(n_heads)
+        self.n_slices = int(n_slices)
+        if self.n_heads < 1 or hidden % self.n_heads:
+            raise ValueError(f"n_heads must divide hidden ({hidden}); got {n_heads}")
+        if self.n_heads > 1 and geo_kernel == "fused":
+            raise ValueError("geo_kernel='fused' supports n_heads=1 only")
+        self.head_dim = hidden // self.n_heads
         ### Activation recompute (2026-09-07 memory attribution): the per-slice
         ### geometry tensors -- rel (B,N,S,3), rel_hat, dist and two bf16 copies
         ### of the (B,N,S,8) invariants -- are 76% of ISLA's saved activations
@@ -311,7 +324,7 @@ class _SliceBlock(nn.Module):
         ### the forward is bitwise unchanged (same ops, same order).
         self.geo_checkpoint = bool(geo_checkpoint)
         self.norm_assign = nn.LayerNorm(hidden)
-        self.assign = nn.Linear(hidden, n_slices)
+        self.assign = nn.Linear(hidden, self.n_heads * n_slices)
         ### Relational geometry (v2): per-slice equivariant anchors and
         ### point-anchor invariants -- many local, data-adaptive reference
         ### points instead of any global frame (smooth by construction).
@@ -320,12 +333,13 @@ class _SliceBlock(nn.Module):
         self.geo_width = hidden // 2
         if use_relational_geo:
             self.geo_logit = nn.Linear(self.n_geo, 1)
-            self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
+            self.geo_feat = nn.Linear(self.n_heads * self.n_geo, self.geo_width)
+        d = self.head_dim  # == hidden when n_heads == 1
         self.slice_mlp = nn.Sequential(
-            nn.LayerNorm(hidden),
-            nn.Linear(hidden, mlp_ratio * hidden),
+            nn.LayerNorm(d),
+            nn.Linear(d, mlp_ratio * d),
             nn.GELU(),
-            nn.Linear(mlp_ratio * hidden, hidden),
+            nn.Linear(mlp_ratio * d, d),
         )
         self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
@@ -344,6 +358,8 @@ class _SliceBlock(nn.Module):
         g_hat: Float[torch.Tensor, "batch tokens vectors 3"],
         eps: float,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
+        if self.n_heads > 1:
+            return self._forward_heads(h, log_w, r, n_hat, g_hat, eps)
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
         logits = self.assign(self.norm_assign(h))  # (B, N, S)
@@ -414,6 +430,54 @@ class _SliceBlock(nn.Module):
             geo_pool = self.geo_feat(pooled)
         else:
             geo_pool = h.new_zeros(h.shape[0], h.shape[1], self.geo_width)
+        h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
+        return h + self.mlp(self.norm_mlp(h))
+
+    def _forward_heads(self, h, log_w, r, n_hat, g_hat, eps):
+        """FORM-HEADS path (n_heads > 1): the single-routing forward above, run once per
+        head on head-split states. Every quantity is an invariant or an equivariant
+        anchor exactly as in the single-head path, so the contracts are unchanged."""
+        b, n, _ = h.shape
+        H, S, D = self.n_heads, self.n_slices, self.head_dim
+        logits_all = self.assign(self.norm_assign(h)).view(b, n, H, S)
+        hv = h.view(b, n, H, D)
+        backs, pooled_all = [], []
+        for i in range(H):
+            logits = logits_all[:, :, i]
+            a = _softmax_over_points(logits + log_w, self.fast_point_softmax)
+            z_pos = torch.einsum("bns,bnc->bsc", a, r)
+            m_s = torch.einsum("bns,bnc->bsc", a, n_hat)
+            m_s = m_s / m_s.norm(dim=-1, keepdim=True).clamp_min(eps)
+            if self.use_relational_geo:
+                region = (
+                    (lambda *args: checkpoint(_geo_region, *args, use_reentrant=False))
+                    if self.geo_checkpoint
+                    else _geo_region
+                )
+                bias, point_mix, pooled = region(
+                    self.geo_logit,
+                    logits,
+                    r,
+                    n_hat,
+                    g_hat,
+                    z_pos,
+                    m_s,
+                    eps,
+                    self.relative_frame,
+                )
+                logits = logits + bias
+                pooled_all.append(pooled)
+            else:
+                point_mix = torch.softmax(logits, dim=-1)
+            a = _softmax_over_points(logits + log_w, self.fast_point_softmax)
+            z = torch.einsum("bns,bnd->bsd", a, hv[:, :, i])
+            z = z + self.slice_mlp(z)
+            backs.append(torch.einsum("bns,bsd->bnd", point_mix, z))
+        back = torch.cat(backs, dim=-1)
+        if self.use_relational_geo:
+            geo_pool = self.geo_feat(torch.cat(pooled_all, dim=-1))
+        else:
+            geo_pool = h.new_zeros(b, n, self.geo_width)
         h = h + self.broadcast(torch.cat([h, back, geo_pool], dim=-1))
         return h + self.mlp(self.norm_mlp(h))
 
@@ -574,6 +638,11 @@ class ISLA(Module):
         n_layers: Number of slice-attention blocks in the encoder.
         n_slices: Number of soft slices (data-adaptive anchors) per block.
         mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
+        n_heads: Independent slice routings per block (FORM-HEADS, 2026-09-17). Each
+            head has its own anchors, relational invariants and slice states of
+            width ``hidden // n_heads``, read back side by side; ``1`` (default) is
+            the original single routing and loads every earlier checkpoint
+            unchanged. Requires ``geo_kernel="eager"`` when above ``1``.
         reference_length: Constant length unit of the centered frame when
             ``scale_mode="reference_length"``; unused by the reference
             configuration (``scale_mode="total_measure"``).
@@ -675,6 +744,7 @@ class ISLA(Module):
         n_layers: int = 12,
         n_slices: int = 256,
         mlp_ratio: int = 4,
+        n_heads: int = 1,
         reference_length: float = 8.0,
         use_measure_weights: bool = True,
         fast_point_softmax: bool = True,
@@ -801,6 +871,9 @@ class ISLA(Module):
         ### kernels agree to 1e-6 in float32 evaluation. Checkpoints trained before
         ### 2026-09-10 used the reference kernel.
         self.fast_point_softmax = bool(fast_point_softmax)
+        self.n_heads = int(n_heads)
+        if self.n_heads < 1 or hidden % self.n_heads:
+            raise ValueError(f"n_heads must divide hidden ({hidden}); got {n_heads}")
         self.out_scalars = out_scalars
         self.out_vectors = out_vectors
         self.reference_length = float(reference_length)
@@ -837,6 +910,7 @@ class ISLA(Module):
                 relative_frame=self.relative_frame,
                 geo_kernel=geo_kernel,
                 n_global_vectors=K,
+                n_heads=self.n_heads,
             )
             for _ in range(n_layers)
         )

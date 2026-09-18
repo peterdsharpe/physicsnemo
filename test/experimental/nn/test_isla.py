@@ -1211,3 +1211,49 @@ def test_legacy_options_non_default_values_raise_naming_the_tag(kw):
 def test_unknown_constructor_argument_raises_type_error():
     with pytest.raises(TypeError, match="unexpected keyword argument 'nonsense'"):
         ISLA(hidden=32, n_layers=1, n_slices=8, nonsense=1)
+
+
+def test_multi_head_routing_keeps_the_contracts():
+    """FORM-HEADS: n_heads > 1 routes each token several ways per block; every guarantee of the
+    single routing (rotation equivariance, translation invariance, measure-weight scale
+    invariance) must hold exactly, and the default n_heads=1 keeps the parameter names."""
+    torch.manual_seed(0)
+    m = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, n_heads=4).double().eval()
+    n = 300
+    pts = torch.randn(1, n, 3, dtype=torch.float64) * torch.tensor(
+        [3.0, 2.0, 1.0], dtype=torch.float64
+    )
+    nrm = torch.nn.functional.normalize(
+        torch.randn(1, n, 3, dtype=torch.float64), dim=-1
+    )
+    drv = torch.nn.functional.normalize(torch.randn(1, 3, dtype=torch.float64), dim=-1)
+    w = torch.rand(1, n, dtype=torch.float64) + 0.5
+    q, _ = torch.linalg.qr(torch.randn(3, 3, dtype=torch.float64))
+    if torch.det(q) < 0:
+        q[:, 0] = -q[:, 0]
+    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
+    with torch.no_grad():
+        base = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
+        rot = m(
+            points=pts @ q.T,
+            normals=nrm @ q.T,
+            global_vectors=drv @ q.T,
+            measure_weights=w,
+        )
+        tr = m(points=pts + shift, normals=nrm, global_vectors=drv, measure_weights=w)
+        ws = m(points=pts, normals=nrm, global_vectors=drv, measure_weights=w * 137.0)
+    p0, v0 = _split(base)
+    p1, v1 = _split(rot)
+    assert torch.isfinite(base).all()
+    assert torch.allclose(p1, p0, atol=1e-10) and torch.allclose(
+        v1, v0 @ q.T, atol=1e-10
+    )
+    assert torch.allclose(tr, base, atol=1e-10)
+    assert torch.allclose(ws, base, atol=1e-9)
+    single = ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16).double()
+    assert single.n_heads == 1
+    assert set(single.state_dict()) == set(
+        m.state_dict()
+    )  # same parameter names; shapes differ
+    with pytest.raises(ValueError):
+        ISLA(**_CENTERED, hidden=64, n_layers=2, n_slices=16, n_heads=5)
