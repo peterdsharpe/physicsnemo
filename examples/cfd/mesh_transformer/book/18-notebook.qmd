@@ -18216,7 +18216,46 @@ ones. Record: the ISLA-specific part of the reference-size DrivAerML
 deficit that a better draw can remove is about two points of ratio; the
 rest of the count slope is the Horvitz–Thompson weight spread of a
 uniform-over-cells sample, which is bounded by MIX at a few percent and by
-the width axis as a shared capacity effect. If supported, the
+the width axis as a shared capacity effect.
+
+## 2026-09-17 — Preregistration, QUAD-VAR-HL: the stratified inference draw on the HiLift 35-case checkpoints, where the count slope is small {#sec-nb-quadvar-hl-prereg}
+
+**Setting.** @sec-nb-quadvar-verdict recommends the stratified inference
+draw for every model on DrivAerML, where ISLA's independent-draw error
+falls 5.5% from 10,000 to 40,000 cells. On HiLiftAeroML the same
+consistency benchmark shows a much smaller count slope at 35 training
+cases: the constant-gauge ISLA goes 0.1390, 0.1367, 0.1362 at 10,000,
+20,000 and 40,000 cells (2%), the reference configuration 0.1551 to 0.1506
+(3%), GeoTransolver 0.1104 to 0.1100 and Transolver 0.1148 to 0.1145
+(flat) (results/consistency_bench/consistency_bench_2026-09-10.json and
+consistency_bench_rf_2026-09-11.json). If the DrivAerML gain is draw
+variance, the HiLift gain must be bounded by this smaller slope; and a
+recommendation made for "every model" needs the second dataset.
+
+**The instrument.** As @sec-nb-quadvar-prereg, with
+`highlift_bench_super_scarce_strat` (the benchmark's HiLift dataset with
+the stratified draw) on the constant-gauge pair
+`lad_hl_mt2_super_scarce_seed42/43`, the reference pair
+`rf_hl_mt2_meas_super_scarce_seed42/43`, GeoTransolver
+`udrv_hl_gt_super_scarce_lr3e3_seed42/43` and Transolver
+`udrv_hl_transolver_super_scarce_lr3e3_seed42/43`, at 10,000 and 20,000
+cells, float32, 180 validation cases; lanes `bench/bench_lanes_strat_hl.tsv`.
+
+**Bars, written before the run.**
+
+- **Free improvement on both datasets**: no arm is worse than its
+  independent-draw value at either count by more than 1%, and the ISLA
+  arms' gains at 10,000 cells lie within the count slope (constant gauge
+  at or above 0.1362, reference at or above 0.1506; a gain beyond the
+  40,000-cell independent value would say the draw does more than reduce
+  variance).
+- **Dataset-specific**: any arm worse by more than 1% at either count.
+  The README recommendation is then narrowed to DrivAerML and the reason
+  investigated.
+- **Prediction**: ISLA arms improve by 1 to 2%, baselines by less than
+  1%; the HiLift 35-case ratios move by at most one point. The HiLift
+  deficit at this rung is therefore not count noise, consistent with the
+  frame-price and capacity readings of @sec-nb-cap-verdict. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
