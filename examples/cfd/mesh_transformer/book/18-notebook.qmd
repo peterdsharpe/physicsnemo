@@ -18334,7 +18334,54 @@ deficit is 4 to 5%, and at the scale corner 2 to 5%. Those are the numbers
 to put beside ISLA's exact contracts (pose, sampling consistency, general
 inputs) when the trade is made; the 25 to 28% at 35 HiLift cases is a
 different mechanism (the mesher-pattern cue where geometries recur,
-@sec-nb-frame-full-verdict) and is priced separately. If supported, the
+@sec-nb-frame-full-verdict) and is priced separately.
+
+## 2026-09-17 — Preregistration, EQ-PRICE: is the 4 to 5 point trained-function deficit the price of the invariance contracts? A raw-coordinate diagnostic at 435 cars {#sec-nb-eqprice-prereg}
+
+**Setting.** @sec-nb-deficit-anatomy leaves 4 to 5 points of
+GeoTransolver ÷ ISLA on DrivAerML to the trained function once the sample
+is fine enough, and CAP placed them outside the slice count, depth and MLP
+width. Two mechanisms remain: the information ISLA is denied by
+construction (absolute position; every baseline token carries its
+coordinates, ISLA's carry only invariants against the anchors), or the
+slice-attention form itself. At 35 HiLift cases the raw-coordinate channel
+bought nothing (0.143 against 0.138, @sec-nb-a35-verdict), but that rung
+is dominated by the mesher-pattern cue and no full-data test exists. If
+positional information is the deficit, the case for ISLA becomes a
+priced trade, "4 to 5% in-distribution for exact pose invariance and
+sampling consistency"; if it is not, the deficit is the form and the
+contracts are free.
+
+**The arm.** `eqp_dr_isla_raw_seed42/43`: the constant-gauge ISLA at the
+reference size (width 192, 10,000 cells, 435 DrivAerML cars, learning rate
+1e-3, 500 epochs, bfloat16, no augmentation) with the research class's
+`raw_coord_channel` (six channels: centred coordinates and normals in the
+frame; breaks SE(3) by design), snapshot `code_globin2`, recipe
+`recipe_globin` (launcher `kernel/eqprice_aga.sbatch`). This is a
+**diagnostic ablation**, never a configuration: it reads the pose of the
+car, which the principle of @sec-principle forbids the flagship. Float32
+evaluation on the corner's sample-frame probe at 10,000 cells
+(`kernel/eqprice_eval_aga.sbatch`): the uniform probe for in-family
+accuracy (comparators on this instrument, consistency benchmark:
+constant gauge 0.0561, Transolver 0.0520, GeoTransolver 0.0509) and the
+10:1 biased probe for the density factor.
+
+**Bars, written before the run** (two-seed mean, uniform probe):
+
+- **Positional information is the deficit** if the raw-coordinate arm is
+  at or below 0.0525 (within 1% of Transolver): the contracts are priced
+  at 4 to 5% and the book says so in the verdict.
+- **Partial**: between 0.0525 and 0.0550, reported in points.
+- **Null**: at or above 0.0550 (less than 2% gain): position is not what
+  the trained function lacks; the deficit is the slice-attention form and
+  the next probe is the readout (soft read-back, two-stage decode).
+- **Consistency**: the raw-coordinate arm's density factor is expected to
+  rise above the constant gauge's 12x (it reads the centred position of a
+  biased sample); recorded, not a bar.
+
+**Prediction.** Null or low partial (a gain of at most 2 points), as at
+35 cases: the deficit is the form. Cost: two lanes of about seven
+GPU-hours. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if
