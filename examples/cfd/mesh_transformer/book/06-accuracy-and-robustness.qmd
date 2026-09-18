@@ -1,333 +1,336 @@
 # Accuracy at full data, and robustness {#sec-full-data}
 
-With the full DrivAerML training split, in float32, GeoTransolver scores
-0.0503, Transolver 0.0517 and ISLA's reference configuration 0.0552 on
-surface pressure: ISLA is 10% behind GeoTransolver and 7% behind
-Transolver. What separates the architectures is behaviour off the tuned
-operating point. ISLA's reference frame degrades 1.2x under a 10:1
-sampling-density bias where every configuration that centres on the
-sampled points, GeoTransolver and Transolver included, degrades 10–16x;
-under refinement its convention-swap penalty converges toward one while the
-released baselines' stays at 3–7x. ISLA is covariant to rigid motions by
-construction, and in arbitrary poses that exactness is worth 6% against a
-rotation-augmented GeoTransolver and 19% against a rotation-augmented
-Transolver. ISLA holds its accuracy across a decade of learning rate where
-GeoTransolver degrades 4–14x on DrivAerML. Exact query independence, the
-property that would make ISLA a true evaluate-anywhere surrogate, is an
-optional configuration that costs 3.0–3.7x in accuracy; the reference
-configuration does not have it. At 10,000 tokens on one GB300 the compiled
-ISLA step is 47 ms in 1.30 GiB against GeoTransolver's 45 ms in 2.70 GiB
-(@sec-cost). Across a flow-regime boundary, from attached to separated
-flow or from low to high angle of attack, no architecture generalizes:
-every one loses about a factor of ten (@sec-regime-extrapolation).
+**At full DrivAerML data the released baselines are a few percent more
+accurate than ISLA; off the tuned operating point, ISLA is the
+configuration that survives.** With every model fed the same inputs and
+scored in float32, GeoTransolver and Transolver lead ISLA's reference
+configuration on surface pressure by 7 to 10% on a 10,000-cell draw, and
+that gap has a measured anatomy: about half of it is finite-sample noise
+that a better draw or more cells removes, about two and a half points are
+the positional information ISLA's contracts deny it, and about two are the
+single-routing form of its slice attention (@sec-deficit-anatomy). What
+separates the architectures is what happens when the evaluation departs
+from the training conditions. Under a 10:1 sampling-density bias ISLA's
+reference frame degrades 1.2x where every configuration that centres on the
+sampled points degrades 10 to 16x; under refinement it converges toward one
+answer while the released baselines do not; in arbitrary poses its exact
+covariance is worth 6% and 19% against rotation-augmented baselines; and it
+holds its accuracy across a decade of learning rate where GeoTransolver
+loses up to 14x. Across a flow-regime boundary nothing tested generalizes.
 
-This chapter is the full-data counterpart of the small-data ladders in
-@sec-data-efficiency, where GeoTransolver and Transolver are more accurate
-than ISLA at every HiLiftAeroML training-set size measured. Here, at full
-DrivAerML data, the ordering is the same and the margin is 7–10%; the
-chapter's job is to state that margin precisely, what else is true of each
-architecture at this operating point, and where all of them stop.
+The metric everywhere is the area-weighted relative L2 of surface pressure
+in float32 (@sec-metrics), and a ratio is baseline ÷ ISLA, above one
+favouring ISLA. The scoreboard (@sec-scoreboard) has every DrivAerML row
+with seeds and artifacts; this chapter explains what stands behind the
+rows.
+
+```{python}
+#| label: setup-fd
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+import json, statistics
+from pathlib import Path
+RES = Path("..") / "results"
+mean = statistics.mean
+```
 
 ## In one paragraph {#sec-program-review}
 
-At full DrivAerML data ISLA is 10% behind GeoTransolver and 7% behind
-Transolver (@sec-full-data-accuracy); at 512 hidden width and 80,000 cells
-per car the three are within 3% of one another. Where they differ is off
-the tuned operating point: ISLA's reference frame is the one configuration
-whose accuracy survives a sampling-density bias and converges under
-refinement (@sec-robustness-density, @sec-consistency-bench), it is exactly
-pose-covariant and leads the augmented baselines in arbitrary poses
-(@sec-pose-contract), and it is robust to learning rate
-(@sec-robustness-lr); its exact query independence is an optional
-configuration bought with accuracy (@sec-query-independence). The
-resources behind every comparison are in @sec-cost, the DrivAerML
-measurements are collected beside their consistency columns in
-@tbl-consistency-matrix, and the one axis on which nothing tested works,
-extrapolation across a flow regime, closes the chapter
-(@sec-regime-extrapolation). The book's single verdict is in
-@sec-verdict; this chapter supports its accuracy and contracts clauses.
+At the reference size (width 192, 10,000 cells, 435 cars) ISLA is 10%
+behind GeoTransolver and 7% behind Transolver (@sec-full-data-accuracy);
+under a stratified inference draw of the same cells the gaps are 6% and 4%,
+and at width 512 with 80,000 cells the three are within about 5%. The gap's
+anatomy is in @sec-deficit-anatomy. Where they differ is off the operating
+point: ISLA's frame is the one that survives a sampling-density bias and
+converges under refinement (@sec-robustness-density,
+@sec-consistency-bench); ISLA is exactly pose-covariant and leads augmented
+baselines in arbitrary poses (@sec-pose-contract); it is robust to learning
+rate (@sec-robustness-lr); its exact query independence is an optional
+configuration bought with accuracy (@sec-query-independence). The resources
+behind every comparison are in @sec-cost; the DrivAerML measurements stand
+beside their consistency columns in @tbl-consistency-matrix; and the axis on
+which nothing works, extrapolation across a flow regime, closes the chapter
+(@sec-regime-extrapolation).
 
 ## In-distribution accuracy at full data {#sec-full-data-accuracy}
 
-**At full DrivAerML data, in float32, GeoTransolver scores 0.0503,
-Transolver 0.0517 and ISLA's reference configuration 0.0552: ISLA is 10%
-behind GeoTransolver and 7% behind Transolver. On HiLiftAeroML the
-full-split comparison is not yet measured.** The metric throughout is the
-relative L2 error of surface pressure as defined in @sec-metrics: the
-recipe's relative L2 on the standardized pressure field over the sampled
-points of a case, cell-area-weighted, arithmetic mean over the validation
-cases. The DrivAerML numbers are on the 48-car validation split of the
-435-car training set (@sec-splits), seed means over two or three seeds,
-evaluated in float32 at the final epoch of the frozen protocol of
-@sec-protocol (10,000 sampled surface points per case, 500 epochs,
-bfloat16 training, no augmentation, the freestream as a unit direction for
-every architecture); no checkpoint was selected on validation error.
-GeoTransolver is at learning rate 1e-3, Transolver at 3e-3 (0.0548 at 1e-3)
-and ISLA at 1e-3. GeoTransolver's 3e-3 lane, which the protocol prefers for
-it on this dataset (@sec-lr-protocol), is measured only in bfloat16, where
-it is 3% better than its 1e-3 lane, so the 10% margin is a lower bound on
-GeoTransolver's lead. The input scale is neutral on this dataset:
-GeoTransolver fed the physical freestream velocity of 38.9 m/s scores
-0.0498 against 0.0503 with the unit direction, inside the preregistered
-null band (results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json,
-results/frame_reduction_2026-09-11.json; @sec-nb-fp32-drivaer-regrade,
-@sec-nb-relframe-verdict).
+**At 435 DrivAerML cars, in float32, GeoTransolver scores 0.0503, Transolver
+0.0517 and ISLA's reference configuration 0.0552.** The numbers are on the
+48-car validation split, seed means over two or three seeds, final-epoch
+checkpoints of the frozen protocol (@sec-protocol): 10,000 sampled points
+per case, 500 epochs, bfloat16 training, no augmentation, the freestream as
+a unit direction for every architecture, each at its own best learning rate
+(GeoTransolver 1e-3, Transolver 3e-3, ISLA 1e-3). The input scale is neutral
+on this dataset: GeoTransolver fed the physical freestream velocity scores
+0.0498, inside the null band. Data:
+results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json,
+results/relframe_reduction_2026-09-11.json.
 
-The other ISLA configurations sit within 2% of the reference at this
-operating point: the constant-gauge variant scores 0.0557, the
-similarity-gauge variant 0.0543 at the same learning rate, and the
-weights-off ablation 0.0542 (not adopted; @sec-mechanism). The
-measure-weighted GeoTransolver and Transolver, research variants that
-carry ISLA's quadrature measure in their slice pooling, score 0.0498 and
-0.0522: the measure costs the baselines nothing here, and their lead over
-ISLA is not a measure effect (results/mw_w4dr_xfam_reduction_2026-09-10.json;
-@sec-nb-mw-verdict). The released GeoTransolver and Transolver are the
-comparison; the measure-weighted rows locate a property and are not
-modifications of those models (@sec-nb-ruling-released-baselines).
+The other ISLA configurations sit within 2% of the reference here: the
+constant-gauge variant 0.0557, the similarity-gauge variant 0.0543 at the
+same rate, the weights-off ablation 0.0542 (not adopted). The
+measure-weighted GeoTransolver and Transolver, research variants that carry
+ISLA's quadrature measure in their slice pooling, score 0.0498 and 0.0522:
+the measure costs the baselines nothing, so their lead is not a measure
+effect (results/mw_w4dr_xfam_reduction_2026-09-10.json).
 
-Those deficits belong to the reference size and resolution. At hidden width
-512 and 80,000 sampled cells per car, in float32 and two seeds, the three
-architectures are within 3% of each other: GeoTransolver 0.0419, ISLA's
-constant-gauge variant 0.0428, Transolver 0.0431 and ISLA's
-similarity-gauge variant 0.0431 (baseline ÷ constant-gauge ISLA 0.98 and
-1.01 against 0.90 and 0.93 at the reference size), because ISLA gains most
-from the cell count (16% from 10,000 to 80,000 cells against 8% for the
-baselines) while width buys 9–11% for all three. The corner is stated with
-its other coordinates. Density, in the sample frame a biased mesher
-delivers: GeoTransolver degrades 10.5x under the 10:1 bias, Transolver
-14.9x, the constant-gauge ISLA 16.6x and the similarity-gauge ISLA 1.09x,
-so the similarity gauge is the only scaled configuration whose accuracy
-survives a sampling-density bias, at the same cost as the constant-gauge
-corner (22.9 against 22.8 GB, 0.281 against 0.285 s per step, 20.2 against
-22.5 GPU-hours). Cost: the baselines reach the corner error at 0.3–0.6x
-ISLA's GPU-hours (12.7 and 6.6 against 22.5) and ISLA holds it in the
-least memory (22.8 GB against 41.5 and 27.6). What the corner demonstrates
-is a frame class: a frame that does not read the sampling distribution
-costs nothing at scale and removes the sensitivity. The similarity gauge
-estimates its frame from the sample and pays for that on sparse
-multi-element meshes (7.6% at 35 HiLift cases, 14.4% at the fixed angle;
-@sec-data-efficiency); the reference configuration carries no sample
-statistic at all, and it is not trained at this corner, so the corner has
-no reference-configuration row (not yet measured). Down-transfer does not
-improve with the gauge: queried at 10,000 cells the 80,000-cell
-similarity-gauge model scores 0.0727, 1.69x its native error, against
-1.55x for the constant gauge; deploy at the training count
-(@sec-nb-scale-drivaer-synthesis).
+::: {.callout-note collapse="true" title="The scale corner: width 512, 80,000 cells"}
+At hidden width 512 and 80,000 sampled cells per car, in float32 and two
+seeds, GeoTransolver scores 0.0419, the constant-gauge variant 0.0428,
+Transolver 0.0431, the similarity-gauge variant 0.0431, and the reference
+configuration, which trains there only under the width learning-rate rule
+of @sec-using-lr, 0.0442. ISLA gains most from the cell count (16% from
+10,000 to 80,000 cells against 8% for the baselines) while width buys 9 to
+11% for all three. The constant-gauge variant retrained at the reference's
+rate scores 0.0424, so the reference's 3 to 4% corner excess is the frame's
+and not the rate's. The baselines reach the corner error at 0.3 to 0.6x
+ISLA's GPU-hours and ISLA holds it in the least memory (22.8 GB against
+41.5 and 27.6). Density at the corner, sample frame: GeoTransolver 10.5x,
+Transolver 14.9x, constant-gauge variant 16.6x, similarity-gauge variant
+1.09x, reference 1.05x. Queried at 10,000 cells the 80,000-cell models are
+1.5 to 1.7x their native error: deploy at the training count. Data:
+results/accuracy_consistency_matrix_2026-09-10.json (scale corner),
+results/corner_wlr_reduction_2026-09-15.json,
+results/cg_wlr_reduction_2026-09-16.json.
+:::
 
-On HiLiftAeroML the constant-gauge variant scores 0.041 at 1,260 training
-cases (two seeds 0.040 / 0.043; results/hilift_ladder_reduction_2026-09-03.json),
-predicting drag to 1.4% and lift to 0.9% against the sampled-cell label
-integral (results/hilift_paired_stats_2026-09-06.json). No unit-direction
-baseline and no reference-configuration ISLA is trained at that rung, so
-the full-split HiLift comparison is not yet measured (@sec-program-status).
-The largest rung with both is 510 cases, where GeoTransolver is 0.84x and
-Transolver 0.90x of the constant-gauge variant (@sec-data-efficiency).
+On HiLiftAeroML at 1,260 cases the constant-gauge variant scores 0.0405
+against unit-direction GeoTransolver's 0.0355 and Transolver's 0.0385; the
+reference configuration is not trained at that rung (@sec-scoreboard). The
+comparison is fair by the criteria of @sec-fair-comparison, and narrow: two
+or three seeds, one validation split per dataset, and no test-split
+evaluation of the full-split models, the sealed splits having been spent on
+regime extrapolation.
 
-The comparison is fair by the criteria of @sec-fair-comparison: matched
-tokens per case and epochs, each architecture at its own best learning
-rate, shared validation cases, the same unit freestream direction, and a
-matched parameter count (ISLA 8.9M against GeoTransolver 9.0M; Transolver
-6.0M). Compute is close to matched at the reference size: at 10,000 tokens
-the compiled ISLA step is 47 ms in 1.30 GiB against GeoTransolver's 45 ms
-in 2.70 GiB (@sec-cost). The comparison is also narrow: two or three seeds,
-one validation split per dataset, and no test-split evaluation of the
-full-split models (the sealed test splits are spent on regime
-extrapolation, @sec-regime-extrapolation).
+## The anatomy of the in-distribution gap {#sec-deficit-anatomy}
+
+**The 9 to 10 point gap at the reference size is not one thing. About half
+of it is finite-sample noise that vanishes with a better draw or more
+cells; of the rest, about two and a half points are the positional
+information the invariance contracts deny the model and about two are the
+single-routing form of its slice attention; none is the frame.** Each part
+was isolated by an experiment designed to move it and nothing else, and
+@fig-deficit-anatomy lays them end to end in the ratio's own units, points
+of GeoTransolver ÷ ISLA.
+
+The reasoning runs from the outside in. The scoreboard's instrument is a
+10,000-cell *independent* draw of each car's surface. The area-weighted
+relative L2 over such a draw is itself a noisy estimate of the true field
+error, and ISLA's slice states, being measure-weighted means over the draw
+(@sec-mt2-quadrature), inherit more of that noise than the baselines'
+unweighted aggregates. Two instruments separate the pieces:
+
+1. **A stratified draw of the same cells** keeps the inclusion law and the
+   token budget but spreads the cells evenly over the surface
+   (@sec-using-sampler). Every model improves, the baselines by about 2%,
+   which is the metric's own estimator noise and cancels in the ratio, and
+   ISLA by about 4%; the excess is the draw variance of ISLA's slice
+   integrals, and it is worth about two points of ratio.
+2. **More cells.** From the stratified 10,000-cell draw to an independent
+   40,000-cell draw the ratio moves a further three points. This is the
+   spread of the Horvitz–Thompson weights of a uniform-over-cells sample,
+   which only more cells or a weight-changing quadrature can reduce;
+   retraining under an area-proportional draw buys only a few percent.
+
+What remains at 40,000 cells, 4 to 5 points, is the trained function's
+deficit. Two further experiments split it:
+
+3. **Raw coordinates as a diagnostic.** Appending each cell's centred
+   coordinates and normal to ISLA's seeds, which breaks the contracts by
+   design, recovers about 2.4 points at 435 cars. That is the price of
+   denying the model absolute position, and it is the honest cost of exact
+   pose invariance and sampling consistency. The diagnostic's own density
+   factor rises to 13x, showing what it reads; it is never a configuration.
+4. **Routing multiplicity.** Transolver's physics attention routes each
+   token through eight independent heads per layer; ISLA routes it once.
+   On a one-car overfitting instrument, eight independent routings per block
+   lower ISLA's floor by 19% relative to a same-code single-routing control,
+   monotone in the head count, and put it below both baselines at 40,000
+   evaluation cells. The remaining two points are therefore attributed to
+   the single-routing form; whether the gain transfers to 435 cars is a
+   running study (@sec-program-status), and until it lands the reference
+   configuration is single-routing.
+
+The frame contributes nothing at the reference size: the reference
+configuration and the constant-gauge variant are within 1% of each other,
+and the reference's 3 to 4% excess at the scale corner is measured against
+a rate-matched constant gauge.
+
+```{python}
+#| label: fig-deficit-anatomy
+#| fig-cap: >
+#|   The anatomy of ISLA's in-distribution gap on DrivAerML (435 training
+#|   cars, 48 validation cars, float32). The horizontal axis is GeoTransolver
+#|   ÷ ISLA on surface pressure; 1.0 is parity. The leftmost marker is the
+#|   scoreboard's instrument, an independent 10,000-cell draw, with ISLA's
+#|   constant-gauge variant as the reference (the reference configuration is
+#|   within 1% of it here). Each bar is one measured part of the gap, in the
+#|   order it was isolated: the draw variance of ISLA's slice integrals (the
+#|   same checkpoints under a stratified draw), the weight-spread count noise
+#|   (the same checkpoints at 40,000 cells), the positional information the
+#|   contracts deny (a raw-coordinate diagnostic, measured at 10,000 cells
+#|   and shown against the fine-sample residual), and the remainder, which
+#|   the one-car routing-multiplicity study attributes to the single-routing
+#|   form. The frame's contribution is zero and is marked. How to read this:
+#|   the two left bars are noise the deployment can remove; the two right
+#|   bars are properties of the trained function, the first of which is the
+#|   price of the contracts. It does not show the HiLiftAeroML gaps, whose
+#|   mechanism is different (@sec-data-efficiency). Data:
+#|   results/quadvar_reduction_2026-09-17.json,
+#|   results/eqprice_reduction_2026-09-17.json,
+#|   results/formheads_reduction_2026-09-18.json,
+#|   results/cg_wlr_reduction_2026-09-16.json.
+#| code-fold: true
+qv = json.load(open(RES / "quadvar_reduction_2026-09-17.json"))["arms"]
+eqp = json.load(open(RES / "eqprice_reduction_2026-09-17.json"))["summary"]
+fh = json.load(open(RES / "formheads_reduction_2026-09-18.json"))
+cgw = json.load(open(RES / "cg_wlr_reduction_2026-09-16.json"))["summary"]
+r_ind10 = qv["gt_unit"]["unif"]["10000"] / qv["isla_cg"]["unif"]["10000"]
+r_strat10 = qv["gt_unit"]["strat"]["10000"]["mean"] / qv["isla_cg"]["strat"]["10000"]["mean"]
+r_ind40 = qv["gt_unit"]["unif"]["40000"] / qv["isla_cg"]["unif"]["40000"]
+pts_position = eqp["points_of_ratio_recovered"] / 100.0
+r_pos = r_ind40 + pts_position
+heads_gain = 1 - fh["axes"]["n_heads"]["ratio_to_h1"]
+parts = [
+    ("draw variance of ISLA's slice integrals\n(stratified draw of the same 10,000 cells)", r_ind10, r_strat10, STYLE["isla_cg"]["color"], ""),
+    ("weight-spread count noise\n(40,000 cells instead of 10,000)", r_strat10, r_ind40, STYLE["isla_cg"]["color"], ""),
+    ("positional information the contracts deny\n(raw-coordinate diagnostic, measured at 10,000 cells)", r_ind40, r_pos, BLUE_PALE, "///"),
+    (f"single-routing form (remainder; eight routings\nlower the one-car floor by {heads_gain:.0%})", r_pos, 1.0, VIOLET, ""),
+]
+fig, ax = plt.subplots(figsize=(10.4, 4.8))
+y = list(range(len(parts)))[::-1]
+for yy, (label, a, b, c, h) in zip(y, parts):
+    ax.barh(yy, b - a, left=a, height=0.55, color=c, hatch=h, edgecolor="white" if not h else BLUE, linewidth=0.8, zorder=3)
+    ax.text(b + 0.002, yy, f"+{(b - a) * 100:.1f} pts", va="center", fontsize=9, color=INK2)
+ax.axvline(1.0, color=INK2, lw=1.0, zorder=2); ax.text(1.0, len(parts) - 0.35, " parity", fontsize=8.5, color=INK2, va="bottom")
+for xv, lab, yy in ((r_ind10, f"independent 10,000-cell draw\n{r_ind10:.3f}", 3.55), (r_strat10, f"stratified 10,000\n{r_strat10:.3f}", 2.55), (r_ind40, f"independent 40,000\n{r_ind40:.3f}", 1.55)):
+    ax.plot([xv], [yy - 0.45], marker="v", ms=7, color=INK, zorder=5); ax.text(xv, yy - 0.25, lab, ha="center", fontsize=8, color=INK2, path_effects=halo())
+ax.text(0.9, -0.85, f"the frame: 0 points at the reference size\n(reference ÷ constant gauge at a matched rate at the corner: {cgw['ratio_reference_wlr_to_cg_wlr']:.2f}x)", fontsize=8.5, color=MUTED, va="center")
+ax.set_xlim(0.895, 1.03); ax.set_ylim(-1.3, len(parts) + 0.2)
+ax.set_xticks([0.90, 0.92, 0.94, 0.96, 0.98, 1.00, 1.02])
+ax.set_xlabel("GeoTransolver ÷ ISLA, surface pressure error [–]  (1 = parity; higher favours ISLA)")
+ax.set_yticks(y); ax.set_yticklabels([p[0] for p in parts], fontsize=9); ax.grid(axis="y", visible=False)
+ax.set_title("where the DrivAerML gap comes from, measured piece by piece")
+plt.show()
+```
+
+The consequence for deployment is the recommendation of @sec-using-sampler:
+use the stratified draw, or more cells. The consequence for the
+architecture is stated in the thesis: two and a half points bought with the
+contracts, and a form point or two that the routing study may yet recover.
+The 25 to 28% at 35 HiLift cases is a different mechanism, the mesher
+pattern where geometries recur (@sec-data-efficiency), and is priced there.
 
 ## Learning-rate robustness {#sec-robustness-lr}
 
 **Across the learning-rate grid ISLA's worst point is within 1.55x of its
-best on DrivAerML and 1.14x on HiLiftAeroML, while GeoTransolver
-degrades 4--14x at 1e-2 on DrivAerML.** The grid is {1e-3, 3e-3, 1e-2} on
-DrivAerML and {1e-3, 3e-3} on HiLift, two seeds (42, 43) per cell except
-the DrivAerML 3e-3 cell, which holds the three GeoTransolver seeds (42--44)
-and five ISLA seeds (42--46) of the frozen-protocol training runs; every
-other setting is held at the frozen protocol, and ISLA is the
-constant-gauge variant. The quantity in @fig-lr-robustness is the
-validation pressure rel-L2 defined above, evaluated in bfloat16 on
-identical points (a within-grid comparison, for which the bfloat16
-instrument is valid; @sec-metrics); a point is one seed and the line joins
-seed means.
-
-On DrivAerML, GeoTransolver at 1e-2 scores 0.739 and 0.221 on its two
-seeds against its best of 0.0532, a degradation of 13.9x and 4.1x that
-also differs by 3.3x between seeds. ISLA at 1e-2 scores 0.0874 and 0.0914
-against its best of 0.0577, a degradation of 1.55x on the seed mean with
-the two seeds within 5% of each other. On HiLift the same pattern appears
-one step lower on the grid: GeoTransolver at 3e-3 destabilizes to 0.397
-and 0.148 (9.4x and 3.5x its best of 0.042) where ISLA scores 0.045 and
-0.049 (1.14x its best of 0.041 on the seed mean), and across the whole
-HiLift grid ISLA's four results lie in 0.040--0.049 while GeoTransolver's
-lie in 0.041--0.397. The robust architecture is the one whose worst grid
-point is within a factor of two of its best; only ISLA satisfies that on
-either dataset. The GeoTransolver lanes on both grids consumed the
-physical freestream velocity. On DrivAerML that input is neutral (the
-unit-direction GeoTransolver at 435 cars scores within 1.5% of the
-physical-velocity lane, @sec-full-data-accuracy), so the DrivAerML half is a
-comparison between architectures. On HiLiftAeroML the physical velocity is
-the input hazard of @sec-part-baseline, and whether GeoTransolver's
-instability at 3e-3 there is a property of the architecture or of that
-input is not measured; the HiLift half therefore reads as a measurement of
-ISLA's own rate robustness (0.040--0.049 across its grid) and not as a
-comparison.
+best on DrivAerML and 1.14x on HiLiftAeroML, while GeoTransolver degrades 4
+to 14x one step above its best.** The grid is {1e-3, 3e-3, 1e-2} on
+DrivAerML and {1e-3, 3e-3} on HiLift, two seeds per cell (three to five in
+the DrivAerML 3e-3 cell), the constant-gauge variant, bfloat16 evaluation on
+identical points (valid for a within-grid comparison; @sec-metrics).
 
 ```{python}
 #| label: fig-lr-robustness
 #| fig-cap: >
-#|   Learning-rate robustness at full data. Validation pressure rel-L2
-#|   (log scale, bfloat16 evaluation) against learning rate for GeoTransolver (red circles)
-#|   and ISLA's constant-gauge variant (blue squares); small markers are individual
-#|   seeds (42 and 43 in every cell except DrivAerML 3e-3, which holds
-#|   GeoTransolver seeds 42--44 and ISLA seeds 42--46), lines join seed
-#|   means. Left: DrivAerML, 435
-#|   training cars, 48 validation cars. Right: HiLiftAeroML full split,
-#|   1,260 training cases, the shared 180-case validation set. Protocol:
-#|   10,000 sampled surface points per case, 500 epochs, bf16, no
-#|   augmentation; the GeoTransolver lanes consumed the physical freestream
-#|   velocity, which is neutral on DrivAerML and the input hazard of
-#|   @sec-part-baseline on HiLiftAeroML, so the right panel's GeoTransolver
-#|   series is not a comparison with ISLA. How to read it: the vertical
-#|   spread of one colour across the grid is that architecture's
-#|   sensitivity to learning rate. It does not show seed sensitivity at a
-#|   fixed rate, which is a different property and is larger for ISLA
-#|   (@sec-shared-floor), and it does not show any rate below 1e-3. Data:
-#|   results/instrument_wave_reduction_2026-09-01.json (DrivAerML 1e-3,
-#|   1e-2), results/mixedres_training_2026-07-31/sweep/round3_reduction.json,
-#|   mt2_v3c_reduction.json and mega_reduction.json (DrivAerML 3e-3),
-#|   results/highlift_wave_reduction.json (HiLift).
+#|   Learning-rate robustness at full data. Validation surface-pressure error
+#|   (log axis, bfloat16 evaluation) against learning rate for GeoTransolver
+#|   (red circles) and ISLA's constant-gauge variant (open light-blue squares);
+#|   small markers are seeds, lines join seed means. Left: DrivAerML, 435
+#|   training cars. Right: the HiLiftAeroML full split, 1,260 training cases.
+#|   The GeoTransolver lanes consumed the physical freestream velocity, which
+#|   is neutral on DrivAerML and the input hazard of @sec-part-baseline on
+#|   HiLiftAeroML, so the right panel's red series is not a comparison with
+#|   ISLA. How to read this: the vertical spread of one colour across the grid
+#|   is that architecture's sensitivity to learning rate. It does not show
+#|   seed sensitivity at a fixed rate, which is larger for ISLA
+#|   (@sec-shared-floor), nor any rate below 1e-3. Data:
+#|   results/instrument_wave_reduction_2026-09-01.json,
+#|   results/mixedres_training_2026-07-31/sweep/{round3,mt2_v3c,mega}_reduction.json,
+#|   results/highlift_wave_reduction.json.
 #| code-fold: true
-import json, statistics
-from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-# book palette (mirrors figures.py without importing it: that module
-# switches matplotlib to Agg, which suppresses inline output here)
-BLUE, RED = "#2a78d6", "#e34948"
-INK, INK2, MUTED, GRID, BASELINE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-mpl.rcParams.update({"figure.dpi": 110, "font.size": 10, "axes.edgecolor": BASELINE,
-                     "axes.labelcolor": INK2, "axes.grid": True, "grid.color": GRID,
-                     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2,
-                     "ytick.labelcolor": INK2, "axes.spines.top": False,
-                     "axes.spines.right": False, "legend.frameon": False})
-
-RES = Path("..") / "results"
 SW = RES / "mixedres_training_2026-07-31" / "sweep"
 iw = json.load(open(RES / "instrument_wave_reduction_2026-09-01.json"))
 round3 = json.load(open(SW / "round3_reduction.json"))
-mt2_const = json.load(open(SW / "mt2_v3c_reduction.json"))  # ISLA, constant gauge, lr 3e-3
+mt2_const = json.load(open(SW / "mt2_v3c_reduction.json"))
 mega = json.load(open(SW / "mega_reduction.json"))
 hl = json.load(open(RES / "highlift_wave_reduction.json"))
-
-# DrivAerML grid: per-seed pressure rel-L2 at each learning rate
-dr = {"gt": {}, "mt2": {}}
-for arch in ("gt", "mt2"):
+dr = {"gt": {}, "isla_cg": {}}
+for arch, code in (("gt", "gt"), ("isla_cg", "mt2")):
     for lr_key, lr in (("lr1e3", 1e-3), ("lr1e2", 1e-2)):
-        dr[arch][lr] = [iw[f"iw_{arch}_{lr_key}_seed{s}"]["pressure_l2"] for s in (42, 43)]
+        dr[arch][lr] = [iw[f"iw_{code}_{lr_key}_seed{s}"]["pressure_l2"] for s in (42, 43)]
 dr["gt"][3e-3] = [round3[f"gt_fixed_seed{s}"]["sweep_metrics"]["10000"]["mean"] for s in (42, 43, 44)]
-dr["mt2"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
-                   + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
-# HiLift full split: per-seed pressure rel-L2 at 1e-3 and 3e-3
-hlg = {"gt": {}, "mt2": {}}
-for arch in ("gt", "mt2"):
-    hlg[arch][1e-3] = [hl[f"{arch}_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)]
-    hlg[arch][3e-3] = [hl[f"{arch}_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]
-
-style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "ISLA", "s")}
+dr["isla_cg"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
+                       + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
+hlg = {"gt": {}, "isla_cg": {}}
+for arch, code in (("gt", "gt"), ("isla_cg", "mt2")):
+    hlg[arch][1e-3] = [hl[f"{code}_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)]
+    hlg[arch][3e-3] = [hl[f"{code}_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]
 fig, axs = plt.subplots(1, 2, figsize=(9.0, 4.6), sharey=True)
-for ax, grid, title in zip(
-        axs, (dr, hlg),
-        ("DrivAerML (435 train / 48 val cars)", "HiLiftAeroML full split (1,260 train / 180 val)")):
-    for arch in ("gt", "mt2"):
-        c, name, mk = style[arch]
-        lrs = sorted(grid[arch])
-        means = [statistics.mean(grid[arch][lr]) for lr in lrs]
-        ax.plot(lrs, means, color=c, lw=2.0, marker=mk, ms=7, zorder=3)
+for ax, grid, title in zip(axs, (dr, hlg), ("DrivAerML, 435 training cars", "HiLiftAeroML full split, 1,260 training cases")):
+    for arch in ("gt", "isla_cg"):
+        c = STYLE[arch]["color"]; lrs = sorted(grid[arch]); means = [mean(grid[arch][lr]) for lr in lrs]
+        ax.plot(lrs, means, **series_kwargs(arch, lw=2.0, ms=7), zorder=3)
         for lr in lrs:
             ax.scatter([lr] * len(grid[arch][lr]), grid[arch][lr], color=c, s=16, alpha=0.9, zorder=4)
-        # Direct labels at the midpoint of the last segment: GeoTransolver's steep
-        # segment leaves room to its upper left, ISLA's flat segment to its lower side.
-        xm = (lrs[-2] * lrs[-1]) ** 0.5
-        ym = (means[-2] * means[-1]) ** 0.5
-        txt = f"{name}\nworst/best = {max(means) / min(means):.2f}x"
-        if arch == "gt":
-            ax.annotate(txt, (xm, ym), xytext=(-10, 6), textcoords="offset points", color=c,
-                        fontsize=9.0, fontweight="bold", ha="right", va="bottom",
-                        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
-        elif ax is axs[0]:
-            ax.annotate(txt, (xm, ym), xytext=(6, -10), textcoords="offset points", color=c,
-                        fontsize=9.0, fontweight="bold", ha="left", va="top",
-                        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
-        else:
-            ax.annotate(txt, (xm, ym), xytext=(0, -12), textcoords="offset points", color=c,
-                        fontsize=9.0, fontweight="bold", ha="center", va="top",
-                        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.85))
+        xm = (lrs[-2] * lrs[-1]) ** 0.5; ym = (means[-2] * means[-1]) ** 0.5
+        txt = f"{STYLE[arch]['label']}\nworst ÷ best = {max(means) / min(means):.2f}x"
+        off = (-10, 6, "right", "bottom") if arch == "gt" else ((6, -10, "left", "top") if ax is axs[0] else (0, -12, "center", "top"))
+        ax.annotate(txt, (xm, ym), xytext=off[:2], textcoords="offset points", color=c, fontsize=8.5, fontweight="bold",
+                    ha=off[2], va=off[3], path_effects=halo())
     ax.set_xscale("log"); ax.set_yscale("log")
-    ax.set_xticks(sorted(grid["gt"]))
-    ax.set_xticklabels([f"{lr:g}" for lr in sorted(grid["gt"])])
-    ax.set_xlim(6e-4, 1.6e-2)
-    ax.set_xlabel("Learning rate [–]", color=INK2)
-    ax.set_title(title, color=INK, loc="left", fontsize=10.5, pad=8)
-    ax.grid(True, which="major", color=GRID); ax.grid(False, which="minor")
-axs[0].set_yticks([0.03, 0.04, 0.06, 0.1, 0.2, 0.4, 0.8])
-axs[0].set_yticklabels(["0.03", "0.04", "0.06", "0.10", "0.20", "0.40", "0.80"])
-axs[0].set_ylim(0.026, 1.0)
-axs[0].set_ylabel("Validation pressure error, rel-L2 [–]  (log)", color=INK2)
-fig.suptitle("Learning-rate robustness at full data (points: seeds; lines: seed means)",
-             x=0.02, ha="left", color=INK, fontsize=11)
-fig.tight_layout(rect=(0, 0, 1, 0.94))
+    ax.set_xticks(sorted(grid["gt"])); ax.set_xticklabels([f"{lr:g}" for lr in sorted(grid["gt"])]); ax.set_xlim(6e-4, 1.6e-2)
+    ax.set_xlabel("learning rate [–]"); ax.set_title(title, pad=8)
+    ax.grid(True, which="major"); ax.grid(False, which="minor")
+axs[0].set_yticks([0.03, 0.04, 0.06, 0.1, 0.2, 0.4, 0.8]); axs[0].set_yticklabels(["0.03", "0.04", "0.06", "0.10", "0.20", "0.40", "0.80"])
+axs[0].set_ylim(0.026, 1.0); axs[0].set_ylabel("surface pressure error, area-weighted relative L2 [–]")
+fig.suptitle("learning-rate robustness at full data (bfloat16 evaluation on identical points)", x=0.02, ha="left", fontsize=10.5)
+fig.tight_layout(rect=(0, 0, 1, 0.95))
 plt.show()
 ```
 
-The consequence for practice is that ISLA can be trained at a
-protocol-default learning rate on a new dataset without a sweep, while
-GeoTransolver's best rate must be found per dataset (it differs between
-the two datasets here) and a rate one step too high can cost a factor of
-ten. The scope is two seeds per cell (three to five in the DrivAerML
-3e-3 cell) and two datasets; the grid does not
-extend below 1e-3, and nothing here says where either architecture's
-instability begins on other datasets. Robustness to learning rate and
-robustness to seed are different properties: ISLA has the larger
-seed-to-seed prediction spread on both datasets (@sec-shared-floor).
+On DrivAerML, GeoTransolver at 1e-2 scores 0.739 and 0.221 on its two seeds
+against its best of 0.0532; ISLA at 1e-2 scores 0.0874 and 0.0914 against
+its best of 0.0577. On HiLift the same pattern appears one grid step lower:
+GeoTransolver at 3e-3 destabilizes to 0.397 and 0.148 where ISLA stays in
+0.040 to 0.049 across its whole grid. In practice ISLA trains at the
+protocol rate on a new dataset without a sweep, and above width 192 under
+the width rule of @sec-using-lr; GeoTransolver's best rate must be found
+per dataset. Robustness to learning rate is not robustness to seed: ISLA
+has the larger seed-to-seed prediction spread on both datasets
+(@sec-shared-floor).
 
 ## Sampling-density robustness {#sec-robustness-density}
 
 **Under a 10:1 spatially biased sampling density ISLA's reference frame
 degrades 1.2x; every configuration that centres its coordinates on the
-sampled points, GeoTransolver, Transolver and ISLA's constant-gauge
-variant among them, degrades 10--16x.** The probe evaluates a trained
-DrivAerML model on the 48 validation cars with surface points drawn ten
-times more densely in one region of the car than elsewhere, with exact
-Horvitz--Thompson measure weights so that any weighted integral is
-unbiased; the readout is the ratio of the pressure rel-L2 under the biased
-sampling to the same model's rel-L2 under uniform sampling at 10,000
-points, in float32. A ratio of 1.0 means the prediction depends only on
-the surface and not on how it was sampled. Every ratio states its frame:
-the *sample frame* centres each model's coordinates on the biased sample
-itself, which is what a biased mesher delivers and what ISLA computes
-inside the model; the *pool frame* centres them on the uniform reader pool
-before the biased draw, which hands a model an unbiased centre it would
-not have in deployment. The sample frame is the headline convention;
-pool-frame values appear only where they are the ones on file.
+sampled points, GeoTransolver, Transolver and ISLA's constant-gauge variant
+among them, degrades 10 to 16x.** The probe evaluates a trained DrivAerML
+model on the 48 validation cars with surface points drawn ten times more
+densely at the front of the car than at the back, with exact
+Horvitz–Thompson measure weights so that every weighted integral is
+unbiased; the readout is the error under the biased draw divided by the
+same model's error under uniform sampling at 10,000 points. A ratio of 1
+means the prediction depends only on the surface and not on how it was
+sampled. Every ratio states its frame: the *sample frame* centres each
+model's coordinates on the biased sample itself, which is what a biased
+mesher delivers and what ISLA computes inside the model; the *pool frame*
+hands a model an unbiased centre it would not have in deployment and
+appears only where it is the value on file.
 
-The frame is the pair of reference quantities a model uses to make
-positions dimensionless: the origin from which they are measured and the
-length that scales them (@sec-mt2). ISLA's reference configuration has no
-origin at all: translation invariance comes from point-to-anchor vectors,
-and the length is the square root of the total surface measure, an
-integral the biased draw estimates without bias. The constant-gauge
-variant centres on the unweighted mean of the sampled points, which moves
-by 0.94 RMS radii under the 10:1 bias, and every downstream invariant moves
-with it; GeoTransolver and Transolver consume absolute coordinates centred
-by the datapipe on the same plain mean. The similarity-gauge variant
-centres on the Horvitz--Thompson centroid and scales by the
-measure-weighted RMS radius, so a biased sample estimates the same frame
-as a uniform one; it is a sample-statistic frame that happens to be
-unbiased, and it pays for its variance on sparse multi-element meshes
-(@sec-data-efficiency).
+The mechanism is the one taught in @sec-mt2-frame. The reference
+configuration has no origin: translation invariance comes from
+point-to-anchor differences and the length unit is the total surface
+measure, an integral the biased draw estimates without bias. The
+constant-gauge variant centres on the plain mean of the sampled points,
+which moves by 0.94 RMS radii under the 10:1 bias, and every downstream
+invariant moves with it; GeoTransolver and Transolver consume coordinates
+centred by the datapipe on the same plain mean.
 
-| configuration | uniform 10,000-cell pressure rel-L2 | biased ÷ uniform, sample frame |
+| configuration | uniform 10,000-cell error | biased ÷ uniform, sample frame |
 |---|---:|---:|
-| ISLA, reference configuration (relative frame, total-measure scale) | 0.0552 | 1.24x (1.20 / 1.27) |
+| ISLA, reference configuration | 0.0552 | 1.24x (1.20 / 1.27) |
 | ISLA, similarity-gauge variant (learning rate 3e-3) | 0.0616 | 1.21x (1.20 / 1.22) |
 | ISLA, constant-gauge variant | 0.0557 | 12.0x (12.4 / 11.6) |
 | ISLA, weights-off ablation (not adopted) | 0.0542 | 19.2x (23.4 / 15.1) |
@@ -335,123 +338,66 @@ unbiased, and it pays for its variance on sparse multi-element meshes
 | Transolver | 0.0517 | 11.6x (10.2 / 13.0) |
 | GeoTransolver, measure-weighted pooling (research variant) | 0.0498 | 14.4x (14.3 / 14.6) |
 | Transolver, measure-weighted pooling (research variant) | 0.0522 | 15.6x (15.9 / 15.4) |
-| GeoTransolver, measure-weighted pooling and Horvitz--Thompson-centred frame (research variant) | 0.0505 | 1.04x |
-| Transolver, measure-weighted pooling and Horvitz--Thompson-centred frame (research variant) | 0.0528 | 1.03x |
+| GeoTransolver, measure-weighted pooling and Horvitz–Thompson-centred frame (research variant) | 0.0505 | 1.04x |
+| Transolver, measure-weighted pooling and Horvitz–Thompson-centred frame (research variant) | 0.0528 | 1.03x |
 
-: Sampling-density robustness on DrivAerML, float32, 48 validation cars,
-10,000 cells. Columns: pressure rel-L2 under uniform sampling; the ratio
-of the same checkpoint's error under 10:1 spatially biased inclusion with
-exact Horvitz--Thompson measure weights to its uniform error, with the
-input frame taken from the biased sample (per-seed values in parentheses;
-1.0 means sampling-independent predictions). All models are trained on the
-435-car split under the frozen protocol; ISLA rows at learning rate 1e-3
-except where stated, GeoTransolver at 1e-3, Transolver at 3e-3. The
-measure-weighted and Horvitz--Thompson-centred baselines are research
-variants that locate where the sensitivity lives; the released
-GeoTransolver and Transolver are the first two baseline rows
-(@sec-nb-ruling-released-baselines). Data:
-results/frame_reduction_2026-09-11.json and
-results/relframe_reduction_2026-09-11.json (reference row);
-`research/transfer_program/studies/campaign_e_evalonly/campaign_e_density_fp32_sampleframe_2026-09-10.json`
-(similarity gauge, constant gauge, weights off, released baselines;
-@sec-nb-mw-postcenter); results/mw_w4dr_xfam_reduction_2026-09-10.json
-and @sec-nb-mw-postcenter (measure-weighted baselines);
-results/mwaw_2026-09-11.json (Horvitz--Thompson-centred baselines;
-@sec-nb-mwaw-verdict). {#tbl-density}
+: Sampling-density robustness on DrivAerML, float32, 48 validation cars, 10,000 cells: surface-pressure error under uniform sampling, and the same checkpoint's error under 10:1 biased inclusion with exact Horvitz–Thompson weights divided by its uniform error, input frame from the biased sample (seeds in parentheses; 1.0 means sampling-independent predictions). The measure-weighted and Horvitz–Thompson-centred baselines are research variants that locate where the sensitivity lives; the released GeoTransolver and Transolver are the first two baseline rows. Data: results/frame_reduction_2026-09-11.json, results/relframe_reduction_2026-09-11.json, research/transfer_program/studies/campaign_e_evalonly/campaign_e_density_fp32_sampleframe_2026-09-10.json, results/mw_w4dr_xfam_reduction_2026-09-10.json, results/mwaw_2026-09-11.json. {#tbl-density}
 
-Three things follow from the table. First, the sensitivity is the frame,
-not the aggregation: measure-weighted pooling leaves the baselines at
-14--16x, and an unbiased centre alone brings them to 1.03--1.04x, below
-ISLA's 1.2x; ISLA's constant-gauge variant, which shares the plain-mean
-centre, collapses with them (@sec-nb-mw-postcenter, @sec-nb-mwaw-verdict).
-Second, ISLA's residual 1.2x with an exact or absent frame is the variance
-of its measure-weighted routing integral under a 10:1 sample, not a frame
-effect: given the exact frame of the full geometry as global data the
+Three things follow. The sensitivity is the **frame, not the aggregation**:
+measure-weighted pooling leaves the baselines at 14 to 16x, and an unbiased
+centre alone brings them to 1.03 to 1.04x. ISLA's residual 1.2x is the
+**variance of its measure-weighted routing integral** under a 10:1 sample,
+not a frame effect: given the exact frame of the full geometry the
 constant-gauge construction reads 1.13x, so the frame estimate accounts for
-about 0.07 of the 1.2x and the routing integral for the rest
-(results/frame_reduction_2026-09-11.json; @sec-nb-frame-full-verdict).
-Third, the weights-off ablation is the most sensitive configuration
-measured (19.2x), which is the deployment face of the in-distribution gain
-it shows in @sec-mechanism. The similarity gauge does nothing for
-zero-shot transfer to a held-out vehicle family, which stays at
-mean-predictor level with or without it (@sec-limits), so absolute
-geometric size is not what limits cross-family transfer. The scope is one
-probe geometry (one bias pattern at one ratio) on one dataset; the
-consistency benchmark below varies the sampling law and the count.
+about 0.07 of the factor and the routing integral for the rest. And the
+**weights-off ablation is the most sensitive configuration measured**,
+which is the deployment face of the in-distribution gain it shows in
+@sec-mechanism. The scope is one bias pattern at one ratio on one dataset;
+the benchmark below varies the sampling law and the count.
 
 ## Consistency under refinement and across samplers {#sec-consistency-bench}
 
 **No configuration gives the same field under a different sampling of the
-same surface at 10,000 cells; ISLA's reference frame converges toward it
-as the sample grows, and the released GeoTransolver and Transolver do
-not.** The density-robustness probe above changes the sampling
-distribution by a factor of ten at one count. The consistency benchmark
-(preregistered in @sec-nb-bench-prereg, verdict in @sec-nb-bench-verdict)
-asks the question the principle of @sec-principle actually poses: does a
-model converge to a single field under refinement, and to the same field
-under two samplings of the same surface? Every checkpoint was evaluated in float32,
-under its own training snapshot, on the same validation surfaces sampled
-three ways from a 320,000-cell pool at 2,500 to 40,000 cells: uniformly
-over cells (the training convention, which inherits the mesher's
-refinement), proportionally to cell area (the law a uniform point-cloud
-generator over the surface would produce), and with the 10:1 front/back
-bias; each draw carries exact Horvitz--Thompson weights, so a
-measure-consistent model sees the same integral under all three.
+same surface at 10,000 cells; ISLA's reference frame converges toward it as
+the sample grows, and the released GeoTransolver and Transolver do not.**
+The consistency benchmark asks the question the principle of @sec-principle
+poses: does a model converge to one field under refinement, and to the same
+field under two sampling laws? Every checkpoint was evaluated in float32 on
+the same validation surfaces sampled three ways from a 320,000-cell pool at
+2,500 to 40,000 cells: uniformly over cells (the training convention, which
+inherits the mesher's refinement), proportionally to cell area (the law a
+uniform point-cloud generator would produce), and with the 10:1 bias; each
+draw carries exact Horvitz–Thompson weights, so a measure-consistent model
+sees the same integral under all three.
 
 ```{python}
 #| label: fig-consistency-curves
 #| fig-cap: >
 #|   Convergence toward consistency. Each panel plots an architecture's
-#|   pressure rel-L2 divided by the same architecture's error under uniform
-#|   sampling at 40,000 cells, against the number of sampled cells, for the
-#|   three samplers (columns) and three validation sets (rows); a curve that
-#|   approaches 1 converges to the uniform-sampling answer. Uniform sampling
+#|   surface-pressure error divided by the same architecture's error under
+#|   uniform sampling at 40,000 cells, against the number of sampled cells,
+#|   for three samplers (columns) and three validation sets (rows); a curve
+#|   approaching 1 converges to the uniform-sampling answer. Uniform sampling
 #|   (left) converges for every arm. Under the area-proportional sampler
-#|   (middle) only the two measure-weighted ISLA arms on DrivAerML fall
-#|   toward 1 (constant-gauge variant 2.6x, similarity-gauge variant 3.5x
-#|   from 2,500 to 40,000 cells); the released baselines and the weights-off
-#|   ablation are flat. Under the 10:1 bias (right) only the similarity-gauge
-#|   variant reaches the uniform answer (1.028 at 40,000 cells). The
-#|   reference configuration, benchmarked from 10,000 cells, is in
-#|   @tbl-consistency-40k. The area sampler's Horvitz-Thompson
-#|   weights span 1,000-37,000 (the bias probe's span exactly 10), so at small
-#|   counts the refined regions (mirrors, slat and flap gaps) are unsampled
-#|   and its fixed-count values carry information loss as well as variance;
-#|   only the trend with count is interpretable. Legend: hue and marker identify the architecture and configuration. Markers are seed means over
-#|   two seeds (raw values in the artifact). Float32; each checkpoint under its
-#|   training snapshot. Data:
-#|   results/consistency_bench/consistency_bench_2026-09-10.json.
+#|   (middle) only the measure-weighted ISLA arms on DrivAerML fall toward 1;
+#|   the released baselines and the weights-off ablation are flat. Under the
+#|   10:1 bias (right) only the similarity-gauge variant reaches the uniform
+#|   answer at 40,000 cells. The reference configuration, benchmarked from
+#|   10,000 cells, is in @tbl-consistency-40k. How to read this: only the
+#|   trend with count is interpretable under the area sampler, whose weights
+#|   span four decades and leave refined regions unsampled at small counts,
+#|   so fixed-count values there mix information loss with model dependence.
+#|   Seed means over two seeds; float32; each checkpoint under its training
+#|   snapshot. Data: results/consistency_bench/consistency_bench_2026-09-10.json.
 #| code-fold: true
-import json
-from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-BLUE, RED = "#2a78d6", "#e34948"
-BLUE2, AMBER = "#7fb0e6", "#c98a2b"
-INK, INK2, MUTED, GRID, BASELINE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-mpl.rcParams.update({"figure.dpi": 110, "font.size": 9.5, "axes.edgecolor": BASELINE,
-                     "axes.labelcolor": INK2, "axes.grid": True, "grid.color": GRID,
-                     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2,
-                     "ytick.labelcolor": INK2, "axes.spines.top": False,
-                     "axes.spines.right": False, "legend.frameon": False})
-B = json.load(open(Path("..") / "results" / "consistency_bench" / "consistency_bench_2026-09-10.json"))
+B = json.load(open(RES / "consistency_bench" / "consistency_bench_2026-09-10.json"))
 A = B["arms"]; COUNTS = [str(c) for c in B["counts"]]
-# arm key -> (label, color, marker, linestyle)
-STYLE = {
- "isla_const": ("ISLA, constant gauge", BLUE, "s", "-"),
- "isla_gauge": ("ISLA, similarity gauge", BLUE2, "D", "-"),
- "isla_off": ("ISLA, weights off (ablation)", MUTED, "s", "--"),
- "gt": ("GeoTransolver", RED, "o", "-"),
- "transolver": ("Transolver", AMBER, "^", "-"),
-}
 ROWS = [
- ("DrivAerML, 48 cars", {"isla_const": "iw_mt2_lr1e3", "isla_gauge": "iw_mt2_gauge", "isla_off": "now_mt2_lr1e3",
-                         "gt": "uw_gt_unit_lr1e3", "transolver": "uw_transolver_unit_lr3e3"}),
- ("HiLift, 35 training cases (180 val)", {"isla_const": "lad_hl_mt2_super_scarce", "isla_off": "a35_hl_mt2_noweights",
-                         "gt": "udrv_hl_gt_super_scarce_lr3e3", "transolver": "udrv_hl_transolver_super_scarce_lr3e3"}),
- ("HiLift, fixed angle (18 geometries)", {"isla_const": "mech_hl_mt2_single_aoa_12", "isla_off": "now_hl_mt2_single_aoa_12",
-                         "gt": "udrv_hl_gt_single_aoa_12", "transolver": "udrv_hl_transolver_single_aoa_12_lr3e3"}),
+ ("DrivAerML, 48 cars", {"isla_cg": "iw_mt2_lr1e3", "isla_sg": "iw_mt2_gauge", "isla_abl": "now_mt2_lr1e3", "gt": "uw_gt_unit_lr1e3", "t": "uw_transolver_unit_lr3e3"}),
+ ("HiLift, 35 training cases", {"isla_cg": "lad_hl_mt2_super_scarce", "isla_abl": "a35_hl_mt2_noweights", "gt": "udrv_hl_gt_super_scarce_lr3e3", "t": "udrv_hl_transolver_super_scarce_lr3e3"}),
+ ("HiLift, fixed angle", {"isla_cg": "mech_hl_mt2_single_aoa_12", "isla_abl": "now_hl_mt2_single_aoa_12", "gt": "udrv_hl_gt_single_aoa_12", "t": "udrv_hl_transolver_single_aoa_12_lr3e3"}),
 ]
+LABELS = {"isla_abl": "ISLA, weights-off ablation"}
 SAMPLERS = [("unif", "uniform over cells"), ("area", "area-proportional"), ("biased", "10:1 front/back bias")]
 def err(arm, sampler, count):
     return A[arm]["table"][sampler][count]["pressure_l2"]["mean"]
@@ -461,27 +407,19 @@ for i, (row_title, arms) in enumerate(ROWS):
     for j, (sampler, stitle) in enumerate(SAMPLERS):
         ax = axs[i, j]
         for key, arm in arms.items():
-            label, color, mk, ls = STYLE[key]
             ref = err(arm, "unif", "40000")
             y = [err(arm, sampler, c) / ref for c in COUNTS]
-            ax.plot(x, y, color=color, ls=ls, lw=1.6, marker=mk, ms=5, mfc="white", mec=color, mew=1.4,
-                    zorder=3, label=label if (i == 0 and j == 0) else None)
+            ax.plot(x, y, **series_kwargs(key, lw=1.6, ms=5, label=(LABELS.get(key, STYLE[key]["label"]) if (i == 0 and j == 0) else None)), zorder=3)
         ax.axhline(1.0, color=BASELINE, lw=1.0, zorder=1)
         ax.set_xscale("log"); ax.set_yscale("log")
-        ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:g}"))
-        ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-        ax.set_xticks(x); ax.set_xticklabels(["2.5k", "5k", "10k", "20k", "40k"])
-        ax.set_xlim(2100, 4.8e4)
-        if i == 0: ax.set_title(stitle, color=INK, fontsize=10, loc="left")
-        if j == 0: ax.set_ylabel(f"{row_title}\nerror ÷ own uniform-40k error [-]", color=INK2)
+        ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:g}")); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+        ax.set_xticks(x); ax.set_xticklabels(["2.5k", "5k", "10k", "20k", "40k"]); ax.set_xlim(2100, 4.8e4)
+        if i == 0: ax.set_title(stitle, fontsize=10)
+        if j == 0: ax.set_ylabel(f"{row_title}\nerror ÷ own uniform-40k error [–]")
         if i == len(ROWS) - 1: ax.set_xlabel("sampled cells per case [count]")
-handles, labels_ = [], []
-for ax in axs.flat:
-    h, l = ax.get_legend_handles_labels(); handles += h; labels_ += l
-fig.legend(handles, labels_, loc="upper left", ncol=5, fontsize=8.5, bbox_to_anchor=(0.01, 0.965), handlelength=2.2, columnspacing=1.4)
-fig.suptitle("Pressure rel-L2 relative to each architecture's uniform 40,000-cell error, by sampler and validation set",
-             color=INK, fontsize=10.5, x=0.01, y=0.995, ha="left")
-fig.tight_layout(rect=(0, 0, 1, 0.925))
+handles, labels_ = axs[0, 0].get_legend_handles_labels()
+fig.legend(handles, labels_, loc="upper left", ncol=5, fontsize=8.5, bbox_to_anchor=(0.01, 0.985), handlelength=2.4, columnspacing=1.4)
+fig.tight_layout(rect=(0, 0, 1, 0.95))
 plt.show()
 ```
 
@@ -489,258 +427,150 @@ plt.show()
 #| label: tbl-consistency-40k
 #| output: asis
 #| code-fold: true
-import json
-from pathlib import Path
-B = json.load(open(Path("..") / "results" / "consistency_bench" / "consistency_bench_2026-09-10.json"))
-A = B["arms"]
-A.update(json.load(open(Path("..") / "results" / "consistency_bench" / "consistency_bench_mcenter_2026-09-10.json"))["arms"])
-A.update(json.load(open(Path("..") / "results" / "consistency_bench" / "consistency_bench_mw_2026-09-10.json"))["arms"])
-A.update(json.load(open(Path("..") / "results" / "consistency_bench" / "consistency_bench_rf_2026-09-11.json"))["arms"])
+A = dict(B["arms"])
+for name in ("consistency_bench_mcenter_2026-09-10.json", "consistency_bench_mw_2026-09-10.json", "consistency_bench_rf_2026-09-11.json"):
+    A.update(json.load(open(RES / "consistency_bench" / name))["arms"])
 def D(arm, sampler, count="40000"):
     return A[arm]["D"][sampler][count]["pressure_l2"]
 def conv(arm, sampler):
     t = A[arm]["table"][sampler]; lo = "2500" if "2500" in t else "10000"
     return t[lo]["pressure_l2"]["mean"] / t["40000"]["pressure_l2"]["mean"]
-rows = [("DrivAerML", "ISLA, reference configuration (relative frame, total-measure scale)", "rf_dr_mt2_meas"),
+rows = [("DrivAerML", "ISLA, reference configuration", "rf_dr_mt2_meas"),
         ("DrivAerML", "ISLA, relative frame with a constant reference length (variant)", "rf_dr_mt2_ref"),
         ("DrivAerML", "ISLA, constant-gauge variant with measure-weighted centring (variant)", "cg_dr_mt2_mcenter"),
         ("DrivAerML", "ISLA, similarity-gauge variant (lr 3e-3)", "iw_mt2_gauge"), ("DrivAerML", "ISLA, constant-gauge variant", "iw_mt2_lr1e3"),
         ("DrivAerML", "Transolver", "uw_transolver_unit_lr3e3"), ("DrivAerML", "GeoTransolver", "uw_gt_unit_lr1e3"),
         ("DrivAerML", "GeoTransolver, measure-weighted pooling (research variant; pool frame)", "mw_dr_gt_unit_lr1e3"), ("DrivAerML", "Transolver, measure-weighted pooling (research variant; pool frame)", "mw_dr_transolver_unit_lr3e3"),
         ("DrivAerML", "ISLA, weights-off ablation", "now_mt2_lr1e3"),
-        ("HiLift 35", "ISLA, reference configuration (relative frame, total-measure scale)", "rf_hl_mt2_meas_super_scarce"),
+        ("HiLift 35", "ISLA, reference configuration", "rf_hl_mt2_meas_super_scarce"),
         ("HiLift 35", "ISLA, relative frame with a constant reference length (variant)", "rf_hl_mt2_ref_super_scarce"),
         ("HiLift 35", "ISLA, constant-gauge variant with measure-weighted centring (variant)", "cg_hl_mt2_mcenter_super_scarce"),
         ("HiLift 35", "ISLA, constant-gauge variant", "lad_hl_mt2_super_scarce"), ("HiLift 35", "GeoTransolver", "udrv_hl_gt_super_scarce_lr3e3"),
         ("HiLift 35", "Transolver", "udrv_hl_transolver_super_scarce_lr3e3"),
         ("HiLift 35", "GeoTransolver, measure-weighted pooling (research variant; pool frame)", "mw_hl_gt_super_scarce_lr3e3"), ("HiLift 35", "Transolver, measure-weighted pooling (research variant; pool frame)", "mw_hl_transolver_super_scarce_lr3e3"),
         ("HiLift 35", "ISLA, weights-off ablation", "a35_hl_mt2_noweights")]
-out = "| validation set | configuration | uniform 40k error | area ÷ uniform − 1 at 40k | bias ÷ uniform − 1 at 40k | area-curve fall, 2.5k → 40k |\n|---|---|---:|---:|---:|---:|\n"
+out = "| validation set | configuration | uniform 40k error | area ÷ uniform − 1 at 40k | bias ÷ uniform − 1 at 40k | area-curve fall, first count → 40k |\n|---|---|---:|---:|---:|---:|\n"
 for ds, label, arm in rows:
     u40 = A[arm]["table"]["unif"]["40000"]["pressure_l2"]["mean"]
     out += f"| {ds} | {label} | {u40:.4f} | {D(arm,'area'):+.0%} | {D(arm,'biased'):+.1%} | {conv(arm,'area'):.2f}x |\n"
 print(out)
-print(": Consistency at the benchmark's largest count. The preregistered bars are "
-      "|D| at or below 3% for consistent and at or above 10% for reading the sampling "
-      "distribution. ISLA's reference configuration passes both samplers on the wings and converges "
-      "to within 3–4% on the cars (@sec-nb-relframe-hl-bench); the measure-centred constant-gauge "
-      "variant passes both samplers on both datasets; the similarity-gauge variant passes under the "
-      "bias on DrivAerML; the constant-gauge variant, the weights-off ablation and the released "
-      "GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted "
-      "baselines (research variants) pass both bars at both counts on the wings and at 40,000 cells on "
-      "the cars (|D| under 1%), but their area and biased columns are pool-frame values (pipeline "
-      "centring before the draw): with the frame held, measure weighting makes their aggregation "
-      "consistent; their frame remains a datapipe sample statistic and collapses when centred on the "
-      "drawn sample (@sec-nb-mw-postcenter), holding at 1.03–1.04x only when that centre is the "
-      "Horvitz–Thompson estimate of the geometric centroid (@sec-nb-mwaw-verdict). "
-      "The last column is the factor by which each arm's area-sampler error fell over the counts it "
-      "was run at (2,500 to 40,000 cells; 10,000 to 40,000 for the reference, the constant-length and "
-      "the measure-centred rows): a value near 1 means the arm's answer under a different sampling law "
-      "does not approach its uniform-sampling answer as the sample grows. Float32, seed means "
-      "of two seeds, each checkpoint under its training snapshot. Data: "
-      "results/consistency_bench/consistency_bench_2026-09-10.json and the _mcenter, _mw and _rf companions. {#tbl-consistency-40k}")
+print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. The reference configuration passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; the measure-centred constant-gauge variant passes on both datasets; the constant-gauge variant, the weights-off ablation and the released GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centred on the drawn sample their frame collapses, and holds only when the centre is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for the reference, constant-length and measure-centred rows). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mcenter, _mw and _rf companions. {#tbl-consistency-40k}")
 ```
 
-The same convergence appears when the training law itself changes. A
-measure-weighted ISLA trained on the area-proportional convention and
-evaluated on the uniform-over-cells one pays 2.9x at 2,500 cells, 1.45x
-at 10,000 and 1.05x at 40,000 (the reverse swap 2.7x to 1.21x;
-@sec-nb-mix-refinement), while at 10,000 cells the baselines pay 3–7x
-with no count to appeal to (@sec-nb-mix-verdict). This is the consistency
-criterion of @sec-principle observed on a convention swap: the two
+Three readings, in order of weight. **Consistency in the fine-mesh limit is
+a property of the measure-weighted estimator standing on a frame that
+reads no sample statistic.** The reference configuration has that frame by
+construction and shows the property: on DrivAerML its area-sampler and bias
+dependence fall from +41% and +19% at 10,000 cells to +3.4% and +2.5% at
+40,000; on the 35-case HiLift rung it is within 1.3% and 0.9% at 40,000;
+on the fixed-angle rung it converges to +2.6% and +5.5%, still short of the
+bar there. The constant-gauge variant's dependence is entirely its
+plain-mean centroid: replacing that centroid by its Horvitz–Thompson
+estimate gives the same field under all three samplers. **No configuration
+is consistent at the 10,000 cells of the book's accuracy numbers**, and a
+factor-of-ten probe understates how far each stands from consistency, since
+a different mesher changes the local density by thousands. **On the wings,
+whose refinement spans more decades than the cars', the centred
+configurations do not converge within 40,000 cells**; their HiLift rows
+report the distance, not a verdict.
+
+::: {.callout-note collapse="true" title="The same convergence under a training-convention swap"}
+A measure-weighted ISLA trained on the area-proportional convention and
+evaluated on the uniform-over-cells one pays 2.9x at 2,500 cells, 1.45x at
+10,000 and 1.05x at 40,000 (the reverse swap 2.7x to 1.21x), while at
+10,000 cells the baselines pay 3 to 7x with no count to appeal to. The two
 conventions are two quadratures of the same surface integral, and the
 estimator that treats them as such gives the same answer in the fine-mesh
-limit. Two seeds, float32, snapshot code; data:
-`results/consistency_bench/consistency_bench_mixarea_2026-09-11.json`.
-
-Three readings, in order of weight. First, consistency in the fine-mesh
-limit is a property of the measure-weighted estimator standing on a frame
-that reads no sample statistic. ISLA's reference configuration has that
-frame by construction and shows the property: on DrivAerML its
-area-sampler and bias dependence fall from +41% and +19% at 10,000 cells to
-+3.4% and +2.5% at 40,000, and on the 35-case HiLift rung it is within
-1.3% under the area sampler and 0.9% under the bias at 40,000 cells; on the
-fixed-angle rung it converges to +2.6% under the area sampler and +5.5%
-under the bias, still short of the 3% bar there
-(results/consistency_bench/consistency_bench_rf_2026-09-11.json,
-consistency_bench_rffa_2026-09-11.json; @sec-nb-relframe-hl-bench). The
-constant-gauge variant's sampler dependence is entirely its plain-mean
-centroid: replacing that centroid by its Horvitz–Thompson estimate gives
-the same field under all three samplers on DrivAerML at 40,000 cells (+3%
-/ +3%) and on the HiLift 35-case rung already at 10,000 cells (−2% / +4%),
-where the constant-gauge variant itself reads the distribution by 150% or
-more (@sec-nb-bench-mcenter); the measure-weighted baselines reach the
-same consistency once their datapipe centre is that estimate
-(@sec-nb-mwaw-verdict), and those baselines are research variants that
-locate the property, since the released GeoTransolver and Transolver are
-not modified (@sec-nb-ruling-released-baselines). Among the configurations
-run from 2,500 cells, under the area sampler the two measure-weighted ISLA
-arms on DrivAerML fall steadily toward the uniform answer while the
-released baselines and the weights-off ablation stay flat, and under the
-bias the similarity-gauge variant reaches +2.8% at 40,000 cells; the
-ordering by sampling-distribution dependence on DrivAerML at 40,000 cells
-is similarity gauge, constant gauge, Transolver, GeoTransolver, weights-off
-ablation (+18%, +90%, +213%, +562%, +1176%). Second, no configuration is
-consistent at the 10,000 cells of the book's accuracy numbers, and the
-factor-of-ten density probe understates how far each stands from
-consistency: a different mesher changes the local density by thousands, and
-at that scale even the measure-weighted estimator's variance is large where
-the geometry is fine, so the area-sampler values at fixed count mix
-information loss with model dependence and only the trend is read. Third,
-on the HiLiftAeroML wings, whose refinement spans more decades than the
-cars', the centred configurations do not converge within 40,000 cells; the
-fine-mesh limit lies beyond the benchmark's range for them, and their
-HiLift rows report the distance, not a verdict. What remains of the
-reference configuration's dependence is the variance of the routing
-integral under extreme weights, a limit that a sample budget alone does not
-remove (@sec-robustness-density).
+limit. Data: results/consistency_bench/consistency_bench_mixarea_2026-09-11.json.
+:::
 
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
 **ISLA is exactly covariant to rotations and translations. When
-geometries arrive in arbitrary poses, that exactness is worth 6% against
+geometries arrive in arbitrary poses that exactness is worth 6% against
 GeoTransolver and 19% against Transolver trained with rotation
-augmentation; when every case is in the dataset's native pose, or a
-canonical frame can be computed, it is a contract and not an accuracy
-edge.** The first readout is float32 validation pressure rel-L2 on
-DrivAerML with every case in its own random SO(3) pose: ISLA's
-constant-gauge variant, trained without augmentation, scores 0.0566
-(1.01x its native-pose 0.0558); GeoTransolver trained with SO(3)
-augmentation scores 0.0602 (1.20x its native-pose 0.0503) and Transolver
-with augmentation 0.0676 (1.31x its 0.0517); GeoTransolver without
-augmentation scores 0.0631, and ISLA with augmentation 0.0578. Baseline ÷
-ISLA is therefore 1.06 and 1.19 in arbitrary poses, ISLA's one measured
-accuracy lead over input-matched baselines, and it is conditional on the
-setting
-(`research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json`;
-@sec-nb-pose-bench-book). ISLA's covariance is exact by algebraic
-construction, verified to roundoff in fp64 (@sec-mt2); on the bf16 path
-the recipe runs, the residual is finite (1.2--1.3% on scalar outputs in a
-CPU autocast probe) and its value on the trained GPU path is not measured
-(@sec-mt2-contracts).
+augmentation; when every case is in a native pose, or a canonical frame can
+be computed, it is a contract and not an accuracy edge.** With every
+DrivAerML case in its own random pose, ISLA's constant-gauge variant,
+trained without augmentation, scores 0.0566 (1.01x its native-pose error);
+GeoTransolver trained with rotation augmentation scores 0.0602 (1.20x its
+native-pose 0.0503) and Transolver with augmentation 0.0676 (1.31x its
+0.0517). GeoTransolver without augmentation scores 0.0631 and ISLA with
+augmentation 0.0578. Data:
+research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json.
 
-The second readout is the native-pose comparison. GeoTransolver trained in
-the native frame degrades 26--32x under random poses across three seeds.
-GeoTransolver trained with the canonicalization of @sec-pose (freestream
-to +x, roll fixed from the geometry's principal axes) scores 0.0536/0.0535
-in-pose and 0.0536/0.0534 on the random-pose orbit, against 0.0530/0.0533
-for the native-frame model in its native pose (bfloat16, same points):
-exactly pose-invariant, 1.01x behind. Where a canonical frame exists, the
-contract can be had for 1%. What ISLA's construction still buys is
-generality: it needs no known global direction to canonicalize against and no sign-resolvable
-principal frame, both of which canonicalization requires and both of which
-every vehicle case here supplies (0 of 48 validation cars has a degenerate
-frame). Where those conditions fail, on a geometry with a degenerate
-inertia tensor or in a setting without a global flow direction, the
-canonicalized model has no frame to compute, the augmented model pays the
-20--31% above, and the equivariant one is unaffected.
+GeoTransolver trained in a canonical frame (freestream to +x, roll fixed
+from the geometry's principal axes; @sec-pose) is exactly pose-invariant at
+1.01x cost. What ISLA's construction still buys is generality: it needs no
+known global direction to canonicalize against and no sign-resolvable
+principal frame. Where those fail, on a geometry with a degenerate inertia
+tensor or in a setting without a global flow direction, the canonicalized
+model has no frame to compute, the augmented model pays the 20 to 31%
+above, and the equivariant one is unaffected. ISLA's covariance is exact by
+algebraic construction and verified to roundoff in float64 (@sec-mt2-contracts);
+its residual on the bfloat16 trained path is not yet measured.
 
 ## Query independence and its price {#sec-query-independence}
 
 **In its reference configuration ISLA's prediction at a surface point
 depends weakly on which other points were sampled with it, about 7%
-against 2% for GeoTransolver; the optional query-independent
-configuration removes that dependence exactly, at a 3.0--3.7x cost in
-accuracy.** Query independence means that the prediction at one surface
-point does not depend on which other points are in the same forward
-pass. In ISLA's reference configuration, the one behind every HiLift and
-DrivAerML surface result in this book, the output heads read directly
-from the interacting encoder tokens, so redrawing the companions of a
-point changes its prediction; holding a shared prefix of 5,000 cells fixed
-and redrawing the rest of the 10,000-point sample moves the predictions on
-the prefix by about 7% for ISLA and 2% for GeoTransolver. The
-query-independent configuration (@sec-mt2) replaces the readout with
-passive read blocks that read the slice and boundary tokens and never
-write to them, so a point evaluated alone gives the same answer, to fp64
-roundoff, as in a batch of 10,000; it has 11.0M parameters against 8.9M.
-Its price on DrivAerML pressure is 3.5--3.7x against the reference
-configuration at the same learning rate (0.203--0.211 against 0.0577) and
-3.0--3.3x against a 6,500-token reference run at matched memory
-(0.209/0.221 against 0.0697/0.0671, for an anchor-conditioned variant in
-which a fixed core of 2,560 interacting tokens carries all the
-interaction). The consequence is a choice, not a defect: exact
-evaluate-anywhere semantics at about three times the error, or
-GeoTransolver-class accuracy with a few percent of sensitivity to how the
-boundary was sampled; not both. The interior task shows the same trade
-from the other direction, less cleanly: the passive decode is about 3x
-behind GeoTransolver-volume on interior pressure in float32, and admitting
-the queries as interacting tokens closes that and more, but the two ISLA
-configurations differ in decoder depth and inputs as well as in
-interaction, so the 3x is the cost of the complete passive configuration
-rather than of query independence alone (@sec-interior). The interacting
-interior decode carries the same dependence as the surface one: its
-prediction at a point depends on the joint query set, count augmentation
-reduces that dependence by about 40% at a 3.7% cost and does not remove
-it, so the model is deployed at its training query count
-(@sec-nb-qcount-verdict, @sec-nb-relint-verdict).
+against 2% for GeoTransolver; the optional passive decoder removes that
+dependence exactly, at a 3.0 to 3.7x cost in accuracy.** Holding a shared
+prefix of 5,000 cells fixed and redrawing the rest of the 10,000-point
+sample moves the predictions on the prefix by about 7% for ISLA and 2% for
+GeoTransolver. The passive decoder (@sec-mt2-passive) replaces the readout
+with read blocks that never write back, so a point evaluated alone gives the
+same answer, to float64 roundoff, as in a batch of 10,000. Its price on
+DrivAerML surface pressure is 3.5 to 3.7x against the reference at the same
+learning rate (0.203 to 0.211 against 0.0577) and 3.0 to 3.3x against a
+6,500-token control at matched memory. The consequence is a choice, not a
+defect: exact evaluate-anywhere semantics at about three times the error,
+or GeoTransolver-class accuracy with a few percent of sensitivity to how the
+boundary was sampled. The interior task shows the same trade
+(@sec-interior): the passive decode is about 3x behind GeoTransolver-volume
+on interior pressure, and admitting the queries as interacting tokens
+closes that and more, at the cost that the prediction at a point depends on
+the joint query set, so the interior model is deployed at its training
+query count (@sec-interior-companion).
 
 ## Cost {#sec-cost}
 
-**At 10,000 tokens per case on one GB300, both models compiled as the
-recipe runs them, ISLA's training step is 47 ms in 1.30 GiB against
+**At 10,000 tokens per case on one GB300, both models compiled as the recipe
+runs them, ISLA's training step is 47 ms in 1.30 GiB against
 GeoTransolver's 45 ms in 2.70 GiB (1.05x the time, 0.48x the memory) with
 the geometry recompute on, and 39 ms in 1.94 GiB without it (0.86x).** At
-40,000 tokens the default compiled ISLA step is 119 ms against
-GeoTransolver's 53 ms (2.2x); with the exact fused geometry kernel, an
-opt-in (`geo_kernel="fused"`), it is 52 ms at 4.5 GiB against
-GeoTransolver's 10.0 GiB. The measurement
-(results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json;
-@sec-nb-kernel-study) runs both models at the recipe dimensions (ISLA
-hidden 192, GeoTransolver hidden 256, 12 layers and 256 slices each) under
-bf16 autocast at batch 1 with an AdamW step, and reads peak memory and step
-time in one harness; every kernel option agrees with the reference forward
-to 5.5 × 10⁻⁷ relative L2 in bf16 and 10⁻¹⁵ in fp64, so no accuracy
-number depends on the kernel. ISLA is the smaller of the two because its
-relational readback pools the relational invariants over slices before
-projecting them, an exact identity since the routing weights sum to one,
-and recomputes the per-slice geometry inside the backward pass
-(@sec-mt2-cost). The step is memory-bound at every stage but the MLP: the
-per-slice relational invariants carry 61% of the memory traffic (38 of 62
-GB per step in eager mode), which is what the fused kernel removes, and
-the reason the compiled default's advantage over GeoTransolver narrows as
-the token count grows.
+40,000 tokens the default compiled step is 119 ms against 53 ms (2.2x); the
+exact fused geometry kernel, an opt-in, brings it to 52 ms at 4.5 GiB against
+10.0 GiB. Both models run at the recipe dimensions under bf16 autocast at
+batch 1 with an AdamW step; every kernel option agrees with the reference
+forward to $5.5 \times 10^{-7}$ relative L2 in bf16, so no accuracy number
+depends on the kernel. ISLA is the smaller of the two because it pools the
+relational invariants before projecting them and rebuilds the per-slice
+geometry in the backward pass (@sec-mt2-cost). The step is memory-bound at
+every stage but the MLP; the per-slice invariants carry 61% of the traffic,
+which is what the fused kernel removes and why the default's advantage
+narrows as tokens grow. Data:
+results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json.
 
 ## The frontier in one table {#sec-review-frontier}
 
 Two tables collect the DrivAerML measurements of this chapter.
 @tbl-consistency-matrix is the float32 standing of every configuration at
 the reference size, accuracy beside consistency, with the scale corner
-beneath it. @tbl-frontier is the bfloat16 table that covers the rows the
-float32 matrix does not: zero-shot transfer to a held-out vehicle family,
-canonicalized and rotation-augmented GeoTransolver, and the two-family
-training runs. Every row of @tbl-frontier is trained on the 435-car
-DrivAerML split at learning rate 3e-3 (the frozen rate, common to all
-rows; the float32 figures at each architecture's own rate are in
-@sec-full-data-accuracy), 500 epochs, 10,000 tokens per case, and scored
-on the 48 validation cars. Its columns are:
-
-- **In-family (x GeoTransolver)**: validation pressure rel-L2 at 10,000
-  uniformly sampled points, divided by the GeoTransolver reference row's
-  value; 1.00 is GeoTransolver's accuracy, larger is worse.
-- **Zero-shot (fastback)**: mean normalized pressure L2 on the DrivAer
-  fastback family (@sec-shift-suv), which no row trained on: the
-  single-family rows trained on DrivAerML alone, the two-family rows on
-  DrivAerML plus the estate family. Scoring every row on the same
-  held-out family is what makes the column comparable down its length.
-  A value of 1.0 is the level of predicting the mean.
-- **Density (10:1)**: the degradation ratio of @tbl-density, biased over
-  uniform sampling.
-- **Pose (random SO(3))**: the degradation ratio of @sec-pose-contract,
-  random poses over native pose; 1.00 is exact invariance.
-- **Peak memory at 10k tokens**: peak training memory at 10,000 tokens
-  per case, both models compiled on one GB300 (@sec-cost).
-
-The frontier is stated as a matrix, not a column: every accuracy number
-below sits beside the same checkpoint's behaviour when the sampling, the
-pose or the vehicle family changes (@sec-principle).
+beneath it. @tbl-frontier, in a collapsed note, is the bfloat16 table that
+covers the rows the float32 matrix does not: zero-shot transfer to a
+held-out vehicle family, canonicalized and rotation-augmented
+GeoTransolver, and two-family training. The frontier is stated as a
+matrix, not a column: every accuracy number sits beside the same
+checkpoint's behaviour when the sampling, the pose or the vehicle family
+changes (@sec-principle).
 
 ```{python}
 #| label: tbl-consistency-matrix
 #| output: asis
 #| code-fold: true
-import json
-from pathlib import Path
-M = json.load(open(Path("..") / "results" / "accuracy_consistency_matrix_2026-09-10.json"))
+M = json.load(open(RES / "accuracy_consistency_matrix_2026-09-10.json"))
+cw = json.load(open(RES / "corner_wlr_reduction_2026-09-15.json"))["summary"]
 def f(v, fmt):
     return "not measured" if v is None else fmt.format(v)
 out = ("| configuration | in-family error | density 10:1 (x) | pose, random SO(3) (x) "
@@ -759,521 +589,276 @@ for key in ("geotransolver_unit_512x80k", "isla_constant_gauge_512x80k", "isla_s
     r = sc[key]
     out += (f"| {r['label']} | {r['in_family']:.4f} | {r['density_factor']:.1f} | not measured "
             f"| not measured | {r['gpu_hours']:.1f} GPU-h |\n")
+out += (f"| ISLA, reference configuration, 512 × 80k, width learning rate | {cw['in_family_80k_seed_mean']:.4f} | {cw['density_factor_80k']:.1f} | not measured | not measured | — |\n")
 print(out)
-print(": Accuracy beside consistency on DrivAerML at full data, float32, unit-direction "
-      "inputs for every architecture. In-family: pressure rel-L2 on 48 validation cars "
-      "at 10,000 cells. Density: error under 10:1 front/back biased sampling with exact "
-      "measure weights over the same model's error under uniform sampling (campaign E). "
-      "Pose: error with every case in an arbitrary SO(3) pose over the architecture's "
-      "canonical-pose error; the baselines were trained with SO(3) augmentation, ISLA "
-      "without (@sec-pose-contract). Zero-shot fastback: error on 99 SHIFT-SUV fastback cases "
-      "never trained on (1.0 is the mean predictor). Few-shot gain: improvement over "
-      "training from scratch after fine-tuning on 20 fastback cases at matched learning "
-      "rate. A configuration that reads the sampling distribution shows it in the "
-      "density column; the weights-off ablation is the extreme case and is not adopted. "
-      "The scale-corner rows (width 512, 80,000 cells, evaluated at 80,000 cells) show the three "
-      "architectures within 3% of one another in-family; only the similarity-gauge ISLA corner "
-      "(0.0431, 1.09x under the bias at 80,000 cells) keeps its accuracy when the sampling changes "
-      "(all corner factors are sample-frame values at 80,000 cells; the artifact also carries the "
-      "baselines' pool-frame values, 4.2x and 4.6x, which hand them an unbiased centre): "
-      "it demonstrates the frame class (a frame that does not read the sampling distribution costs nothing "
-      "at scale and removes the sensitivity). The reference configuration is the relative frame with the "
-      "total-measure scale; it is not trained at the corner, so the corner has no reference row. "
-      "The last column is training cost in GPU-hours. "
-      "Learning rates are stated per row: the similarity-gauge checkpoints at 3e-3 sit beside the "
-      "rate-matched constant-gauge variant at 0.0620, and the 1e-3 pair is at parity with the 1e-3 constant-gauge variant. "
-      "The measure-weighted rows are research variants that give GeoTransolver and Transolver the quadrature "
-      "measure in their slice pooling: their accuracy is unchanged. Density factors for all four baseline rows are the "
-      "like-for-like values with the input frame centred on the biased sample, as ISLA's are; with the "
-      "pipeline's unbiased pool frame the same checkpoints read 9.5x / 3.9x (unweighted) and 1.02x "
-      "(weighted), so the pooling repair does not touch the frame, which is what the bias breaks. "
-      "The measure-centred ISLA row is a sample-statistic frame and a variant, not the reference. "
-      "Data: results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell "
-      "inside). {#tbl-consistency-matrix}")
+print(": Accuracy beside consistency on DrivAerML at full data, float32, unit-direction inputs for every architecture. "
+      "In-family: surface-pressure error on 48 validation cars at 10,000 cells. Density: error under 10:1 biased sampling with exact "
+      "measure weights over the same model's error under uniform sampling, sample frame. Pose: error with every case in an arbitrary "
+      "pose over the architecture's canonical-pose error; baselines trained with rotation augmentation, ISLA without. Zero-shot "
+      "fastback: error on 99 SHIFT-SUV fastback cases never trained on (1.0 is the mean predictor). Few-shot gain: improvement over "
+      "training from scratch after fine-tuning on 20 fastback cases. Row labels are the artifact's; the measure-weighted and "
+      "measure-centred rows are research variants, the weights-off row an ablation, and the full-frame rows diagnostics. The "
+      "scale-corner rows are evaluated at 80,000 cells; the corner factors are sample-frame values (the artifact also carries the "
+      "baselines' pool-frame values, 4.2x and 4.6x). The last column is training cost in GPU-hours. Data: "
+      "results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell inside), results/corner_wlr_reduction_2026-09-15.json. {#tbl-consistency-matrix}")
 ```
 
+The measure-weighted rows are the steel-man the principle asked for, and
+they split the story in two. Accuracy: once GeoTransolver and Transolver
+carry the surface measure in their slice pooling they keep their
+in-distribution lead on both datasets, so ISLA's contracts do not buy
+accuracy at the reference size. Consistency: the pooling repair does not
+touch the frame, and with the centre taken from the biased sample the
+weighted baselines degrade 14 to 16x. Under a like-for-like frame only
+ISLA's frames that read no biased statistic survive, and the frame is the
+whole of the density story at 10,000 cells for every architecture. The
+measure-weighted and Horvitz–Thompson-centred baselines are research
+variants that locate that property; the released models are the ones
+compared and are not modified.
+
+::: {.callout-note collapse="true" title="The bfloat16 frontier: zero-shot transfer, canonical frames, two families"}
 ```{python}
 #| label: frontier-table
 #| output: asis
 #| code-fold: true
-import json
-from pathlib import Path
-
-RES = Path("..") / "results"
 SW = RES / "mixedres_training_2026-07-31" / "sweep"
-mega = json.load(open(SW / "mega_reduction.json"))
-round3 = json.load(open(SW / "round3_reduction.json"))
-mt2_const = json.load(open(SW / "mt2_v3c_reduction.json"))  # ISLA, constant gauge, lr 3e-3
-probe = json.load(open(SW / "probe_reduction.json"))
+mega = json.load(open(SW / "mega_reduction.json")); round3 = json.load(open(SW / "round3_reduction.json"))
+mt2_const = json.load(open(SW / "mt2_v3c_reduction.json")); probe = json.load(open(SW / "probe_reduction.json"))
 p3v3 = json.load(open(SW / "p3v3_reduction.json"))
 s1 = json.load(open(RES / "s1_similarity_gauge_2026-09-03.json"))["runs"]
 p1pp = json.load(open(RES / "p1pp_canonical_training_2026-09-03.json"))["results"]
-
-def mean(vals):
-    return sum(vals) / len(vals)
-
-# GeoTransolver reference: in-family pressure rel-L2 and zero-shot fastback, seeds 42-44
 gt10_seeds = {s: round3[f"gt_fixed_seed{s}"]["sweep_metrics"]["10000"]["mean"] for s in (42, 43, 44)}
 gt10 = mean(list(gt10_seeds.values()))
 gt_zs = mean([round3[f"gt_fixed_seed{s}"]["smoke_fastback"]["mean"] for s in (42, 43, 44)])
-# pose: random-SO(3) pressure rel-L2 over native-pose rel-L2, per seed
 gt_pose = [probe["p1_rot"][f"gt_fixed_seed{s}"]["mean"] / gt10_seeds[s] for s in (42, 43, 44)]
-mt2_pose = (mt2_const["mt2_v3c_seed42"]["p1_rot"]["mean"]
-            / mt2_const["mt2_v3c_seed42"]["sweep"]["10000"]["mean"])
+mt2_pose = mt2_const["mt2_v3c_seed42"]["p1_rot"]["mean"] / mt2_const["mt2_v3c_seed42"]["sweep"]["10000"]["mean"]
 rot_pose = mega["gt_rotaug_seed42"]["p1_rot"]["mean"] / mega["gt_rotaug_seed42"]["in10k"]["mean"]
-# density: biased over uniform (GeoTransolver seed 42 on the same instrument as the ISLA rows)
 gt_dens = p3v3["gt_fixed_seed42"]["mean"] / gt10_seeds[42]
 mt2_dens_const = [s1[f"mt2_v3c_seed{s}"]["p3_ratio_vs_infamily"] for s in (42, 43)]
 mt2_dens_gauge = [s1[f"iw_mt2_gauge_seed{s}"]["p3_ratio_vs_infamily"] for s in (42, 43)]
-
 rot_in = mean([mega[f"gt_rotaug_seed{s}"]["in10k"]["mean"] for s in (42, 43)])
 rot_zs = mean([mega[f"gt_rotaug_seed{s}"]["fastback"]["mean"] for s in (42, 43)])
 canon_in = mean([p1pp[f"gt_canon_seed{s}"]["inpose_raw"][0] for s in (42, 43)])
-
-mt2c_in = mean([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
-               + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
+mt2c_in = mean([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)] + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
 mt2c_zs = mean([mt2_const[f"mt2_v3c_seed{s}"]["smoke_fastback"]["mean"] for s in (42, 43, 44)])
 gauge_in = mean([s1[f"iw_mt2_gauge_seed{s}"]["infamily"]["pressure_l2"]["mean"] for s in (42, 43)])
 gauge_zs = mean([s1[f"iw_mt2_gauge_seed{s}"]["fastback"]["pressure_l2"]["mean"] for s in (42, 43)])
-
-mt2m_in = mean([mega[f"mt2_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)])
-mt2m_zs = mean([mega[f"mt2_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
-gtm_in = mean([mega[f"gt_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)])
-gtm_zs = mean([mega[f"gt_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
-
+mt2m_in = mean([mega[f"mt2_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)]); mt2m_zs = mean([mega[f"mt2_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
+gtm_in = mean([mega[f"gt_multi_seed{s}"]["in10k"]["mean"] for s in (42, 43, 44)]); gtm_zs = mean([mega[f"gt_multi_seed{s}"]["fastback"]["mean"] for s in (42, 43, 44)])
 GT_MEM, MT2_MEM = "2.70 GiB", "1.30 GiB"
 rows = [
-    ("GeoTransolver (9.0M), native frame", 1.0, gt_zs, f"{gt_dens:.1f}x",
-     f"{min(gt_pose):.0f}--{max(gt_pose):.0f}x", GT_MEM),
-    ("GeoTransolver + rotation augmentation", rot_in / gt10, rot_zs, "not measured",
-     f"{rot_pose:.2f}", GT_MEM),
-    ("GeoTransolver, canonical frame", canon_in / gt10, None, "not measured",
-     "1.00 (canonicalized)", GT_MEM),
-    ("ISLA (8.9M), constant-gauge variant", mt2c_in / gt10, mt2c_zs,
-     f"{min(mt2_dens_const):.1f}--{max(mt2_dens_const):.1f}x", f"{mt2_pose:.2f} (exact)", MT2_MEM),
-    ("ISLA (8.9M), similarity-gauge variant", gauge_in / gt10, gauge_zs,
-     f"{mean(mt2_dens_gauge):.2f}x", "1.00 (exact)", MT2_MEM),
+    ("GeoTransolver (9.0M), native frame", 1.0, gt_zs, f"{gt_dens:.1f}x", f"{min(gt_pose):.0f}–{max(gt_pose):.0f}x", GT_MEM),
+    ("GeoTransolver, rotation augmentation", rot_in / gt10, rot_zs, "not measured", f"{rot_pose:.2f}", GT_MEM),
+    ("GeoTransolver, canonical frame", canon_in / gt10, None, "not measured", "1.00 (canonicalized)", GT_MEM),
+    ("ISLA (8.9M), constant-gauge variant", mt2c_in / gt10, mt2c_zs, f"{min(mt2_dens_const):.1f}–{max(mt2_dens_const):.1f}x", f"{mt2_pose:.2f} (exact)", MT2_MEM),
+    ("ISLA (8.9M), similarity-gauge variant", gauge_in / gt10, gauge_zs, f"{mean(mt2_dens_gauge):.2f}x", "1.00 (exact)", MT2_MEM),
     ("GeoTransolver, two families", gtm_in / gt10, gtm_zs, "not measured", "not measured", GT_MEM),
     ("ISLA, two families, constant-gauge variant", mt2m_in / gt10, mt2m_zs, "not measured", "1.00 (exact)", MT2_MEM),
 ]
-out = ("| configuration | in-family (x GeoTransolver) | zero-shot (fastback) | density (10:1) "
-       "| pose (random SO(3)) | peak memory at 10k tokens |\n|---|---|---|---|---|---|\n")
+out = "| configuration | in-family (× GeoTransolver) | zero-shot (fastback) | density (10:1) | pose (random SO(3)) | peak memory at 10k tokens |\n|---|---|---|---|---|---|\n"
 for (n, i, z, d, r_, m) in rows:
-    zs = f"{z:.2f}" if z is not None else "not measured"
-    out += f"| {n} | {i:.2f}x | {zs} | {d} | {r_} | {m} |\n"
+    out += f"| {n} | {i:.2f}x | {('%.2f' % z) if z is not None else 'not measured'} | {d} | {r_} | {m} |\n"
 print(out)
-print(f": The DrivAerML frontier at full data, bfloat16 evaluation (ISLA rows are the "
-      f"constant-gauge and similarity-gauge variants; the reference configuration's float32 "
-      f"standing is in @tbl-consistency-matrix). In-family: validation pressure "
-      f"rel-L2 at 10,000 uniformly sampled points on 48 cars, relative to the "
-      f"GeoTransolver native-frame reference ({gt10:.4f}, seeds 42--44); all "
-      f"rows at learning rate 3e-3, 500 epochs, bf16. Zero-shot (fastback): "
-      f"mean normalized pressure L2 on the SHIFT-SUV fastback family, which no "
-      f"row trained on (single-family rows train on DrivAerML alone; "
-      f"two-family rows on DrivAerML plus the estate family); 1.0 is the "
-      f"level of predicting the mean. Density (10:1): pressure rel-L2 under "
-      f"10:1 spatially biased sampling with exact measure weights, over the "
-      f"same model's rel-L2 under uniform sampling (GeoTransolver seed 42; ISLA "
-      f"seeds 42/43; pool-frame values for GeoTransolver, whose sample-frame "
-      f"value is 12.1x, @tbl-density). Pose: pressure rel-L2 under random SO(3) poses over "
-      f"native-pose rel-L2 (GeoTransolver seeds 42--44; augmentation and ISLA "
-      f"seed 42; ISLA's covariance is exact by construction and verified in "
-      f"fp64, so its ratio is 1.00 for every checkpoint). Peak memory at 10k "
-      f"tokens: peak training memory at 10,000 tokens per case on one GB300, "
-      f"both models compiled, bf16 autocast, batch 1, geometry recompute on "
-      f"for ISLA (@sec-cost). Seeds per cell: GeoTransolver "
-      f"reference 3, augmentation 2, canonical frame 2, ISLA constant gauge 5 "
-      f"in-family and 3 zero-shot, ISLA similarity gauge 2, two-family rows 3. "
-      f"Data: "
+print(f": The DrivAerML frontier at full data, bfloat16 evaluation, every row trained on the 435-car split at learning rate 3e-3 "
+      f"(the float32 standing at each architecture's own rate is in @tbl-consistency-matrix). In-family: validation pressure error at "
+      f"10,000 points relative to the GeoTransolver native-frame reference ({gt10:.4f}, three seeds). Zero-shot (fastback): mean "
+      f"normalized pressure L2 on the SHIFT-SUV fastback family, which no row trained on; 1.0 is predicting the mean. Density: pool-frame "
+      f"values for GeoTransolver (its sample-frame value is in @tbl-density). Pose: random poses over native pose; ISLA's covariance is "
+      f"exact by construction. Peak memory: both models compiled on one GB300, geometry recompute on for ISLA. Data: "
       f"results/mixedres_training_2026-07-31/sweep/{{mega,round3,mt2_v3c,probe,p3v3}}_reduction.json, "
-      f"results/s1_similarity_gauge_2026-09-03.json, "
-      f"results/p1pp_canonical_training_2026-09-03.json. {{#tbl-frontier}}")
+      f"results/s1_similarity_gauge_2026-09-03.json, results/p1pp_canonical_training_2026-09-03.json. {{#tbl-frontier}}")
 ```
 
-The measure-weighted rows of @tbl-consistency-matrix are the steel-man the
-principle asked for, and they split the story in two. Accuracy: once
-GeoTransolver and Transolver carry the surface measure in their slice
-pooling (@sec-nb-mw-prereg, @sec-nb-mw-verdict) they keep their
-in-distribution lead over ISLA on both datasets, free on the cars and at a
-6.5% price on the wings, so ISLA's contracts do not buy accuracy at the
-reference size. Consistency: the pooling repair does not touch the frame.
-Both baselines consume absolute centred coordinates, and with the centre
-taken from the biased sample, as a biased mesher delivers it and as ISLA's
-centred variants compute it in the model, the weighted baselines degrade
-14–16x and the unweighted 12x (@sec-nb-mw-postcenter); the 9.5x and 3.9x
-in the artifact are pool-frame values, measured with an unbiased frame
-handed to them by the pipeline. Under a like-for-like frame only ISLA's
-frames that read no biased statistic survive (1.2x), and the frame is the
-whole of the density story at 10,000 cells for every architecture, which
-is what the reference configuration's relative frame removes. The
-measure-weighted and Horvitz–Thompson-centred baselines are research
-variants that locate that property; the released GeoTransolver and
-Transolver are the models compared, and they are not modified
-(@sec-nb-ruling-released-baselines). What ISLA retains beyond
-consistency is exact equivariance under arbitrary poses
-(@sec-pose-contract), the interior velocity lead at matched parameters
-(@sec-interior), and its memory footprint at scale.
-
-Three things to read off the bfloat16 table below. First, at the common
-learning rate the constant-gauge ISLA is about 1.2x behind GeoTransolver
-in-family in bfloat16; the float32 figures at each architecture's own rate
-put the reference configuration 10% behind (@sec-full-data-accuracy), and
-the table's column is the conservative one for ISLA. Second, on the common
-held-out fastback family no single-family row transfers: GeoTransolver
-scores 0.59 (0.82 with rotation augmentation) and ISLA 0.95--0.99 in
-either gauge, against 1.0 for predicting the mean; in float32 on two
-seeds the unit-direction GeoTransolver scores 0.61 and the constant-gauge ISLA
-at learning rate 1e-3 0.79 (0.98 at 3e-3). GeoTransolver's failure is the
-milder one, but neither is usable, neither gauge nor pose handling moves
-ISLA's, and a second training family moves both architectures to
-0.11--0.13. Cross-family transfer is governed by training-data diversity,
-with an architecture-dependent offset that does not change the verdict
-(@sec-limits). Third, the two robustness columns are where the rows differ
-by more than a seed spread: ISLA with the similarity gauge is the only row
-of this table that is both sampling-robust and pose-robust without a frame
-estimate, and the reference configuration, which is not in this table, has
-the same two properties with no sample statistic at all
-(@sec-robustness-density). At full DrivAerML data the gauge pays nothing
-for this in the in-family column (0.0638/0.0629 against 0.0636/0.0627 for
-the constant-gauge variant at the same rate), but at 35 HiLift cases it
-costs 8% (@sec-mechanism); the memory column is the same for every ISLA
-row.
+On the common held-out fastback family no single-family row transfers:
+GeoTransolver scores 0.59 (0.82 with rotation augmentation) and ISLA 0.95
+to 0.99 in either gauge, against 1.0 for predicting the mean; a second
+training family moves both architectures to 0.11 to 0.13. Cross-family
+transfer is governed by training-data diversity, with an
+architecture-dependent offset that does not change the verdict
+(@sec-limits).
+:::
 
 ## What is shared and what is not at full data {#sec-shared-floor}
 
 **At full data, 70% of each architecture's residual is shared with the
-other on identical points, seed disagreement does not predict error at full data,
-and accuracy is still rising with tokens per case; the current
-understanding is that both architectures approach a common floor set by
-the protocol at this token count.** The measurements behind that
-sentence are three.
+other on identical points, seed disagreement no longer predicts error, and
+accuracy is still rising with tokens per case; the current understanding is
+that both architectures approach a common floor set by the protocol at
+this token count.** Three measurements stand behind that sentence.
 
-The shared residual. Two GeoTransolver and two ISLA full-split
-checkpoints (the learning-rate 3e-3 pairs on DrivAerML, the 1e-3 pairs
-on HiLift) were evaluated on bit-identical validation points (10,000 per
-case) and their four pressure residual fields were averaged point by
-point; the shared fraction of a case is the measure-weighted energy of
-that mean residual divided by the mean of the four models' residual
-energies, so it is 1.0 when the four residuals coincide and 0.25 when
-they are mutually orthogonal with equal norms. Averaged over cases it is
-0.71 on DrivAerML (48 cars) and 0.70 on HiLift (180
-cases).^[`results/n1_noise_floor_2026-09-01.json`, `shared_residual_fraction`.]
-Whatever the two architectures get wrong at full data, they
-mostly get wrong together, and equally so on the two datasets. This is
-a measured fact about the residuals and nothing more; the probe cannot
-separate shared inductive bias from any property of the labels, because
-the four models share training set, pipeline, loss and point subsample.
+- **The shared residual.** Two GeoTransolver and two ISLA full-split
+  checkpoints were evaluated on bit-identical validation points and their
+  pressure residual fields averaged point by point; the measure-weighted
+  energy of the mean residual divided by the mean of the four residual
+  energies is 0.71 on DrivAerML and 0.70 on HiLift (1.0 would mean
+  identical residuals, 0.25 mutually orthogonal ones). Whatever the two
+  architectures get wrong at full data, they mostly get wrong together. The
+  probe cannot separate shared inductive bias from any property of the
+  labels. Data: results/n1_noise_floor_2026-09-01.json.
+- **Seed disagreement.** On the HiLift full split the per-case disagreement
+  between a model's two seeds correlates with its per-case error at
+  Spearman 0.15 for ISLA and 0.19 for GeoTransolver, against about +0.6 for
+  both at 210 training cases. Two-seed ensembling gains only 3 to 4%. The
+  same artifact shows ISLA with the larger seed-to-seed prediction spread on
+  both datasets.
+- **Tokens per case.** Reducing ISLA from 10,000 to 6,500 tokens costs 8% in
+  pressure error, so at 10,000 tokens the error is still resolution-bound;
+  at 80,000 cells and width 512 the three architectures are within about 5%.
 
-Seed disagreement. On the HiLift full split, the per-case disagreement
-between a model's two seeds correlates with its per-case error at
-Spearman 0.15 for ISLA and 0.19 for GeoTransolver (this analysis scores
-pressure on the gauge-pressure scale ‖p̂ − p‖/‖p − p_∞‖, a different
-scale from the recipe metric, on which the same checkpoints read
-0.11--0.12 rather than 0.041--0.042; the rank correlations are
-scale-free), against about +0.6 for
-both at 210 training cases and +0.67 for ISLA at 35
-(@sec-data-efficiency). At full data, where a model is uncertain is no
-longer where it is wrong, and two-seed ensembling gains only 3--4%. The
-same artifact shows ISLA with the larger seed-to-seed prediction spread
-on both datasets, which is why the learning-rate robustness of
-@sec-robustness-lr must not be read as robustness to seed.
-
-Tokens per case. Reducing ISLA from 10,000 to 6,500 tokens per case on
-DrivAerML costs 8% in pressure error (0.0684 against 0.0633 at the same
-learning rate), so at 10,000 tokens the error is still resolution-bound
-rather than saturated; at 80,000 cells and 512 hidden width the three
-architectures are within 3% of one another (@sec-full-data-accuracy). If
-the shared residual is a floor, it is a floor of the protocol (the token
-count, the sampled-point supervision, the labels) and not of either
-architecture, and the flattening of ISLA's data-efficiency curve toward
-1,260 cases (@sec-data-efficiency) would then be the floor asserting
-itself rather than a property of ISLA.
-
-The direct test is to train both architectures on the 1,260-case split
-at 20,000 tokens per case and ask whether their errors move down
-together, apart, or not at all. That is not measured
-(@sec-program-status), so the statement stands as a current
-understanding supported by three consistent measurements, not as a
-result.
-
-This is also the right place to state what the full-data result is and is
-not. It is a two- or three-seed, one-split measurement that GeoTransolver
-and Transolver are 7–10% more accurate than ISLA's reference
-configuration at 435 DrivAerML cars in float32, and that the constant-gauge
-ISLA reaches 0.041 at 1,260 HiLift cases with no unit-direction baseline
-measured beside it. It does not say that the architectures are equivalent
-up to that margin: on every HiLiftAeroML rung measured the baselines lead
-by 12–32% against the reference configuration (@sec-data-efficiency), the
-consistency and pose columns of @tbl-consistency-matrix separate the
-architectures in ISLA's favour, and ISLA's passive decode trails by about
-3x on the interior (@sec-interior), each in a different direction. Where
-the protocol is perturbed the architectures come apart, and @sec-limits
-collects where each one stops.
+If the shared residual is a floor, it is a floor of the protocol and not of
+either architecture, and the flattening of ISLA's data-efficiency curve
+toward 1,260 cases (@sec-data-efficiency) is the floor asserting itself.
+The direct test, both architectures on the 1,260-case split at 20,000
+tokens, moved each by about 5% and left their ratio unchanged
+(@sec-scoreboard), so the statement stands as a current understanding
+supported by consistent measurements, not as a result.
 
 ## Regime extrapolation: angle of attack and stall {#sec-regime-extrapolation}
 
 **Trained on one flow regime, neither ISLA nor GeoTransolver predicts the
 other.** Crossing from low to high angle of attack, or from attached to
 separated flow, multiplies surface-pressure error by roughly ten for both
-architectures, to a level worse than any architecture reaches from only
-35 training cases inside the regime (ISLA's reference configuration
-0.153, GeoTransolver 0.110, Transolver 0.114; @sec-data-efficiency). No
-architectural choice tested here substitutes for training data that
-covers the regime.
+architectures, to a level worse than any architecture reaches from only 35
+training cases inside the regime. No architectural choice tested here
+substitutes for training data that covers the regime.
 
-HiLiftAeroML (@sec-problem, @sec-splits) ships two curated partitions along
-that axis. The **aoa split** trains on 788 cases at angles of attack of 12°
-or less, validates on 112 further low-angle cases, and holds a sealed test
-set of all 900 cases at 14° or more. The **stall split** partitions by flow
-state rather than angle: 942 training and 135 validation cases labelled
-pre-stall by the dataset, and a sealed test set of 723 post-stall cases. In
-each split the validation set is in-regime, so the validation error
-measures how well the model learned the regime it was shown and the test
-error measures how far it carries beyond it. Training follows the frozen
-protocol of @sec-protocol (10,000 sampled surface points per case, 500
-epochs, bf16, no augmentation, learning rate 1e-3 for both architectures,
-ISLA in its constant-gauge variant, seeds 42 and 43; 8.9M against 9.0M
-parameters; memory and step time in @sec-cost). The GeoTransolver lanes
-on these splits consumed the physical freestream velocity, the input
-hazard of @sec-part-baseline, so the GeoTransolver rows are not a
-comparison with ISLA; the finding of this section, a ten-fold loss for
-every architecture, does not depend on that comparison. The sealed test was
-run under a protocol declared before any test case was read: the eight
-checkpoints were each evaluated exactly once on their own split's test list
-with the frozen inference configuration, with no reruns and no
-configuration changes after the numbers were seen.
+HiLiftAeroML ships two curated partitions along that axis. The **aoa split**
+trains on 788 cases at angles of 12° or less, validates on 112 further
+low-angle cases, and holds a sealed test set of all 900 cases at 14° or
+more. The **stall split** partitions by flow state: 942 training and 135
+validation cases labelled pre-stall, and a sealed test set of 723
+post-stall cases. In each the validation set is in-regime, so validation
+error measures how well the model learned the regime it saw and test error
+how far it carries beyond it. Training follows the frozen protocol with
+ISLA in its constant-gauge variant, two seeds. The GeoTransolver lanes on
+these splits consumed the physical freestream velocity, the input hazard of
+@sec-part-baseline, so the GeoTransolver rows are not a comparison with
+ISLA; the finding, a ten-fold loss for every architecture, does not depend
+on that comparison. The sealed test was run under a protocol declared
+before any test case was read: each checkpoint evaluated exactly once.
 
-The readout is the relative L2 error of surface pressure (@sec-metrics),
-averaged over the cases of a split, and the degradation ratio
+The readout is the seed-mean surface-pressure error on each side and the
+degradation ratio $d \equiv$ (sealed-test error in the other regime) ÷
+(validation error in the training regime): $d = 10$ means the model is ten
+times less accurate across the boundary.
 
-$$
-d = \frac{\text{sealed-test pressure rel-L2 (other regime)}}
-         {\text{validation pressure rel-L2 (training regime)}},
-$$
-
-computed per seed and reported as the seed mean, so d = 10 means the model
-is ten times less accurate on the other side of the boundary than on
-held-out cases from its own side.
-
-| split | architecture | validation (in-regime) | sealed test (OOD) | d = test / val |
+| split | architecture | validation (in-regime) | sealed test (other regime) | d = test ÷ validation |
 |---|---|---|---|---|
 | aoa | GeoTransolver | 0.0301 | 0.315 | 10.5 |
 | aoa | ISLA | 0.0207 | 0.244 | 11.8 |
 | stall | GeoTransolver | 0.0296 | 0.276 | 9.3 |
 | stall | ISLA | 0.0207 | 0.260 | 12.5 |
 
-: Regime extrapolation on HiLiftAeroML: seed-mean pressure rel-L2 on the
-in-regime validation set and on the sealed test set of the other regime,
-and their ratio d. Two seeds per cell; the per-seed values are the
-individual lines of @fig-hilift-ood. Validation from
-`results/hilift_ladder_reduction_2026-09-03.json`; test and d from
-`results/hilift_sealed_test_2026-09-04.json`, whose `protocol` and
-`inference_config` entries record the sealed-test declaration alongside
-the numbers. {#tbl-hilift-ood}
+: Regime extrapolation on HiLiftAeroML: seed-mean surface-pressure error on the in-regime validation set and on the sealed test set of the other regime, and their ratio. Two seeds per cell; the per-seed values are the lines of @fig-hilift-ood. Data: results/hilift_ladder_reduction_2026-09-03.json (validation), results/hilift_sealed_test_2026-09-04.json (test and d, with the sealed-test declaration recorded inside). {#tbl-hilift-ood}
 
 ```{python}
 #| label: fig-hilift-ood
 #| fig-cap: >
 #|   Regime extrapolation on HiLiftAeroML under the one-shot sealed test.
-#|   Left: the aoa split (788 training cases at 12° or less; 112 in-regime
-#|   validation cases; 900 sealed test cases at 14° or more). Right: the
-#|   stall split (942 pre-stall training cases; 135 in-regime validation
-#|   cases; 723 sealed post-stall test cases). Each line is one seed, joining
-#|   its in-regime validation pressure error to its sealed-test pressure
-#|   error; filled markers are seed 42, open markers seed 43; red circles are
-#|   GeoTransolver, blue squares ISLA. Each end is annotated with
-#|   the seed-mean error and each line pair with the seed-mean d = test / val.
-#|   What it does not show:
-#|   per-case pairing or statistics (each point is a split mean over two
-#|   seeds); anything about data efficiency (@fig-hilift-data-efficiency);
-#|   velocity or wall-shear error. Protocol: 10,000 sampled surface points
-#|   per case, 500 epochs, bf16, no augmentation, learning rate 1e-3 for both
-#|   architectures, ISLA in its default constant-gauge configuration. Data:
-#|   results/hilift_ladder_reduction_2026-09-03.json (validation) and
-#|   results/hilift_sealed_test_2026-09-04.json (test, d).
+#|   Left: the aoa split (train at 12° or less, sealed test at 14° or more).
+#|   Right: the stall split (train pre-stall, sealed test post-stall). Each
+#|   line is one seed, joining its in-regime validation error to its
+#|   sealed-test error; filled markers are the first seed, open markers the
+#|   second; red circles GeoTransolver, light-blue squares ISLA's
+#|   constant-gauge variant. Each end carries the seed mean and each pair the
+#|   seed-mean ratio. How to read this: from either side of a regime boundary
+#|   both architectures lose about a factor of ten; the vertical offset between
+#|   the colours is not a comparison (the GeoTransolver lanes consumed the
+#|   physical freestream velocity). It does not show per-case statistics or
+#|   any field other than pressure. Data:
+#|   results/hilift_ladder_reduction_2026-09-03.json,
+#|   results/hilift_sealed_test_2026-09-04.json.
 #| code-fold: true
-import json, statistics
-from pathlib import Path
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-# book palette (mirrors figures.py without importing it: that module
-# switches matplotlib to Agg, which suppresses inline output here)
-BLUE, RED = "#2a78d6", "#e34948"
-INK, INK2, MUTED, GRID, BASELINE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
-mpl.rcParams.update({"figure.dpi": 110, "font.size": 10, "axes.edgecolor": BASELINE,
-                     "axes.labelcolor": INK2, "axes.grid": True, "grid.color": GRID,
-                     "xtick.color": MUTED, "ytick.color": MUTED, "xtick.labelcolor": INK2,
-                     "ytick.labelcolor": INK2, "axes.spines.top": False,
-                     "axes.spines.right": False, "legend.frameon": False})
-
-lad = json.load(open(Path("..") / "results" / "hilift_ladder_reduction_2026-09-03.json"))
-sealed = json.load(open(Path("..") / "results" / "hilift_sealed_test_2026-09-04.json"))
-runs = sealed["runs"]
-style = {"gt": (RED, "GeoTransolver", "o"), "mt2": (BLUE, "ISLA", "s")}
-seeds = (42, 43)
-# In-regime validation sizes come from the dataset's curated split manifests
-# (112 low-angle cases for aoa, 135 pre-stall cases for stall); the sealed
-# test sizes are read from the artifact.
-n_val = {"aoa": 112, "stall": 135}
-panels = [("aoa", "Angle-of-attack extrapolation\n(train at 12° or less, test at 14° or more)"),
-          ("stall", "Stall extrapolation\n(train pre-stall, test post-stall)")]
-X_VAL, X_TEST = 0.0, 1.0  # the only two x positions used; no per-series offsets
-
+lad = json.load(open(RES / "hilift_ladder_reduction_2026-09-03.json"))
+sealed = json.load(open(RES / "hilift_sealed_test_2026-09-04.json")); runs = sealed["runs"]
+ARCH = {"gt": ("gt", "GeoTransolver"), "mt2": ("isla_cg", "ISLA, constant-gauge variant")}
+seeds = (42, 43); n_val = {"aoa": 112, "stall": 135}
+panels = [("aoa", "angle-of-attack extrapolation\n(train at 12° or less, test at 14° or more)"), ("stall", "stall extrapolation\n(train pre-stall, test post-stall)")]
+X_VAL, X_TEST = 0.0, 1.0
 fig, axs = plt.subplots(1, 2, figsize=(9.0, 4.9), sharey=True)
 for ax, (axis, title) in zip(axs, panels):
-    n_test = {runs[f"lad_hl_{a}_{axis}_seed{s}"]["n_test"] for a in style for s in seeds}
-    assert len(n_test) == 1
-    n_test = n_test.pop()
-    for arch, (c, name, mk) in style.items():
+    n_test = {runs[f"lad_hl_{a}_{axis}_seed{s}"]["n_test"] for a in ARCH for s in seeds}; assert len(n_test) == 1; n_test = n_test.pop()
+    for arch, (key, name) in ARCH.items():
+        c, mk = STYLE[key]["color"], STYLE[key]["marker"]
         vals, tests, ds = [], [], []
         for s in seeds:
-            key = f"lad_hl_{arch}_{axis}_seed{s}"
-            v, t, d = lad[key]["pressure_l2"], runs[key]["pressure_l2"], runs[key]["d_axis"]
-            assert abs(v - runs[key]["val_pressure_l2"]) < 1e-6  # the sealed-test file carries the same val number
+            k = f"lad_hl_{arch}_{axis}_seed{s}"
+            v, t, d = lad[k]["pressure_l2"], runs[k]["pressure_l2"], runs[k]["d_axis"]
             vals.append(v); tests.append(t); ds.append(d)
-            face = c if s == 42 else "white"  # filled = seed 42, open = seed 43
             ax.plot([X_VAL, X_TEST], [v, t], color=c, lw=1.5, alpha=0.9, zorder=3)
-            ax.plot([X_VAL, X_TEST], [v, t], ls="none", marker=mk, ms=7, mfc=face, mec=c, mew=1.6, zorder=4)
-        vmean, tmean, dmean = (statistics.mean(x) for x in (vals, tests, ds))
-        # Direct labels: seed-mean validation error left of the validation end,
-        # seed-mean test error and d right of the test end. GeoTransolver sits
-        # above ISLA at both ends, so its labels go above and ISLA's below.
-        up = arch == "gt"
-        ax.text(X_VAL - 0.06, vmean, f"{vmean:.3f}", color=c, fontsize=8.8, ha="right",
-                va="bottom" if up else "top")
-        ax.text(X_TEST + 0.10, tmean * (1.30 if up else 0.78),
-                f"{name}\n{tmean:.3f} on test,  d = {dmean:.1f}", color=c, fontsize=9.0,
-                fontweight="bold", ha="left", va="center", linespacing=1.3)
-    ax.set_yscale("log")
-    ax.set_xticks([X_VAL, X_TEST])
-    ax.set_xticklabels([f"in-regime validation\n({n_val[axis]} cases)", f"sealed OOD test\n({n_test} cases)"])
-    ax.set_xlim(-0.55, 2.35)
-    ax.set_title(title, color=INK, loc="left", fontsize=10.5, pad=8)
-    ax.grid(True, which="major", axis="y", color=GRID); ax.grid(False, which="minor"); ax.grid(False, axis="x")
-axs[0].set_yticks([0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5])
-axs[0].set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20", "0.30", "0.50"])
-axs[0].set_ylim(0.015, 0.6)
-axs[0].set_ylabel("Surface pressure error, rel-L2 [–]  (log)", color=INK2)
-fig.suptitle("Regime extrapolation on HiLiftAeroML: one-shot sealed test, one line per seed",
-             x=0.02, ha="left", color=INK, fontsize=11)
-fig.text(0.02, 0.02,
-         "Filled markers: seed 42. Open markers: seed 43. Left end of each line: pressure error on held-out cases from the\n"
-         "training regime. Right end: error on the sealed test split of the other regime, evaluated exactly once.\n"
-         "d = test / validation, seed mean.",
-         fontsize=7.6, color=MUTED, va="bottom", linespacing=1.35)
-fig.subplots_adjust(left=0.09, right=0.99, bottom=0.27, top=0.80, wspace=0.08)
+            ax.plot([X_VAL, X_TEST], [v, t], ls="none", marker=mk, ms=7, mfc=(c if s == 42 else "white"), mec=c, mew=1.6, zorder=4)
+        vmean, tmean, dmean = (mean(x) for x in (vals, tests, ds)); up = arch == "gt"
+        ax.text(X_VAL - 0.06, vmean, f"{vmean:.3f}", color=c, fontsize=8.8, ha="right", va="bottom" if up else "top")
+        ax.text(X_TEST + 0.10, tmean * (1.30 if up else 0.78), f"{name}\n{tmean:.3f} on test,  d = {dmean:.1f}", color=c, fontsize=9.0, fontweight="bold", ha="left", va="center", linespacing=1.3)
+    ax.set_yscale("log"); ax.set_xticks([X_VAL, X_TEST])
+    ax.set_xticklabels([f"validation,\nin regime\n({n_val[axis]} cases)", f"sealed test,\nother regime\n({n_test} cases)"], fontsize=9)
+    ax.set_xlim(-0.55, 2.35); ax.set_title(title, pad=8)
+    ax.grid(True, which="major", axis="y"); ax.grid(False, which="minor"); ax.grid(False, axis="x")
+axs[0].set_yticks([0.02, 0.03, 0.05, 0.1, 0.2, 0.3, 0.5]); axs[0].set_yticklabels(["0.02", "0.03", "0.05", "0.10", "0.20", "0.30", "0.50"])
+axs[0].set_ylim(0.015, 0.6); axs[0].set_ylabel("surface pressure error, area-weighted relative L2 [–]")
+fig.tight_layout()
 plt.show()
 ```
 
-::: {.callout-note title="How to read this figure"}
-It says: *from either side of a regime boundary, both architectures lose
-about a factor of ten.* The shallower red slope shows that GeoTransolver
-loses a smaller multiple of a worse starting point. The vertical offset
-between the colours is not a comparison between architectures (the
-GeoTransolver lanes consumed the physical freestream velocity,
-@sec-part-baseline). It does not show data efficiency, per-case
-statistics, or any field other than pressure, and it is a two-seed,
-one-shot measurement.
-:::
-
-Three readings follow, in order of importance. **Neither architecture
-generalizes across a flow-regime boundary:** both lose a factor of about
-ten, from 0.021–0.030 in regime to 0.24–0.33 on the sealed test, and those
-test errors are worse than any architecture reaches from 35 in-regime
-training cases (0.11–0.15; @sec-data-efficiency). A model that has seen
-788 or 942 cases of the wrong regime is less useful than one that has seen
-35 cases spanning both; coverage of the regime, not architecture, governs
-this axis, and the other fields degrade the same way (sealed-test velocity
-rel-L2 0.19–0.26 and wall shear 0.32–0.39 for all eight checkpoints,
-against 0.04–0.06 and 0.07–0.10 in regime). **The absolute errors of the
-two architectures on these splits are not a comparison.** The GeoTransolver
-lanes consumed the physical freestream velocity (@sec-part-baseline), so
-its in-regime 0.030 against ISLA's 0.021 and its sealed-test 0.315 and
-0.276 against 0.244 and 0.260 carry that input; no unit-direction lane on the
-regime splits is measured. **GeoTransolver has the smaller degradation
-ratio because its in-regime floor is higher:** the two converge to similar
-sealed-test error from different starting points, and a ratio criterion
-rewards the worse starting point. The stall-split ratios are separated by
-more than their seed spread (d_GT/d_ISLA 0.74 with disjoint seed
-intervals), so the smaller ratio is a real feature of these numbers, and
-the one mechanism proposed for it was tested and falsified
-(@sec-ood-mechanism). The measurement is two seeds and one evaluation per
-checkpoint with no per-case pairing; the ten-fold degradation is robust to
-that. Both splits are drawn from one wing family; cross-family transfer is
-treated in @sec-shared-floor and @tbl-frontier.
+Three readings, in order of importance. **Neither architecture generalizes
+across a flow-regime boundary**: both lose a factor of about ten, from 0.021
+to 0.030 in regime to 0.24 to 0.33 on the sealed test, worse than any
+architecture reaches from 35 in-regime training cases (0.11 to 0.15). A
+model that has seen hundreds of cases of the wrong regime is less useful
+than one that has seen 35 spanning both; coverage, not architecture,
+governs this axis, and velocity and wall shear degrade the same way. **The
+absolute errors of the two architectures here are not a comparison**, for
+the input reason above. **GeoTransolver's smaller ratio is the arithmetic of
+a higher in-regime floor**: the two converge to similar sealed-test error
+from different starting points, and a ratio criterion rewards the worse
+start. The one mechanism proposed for the smaller ratio was tested and
+falsified (@sec-ood-mechanism).
 
 ### The smaller ratio is not carried by raw coordinates {#sec-ood-mechanism}
 
-**Giving ISLA a raw-coordinate input channel does not give it
-GeoTransolver's smaller degradation ratio: the variant's d is 12.7 and 13.3
-against ISLA's 12.5 and GeoTransolver's 9.3, and its sealed-test error is
-unchanged (0.264 against 0.260).** The hypothesis was that GeoTransolver's
-pointwise raw coordinates let it carry a learned map from position on the
-wing to pressure across the boundary. The test adds those coordinates to
-ISLA as a side channel appended to its seed invariants, deliberately
-breaking rotation equivariance (a contract test asserts the break), with
-the similarity gauge on; two seeds on the stall split under the otherwise
-frozen protocol, and one permitted sealed-test evaluation of the two new
-checkpoints only. Bars declared in readout units before training: raw
-features carry the transfer if d ≤ 11.0 *and* sealed-test pressure error
-< 0.245; they do not if d ≥ 12.0 *or* the error is ≥ 0.255.
+::: {.callout-note collapse="true" title="The raw-coordinate falsification test"}
+The hypothesis was that GeoTransolver's pointwise raw coordinates let it
+carry a learned map from position on the wing to pressure across the
+boundary. The test adds those coordinates to ISLA as a side channel,
+deliberately breaking rotation equivariance, on the stall split with two
+seeds and one permitted sealed-test evaluation. Bars declared before
+training: raw features carry the transfer if $d \le 11.0$ and sealed-test
+error $< 0.245$; they do not if $d \ge 12.0$ or the error is $\ge 0.255$.
 
 ```{python}
 #| output: asis
 #| code-fold: true
-import json, statistics
-from pathlib import Path
 from IPython.display import Markdown, display
-
-res = Path("..") / "results"
-b1 = json.load(open(res / "b1_raw_coordinate_discriminator_2026-09-07.json"))
-lad = json.load(open(res / "hilift_ladder_reduction_2026-09-03.json"))
-sealed = json.load(open(res / "hilift_sealed_test_2026-09-04.json"))["runs"]
-
+b1 = json.load(open(RES / "b1_raw_coordinate_discriminator_2026-09-07.json"))
 def ref(arch):
     keys = [f"lad_hl_{arch}_stall_seed{s}" for s in (42, 43)]
-    v = statistics.mean(lad[k]["pressure_l2"] for k in keys)
-    t = statistics.mean(sealed[k]["pressure_l2"] for k in keys)
-    d = statistics.mean(sealed[k]["d_axis"] for k in keys)
-    return v, t, d
-
-lines = ["| configuration (stall split) | in-regime validation | sealed post-stall test | d = test / val |",
-         "|---|---:|---:|---:|"]
+    return (mean(lad[k]["pressure_l2"] for k in keys), mean(runs[k]["pressure_l2"] for k in keys), mean(runs[k]["d_axis"] for k in keys))
+lines = ["| configuration (stall split) | in-regime validation | sealed post-stall test | d = test ÷ validation |", "|---|---:|---:|---:|"]
 n_test = []
 for s in (42, 43):
-    r = b1[f"b1_hl_mt2_stall_rawcoord_seed{s}"]
-    n_test.append(r["stall_test"]["n"])
-    lines.append(f"| ISLA + raw-coordinate channel, seed {s} | {r['val']['pressure_l2']:.4f} "
-                 f"| {r['stall_test']['pressure_l2']:.3f} | {r['d_axis']:.1f} |")
-for arch, name in (("mt2", "ISLA reference (constant gauge), seed mean"), ("gt", "GeoTransolver, seed mean")):
-    v, t, d = ref(arch)
-    lines.append(f"| {name} | {v:.4f} | {t:.3f} | {d:.1f} |")
-caption = (": Raw-coordinate variant of ISLA on the stall split against the reference rows of "
-           "@tbl-hilift-ood: pressure rel-L2 on the 135 in-regime validation cases, on the sealed "
-           "post-stall test, and their ratio d. Preregistered bars: raw coordinates carry the ratio "
-           "if d ≤ 11.0 and test error < 0.245; they do not if d ≥ 12.0 or test error ≥ 0.255. "
-           f"The variant's artifact records {n_test[0]} (seed 42) and {n_test[1]} (seed 43) evaluated "
-           "test cases; the reference rows are means over the full 723-case test list. Data: "
-           "results/b1_raw_coordinate_discriminator_2026-09-07.json (variant); "
-           "results/hilift_ladder_reduction_2026-09-03.json and "
-           "results/hilift_sealed_test_2026-09-04.json (reference rows). {#tbl-hilift-rawcoord}")
+    r = b1[f"b1_hl_mt2_stall_rawcoord_seed{s}"]; n_test.append(r["stall_test"]["n"])
+    lines.append(f"| ISLA with a raw-coordinate channel, seed {s} | {r['val']['pressure_l2']:.4f} | {r['stall_test']['pressure_l2']:.3f} | {r['d_axis']:.1f} |")
+for arch, name in (("mt2", "ISLA, constant-gauge variant, seed mean"), ("gt", "GeoTransolver, seed mean")):
+    v, t, d = ref(arch); lines.append(f"| {name} | {v:.4f} | {t:.3f} | {d:.1f} |")
+caption = (": The raw-coordinate diagnostic on the stall split against the rows of @tbl-hilift-ood. Preregistered bars: raw coordinates "
+           "carry the ratio if d ≤ 11.0 and test error < 0.245; they do not if d ≥ 12.0 or test error ≥ 0.255. The diagnostic's "
+           f"artifact records {n_test[0]} and {n_test[1]} evaluated test cases for its two seeds; the reference rows are means over the "
+           "full 723-case list. Data: results/b1_raw_coordinate_discriminator_2026-09-07.json, "
+           "results/hilift_ladder_reduction_2026-09-03.json, results/hilift_sealed_test_2026-09-04.json. {#tbl-hilift-rawcoord}")
 display(Markdown("\n".join(lines) + "\n\n" + caption))
 ```
 
-Both falsifier conditions fire on both seeds. The channel leaves in-regime
-accuracy where the reference ISLA has it (0.0206/0.0201 against
-0.0204/0.0210) and the sealed-test error where it was, so GeoTransolver's
-smaller ratio is the arithmetic of a higher in-regime floor and not a
-transfer mechanism its inputs carry; on the absolute readout there is no
-transfer advantage to explain, and no GeoTransolver ablation removing its
-raw coordinates is warranted.
+Both falsifier conditions fire on both seeds: the channel leaves in-regime
+accuracy and sealed-test error where the reference ISLA has them, so
+GeoTransolver's smaller ratio is arithmetic and not a transfer mechanism its
+inputs carry.
+:::
 
 **In practice, a regime boundary must be covered by training data; a
 surrogate's in-regime accuracy does not predict its accuracy on the other
 side.** A few dozen post-stall cases are worth more than hundreds of
 additional attached-flow cases if post-stall predictions are needed, and a
 validation set drawn from the training regime overstates the model's range
-by an order of magnitude. Any reported accuracy for these surrogates
-should state the angle-of-attack and flow-state coverage of the training
-data alongside the error. Outside that coverage no architecture is
-usable, and the choice between them is not the decision that matters.
+by an order of magnitude. Any reported accuracy for these surrogates should
+state the angle-of-attack and flow-state coverage of the training data
+alongside the error.

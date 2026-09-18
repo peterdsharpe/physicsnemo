@@ -1,160 +1,68 @@
 # Program status: the research tech tree {#sec-program-status}
 
-This appendix is the one place in the book that is a live status ledger rather than a presentation of settled knowledge: it records which experiments are running, planned, done or stopped, with dates, so that a reader can see what is still open. Every row links to the dated lab-notebook entry (@sec-notebook) holding the preregistration and verdict. Polished chapters cite results only once they are in the DONE state here.
+**This chapter is the one place in the book that is a live status ledger
+rather than settled knowledge.** The program is run as a tech tree: every
+experiment is a node with a preregistered question, the nodes it depends
+on, an acceptance criterion written before the run, and a dated verdict in
+the lab notebook (@sec-notebook). A polished chapter cites a result only
+once its node is DONE here. Because this is a ledger, it is also the one
+chapter where dates and node codes appear; everywhere else an experiment is
+named by what it measures.
+
+**How to read status.** Each node carries one of six words, written in its
+label and repeated in the ledger: PLANNED (a prerequisite is unmet), READY
+(can start now), RUNNING (has an active job or owner), BLOCKED (needs an
+external resolution), DONE (its acceptance criterion was met or its
+falsifier fired), STOPPED (deliberately
+abandoned, refuted, or superseded). Shape and border repeat the word:
+DONE nodes are plain boxes with a green border, RUNNING nodes are rounded
+boxes with a blue fill, PLANNED and READY nodes are hexagons with a dashed
+grey border, STOPPED nodes are stadium shapes with a grey fill. An arrow
+from A to B means B could not start until A produced what it needed. The
+tree is drawn as five thematic sub-trees; a node appears in one sub-tree
+and its full dependency list is in the ledger's fourth column. Ratios
+follow the book's convention, baseline error divided by ISLA error.
 
 ## The tech tree {#sec-tech-tree}
 
-The program is run as an explicit tech tree: every experiment is a node
-with a preregistered question, a dependency, an acceptance criterion, and a
-dated verdict in the lab notebook (@sec-notebook). Two architectures recur
-throughout. **ISLA** is the program's product: an SE(3)-equivariant
-slice-routing surrogate, exact under rotations and translations by
-construction, with an optional measure-weighted similarity gauge
-(measure-weighted centroid and RMS-radius reference length) that is the
-reference configuration for new runs since 2026-09-03; the checkpoints most
-of this book reports predate that gauge and saw absolute scale through a
-constant reference length (@sec-mt2-architecture). **GeoTransolver** is
-the strongest baseline tested under this protocol, a soft-slice global-attention architecture
-with pointwise raw-coordinate features and no equivariance contract; plain
-**Transolver**, the same attention family without GeoTransolver's geometry
-encoder, is the same-family control. The exact-kernel MeshTransformer, an
-earlier design of this program, appears in the tree's history (nodes G3,
-G3K, K0, V0) and nowhere in the recommendation; its code and its Laplace
-benchmark suite were removed from the repository on 2026-09-14 (last carried
-by the git tag `mt1-final`), and its archived results remain under
-`results/`. The central open question
-the tree is now organized around is **whether ISLA has any accuracy
-advantage once every model receives the freestream at the same unit scale,
-and what its contracts are worth**: the unit-drive control (UDRV) showed
-that the baselines' small-data deficit on HiLiftAeroML was an input-scaling
-artifact of the comparison protocol, the unit-drive ladder (UDRV-L) and the
-interior control (UDRV-INT) re-measure every remaining comparison, and the
-book's verdict (@sec-verdict) is rewritten from their readouts.
+### Foundations and the reframing
+
+The early nodes set the question (generalization measured as curves, not
+points), audited ISLA's own contracts, and ended in an independent critic
+review that reframed the program around the fair-comparison protocol.
 
 ```{mermaid}
 %%| fig-cap: >
-%%|   The program tech tree as of 2026-09-09. Green: done,
-%%|   with the verdict in the node. Amber: running. Blue: ready to start. Gray dashed: planned,
-%%|   gated on an upstream readout. Red: a verdict that was later
-%%|   retracted, voided, or overturned; the node that did so is its
-%%|   downstream neighbour. Every node has a ledger row below with its
-%%|   acceptance criterion and notebook evidence link.
+%%|   Sub-tree 1: foundations and the critic review. Status is written in
+%%|   every node; DONE nodes have a green border, PLANNED nodes are dashed
+%%|   hexagons. The exact-kernel MeshTransformer, an earlier design of this
+%%|   program, appears only here (G3, G3K, K0) and in the interior sub-tree
+%%|   (V0).
 flowchart TB
-    classDef done fill:#eaf7ea,stroke:#2a6a2a,color:#1a1a1a
-    classDef running fill:#fff8e8,stroke:#8a6d1a,color:#1a1a1a
-    classDef planned fill:#f2f1ec,stroke:#898781,color:#1a1a1a,stroke-dasharray:4 3
-    classDef retracted fill:#fbeaea,stroke:#a33a3a,color:#1a1a1a
-    classDef stopped fill:#ecebe6,stroke:#52514e,color:#1a1a1a
-    classDef ready fill:#e8f0fb,stroke:#2a78d6,color:#1a1a1a
-
-    NSTAR["NSTAR: generalization north star<br/>(measure curves, not points)<br/>DONE - framing adopted"]:::done
-    G1G2["G1G2: data-scaling + transfer ladder<br/>DONE - GeoTransolver's transfer compounds<br/>with data; ISLA's is flat (2 seeds/rung)"]:::done
-    LOC["LOC: locality-hypothesis ladder<br/>DONE - REFUTED as the transfer carrier<br/>(constant 3-5% in-family offset only)"]:::done
-    M1["M1: scale-relaxation arm<br/>DONE - verdict VOID: ISLA already saw<br/>absolute scale (constant gauge)"]:::retracted
-    M2["M2: v5a4 anchor-conditioned decode<br/>DONE - CLOSED at pilot gate<br/>(0.01517 vs 0.01500 bar)"]:::done
-    M3["M3: invariant-completeness audit<br/>DONE - PARTIAL: ceiling real; not established<br/>as the cause on cars; parity defect found"]:::done
-    M4["M4: NEO normalization audit<br/>DONE - closure RETRACTED (unweighted<br/>centroid), then REFUTED by S1"]:::retracted
-    G3["G3: 2D BC-generalization ladder<br/>DONE - amplitude extrapolation exact<br/>under linearity; T1 frequency verdict<br/>OVERTURNED by G3K"]:::retracted
-    HL["HL: high-lift wave (HiLiftAeroML)<br/>DONE - parity at best lr (GeoTransolver/ISLA 1.02);<br/>physical-drive GT; unit-drive rerun in UDRV-L"]:::done
-    N1["N1: DrivAerML noise-floor probe<br/>DONE - NON-DISCRIMINATING (shared<br/>residual 0.71 vs 0.70 on HiLift)"]:::done
-    R1["R1: symmetric lr-robustness grid<br/>DONE - CONFIRMED: GT 4-14x at lr 1e-2,<br/>ISLA 1.55x; best-vs-best 1.085x"]:::done
-    V6["V6: anchor decode at matched VRAM<br/>DONE - 3.1x worse; M2 closed for good"]:::done
-    PAR["W1, W1', L2, W2, W2': parity thread<br/>DONE - CLOSED NEGATIVE: exact O(3)<br/>costs >= 12% wall shear or fails to train"]:::done
-    L1["L1 / L1b: label + prediction covariance<br/>DONE - labels mirror-covariant to <1%;<br/>default head already covariant"]:::done
-    CRIT["CRIT: independent critic review<br/>DONE - similarity-equivariance and<br/>measure-completeness claims contradicted<br/>by the code; program reframed"]:::done
-    G3K["G3K: G3 rerun, kernel decoder<br/>DONE - OVERTURNS G3-T1: kernel MT1<br/>generalizes frequency (0.070 vs 1.00)"]:::done
-    K0["K0: potential-flow oracle gate<br/>DONE - GATE FAILED (rel-L2 4.8 vs 0.77);<br/>K1 / K2 STOPPED"]:::done
-    P1C["P1' / P1'': GT canonicalization control<br/>DONE - canonically trained GT exactly<br/>pose-invariant at 1.01x; 1.6x headline retired"]:::done
-    S1["S1: similarity gauge (weighted centroid<br/>+ RMS radius)<br/>DONE - free in-family; P3 13-14.5x -> 1.20x;<br/>zero-shot unchanged; gauge ADOPTED"]:::done
-    HLGEN["HLGEN: HiLift generalization ladder<br/>DONE - ISLA 2.8x / 2.2x vs PHYSICAL-DRIVE baselines at<br/>35 / 210 cases, parity at 1,260; both arms degrade ~10x<br/>across a regime boundary. Superseded as a comparison by UDRV / UDRV-L"]:::retracted
-    CTRL["CTRL: GeoTransolver small-n steel-man<br/>controls (lr 3e-3; 1,000 epochs; 35 and 210)<br/>DONE - 4 of 4 landed, none near the falsifier;<br/>all kept the physical-velocity input: could not find<br/>the artifact UDRV found"]:::done
-    T1["T1: plain Transolver same-family control<br/>(35 and 210 cases)<br/>DONE - 2.9x behind ISLA at 35 with the physical drive;<br/>0.83x (ahead) with the unit drive (UDRV)"]:::done
-    A35["A35: ISLA single-factor ablations at 35<br/>DONE - raw coords 1.04x: equivariance is NOT<br/>the carrier; measure weights off 0.88x"]:::done
-    A35B["A35b: raw seeds / no relational geometry<br/>at 35 cases<br/>DONE - 0.99x / 1.16x: DISTRIBUTED; no single<br/>ISLA contract carries the advantage"]:::done
-    INV["INV: drive invariants [n.d, r.d, |r|/L] as INPUTS<br/>to GeoTransolver and Transolver at 35 cases<br/>DONE - NOT the carrier: Transolver 0.297<br/>(inconclusive band), GeoTransolver 0.394 (falsified)"]:::done
-    W2["W2: power (seed 44), 510-case rung, 20k-token<br/>floor test, single-AoA mechanism, forces<br/>DONE - A, B, D, E done against PHYSICAL-DRIVE baselines (B: ISLA 0.0495 at 510 cases); 2.2x at 210,<br/>5.0x single angle, 180/180 at 35; superseded as comparisons by UDRV / UDRV-L;<br/>C done 2026-09-17: 20k cells at 1,260 cases lowers GT and ISLA by 4-5%, ratio 0.885 vs 0.878 at 10k, no token floor"]:::done
-    W2F["W2-F: unseen-geometry ladder (210, 40 cases)<br/>+ GT single-angle lr 3e-3 steel-man<br/>DONE - 1.8x (4 geometries), 1.4x (21) vs PHYSICAL-DRIVE GT;<br/>superseded as a comparison by UDRV-L lanes 12-15"]:::done
-    DEFL["DEFL: deflection split (geometry-parameter extrapolation,<br/>sealed one-shot test, 360 cases)<br/>DONE - FALSIFIED: ISLA 1.16x unit-direction GeoTransolver on the sealed test;<br/>both degrade 1.23x / 1.25x across the boundary"]:::stopped
-    QT["QT: ISLA query tokens (interior queries interact)<br/>DONE - interior pressure 0.064 vs GT-volume 0.062 (1.03x, bar 1.3);<br/>velocity 1.16x, nu_t 1.71x; 8.9M vs 27.6M params"]:::done
-    QTSDF["QT-SDF: query tokens + signed distance as input<br/>DONE - float32, three seeds: pressure 1.08x GT, velocity 0.75x, nu_t 1.27x at 8.9M vs 27.6M (bf16 read 0.91x/0.64x/1.29x);<br/>QT-SDF/QT 0.89 (inconclusive band on pressure)"]:::done
-    QTSDFL["QT-SDF ladder: signed-distance configuration at 54 and 109 cars<br/>DONE - 54 cars: pressure 1.11 (inconclusive band), velocity 0.83 (closed), nu_t 1.44;<br/>109: 1.06 / 0.73 / 1.49; pressure curves cross between 109 and 435"]:::done
-    QTLF["QT-SDF-LF: local surface-patch features on query tokens<br/>(third difference; target nu_t 1.29x)<br/>STOPPED - falsified: nu_t 0.127 vs 0.122 (1.36x GT); pressure and velocity unchanged"]:::stopped
-    QTH256["QT-SDF h256: width control (15.7M params; a width increase,<br/>GT-volume runs at effective width 448)<br/>DONE - float32: nu_t 1.17x GT (inconclusive band; bf16 read 1.26x), pressure 1.02x, velocity 0.72x; capacity not excluded"]:::done
-    V0L["V0-L: interior data efficiency at 54 cars<br/>(ISLA-QT vs GT-volume)<br/>DONE - GT leads 1.21x (54) and 1.20x (109); parity at 435;<br/>GT slope halves above 109 (0.41 to 0.17), ISLA 0.42 to 0.28"]:::done
-    DRVSTA["DRV-STA: where on the car is the DrivAerML gap?<br/>DONE - uniform; rear/front 1.10, 1.03 (bar 1.1);<br/>wake-context extension closed"]:::done
-    MEM2["MEM2: rebuild per-slice invariants in backward<br/>DONE - exact; 2.3x less peak memory, 1.16x step"]:::done
-    IO1["IO1: HiLift reader I/O (read amplification 1 GB/sample)<br/>STOPPED - positional reads 4-5x slower in the loop on lustre;<br/>fix is dataset layout (owner decision)"]:::stopped
-    V0["V0: boundary-to-interior (DrivAerML volume)<br/>DONE - GT 0.062; ISLA-interior 2.6-3.1x worse;<br/>kernel MT1 8x worse, CLOSED on far band"]:::done
-    LVT["LVT: equivariant latent volume tokens<br/>(Branch V)<br/>STOPPED - FALSIFIED: 3.68x GT and 1.43x<br/>worse than the plain interior decode"]:::retracted
-    STEST["STEST: sealed OOD test (aoa, stall)<br/>DONE - both ~10x worse OOD; ISLA lower<br/>absolute error; GeoTransolver smaller ratio d;<br/>Branch B triggered on stall (0.74)"]:::done
-    B1["B1: raw-coordinate discriminator<br/>(ISLA + gauge + raw_coord_channel, stall split)<br/>DONE - FALSIFIED: d 12.7/13.3 vs GT 9.3;<br/>raw coordinates do not carry the ratio"]:::done
-    HLREG["HLREG: where on the wing does the advantage live?<br/>per-element and gap-distance error ratio at 35 and 210 cases (eval-only)<br/>DONE - falsified in direction vs physical-drive GT (2.0x gap band, 3.0x open);<br/>no advantage left to localize at 35 cases after UDRV; conditional on UDRV-L"]:::done
-    MT3["MT3: MT3 preregistration<br/>PLANNED - gated on B1 + INV + W2"]:::planned
-    G5["G5: single-factor generalization on the<br/>cfd-datagen corpus (pose/scale/Re/mesh twins,<br/>held-out banks and BC profiles)<br/>PLANNED - gated on corpus launch"]:::planned
-    UDRV["UDRV: baselines with the unit freestream direction<br/>(GT and Transolver at 35 cases and the fixed angle)<br/>DONE at 35 cases and the fixed angle - SUPPORTED far past the bar; fixed angle: unit GT 0.029, T 0.032 vs ISLA 0.036 (18/18 geometries); GT 0.124 (was 0.381), Transolver 0.115 (was 0.404)<br/>vs ISLA 0.138; baselines ahead 0.90x / 0.83x, lower on 130 / 152 of 180 cases;<br/>the small-data deficit was an input-scaling artifact. Fixed-angle lanes still training"]:::done
-    UDRVINT["UDRV-INT: GeoTransolver-volume with the unit freestream direction (DrivAerML interior)<br/>DONE - null: unit-drive GT-volume 0.0617/0.131/0.0936 vs 0.0620/0.1334/0.0939 (all within 3%); interior ordering stands"]:::done
-    QMASS["QMASS: query-mass convention repair + companion-count probe<br/>(source-refinement, composition contracts)<br/>DONE - repair committed; trained QT+SDF: pressure 0.062 at 10k queries, 0.110 at 1k, 0.056 at 40k; passive 0"]:::done
-    EXPO["EXPO: program-level exposure ledger (HiLift)<br/>DONE - no unexposed HiLift geometry; full_test shares 179 cases,<br/>geometry/deflection tests 182 each with STEST"]:::done
-    GEOSTAT["GEOSTAT: geometry-level paired statistics<br/>(18 geometries x 10 angles on W2-F and single angle)<br/>DONE - 18/18 and 118/118 vs PHYSICAL-DRIVE baselines; unit-drive at 35: GT ahead on 84/118 geometries"]:::done
-    FORCEREF["FORCE-REF: force reference ladder<br/>(10k / 20k / 40k cells / full surface)<br/>READY - 3% and 0.6% are against sampled-cell label integrals"]:::ready
-    MEMINST["MEM-INST: matched memory instrument<br/>(allocated and reserved, both models, one harness)<br/>DONE - one harness: ISLA current 1.6 GiB, as trained 9.3 GiB, GeoTransolver 4.1 GiB; ISLA step 3.7x slower"]:::done
-    PASSIVE2["PASSIVE2: query independence at fixed query depth and readout<br/>DONE via companion D1 - passive read through 12 blocks from a 5k interacting support: 1.43x / 1.34x / 2.41x vs interacting QT+SDF;<br/>falsified (bar 0.060); passive route closed at matched depth; repair = query-count augmentation"]:::done
-    MOM2["MOM2: second-moment channel vs local-distance channel<br/>on the first-moment collision family (expressivity benchmark)<br/>DONE - supported: second-moment and local channels both recover the azimuth (R2 0.996-1.000); base blind\"]:::done
-    MOM2T["MOM2-T: second-moment channel trained on DrivAerML surface, 435 cars<br/>DONE - free: pressure 0.0583 vs 0.0577 (+0.9%, under the 3% bar); wall shear not measured"]:::done
-    MEASMET["MEAS-METRIC: are the measure weights a metric mismatch? (eval-only)<br/>DONE - falsified: no-weights advantage unchanged under the area-weighted metric (1.116 vs 1.119)"]:::done
-    NOWL["NOW-L: measure weights off at 210 HiLift cases and on DrivAerML (ablation: what does the measure semantics cost?)<br/>DONE - DrivAerML 2.9% (fades); 210 cases 8.4% (persists; 0.0589 vs 0.0643, 150/180); ablation only, reference-configuration rule RETIRED"]:::done
-    WAVE3["WAVE-3: unit-drive baselines on every rung and on DrivAerML, ISLA weights-off ablation ladder,<br/>third seeds, lr steel-men for the new baselines (35 lanes)<br/>RUNNING - weights-off ablation gains 12% / 17% / 10.6% at 35, 4 geometries, fixed angle (cost of the measure semantics; never adopted); 210, 21 geometries, 1,260, deflection pending"]:::running
-    FP32["FP32-EVAL: float32 re-evaluation of every reported checkpoint (reporting instrument)<br/>DONE - 230 checkpoints; bf16 offset is an additive floor (ISLA HiLift -0.7%, Transolver -8%, GT DrivAerML -10%);<br/>all rungs re-graded, float32 is the reporting instrument"]:::done
-    CAMPA["CAMPA: 35-case unit-drive arms on three further geometry-stratified draws × three seeds (fp32)<br/>DONE at 35 - orderings stand on every draw (GT÷ISLA 0.88-0.96, T÷ISLA 0.85-0.90, off÷on 0.90-0.95);<br/>between-draw SD is 3-11x seed SD: future rungs need draws, not seeds; 210-case rung RUNNING"]:::done
-    UDRV --> CAMPA
-    TRANSFER["TRANSFER: cross-dataset generalization companion (research/transfer_program)<br/>RUNNING - done: POSE-BENCH (ISLA 6-19% ahead in arbitrary poses), campaign A at 35 (draw intervals), T3 few-shot (GT 31%, ISLA 6%),<br/>T2 diversity trade (-81-84% fastback at +19-32% in-family), campaign D local features (general 4-7% carrier);<br/>campaign C CLOSED (T1 null: a family flag changes nothing; T2 decomposed: mixing cost 8% at 50% share, 17% at 65% for ISLA, 4% for GT; T3 GT-only), D1 falsified, campaign D done;<br/>running: campaign A at 210 (36 lanes), wake / latent-token far-field arms"]:::running
-    KERNEL["KERNEL: point-over-slices softmax kernel (fast_point_softmax)<br/>DONE - 3.2x step (230 -> 72 ms at 10k cells), training-neutral (+1.8% float32, inside the 3% bar),<br/>float32 evaluation kernel-independent; default True since 2026-09-10"]:::done
-    KSTUDY["KSTUDY: kernel study (roofline, profiles, Pareto of exact implementation options, GB300)<br/>DONE - compiled path 1.05x GT at 10k (0.86x no-ckpt); 3.7x was the retired softmax eager; fused geometry kernel exact, opt-in, parity at 40k"]:::done
-    RELINT["RELINT: the interior query-token configuration on the reference frame<br/>(relative frame, total-measure scale, HT-corrected boundary measure)<br/>DONE - supported: 1.000x / 0.990x / 0.880x of the similarity-gauge interior reference; first attempt void (uncorrected measure)"]:::done
-    GLOBIN["GLOBIN: global inputs - zero or more global vector inputs and zero or more global scalar inputs<br/>DONE - K = 1, S = 0 bitwise the former model on 14 configurations; 15 new contract tests; 'drive' retired; non-aerodynamic acceptance case open"]:::done
-    GLOBACC["GLOBIN-ACCEPT: screened-Poisson family, no global vector, one global scalar, Dirichlet trace<br/>DONE - 9,000 steps: 0.043 / 0.045 (bar 0.10 met), 13-17x over trivial predictors; scalar input helps 1.41x (3,000 steps: bar missed by one seed)"]:::done
-    GLOBDIS["GLOBIN-DISCRIM: sphere family, trace blind to the parameter<br/>DONE - scalar arm 0.077 / 0.070 (bar 0.10), blind arm 3.8x worse (bar 2x): scalar conditioning is decisive and the seed-append route suffices"]:::done
-    KNEUT["KERNEL-NEUTRAL: fused geometry kernel as the only change to the DrivAerML reference lanes<br/>DONE - five pairs: mean ratio 1.009, 4 of 5 within 3%, seed 43 +9%; neither prereg clause met; kernel stays opt-in (eager default); 10k epoch gain 1.03-1.1x"]:::done
-    RFDIV["RFDIV: relative-frame divergence at width 512 (SCALE corner r512x80k)<br/>DONE (mechanism) - width not tokens; routing hardens to one slice per token, anchors collapse; lr 5e-4 cures; routing temperature and head-frame fix refuted/not needed; recommendation: lr = 1e-3 x 192/width for ISLA's width ladder"]:::done
-    MAINLINE["MAINLINE: ISLA prepared for PhysicsNeMo integration (Peter's directive 2026-09-15)<br/>RUNNING - research class tagged isla-research-full; lean class merged (27 options, bitwise on 12 configurations, suites and lint clean); recipe README, CHANGELOG, API docs merged; recipe configs named for the reference (isla_surface, isla_volume) and MeshTransformer2 aliases removed; CORNER-WLR measured: reference 0.0442 at the corner under the width learning rate, 1.05x GeoTransolver (between the 3% parity and 1.10x falsification bars); CG-WLR done: the constant gauge at the corner under 3.75e-4 scores 0.0424 (0.99x its 1e-3 value), so the reference's excess is the frame's; width learning-rate rule adopted provisionally 2026-09-17 (lr = 1e-3 x 192/width above 192)"]:::running
-    KERNEL --> SCALE
-    PRINCIPLE["PRINCIPLE: accuracy by principled means; discretization consistency as acceptance criterion<br/>DONE - chapter 1 section, audit, weights-off demoted to ablation, rule retired"]:::done
-    BENCH["BENCH: consistency benchmark (eval only): unif / area / 10:1-biased samplers x 2.5k-40k cells,<br/>all reference checkpoints, float32 (390 lanes)<br/>DONE - nothing is consistent at 10k; at 40k only similarity-gauge ISLA passes (bias +2.8%) and converges under area (+18%, falling);<br/>every other arm flat (GT +562%, Transolver +213%, weights-off +1176%);<br/>follow-ups: measure-centred ISLA and measure-weighted baselines consistent under all samplers (|D| <= 3%; mw < 1%, pool frame)"]:::done
-    MW["MW: measure-weighted slice pooling for GeoTransolver and Transolver (RESEARCH VARIANT, not the released model; ruling 2026-09-11)<br/>DONE - lead SURVIVES: DrivAerML 0.0498 / 0.0522 (unchanged); HiLift 35: +6.5% (0.1173 / 0.1217), 0.85x / 0.88x of ISLA;<br/>consistency NOT gained: with the frame from the biased sample the weighted baselines collapse 14-16x (unweighted 12x); the 1.02x was the pipeline frame"]:::done
-    WAVE4["WAVE-4: similarity-gauge ISLA on every HiLift rung (13 lanes)<br/>RUNNING (11/13 read) - prices: 35 cases +7.6%, 4 geometries +7.4%, 21 geometries +2.9%, 210 cases +2.0%, fixed angle +14.4% (consistent at 40k: area -0.1%, bias +2.4%; constant gauge +960% / +1385%), DrivAerML parity;<br/>price falls with training-set size on the angle-varying rungs; fixed angle is the outlier; full / deflection training (days)"]:::running
-    XFAM["XFAM: which ISLA ingredient carries the cross-family deficit (zero-shot fastback 0.79 vs 0.61)?<br/>DONE - NONE carries it: n_slices 128 0.98, 512 0.87, raw seeds 0.767, gauge 0.945 (3e-3) / 0.918 (1e-3), weights-off 0.806;<br/>deficit distributed (H5); lever = training diversity, not architecture"]:::done
-    CENTER["CENTER: is the constant gauge's density collapse the unweighted centroid?<br/>probe + 4 trained lanes with measure-weighted centering<br/>DONE - YES (12.1x -> 1.12x frozen; trained: DrivAerML 0.98x accuracy, 1.17x density = JOINT PASS;<br/>HiLift 35: +10% price; BENCH: consistent under ALL samplers, DrivAerML +3%/+3% at 40k, HiLift -2%/+4% at 10k - the first such configuration)"]:::done
-    PRINCIPLE --> CENTER
-    CENTER --> WAVE4
-    FRAMEFULL["FRAME-FULL: frame (centroid, extent) from the full geometry as global data<br/>DONE - DrivAerML PASSES (centre+scale 0.0544 at 1.13x); HiLift 35 PAYS 14-16% (0.1571 / 0.1600 vs 0.1377), worse than frame-free 11%:<br/>the HiLift price is the mesher pattern in the plain mean, not lost positional information. RULE FIRES: reference = RELFRAME total-measure<br/>DIAGNOSTIC of the variance mechanism only (Peter: no sample statistic, no centering in the flagship); 8 lanes"]:::running
-    RELFRAME["RELFRAME: translation invariance from relative positions only (drop the 6 centroid terms),<br/>length scale = reference length or sqrt(total measure)<br/>DONE (lanes) - DrivAerML +1.5% / -0.9% at density 1.21x / 1.24x (at the bar; BENCH converges +3.4% at 40k);<br/>HiLift 35: +11% on both arms - accuracy bar FAILS; not frame variance;<br/>consistency half PASSES on both datasets (HiLift |D| <= 1.2% at 40k); FRAME-FULL decides"]:::done
-    CENTER --> RELFRAME
-    CENTER --> FRAMEFULL
-    MWAW["MWAW: repaired baselines with an area-weighted datapipe frame (HT centroid)<br/>DONE - accuracy equal (+1.1-1.2%); sample-frame density 1.03-1.04x with the HT centre (raw-area centre 6-9x: count bias);<br/>the baselines' sampler dependence was entirely the plain-mean centroid; RESEARCH VARIANT (diagnostic only) by the ruling of 2026-09-11 - released models are not modified"]:::done
-    MW --> MWAW
-    RFLADDER["RELFRAME-LADDER: the reference configuration on the other HiLift rungs<br/>RUNNING - 4 geometries: +1.0% vs the constant-gauge variant (parity; prediction of 5-10% falsified downward);<br/>fixed angle (3 seeds): reference +14.4% (parity with the gauge), ref-length arm +22% - scale normalization is NOT the cost;<br/>fixed-angle FRAME-FULL PAYS 21% (exact frame + all seeds): the fixed-angle price is the mesher pattern, not positional seeds - both FF experiments agree;<br/>fixed-angle BENCH: area +2.6% at 40k (consistent), bias +5.5% (converging, inconclusive); most accurate arm at every count;<br/>21 geometries +5.2%, 210 cases +11.3% - RECURRENCE CONFIRMED (recurring-geometry rungs pay ~11%, never-seen 1-5%, fixed angle 10% unexplained);<br/>fixed-angle FRAME-FULL pair + third seeds DONE"]:::done
-    RELFRAME --> RFLADDER
-    FRAMEFULL --> RFLADDER
-    MIX["MIX: mixed-mesher training (uniform-over-cells + area-proportional sampling of the same surfaces)<br/>DONE - everyone pays to SWAP conventions (ISLA gauge 1.5-1.9x, Transolver 3-6x, GeoTransolver 6-7x);<br/>everyone MIXES for free (mixed models 5-10% better than specialists; 2x steps caveat)"]:::done
-    PRINCIPLE --> BENCH
-    PRINCIPLE --> MW
-    PRINCIPLE --> WAVE4
-    BENCH --> MIX
-    UDRV --> MW
-    TRANSFER --> XFAM
-    SCALE["SCALE: width (384, 512) and token (40k, 80k) scaling of ISLA, GeoTransolver, Transolver<br/>at full data on both datasets, unit drive (64 lanes)<br/>RUNNING - DrivAerML: ISLA 0.0557 -> 0.0508 at width 512, 0.0428 at 512 x 80k cells (0.77x) at equal GPU-hours;<br/>GT 0.0442 (384 x 40k), Transolver 0.0455; baselines at 512 x 80k running before any ordering claim; HiLift lanes I/O-throttled (5-7 days)"]:::running
-    POSE["POSE-BENCH: random SO(3) poses on DrivAerML; baselines with augmentation, unit drive<br/>DONE - SUPPORTED: posed ISLA 0.0566 (1.01x canonical) vs GT+aug 0.0602 (1.20x) and Transolver+aug 0.0676 (1.31x); ISLA 6% and 19% ahead (fp32)"]:::done
-    OVERFIT["OVERFIT-1: one case per architecture, 20k steps (capacity vs data)<br/>DONE - surface: ISLA floor 1.27-1.55x the unit-drive baselines (capacity, not data), weights cost 17% = sampler variance; interior: velocity lead 0.67x is capacity, nu_t 1.64x capacity-limited, pressure lead is generalization"]:::done
-    CAP["CAP: which capacity axis lifts ISLA's single-case floor?<br/>(slice count 128/512/1024 vs width 384, depth 24, MLP ratio 8; DrivAerML one-car instrument)<br/>DONE - slices NULL (0.1058/0.1096/0.1052 vs 0.1064), width CARRIES (0.0948), depth and MLP NULL; at 40k evaluation cells every arm is within 1.03-1.10x of the baselines: the 10k floor is mostly query-count noise of the slice integrals"]:::done
-    QUADVAR["QUAD-VAR: spatially stratified inference draw at a fixed token budget<br/>(Morton-ordered systematic sample, same inclusion law; eval-only on the DrivAerML checkpoints)<br/>DONE - ISLA bars met (cg 0.0537, reference 0.0531 at 10k) but the control fired (GT -2.2%, Transolver -2.1%): ~2 points shared metric variance, ~2 points ISLA-specific (40% of the count slope); GT/ISLA 0.907 -> 0.927"]:::done
-    QUADVARHL["QUAD-VAR-HL: the stratified draw on the HiLift 35-case checkpoints<br/>(count slope 2-3% there; is the draw a free improvement on both datasets?)<br/>DONE - free improvement on both datasets: ISLA -1.4% / -1.9% at 10k (inside the count slope), baselines within 0.4%; GT/ISLA at 35 cases 0.794 -> 0.808"]:::done
-    EQPRICE["EQ-PRICE: is the 4-5 point trained-function deficit the price of the invariance contracts?<br/>(constant gauge + raw coordinate channel at 435 cars; diagnostic, breaks SE(3) by design)<br/>DONE - PARTIAL: 0.0547 vs cg 0.0561 (-2.6%), GT/arm 0.931 vs 0.907: the contracts cost ~2.5 points in-distribution; ~2 points are the form; density factor 13x (diagnostic only)"]:::done
-    FORMHEADS["FORM-HEADS: multi-head slice routing (H independent routings per block, head-split states)<br/>on the one-car instrument: h1 control, h4, h8<br/>DONE - CARRIES: h8 0.0869 = 0.813x the h1 control (0.1069), h4 0.951x, monotone; at 40k cells h8 0.0729 is below both baselines (0.078 / 0.079)"]:::done
-    HEADS435["HEADS-435: the reference configuration with 4 and 8 routings per block at 435 DrivAerML cars<br/>(two seeds each, probe instrument at 10k)<br/>RUNNING - launched 2026-09-18; bars on h8: closes <= 0.0530 (promote), carries <= 0.0543, null >= 0.0549; density factor 1.05-1.3"]:::running
-    SPARSE["SPARSE: sparse anchor routing (k nearest anchors per point)<br/>DONE - not worth it: 0.84-0.92x step time at every k (GB300, 10k tokens); memory gain only without the exact recompute; 21-46% output change at init"]:::done
-    ABUPT["ABUPT: independent baselines under this protocol<br/>(AB-UPT; AB-GATr; family adaptation; Transolver++ flag)<br/>PLANNED - after UDRV-L; every model at unit drive"]:::planned
-    UDRVL["UDRV-L: the HiLift ladder with unit-drive baselines<br/>(GT + Transolver at 210; GT at 4 and 21 geometries; GT and Transolver at 1,260 DONE: 0.0355 and 0.0385 vs constant gauge 0.0405, 0.88x and 0.95x)<br/>DONE - 210 cases (GT 0.83x baseline ahead, 162/180; Transolver 0.91x between); 4 geometries DONE (0.76x / 0.77x); fixed angle DONE (0.78x / 0.86x); 21 geometries DONE (GT 0.92x, Transolver 0.93x, between);<br/>510 cases DONE (GT 0.84x, 168/180; Transolver 0.90x, 168/180);<br/>prediction held at 7 of 7 rungs (1,260: GT 0.88x, Transolver 0.95x); the deflection sealed test is DEFL"]:::done
-
+    classDef done fill:#ffffff,stroke:#008300,color:#0b0b0b
+    classDef running fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef planned fill:#ffffff,stroke:#898781,color:#0b0b0b,stroke-dasharray:4 3
+    classDef stopped fill:#f4f3ee,stroke:#52514e,color:#0b0b0b
+    NSTAR["NSTAR: generalization north star<br/>DONE"]:::done
+    G1G2["G1G2: data-scaling and transfer ladder<br/>DONE"]:::done
+    LOC["LOC: locality hypothesis<br/>DONE (refuted)"]:::done
+    M1["M1: scale-relaxation arm<br/>DONE (verdict void)"]:::done
+    M2["M2: anchor-conditioned decode<br/>DONE (closed)"]:::done
+    M3["M3: invariant-completeness audit<br/>DONE (partial)"]:::done
+    M4["M4: normalization audit<br/>DONE (retracted, then refuted)"]:::done
+    G3["G3: 2D boundary-condition ladder<br/>DONE (one verdict overturned)"]:::done
+    HL["HL: HiLiftAeroML full split<br/>DONE"]:::done
+    N1["N1: label-noise probe<br/>DONE (non-discriminating)"]:::done
+    R1["R1: learning-rate robustness grid<br/>DONE"]:::done
+    V6["V6: anchor decode at matched memory<br/>DONE"]:::done
+    PAR["PAR: reflection-covariant heads<br/>DONE (closed negative)"]:::done
+    L1["L1: label mirror covariance<br/>DONE"]:::done
+    CRIT["CRIT: independent critic review<br/>DONE"]:::done
+    G3K["G3K: G3 rerun with the kernel decoder<br/>DONE"]:::done
+    K0["K0: potential-flow oracle gate<br/>DONE (gate failed)"]:::done
+    P1C["P1C: GeoTransolver canonicalization control<br/>DONE"]:::done
+    S1["S1: similarity gauge<br/>DONE"]:::done
+    G5{{"G5: single-factor generalization corpus<br/>PLANNED"}}:::planned
     NSTAR --> G1G2
     NSTAR --> G3
     G1G2 --> LOC
@@ -180,7 +88,50 @@ flowchart TB
     CRIT --> P1C
     CRIT --> S1
     M4 --> S1
-    HL --> HLGEN
+    G3K --> G5
+    S1 --> G5
+```
+
+### The HiLiftAeroML ladder and the unit-direction protocol
+
+The data-efficiency ladder on the wings, its controls, and the control
+that decided the surface comparison: retraining the baselines with the
+freestream as a unit direction.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   Sub-tree 2: the HiLiftAeroML ladder. UDRV is the node that changed the
+%%|   book's verdict; every comparison upstream of it against baselines fed
+%%|   the physical velocity is kept as a measurement of that protocol, not of
+%%|   the architectures.
+flowchart TB
+    classDef done fill:#ffffff,stroke:#008300,color:#0b0b0b
+    classDef running fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef planned fill:#ffffff,stroke:#898781,color:#0b0b0b,stroke-dasharray:4 3
+    classDef stopped fill:#f4f3ee,stroke:#52514e,color:#0b0b0b
+    HLGEN["HLGEN: HiLift generalization ladder<br/>DONE (superseded as a comparison)"]:::done
+    CTRL["CTRL: GeoTransolver small-data controls<br/>DONE"]:::done
+    T1["T1: plain Transolver control<br/>DONE"]:::done
+    A35["A35: single-factor ablations at 35 cases<br/>DONE"]:::done
+    A35B["A35B: raw seeds, no relational geometry<br/>DONE"]:::done
+    INV["INV: invariants as baseline inputs<br/>DONE (not the carrier)"]:::done
+    W2["W2: seeds, 510 rung, 20k floor, fixed angle, forces<br/>DONE"]:::done
+    W2F["W2F: unseen-geometry ladder<br/>DONE"]:::done
+    DEFL["DEFL: deflection split, sealed test<br/>DONE (falsified)"]:::done
+    STEST["STEST: sealed regime tests<br/>DONE"]:::done
+    B1["B1: raw-coordinate discriminator<br/>DONE (falsified)"]:::done
+    HLREG["HLREG: where on the wing<br/>DONE (falsified)"]:::done
+    IO1(["IO1: HiLift reader I/O<br/>STOPPED"]):::stopped
+    UDRV["UDRV: unit-direction baselines at 35 cases<br/>DONE"]:::done
+    UDRVL["UDRVL: unit-direction ladder, every rung<br/>DONE"]:::done
+    CAMPA["CAMPA: further 35-case draws<br/>DONE"]:::done
+    EXPO["EXPO: exposure ledger<br/>DONE"]:::done
+    GEOSTAT["GEOSTAT: geometry-level statistics<br/>DONE"]:::done
+    FORCEREF{{"FORCEREF: force reference ladder<br/>READY"}}:::planned
+    WAVE3(["WAVE3: completing the fair comparison<br/>RUNNING"]):::running
+    FP32["FP32: float32 re-evaluation<br/>DONE"]:::done
+    ABUPT{{"ABUPT: independent baselines<br/>PLANNED"}}:::planned
+    MT3{{"MT3: successor design brief<br/>PLANNED"}}:::planned
     HLGEN --> CTRL
     HLGEN --> T1
     T1 --> A35
@@ -189,312 +140,301 @@ flowchart TB
     T1 --> INV
     HLGEN --> W2
     CTRL --> W2
-    INV --> MT3
-    W2 --> MT3
     W2 --> W2F
     W2 --> DEFL
-    LVT --> QT
-    V0 --> QT
-    QT --> MT3
-    QT --> QTSDF
-    QT --> V0L
-    V0L --> MT3
-    QTSDF --> MT3
-    QTSDF --> QTSDFL
-    V0L --> QTSDFL
-    QTSDFL --> MT3
-    QTSDF --> QTLF
-    QTLF --> MT3
-    QTLF --> QTH256
-    QTH256 --> MT3
-    DRVSTA --> MT3
-    MEM2 --> MT3
     IO1 --> W2F
     IO1 --> DEFL
-    W2F --> MT3
-    DEFL --> MT3
     HLGEN --> STEST
     STEST --> B1
-    S1 --> V0
-    K0 --> V0
-    V0 --> LVT
-    B1 --> MT3
-    CTRL --> MT3
-    A35B --> MT3
-    LVT --> MT3
-    G3K --> G5
-    S1 --> G5
-    G5 --> MT3
     W2F --> HLREG
-    DRVSTA --> HLREG
-    HLREG --> MT3
-    P1C --> MT3
-    S1 --> MT3
-    K0 --> MT3
-    L1 --> MT3
     W2 --> UDRV
     W2F --> UDRV
     INV --> UDRV
-    UDRV --> MT3
-    QTSDF --> QMASS
-    QMASS --> MT3
-    V0SURF["V0-SURF10K: ISLA query tokens + SDF with the intended 10,000 surface cells<br/>(reader boundary_subsample=cells; every prior interior arm saw about 365)<br/>DONE - null: 10,000 cells vs ~365 changes p/u/nu_t by +0.9/-0.6/-2.3%, all within the 3% band"]:::done
-    QTDENS["QTDENS: does GT-volume's nu_t lead come from reading the interior sample density?<br/>ISLA QT+SDF + query-density scalar / + query-neighbour invariants (k=16), 2 seeds each<br/>DONE - neither closes the gap: float32 nu_t 1.32x (density) and 1.30x (neighbours) vs reference 1.28x; p/u within 5%"]:::done
-    QTSDF --> V0SURF
-    QMASS --> V0SURF
-    V0SURF --> MT3
-    V0SURF --> QTDENS
-    QTSDF --> QTDENS
-    QTDENS --> MT3
-    UDRV --> UDRVINT
-    V0 --> UDRVINT
-    UDRVINT --> MT3
+    HLGEN --> UDRV
+    UDRV --> UDRVL
+    UDRV --> CAMPA
+    FP32 --> CAMPA
     HLGEN --> EXPO
     STEST --> EXPO
     W2 --> GEOSTAT
     W2F --> GEOSTAT
     W2 --> FORCEREF
-    MEM2 --> MEMINST
+    UDRV --> WAVE3
+    UDRV --> ABUPT
+    UDRVL --> ABUPT
+    UDRVL --> MT3
+    B1 --> MT3
+    WAVE3 --> MT3
+```
+
+### Boundary to interior
+
+The volume task on DrivAerML: how ISLA's queries should interact, what
+they should be told, and the conventions that make the interacting decode
+depend on the request.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   Sub-tree 3: the interior task. STOPPED nodes are falsified designs
+%%|   (latent volume tokens, local patch features, far-wake oversampling).
+flowchart TB
+    classDef done fill:#ffffff,stroke:#008300,color:#0b0b0b
+    classDef running fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef planned fill:#ffffff,stroke:#898781,color:#0b0b0b,stroke-dasharray:4 3
+    classDef stopped fill:#f4f3ee,stroke:#52514e,color:#0b0b0b
+    V0["V0: first boundary-to-interior measurement<br/>DONE"]:::done
+    LVT(["LVT: latent volume tokens<br/>STOPPED (falsified)"]):::stopped
+    QT["QT: interior queries as interacting tokens<br/>DONE"]:::done
+    QTSDF["QTSDF: query tokens with the signed distance<br/>DONE"]:::done
+    V0L["V0L: interior data efficiency<br/>DONE"]:::done
+    QTSDFL["QTSDFL: signed-distance ladder<br/>DONE"]:::done
+    QTLF(["QTLF: local patch features on queries<br/>STOPPED (falsified)"]):::stopped
+    QTH256["QTH256: width control<br/>DONE"]:::done
+    DRVSTA["DRVSTA: where on the car<br/>DONE"]:::done
+    QMASS["QMASS: query-mass convention<br/>DONE"]:::done
+    V0SURF["V0SURF: 10,000 surface cells<br/>DONE (null)"]:::done
+    UDRVINT["UDRVINT: unit-direction GeoTransolver-volume<br/>DONE (null)"]:::done
+    QTDENS["QTDENS: query-density channels<br/>DONE (neither)"]:::done
+    PASSIVE2["PASSIVE2: query independence at matched depth<br/>DONE (falsified)"]:::done
+    QCOUNT["QCOUNT: query-count augmentation<br/>DONE (between)"]:::done
+    FARWAKE(["FARWAKE: far-wake oversampling<br/>STOPPED (falsified)"]):::stopped
+    MOM2["MOM2: second-moment channel benchmark<br/>DONE"]:::done
+    MOM2T["MOM2T: second-moment channel trained<br/>DONE"]:::done
+    RELINT["RELINT: interior configuration on the reference frame<br/>DONE"]:::done
+    V0 --> LVT
+    V0 --> QT
+    LVT --> QT
+    QT --> QTSDF
+    QT --> V0L
+    QTSDF --> QTSDFL
+    V0L --> QTSDFL
+    QTSDF --> QTLF
+    QTLF --> QTH256
+    QTSDF --> QMASS
+    QTSDF --> V0SURF
+    QMASS --> V0SURF
+    V0 --> UDRVINT
+    V0SURF --> QTDENS
+    QTSDF --> QTDENS
     QMASS --> PASSIVE2
-    QCOUNT["QCOUNT: query-count augmentation for the interior query-token configuration<br/>(interior request size drawn per sample in [2k, 20k]; boundaries unchanged)<br/>DONE - BETWEEN: 2k/10k penalty 1.38 -> 1.24 (p), 1.59 -> 1.31 (v), 1.49 -> 1.31 (nu_t); 2k prediction improves 0.0753 -> 0.0703;<br/>cost 3.7% at 10k (0.0567, bar 0.0563 fails); 20k <= 10k holds; dependence partly intrinsic"]:::done
-    FARWAKE["FARWAKE: far-field oversampling of interior training queries (SDF-band inclusion 1/3/8; far band 10% -> 32%)<br/>STOPPED - falsified: every band of every field worse (far-shell nu_t 0.193 vs ref 0.118; recipe p +36%, v +22%, nu_t +48%); swap confound stated"]:::stopped
-    QCOUNT --> FARWAKE
-    QMASS --> QCOUNT
-    PASSIVE2 --> QCOUNT
     QTSDF --> PASSIVE2
     V0 --> PASSIVE2
-    PASSIVE2 --> MT3
-    M3 --> MOM2
+    QMASS --> QCOUNT
+    PASSIVE2 --> QCOUNT
+    UDRVINT --> QCOUNT
+    QCOUNT --> FARWAKE
     MOM2 --> MOM2T
-    MOM2T --> MT3
-    A35 --> MEASMET
+```
+
+### The measure, the frame and the contracts
+
+The nodes that turned discretization consistency into an acceptance
+criterion, located the cause of every sampler dependence, and chose the
+reference frame.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   Sub-tree 4: measure, frame and contracts. RELFRAME is the node that
+%%|   fixed the reference configuration; POSE is the pose benchmark; TRANSFER
+%%|   is the cross-dataset companion program.
+flowchart TB
+    classDef done fill:#ffffff,stroke:#008300,color:#0b0b0b
+    classDef running fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef planned fill:#ffffff,stroke:#898781,color:#0b0b0b,stroke-dasharray:4 3
+    classDef stopped fill:#f4f3ee,stroke:#52514e,color:#0b0b0b
+    MEASMET["MEASMET: measure-metric mismatch?<br/>DONE (falsified)"]:::done
+    NOWL["NOWL: weights off at 210 cases and DrivAerML<br/>DONE (ablation only)"]:::done
+    PRINCIPLE["PRINCIPLE: consistency as acceptance criterion<br/>DONE"]:::done
+    BENCH["BENCH: consistency benchmark<br/>DONE"]:::done
+    MW["MW: measure-weighted baseline pooling<br/>DONE (research variant)"]:::done
+    MWAW["MWAW: measure-centred baseline frame<br/>DONE (research variant)"]:::done
+    MIX["MIX: mixed-mesher training<br/>DONE"]:::done
+    WAVE4(["WAVE4: similarity gauge on every rung<br/>RUNNING"]):::running
+    CENTER["CENTER: the plain-mean centroid<br/>DONE"]:::done
+    RELFRAME["RELFRAME: relative frame<br/>DONE (reference configuration)"]:::done
+    FRAMEFULL["FRAMEFULL: exact full-geometry frame<br/>DONE (diagnostic)"]:::done
+    RFLADDER["RFLADDER: reference frame on every rung<br/>DONE"]:::done
+    XFAM["XFAM: cross-family deficit carrier<br/>DONE (none)"]:::done
+    TRANSFER(["TRANSFER: cross-dataset companion<br/>RUNNING"]):::running
+    POSE["POSE: random poses on DrivAerML<br/>DONE"]:::done
     MEASMET --> NOWL
-    NOWL --> MT3
-    UDRV --> WAVE3
-    NOWL --> WAVE3
-    WAVE3 --> MT3
-    FP32 --> MT3
-    UDRV --> OVERFIT
-    MEASMET --> OVERFIT
-    OVERFIT --> MT3
+    PRINCIPLE --> BENCH
+    PRINCIPLE --> MW
+    PRINCIPLE --> WAVE4
+    PRINCIPLE --> CENTER
+    BENCH --> MIX
+    MW --> MWAW
+    CENTER --> WAVE4
+    CENTER --> RELFRAME
+    CENTER --> FRAMEFULL
+    RELFRAME --> RFLADDER
+    FRAMEFULL --> RFLADDER
+    TRANSFER --> XFAM
+```
+
+### Cost, scale, the deficit anatomy and the mainline
+
+The engineering nodes (memory, kernels), the scaling corner, the ladder of
+experiments that decomposed the in-distribution gap, the general-input
+extension, and the productization node.
+
+```{mermaid}
+%%| fig-cap: >
+%%|   Sub-tree 5: cost, scale, deficit anatomy and mainline. HEADS435 is the
+%%|   one node RUNNING with a bar that could change the reference
+%%|   configuration; MAINLINE is the productization node.
+flowchart TB
+    classDef done fill:#ffffff,stroke:#008300,color:#0b0b0b
+    classDef running fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef planned fill:#ffffff,stroke:#898781,color:#0b0b0b,stroke-dasharray:4 3
+    classDef stopped fill:#f4f3ee,stroke:#52514e,color:#0b0b0b
+    MEM2["MEM2: geometry recompute in backward<br/>DONE"]:::done
+    MEMINST["MEMINST: matched memory instrument<br/>DONE"]:::done
+    SPARSE["SPARSE: sparse anchor routing<br/>DONE (not worth it)"]:::done
+    KERNEL["KERNEL: point-softmax kernel<br/>DONE"]:::done
+    KSTUDY["KSTUDY: kernel study<br/>DONE"]:::done
+    KNEUT["KNEUT: fused kernel training neutrality<br/>DONE (stays opt-in)"]:::done
+    SCALE(["SCALE: width and token scaling<br/>RUNNING"]):::running
+    RFDIV["RFDIV: relative-frame divergence at width 512<br/>DONE"]:::done
+    OVERFIT["OVERFIT: one-case floor<br/>DONE"]:::done
+    CAP["CAP: capacity axis<br/>DONE"]:::done
+    QUADVAR["QUADVAR: stratified inference draw<br/>DONE"]:::done
+    QUADVARHL["QUADVARHL: stratified draw on the wings<br/>DONE"]:::done
+    EQPRICE["EQPRICE: price of the contracts<br/>DONE (partial)"]:::done
+    FORMHEADS["FORMHEADS: multi-head routing, one car<br/>DONE (carries)"]:::done
+    HEADS435(["HEADS435: multi-head routing at 435 cars<br/>RUNNING"]):::running
+    GLOBIN["GLOBIN: global vector and scalar inputs<br/>DONE"]:::done
+    GLOBACC["GLOBACC: non-aerodynamic acceptance case<br/>DONE"]:::done
+    GLOBDIS["GLOBDIS: scalar-input discriminator<br/>DONE"]:::done
+    MAINLINE(["MAINLINE: prepared for PhysicsNeMo integration<br/>RUNNING"]):::running
+    MEM2 --> MEMINST
+    MEM2 --> SPARSE
+    KERNEL --> KSTUDY
+    KSTUDY --> KNEUT
+    KERNEL --> SCALE
+    SCALE --> RFDIV
     OVERFIT --> CAP
     CAP --> QUADVAR
     QUADVAR --> QUADVARHL
     CAP --> EQPRICE
     EQPRICE --> FORMHEADS
     FORMHEADS --> HEADS435
-    QMASS --> TRANSFER
-    UDRVINT --> TRANSFER
-    TRANSFER --> MT3
-    UDRV --> SCALE
-    WAVE3 --> SCALE
-    SCALE --> MT3
-    UDRV --> POSE
-    POSE --> MT3
-    UDRVINT --> QCOUNT
-    QMASS --> QCOUNT
-    QCOUNT --> MT3
-    MEM2 --> SPARSE
-    SPARSE --> MT3
-    MOM2 --> MT3
-    UDRV --> ABUPT
-    QTSDF --> ABUPT
-    ABUPT --> MT3
-    HLGEN --> UDRV
-    UDRV --> UDRVL
-    UDRVL --> MT3
-    UDRVL --> ABUPT
-    KERNEL --> KSTUDY
-    FRAMEFULL --> RELINT
-    RELINT --> GLOBIN
     GLOBIN --> GLOBACC
     GLOBACC --> GLOBDIS
-    KSTUDY --> KNEUT
     GLOBIN --> MAINLINE
     RFDIV --> MAINLINE
     KNEUT --> MAINLINE
-    SCALE --> RFDIV
 ```
 
-This paragraph summarizes the ledger below as of 2026-09-09. The book's
-headline is overturned by its own preregistered control. Every HiLiftAeroML
-comparison fed GeoTransolver and Transolver the physical freestream velocity
-(2,679.5 in/s) while ISLA received the unit direction; retrained with the
-unit direction and nothing else changed (UDRV, done at 35 cases),
-GeoTransolver scores 0.124 (0.111 at its better rate) and Transolver 0.115
-against 0.381 and 0.404 with the physical velocity and ISLA's 0.138 (0.123
-in the weights-off ablation), so both baselines are 1.1–1.25x more accurate
-than ISLA (lower on 130 and 152 of 180 cases; 84 and 102 of
-118 geometries), and each improved on 180 of 180 cases against its own
-physical-drive lane (median 3.4x and 3.8x). The preregistered bars for
-"the input scale carries a material part of the deficit" were 0.27 and
-0.29; both arms passed far beyond them. The 2.8x at 35 cases, the 180/180
-case wins, the 6x data-multiplier reading, the force-coefficient margin
-(3% against 8–17%) and every steel-man control at 35 cases (CTRL, T1, INV,
-A35, A35B) were measured against mis-scaled baselines; they remain
-measurements of the physical-drive protocol and are no longer comparisons
-of architectures. The 2.2x at 210 cases, the 1.8x and
-1.4x on unseen geometries (W2-F) and the 5.0x at a fixed angle (W2) were
-physical-drive measurements, and the unit-drive ladder has now read out at
-every rung: GeoTransolver 0.83x of ISLA at 210 cases
-(Transolver 0.91x), 0.76x at 4 geometries, 0.92x at 21, 0.78x at the fixed
-angle, 0.88x of the constant gauge at 1,260 cases with Transolver at 0.95x
-there (UDRV-L, every rung read out with both baselines); its
-preregistered prediction is that the baselines match or beat ISLA at every
-rung, and ISLA has an advantage at a rung only if baseline ÷ ISLA ≥ 1.10
-with ISLA lower on two thirds of the cases. On DrivAerML GeoTransolver's
-surface lanes also consumed the physical velocity (38.9 m/s) and lead ISLA
-1.2–1.3x at every training-set size regardless, so that lead is a lower
-bound; GeoTransolver-volume consumes the same vector, and the interior
-comparison (ISLA query tokens + SDF ahead on velocity 0.75x and behind on
-pressure 1.08x and eddy viscosity 1.27x in float32, three seeds, at or above the training query
-count) stands pending its unit-drive control (UDRV-INT). What no unit-drive
-rerun can remove is ISLA's contracts: exact SE(3) covariance without a
-frame estimate or a freestream at inference, a query-independent passive
-decode (3.1x on the interior in float32, 3.0–3.7x on the surface), sampling-density
-robustness with the similarity gauge, and the current code's 1.6 GiB
-footprint at 3.7x GeoTransolver's step time (MEM-INST). ISLA-internal
-results stand as measurements of ISLA: five single-factor ablations move
-its 35-case error by at most 16%; its error responds to the number of
-training geometries; its residual concentrates in the gap regions (HLREG).
-On the sealed regime-extrapolation test both architectures degrade about
-10x and the raw-coordinate discriminator was falsified. Every mechanism
-candidate for the earlier cross-family transfer gap was resolved against
-(locality, absolute scale, measure completeness, label noise) and the
-exact-kernel line is closed on separated 3D aerodynamics. The independent
-audit (@sec-nb-audit-2026-09-08) that raised the input-scale question also
-found that the query-token configuration's prediction depends on query
-count (repair committed; the interior advantage holds at or above the
-training count; QMASS, done), that every ISLA interior arm received about
-365 surface cells rather than 10,000, and that the rerun with 10,000 changes nothing (V0-SURF10K, null: 0.0572 / 0.0848 / 0.1187 against 0.0567 / 0.0853 / 0.1215), that no
-HiLiftAeroML geometry is unexposed at the program level (EXPO, done), that
-the geometry is the independent unit of the unseen-geometry statistics
-(GEOSTAT, done), that the force errors are against sampled-cell label
-integrals (FORCE-REF, ready), that the passive-decode price needs a
-fixed-depth control (PASSIVE2, done via the companion's D1: passive route closed, 1.43x / 2.41x), and that the first-moment
-representation limitation is removable by a cheap channel (MOM2, done;
-MOM2-T done: the channel is free on DrivAerML surface pressure, 0.0583
-against 0.0577); independent baselines outside the Transolver family are
-queued behind UDRV-L (ABUPT).
-Measured since: the fixed-angle unit-drive lanes (baselines ahead, 18 of 18
-geometries), the 4-geometry unit-drive rung (baselines ahead by the mean,
-even by geometry), the interior unit-drive control (null: the interior
-ordering stands), the width control and the 10,000-cell rerun (both null
-for the eddy-viscosity gap), the interior density and neighbour channels
-(both null, QTDENS), the measure-weight tests (weights cost 12% at 35 cases
-under either metric, 17% at 4 geometries, 10.6% at the fixed angle; 2.9% on
-DrivAerML), the float32 re-evaluation of every checkpoint (FP32-EVAL), the
-fast softmax kernel's neutrality (KERNEL), the 35-case draw intervals
-(CAMPA: between-draw spread 3–11x the seed spread), and the companion's
-pose benchmark (ISLA 6–19% ahead of augmented baselines in arbitrary
-poses), few-shot transfer (GeoTransolver 31%, ISLA 6%) and diversity trade.
-Still running: the remaining UDRV-L rungs (210 and 21 geometries near
-completion; 1,260, 510, deflection and 20k tokens I/O-throttled), the
-weights-off ladder's last three rungs, the 210-case draw campaign, the
-scaling study's baselines at 512 × 80k cells, and the companion's
-conditioning (T1), rung/mixing split and width-matched interior pair.
+## The ledger {#sec-ledger}
 
-| ID | Status | Question and why it matters | Depends on | Acceptance criterion | Evidence |
-|---|---|--------|---|------|---|
-| NSTAR | DONE | Reframe the program's goal: multi-family transfer was a coverage demonstration, not generalization; measure generalization as curves (error vs training-set size, error beyond the training hull), not points. Sets the ledger G1–G4. | — | Preregistered framing adopted (sha 02ca9432) with a declared ladder design. | @sec-nb-generalization-northstar |
-| G1G2 | DONE | Do ISLA's contracts improve performance per sample (G1), and does either architecture's zero-shot transfer improve with in-family data (G2)? The G2 slope is the program's first measured architecture-carried generalization. | NSTAR | 22-lane nested ladder, n ∈ {14…435}, 2 seeds per rung; preregistered predictions scored. | @sec-nb-g1g2-verdict |
-| LOC | DONE — refuted | Is GeoTransolver's data-compounding transfer carried by *local* features? If yes, ISLA's flag-gated local patch-integral channel should bend ISLA's G2 curve downward. | G1G2 | Preregistered (p ~ 0.45): monotone zero-shot decrease across n ∈ {27, 109, 218}; a flat curve refutes locality as sufficient. Verdict: refuted — the local channel is a constant 3–5% in-family offset with no G2 slope change, and destabilizes transfer at n=218 (seed spread 0.12). | @sec-nb-locality-verdict |
-| M1 | DONE — verdict VOID | Is ISLA's exact scale equivariance an over-symmetrization (aerodynamics depends on Reynolds number, hence absolute size)? Literature wave arm, prereg 69a81e2a. | G1G2 | Preregistered: >5% in-family gain at n=218 from scale conditioning; falsifier: within the ±3% seed band. Read as refuted (1.3–2.0% gain). Voided by CRIT: ISLA's constant reference length already fed absolute size to the backbone, so the appended log-size feature was redundant and the null was guaranteed; the hypothesis was never tested. | @sec-nb-m1-verdict-wave-close; @sec-nb-critic-review |
-| M2 | DONE — closed | Does AB-UPT-style anchor-conditioned decoding (fixed 2,560-token interacting core, all queries passive) recover the accuracy the fully passive v5a3 decode lost? | G1G2 | Preregistered pilot gate: 50-epoch validation loss ≤ v5a3 pilot × 1.15 (= 0.01500). Verdict: fail at 0.01517 (1.2% over); arm closed per prereg. The campaign review flagged this accuracy-only closure as a judgment error (the arm ran at 65% of v3c's memory); V6 re-opened it resource-normalized. | @sec-nb-v5a4-gate; @sec-nb-campaign-review |
-| M3 | DONE — partial; scope qualified | Does ISLA's invariant-only feature set have a provable expressivity ceiling (geometry pairs it cannot separate)? | G1G2 | Analytic fp64 probe: constructed pairs separate at roundoff vs controls. Verdict: ceiling real (rotationally symmetric geometries, separations 5e-16–2e-15); by-product: a reflection-covariance defect in the vector head, which opened the parity thread (PAR). Qualified by the audit: the collapse does not require rotational symmetry (non-congruent five-component arrangements with zero transverse first moment collide to 4e-15, results/isla_first_moment_collision_2026-09-08.json), so the original "not DrivAerML-relevant" reading becomes "not established as the cause on cars"; benchmark in MOM2. | @sec-nb-m3-verdict; @sec-nb-audit-2026-09-08 |
-| M4 | DONE — RETRACTED, then refuted | Does ISLA miss a measure-weighted (NEO-style) normalization somewhere, explaining the P3 density floor? | G1G2 | Code audit claimed every point-population normalization carries measure weights and closed the arm by derivation. Retracted by CRIT: the centroid was an unweighted mean (0.94 RMS-radii shift under 10:1 bias). Refuted by S1: the weighted gauge cuts the P3 penalty 13–14.5× → 1.20×, so the floor was an implementation gap, not information-limited. | @sec-nb-lit-wave-prereg; @sec-nb-critic-review; @sec-nb-s1-verdict |
-| G3 | DONE — T1 verdict overturned | Which boundary-condition generalization axes can architecture or contracts improve? Exact-label 2D conformal-Laplace suite; three arms (ISLA+BC-scalar, soft-slice/GeoTransolver-family, MT1-linear); prereg ae2dee91. | NSTAR | Preregistered per-axis degradation fingerprints. Amplitude verdict stands: the linearity contract guarantees *exact* amplitude extrapolation (undeclared linearity costs 4.5–12×). Frequency verdict ("no arm generalizes", rel-L2 ≈ 1.0) overturned by G3K: the MT1 arm used the moment decoder, whose proved m ≤ 2 nullspace made the T1 modes unrepresentable. | @sec-nb-g3-verdict; @sec-nb-g3-kernel-rerun |
-| HL | DONE — parity | Does the DrivAerML frontier (ISLA within 1.10× of GeoTransolver) extend to harder, Reynolds-varying physics? GeoTransolver vs ISLA-v3c on the HiLiftAeroML curated full split, 2 seeds × 2 learning rates each. | G1G2, LOC, M1 | Preregistered H1/H2 readouts with the mid-flight lr-parity amendment (each architecture reports its best lane over {3e-3, 1e-3}). Verdict: at best lr (1e-3 for both) ISLA/GT = 0.98 — parity, ISLA nominally ahead on every field; both architectures beat their DrivAerML levels; GeoTransolver destabilizes at 3e-3 (0.148/0.397) where ISLA spans 0.040–0.049. The DrivAerML gap does not transfer. GeoTransolver lanes are physical-drive (U_inf = 2,679.5 in/s); the unit-drive rerun at 1,260 cases is UDRV-L lanes 16–17. | @sec-nb-hl-lr-amendment; @sec-nb-hl-verdict |
-| N1 | DONE — non-discriminating | Was the DrivAerML 1.10–1.18× GeoTransolver lead a property of noisy time-averaged labels rather than of the architectures? Eval-only: shared residual across two GeoTransolver and two ISLA checkpoints on bit-identical val points, HiLift as the cleaner-label control. Prereg 1f6cb942. | HL | Prediction: cross-architecture disagreement D larger on HiLift than on DrivAerML; falsifier D ≥ 0.8 with weak correlation. Verdict: shared-residual fraction 0.713 (DrivAerML) vs 0.703 (HiLift) — the control shows the same or more shared structure; the "gap = label noise" attribution is unsupported. Disclosed: thresholds not mutually calibrated; shared residual is only an upper bound on label noise. | @sec-nb-n1-verdict |
-| R1 | DONE — confirmed | Is learning-rate robustness a reproducible ISLA architecture property, or a HiLift step-count artefact? Symmetric grid {1e-3, 3e-3, 1e-2} × 2 seeds × both architectures on DrivAerML. Prereg 1f6cb942. | HL | Predictions: GeoTransolver degrades > 2× at 1e-2 (held: 4–14×); ISLA < 1.5× (missed narrowly: 1.55×). Spreads differ by far more than the 20% falsifier band. By-product: ISLA's best DrivAerML lr is 1e-3 (0.0577), fixing the best-vs-best gap at 1.085×. | @sec-nb-instrument-wave-verdict |
-| V6 | DONE — M2 closed for good | Does anchor-conditioned decode (v5a4) win once compared at matched peak VRAM, the resource frame M2's pilot gate omitted? Prereg 1f6cb942. | M2 | Matched VRAM: v5a4 6.35 GB vs v3c at 6,500 tokens 6.56 GB; closure bar 1.3×. Verdict: 0.209/0.221 vs 0.0697/0.0671 — 3.1× worse, and a slower validation step on DrivAerML. Frontier by-product: v3c at 6,500 tokens costs 8% accuracy for 33% less memory than at 10,000 (9.81 GB). | @sec-nb-instrument-wave-verdict |
-| PAR | DONE — closed negative | Can ISLA's vector head be made exactly reflection-covariant (full O(3)) at no accuracy cost? Trained constructions: W1 raw pseudoscalar gate, W1' tanh gate, true5/true7 all-true-vector bases (`vector_basis`), W2 and W2' odd-coefficient heads (`odd_head`). | M3, L1 | Preregistered per arm in readout units: wall shear within 3% of v3c (≤ 0.094); falsifier > 10% worse (> 0.100). Verdict: every exact construction cost ≥ 12% wall shear (+12.6% to +26%, pressure also worse) or failed to train (W2 collapsed to 0.77/0.74; W2' NaN at epoch 95). Default head retained; flags stay as documented negative results. | @sec-nb-instrument-wave-verdict; @sec-nb-w1p-verdict; @sec-nb-l2-verdict; @sec-nb-w2-verdict; @sec-nb-parity-thread-closed |
-| L1 | DONE — labels covariant; L1 nil | Are DrivAerML's labels mirror-covariant (L1), and does the unconstrained head exploit any asymmetry (L1b)? Data-only mirror-pairing on 48 val cars at full resolution. | PAR | L1 prediction if labels explain the parity penalty: wall-shear antisymmetric energy ≳ 10%. Measured 0.67% (pressure 0.93%) — falsifier fires; disclosed threshold miscalibration (converted, the unfittable part is worth at most +9.8%). L1b: the unconstrained head's predictions are as mirror-symmetric as the constrained heads' (excess −0.002 vs labels' +0.012–0.016), so the penalty is a representation effect, not a labels effect. | @sec-nb-l1-verdict; @sec-nb-l1b-l2-prereg |
-| CRIT | DONE — program reframed | Independent fresh-context review of the whole written record against the code and artifacts; seventeen graded claims (`results/critic_review_2026-09-02.md`). | N1, R1, M1, M4 | Verified in-session before acceptance: ISLA is not scale-equivariant (constant `reference_length`; 63% output change under 2× rescale — M1 void); not measure-complete (unweighted centroid — M4 retracted); the drive-degree-1 contract is vacuous on unit-direction inputs; peak memory 9.8 GB vs GeoTransolver 4.6 GB; the label-noise framing survived in chapter 17 after N1 retracted it. Actions preregistered: S1, P1', G3'. | @sec-nb-critic-review |
-| G3K | DONE — overturns G3-T1 | Does the exact double-layer kernel decoder generalize across BC frequency content where G3's moment-decoder arm could not (chapter 6's 0.075 vs G3's 1.00)? Post-hoc decoder control, labelled as such; 3 seeds, otherwise G3's protocol. | CRIT, G3 | Falsifier for chapter 6: kernel MT1 T1 > 0.5; falsifier for G3: T1 < 0.15. Verdict: T1 **0.070** (14× better than the moment decoder's 1.004), best arm on every axis (T0 0.016, exact amplitude extrapolation, geometry-OOD 0.023). The soft-slice family and the moment decoder fail on the frequency axis; an exact Green's-function operator does not. | @sec-nb-g3-kernel-rerun |
-| K0 | DONE — gate failed; K1/K2 STOPPED | Is inviscid potential flow a usable prior for DrivAerML pressure, so that "exact kernel = Laplace, viscous = learned correction" could carry the G3K mechanism into 3D? Zero-parameter oracle: Morino second-kind solve on a closed remesh, Bernoulli Cp, at the recipe's exact evaluation points. | G3K | Preregistered gate: oracle rel-L2 < 0.90. Verdict: measure-weighted rel-L2 **4.79** (median 1.97, every case > 1.6) against 0.774 for predicting the case mean; no numerical control rescues it (oracle-optimal affine rescale 0.73; remesh sweep flat; sphere validation exact). The physics is separation. K1 (symmetric feature arm) and K2 (mechanism arm) do not launch; K-alt (learned density through the exact 3D double layer on the boundary→interior problem) deferred. | @sec-nb-kernel3d-scoping; @sec-nb-k0-verdict |
-| P1C | DONE — 1.6× headline retired | Does GeoTransolver recover pose invariance for free by canonicalizing its input frame (U_inf → +x, principal-axis roll), rather than by the augmentation the 1.6× headline compared against? P1' eval-only on frozen checkpoints; P1'' trains in the canonical frame. | CRIT | P1' falsifier for the headline: canonicalized GT P1 ratio ≈ 1.00 at in-pose 1.00×. P1': exactly pose-invariant but 1.6–1.7× in-pose (sub-degree tilt hypersensitivity: 1° roll costs 1.7–1.8×; 1.15–1.19× with a 1M-cell frame estimate). P1'' prediction ≤ 1.05×: **held at 1.01×** — canonically trained GT is exactly pose-invariant at 1% cost. ISLA's equivariance is a contract (no freestream or resolvable frame needed), not an accuracy edge on vehicle data. | @sec-nb-p1-canon-verdict; @sec-nb-p1pp-verdict |
-| S1 | DONE — gauge adopted | Does a real similarity gauge (measure-weighted centroid + measure-weighted RMS-radius reference length, geometric-scale contract test added) change in-family accuracy, the P3 density floor, or zero-shot transfer? v3c + `similarity_gauge`, 2 seeds, seed-matched against v3c. | CRIT, M4 | Predictions in readout units: in-family ≤ 0.066 (held: 0.0638/0.0629); P3 density ratio < 2× (held decisively: 13–14.5× → **1.20×**, now the most density-robust ISLA configuration measured (gauge on; the constant-gauge configuration behind the accuracy results degrades 13–14.5x) — GeoTransolver 3.6×, kernel MT1 about 1.8× (1.6–2.2×)); zero-shot estate improves (falsifier fired: 0.949 vs 0.967, inside seed spread — absolute size was not the transfer leak). `similarity_gauge=true` is the reference configuration for new runs; frozen checkpoints keep the constant gauge. | @sec-nb-s1-verdict |
-| HLGEN | DONE — both halves read out | The HiLift analogue of the G1/G2 ladder: data-efficiency rungs (35/210/1260 cases) and OOD axes (AoA extrapolation, pre-to-post-stall) — does GeoTransolver's transfer compounding, the remaining G2-gap discriminator, reproduce on Reynolds-varying physics? | HL | Launched at LR_GT = LR_MT2 = 1e-3 per the preregistered gate rule (prereg 499bcfe8, `results/hilift_generalization_ladder_preregistration_2026-08-24.json`); ISLA lanes are constant-gauge v3c (they predate S1). Data-efficiency verdict: prediction P1 held, ISLA/GT = 0.35 at 35 cases (Branch A condition r(35) ≤ 0.85 met), 0.41 at 210, 0.98 at 1,260, seed spreads an order of magnitude below the gaps; provisional on CTRL. OOD half: in-distribution ISLA/GT 0.69 (aoa) and 0.70 (stall) on the low-side populations; the sealed test is STEST. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L** (unit-drive GeoTransolver 0.124 at 35 cases, ahead of ISLA). | @sec-nb-hl-ladder-dataeff; @sec-nb-hl-ladder-ood-indist; @sec-nb-udrv-verdict |
-| CTRL | DONE — 4 of 4 landed, falsifier not approached | Steel-man for the data-efficiency result: is GeoTransolver's collapse at 35 and 210 cases a learning-rate mismatch or under-training at fixed epochs (about 4,500 optimizer steps at 35 cases) rather than an architectural property? GeoTransolver `super_scarce` and `scarce` at lr 3e-3 (500 epochs) and at lr 1e-3 (1,000 epochs), 2 seeds each. | HLGEN | Preregistered: the best control stays ≥ 2x ISLA at 35 cases; falsifier: any control within 1.2x of ISLA at 35 cases (≤ 0.166) voids the Branch A decision. Landed: lr 3e-3 at 35 cases 0.392 / 0.481; 1,000 epochs at 35 cases 0.373 / 0.429 (ladder 0.375 / 0.409); lr 3e-3 at 210 cases 0.220 / 0.290 (ladder 0.159, worse). 1,000 epochs at 210 cases 0.152 / 0.128 (the only control better than its ladder lane, by 1.13x; bar 0.077). Neither lr nor training length moves GeoTransolver toward ISLA at small n. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L**: all four controls kept the physical-velocity input and could not find the artifact that the unit direction removes (0.381 → 0.124). | @sec-nb-hl-ladder-dataeff; @sec-nb-hl-ladder-ood-indist; @sec-nb-udrv-verdict |
-| T1 | DONE — advantage ISLA-specific, size baseline-dependent | Same-family control for the data-efficiency result: plain Transolver (GeoTransolver's attention family, no geometry encoder, none of ISLA's contracts) on the 35- and 210-case rungs, 2 seeds, lr 1e-3 (+ lr 3e-3 at 35 and, launched later, at 210). Separates "ISLA's structure buys small-data accuracy" from "GeoTransolver's geometry encoder loses it". | HLGEN | Preregistered falsifier: Transolver ≤ 1.3x ISLA (≤ 0.18 at 35; ≤ 0.084 at 210). At 35: 0.634 / 0.616 (lr 1e-3), 0.406 / 0.398 (lr 3e-3) — in GeoTransolver's band, 2.9x ISLA. At 210: 0.092 / 0.089 (lr 1e-3) and 0.089 / 0.083 (lr 3e-3) — above the bar (1.34x ISLA at its better lr) but 1.8x better than GeoTransolver (0.159), so most of the 2.5x ISLA/GT gap at 210 is GeoTransolver falling behind its own backbone. Honest statement: 2.9x at 35 against both baselines; 1.3x (Transolver) to 2.5x (GeoTransolver) at 210; parity at 1,260. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L**: unit-drive Transolver at 35 cases 0.115, ahead of ISLA (0.83x); 210-case unit-drive lanes running. | @sec-nb-transolver-control-prereg; @sec-nb-t1-35-verdict; @sec-nb-t1-210-verdict; @sec-nb-udrv-verdict |
-| A35 | DONE — equivariance is not the carrier | Which ISLA ingredient buys the 35-case advantage? Single-factor ablations at 35 cases, 2 seeds: raw-coordinate channel (breaks SE(3)), measure weights off, similarity gauge on. | T1 | Prediction: breaking equivariance costs ≥ 1.5x (≥ 0.21); falsifier: within 1.15x of 0.138. Verdict: raw coordinates 0.143 / 0.143 (1.04x) — falsifier fires, exact equivariance is not what buys small-data accuracy; measure weights off 0.121 / 0.123 (0.88x, *better*: area weights are gradient variance at uniform 10k sampling); gauge on 0.151 / 0.147 (1.08x). ISLA-internal measurements stand; the advantage they were to explain was against physical-drive baselines and is superseded by UDRV. | @sec-nb-a35-verdict |
-| A35B | DONE — distributed | The two surviving candidates from A35, one flag each at 35 cases, 2 seeds: `seed_mode=raw` (the invariant seeds replaced by raw [r, n, d]; GeoTransolver-style inputs) and `use_relational_geo=false` (anchor-relational invariants removed from slice routing; Transolver-style feature-only slicing, still exactly equivariant). | A35 | Preregistered: the carrier degrades ≥ 1.5x (≥ 0.21) while the other stays within 1.15x; if neither moves ≥ 1.3x the advantage is distributed ("the soft-slice design as a whole"). Falsifier for the whole line: both within 1.15x. Verdict: raw seeds 0.1377 / 0.1366 (0.99x), relational routing off 0.1579 / 0.1629 (1.16x) — distributed; and the A35 reading is corrected: every ISLA variant retained an invariant path, so invariant *information* (not exactness) is the untested candidate → INV. ISLA-internal measurements stand; the advantage they were to explain was against physical-drive baselines and is superseded by UDRV. | @sec-nb-a35-verdict; @sec-nb-a35b-verdict |
-| INV | DONE — not the carrier | Transplant test of the small-data carrier: give GeoTransolver and Transolver ISLA's drive-relative invariants [n·d, r̂·d, \|r\|/8] as per-cell input features (job-local `ComputeDriveInvariants`, ported to the recipe with tests) at 35 cases, each at its better learning rate, 2 seeds. Retrodiction: DrivAerML's fixed freestream makes these raw inputs already, predicting the observed G1 null. | A35B, T1 | Carrier identified if both baselines ≤ 0.235 (log-midpoint to ISLA's 0.138); fully if ≤ 0.16; falsifier ≥ 0.30 (< 20% of the log-gap closed) → the advantage is in ISLA's routing/decoder structure as a whole. Verdict: Transolver 0.294/0.301 (inconclusive band, a 1.35x gain), GeoTransolver 0.400/0.388 (falsifier band, no change); the invariant inputs are not the carrier for GeoTransolver and at most a partial contributor for Transolver. **Physical-drive baselines; superseded as a comparison by UDRV**: the transplant appended features to a mis-scaled input (the carrier was the input scale). | @sec-nb-inv-prereg; @sec-nb-inv-verdict; @sec-nb-udrv-verdict |
-| W2 | DONE — A, B, C, D and E read out; C (20,000-cell floor at 1,260 cases): GeoTransolver 0.0340 and ISLA constant gauge 0.0384, both about 5% below their 10,000-cell values, ratio 0.885 vs 0.878, so the full-data gap is not a token floor (@sec-nb-w2c-floor-verdict); A@210: GT third seed 0.107 vs 0.157–0.160; factor 2.2x on three seeds); Transolver single-angle: 0.091 (1.96x ahead of GT, 2.55x behind ISLA), inconclusive band → ~2/5 of the fixed-angle log-gap separates the two baselines, ~3/5 is common to both; a numerical decomposition, not an attribution to the geometry encoder (Transolver also differs in depth, parameters, drive injection and lr) (@sec-nb-transolver-single-verdict) | Make the data-efficiency result robust, useful and honestly bounded: (A) third seed at 35/210 for all three architectures; (B) the curated 510-case `medium` rung; (C) 1,260 cases at 20,000 tokens for ISLA and GeoTransolver (is the flattening a shared protocol floor?); (D) `single_aoa_12` vs a matched mixed-AoA control (is the carrier the freestream-direction dependence?); (E) paired per-case statistics and force coefficients from existing evaluations; (F, queued) unseen-geometry ladder. | HLGEN, CTRL | Per-arm predictions and falsifiers in readout units at @sec-nb-w2-prereg. W2-E: ISLA wins 180/180 case-level pairs vs both baselines at 35 (median ratio 3.2x), 354/360 vs GT at 210, 258/360 at 1,260 (median 1.06); CL/CD rel-MAE 3.0/3.3% (ISLA) vs 11/17% (GT) vs 8/12% (Transolver) at 35 cases. Third seed at 35 cases: ISLA 0.1376, GeoTransolver 0.359, Transolver 0.409 (three-seed means 0.138/0.381/0.404). Case-level paired statistics (180 cases): ISLA wins 180/180 vs both baselines at 35, 177/180 vs GeoTransolver at 210, 130/180 at 1,260. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L**: at 35 cases with the unit drive GeoTransolver is lower on 130/180 and Transolver on 152/180; the 210-case, fixed-angle and force comparisons await the unit-drive lanes; ISLA arms of B and C kept as measurements. | @sec-nb-w2-prereg; @sec-nb-w2e-paired; @sec-nb-w2a-35; @sec-nb-udrv-verdict; B (510 cases) measured: ISLA 0.0495 (0.0486/0.0504), physical-drive GT 0.0568, Transolver 0.0656 (@sec-nb-w2-medium-verdict; unit-drive baselines at 510 added as wave-2 rows 69–72) |
-| W2F | DONE | Unseen-geometry ladder: ISLA vs GeoTransolver on `geometry_scarce` (210 cases, 21 geometries) and `geometry_super_scarce` (40 cases, 4 geometries), validated on 18 geometries never seen at any angle; plus the GeoTransolver lr 3e-3 steel-man at the single angle. | W2 (arm D) | Falsifier ISLA/GT ≥ 0.8: clear at both rungs (0.56, 0.71). Prediction (within 0.1 of the random split): missed at both, because ISLA's error responds to geometry count (0.138 → 0.250 at 33 → 4 geometries; 0.065 → 0.102 at ~126 → 21) while GeoTransolver's does not (0.38 → 0.45; 0.14 → 0.14); ISLA wins 172/180 cases at both rungs (18 geometries × 10 angles: the case count is descriptive, the geometry-level statistic is GEOSTAT; the random-split and ladder validation sets share 20/180 cases, so the comparison supports a geometry-generalization advantage, not "geometry count alone"). Steel-man: GT lr 3e-3 worse. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L** (lanes 12–15 rerun GeoTransolver with the unit drive at 4 and 21 training geometries); ISLA's response to geometry count stands as a measurement of ISLA. | @sec-nb-w2f-launch; @sec-nb-w2f-40-verdict; @sec-nb-w2f-210-verdict; @sec-nb-w2g-verdict; @sec-nb-udrvl-prereg |
-| DEFL | DONE — falsified | Geometry extrapolation: train on the 80% of geometries with lower flap/slat deflection (1,260 cases), one-shot test on the 20% most aggressive (360 cases; held out per checkpoint, but 182 of them were read by STEST and 40 sit in full_val, so not a program-level confirmation — EXPO); does ISLA's geometry generalization carry across a geometry-parameter boundary where flow-regime boundaries defeated every architecture? | W2 (arm D) | Carried if ISLA test error ≤ 0.7x GeoTransolver's with d ≤ 4; falsifier ISLA ≥ 0.9x GT or both d ≥ 8. | ISLA 1.157x GeoTransolver on sealed pressure (1.108x velocity, 1.115x wall shear); degradation 1.23x vs 1.25x, within 0.03 on every field; bars 0.7x carried / 0.9x falsified; @sec-nb-deflection-prereg, @sec-nb-deflection-amend, @sec-nb-deflection-verdict |
-| QT | DONE | ISLA with interior queries as interacting tokens (GeoTransolver's interior mechanism on ISLA's equivariant routing; `query_tokens=True`, SE(3)-covariant, not query-independent). Pilot (50 ep): 0.103/0.108 vs passive 0.269 and GT pilot 0.093. Full (500 ep, 2 seeds): interior pressure 0.0636/0.0642 vs GeoTransolver-volume 0.0622/0.0618 → 1.03x; velocity 1.16x; ν_t 1.71x; 8.9M params / 6.0 GB vs 27.6M / 8.8 GB; no SDF input. | V0, LVT | Bar ISLA-QT/GT ≤ 1.3 on interior pressure: met (1.03). | @sec-nb-qt-prereg; @sec-nb-qt-pilot; @sec-nb-qt-verdict; float32 re-grade: 1.19x / 1.28x / 1.61x (the bf16 1.03x pressure parity was a bf16 artifact) |
-| QT-SDF | DONE | GeoTransolver-volume receives the signed distance at every interior point; ISLA never did. Query tokens plus `n_query_scalars=1` (SDF) at 8.9M parameters vs GeoTransolver-volume's 27.6M, inputs now matched. Result: pressure 0.0567 (0.91x GT, 0.89x QT), velocity 0.0853 (0.64x GT), ν_t 0.1215 (1.29x GT). | QT | Primary (pressure) QT-SDF/QT ≤ 0.85 supported / ≥ 0.95 falsified: 0.89, inconclusive band. Secondary QT-SDF/GT ≤ 1.1: met (0.91). | @sec-nb-qt-sdf-prereg; @sec-nb-qt-sdf-verdict; results/a35_v0_reduction_2026-09-08.json; float32 re-grade (@sec-nb-fp32-interior-regrade): ISLA 0.0547/0.0796/0.1116 vs GT-volume 0.0515/0.1088/0.0879 → 1.06x / 0.73x / 1.27x; the bf16 pressure lead (0.91x) was a bf16 artifact (GT-volume inflated 20–23%, ISLA 4–7%) |
-| V0-L | DONE — H-b at 54 and 109; parity at 435 | Does ISLA's small-data strength reach the interior on DrivAerML now that query tokens close the full-data gap? GeoTransolver-volume vs ISLA-QT at 54 cars (`train_n54`), two seeds, V0 protocol. Result: GT 0.104 vs ISLA-QT 0.126 on interior pressure (1.21x; velocity 1.26x; ν_t 1.73x); slopes 54→435: ISLA 0.33 vs GT 0.25 on pressure. | QT | H-a if ≤ 0.9; H-b if ≥ 1.15 → H-b: the DrivAerML fit deficit carries to the interior at small data and closes with data. | @sec-nb-v0l-prereg; @sec-nb-v0l-verdict; results/v0l_reduction_2026-09-07.json; float32 re-grade: pressure 1.19x (54) / 1.18x (109) / 1.06x (435), velocity 0.94 / 0.83 / 0.73, ν_t 1.53 / 1.49 / 1.27; no pressure crossover |
-| QT-SDF-L | DONE — inconclusive on pressure, closed on velocity | Does the signed-distance input change the small-data ordering on the interior? QT-SDF configuration at 54 and 109 cars vs GeoTransolver-volume, two seeds, V0 protocol. Result: 54 cars 0.116/0.169/0.274 vs GT 0.104/0.202/0.190 (1.11 / 0.83 / 1.44); 109 cars 0.083/0.119/0.211 vs 0.078/0.163/0.142 (1.06 / 0.73 / 1.49). | QT-SDF, V0-L | Closes if ≤ 1.05 pressure and < 1.0 velocity at 54: velocity yes, pressure no (1.11); persists if ≥ 1.15: no. | @sec-nb-qtsdf-ladder-prereg; @sec-nb-qtsdf-ladder-verdict; results/v0l_reduction_2026-09-08b.json |
-| QT-SDF-LF | STOPPED — falsified | The last of GeoTransolver-volume's three differences: local features. Surface-patch integrals at three radii on ISLA's query tokens (`query_local_features`), aimed at the eddy-viscosity gap (1.29x at 435 cars, flat in data). Result: ν_t 0.1274 (1.36x GT) vs 0.1215 without; pressure 0.0574 (+1%), velocity 0.0855 (+0.2%). | QT-SDF | Supported if ν_t ≤ 1.10x GT; falsified if ≥ 1.25x → falsified. | @sec-nb-qt-lf-prereg; @sec-nb-qt-lf-verdict; results/a35_v0_reduction_2026-09-08b.json |
-| QT-SDF-h256 | DONE — inconclusive (float32) | Does width carry the remaining eddy-viscosity gap? QT-SDF configuration at hidden 256 (~15.7M params vs GeoTransolver-volume's 27.6M), two seeds, 435 cars, V0 protocol. | QT-SDF-LF | Supported if ν_t ≤ 1.10x GT; falsified if ≥ 1.25x; pressure/velocity changes > 5% reported as width effects. | ν_t 0.118 vs GT 0.094 (1.26x, at the 1.25 falsifier); pressure 0.055 (0.88x), velocity 0.084 (0.63x), 2–4% better than width 192. Capacity not excluded (effective GT width 448). @sec-nb-qt-h256-prereg, @sec-nb-qt-h256-verdict; float32 re-grade: ν_t 1.17x (inside 1.10–1.25), pressure 1.02x, velocity 0.72x (results/fp32_reeval/fp32_shift_interior_2026-09-09.json) |
-| DRV-STA | DONE | Where on a DrivAerML car does GeoTransolver's 1.2x edge over ISLA live: on wake-dominated rear surfaces (missing global context) or uniformly (case-level fit)? Per-bin RMS error ratio by streamwise third, 48 validation cases, two seed pairs. | full-data DrivAerML evals | H-wake if rear/front ≥ 1.3; falsified if ≤ 1.1. Result: 1.10 and 1.03 → falsified; gap uniform. Addendum: per-car errors rank-correlated 0.86–0.89 between architectures (= seed self-consistency); gap is a near-constant factor. | @sec-nb-drivaer-station-verdict; @sec-nb-drivaer-percase; results/drivaer_station_attribution_2026-09-07.json |
-| MEM2 | DONE | Saved-activation attribution of ISLA at 10k tokens (76% per-slice geometry) and an exact recompute-in-backward option (`geo_checkpoint`, recipe default on). | — | Bitwise-identical forward and gradients; peak memory 3.23 → 1.42 GiB (10k), 6.34 → 2.78 GiB (20k); step time 1.16x. | @sec-nb-geo-recompute; results/isla_memory_recompute_2026-09-07.json |
-| IO1 | STOPPED | HiLift lanes are dataloader-bound (130–150 s epochs for 15 s of compute at 210 cases; 510-case lanes 36 h). Root cause measured: a 10k-cell sample's 28k referenced vertices are spread over the whole 142M-vertex memmap and each page fault drags in lustre read-ahead (1.08 GB per sample). Page-wise positional reads move 0.29 GB but are latency-bound in the training loop: 320–361 s per epoch against 70–130 s for the memmap gather on the same node. Positional reads dropped; compaction now lives upstream in Mesh.slice_points (PR #1966), merged 2026-09-08 (@sec-nb-sync-1966). The remaining fix is dataset-level (vertex renumbering or a per-cell derived copy, ~15 TB) or a preregistered reservoir protocol: owner decision. | — | Adopt if ≥ 1.5x faster epochs: not met (0.2–0.25x). | @sec-nb-hilift-io; @sec-nb-hilift-io-verdict |
-| V0 | DONE — GeoTransolver leads the interior 2.6–3.1x; kernel line closed | The first boundary→interior measurement, the task closest to the restated north star: predict DrivAerML volume fields (pressure, velocity, nut) from the surface alone. Four arms, 500 epochs, 2 seeds: GeoTransolver-volume (queries as interacting tokens), ISLA-interior with a soft-assigned proxy normal, ISLA-interior with the SDF gradient as query normal, and the exact-kernel MeshTransformer (K-alt). | S1, K0 | Preregistered: ISLA-interior/GT in [1.3, 2.5] (falsifiers ≤ 1.2, ≥ 3.0); kernel/GT in [1.5, 3.0] with far-band (SDF ≥ 0.5 L_ref) pressure ≤ 1.0x GT or the kernel line closes. Verdict: GT 0.062; ISLA-int-SDF 0.160 (2.57x, inside band); ISLA-int proxy 0.193 (3.11x, falsifier); kernel 0.496 (8.0x). SDF-band stratification: the kernel's "0.59x far-band pressure" is a zero-output artefact (far velocity 16.7x GT) — kernel line CLOSED on all readouts; ISLA's deficit *ratio* grows with distance from the wall (2.5x near → 3.3–5.4x far). Qualified by the audit: 94.6% (pressure) and 93.7% (velocity) of the excess sampled squared error over GT lies within 5 cm of the wall (results/v0_interior_excess_sse_2026-09-08.json), so the ratio growth does not identify a missing mechanism; "missing volumetric context" is withdrawn as a finding. | @sec-nb-v0-prereg; @sec-nb-v0-pilot; @sec-nb-v0-verdict; @sec-nb-v0-sdf-band; @sec-nb-audit-2026-09-08 |
-| LVT | STOPPED — falsified | Branch V: can interior queries receive interaction while staying exactly query-independent? K = 3·n_slices + 1 latent tokens placed equivariantly off each slice anchor along its mean normal (plus the centroid) join the encoder as interacting tokens; queries still decode passively. Contracts preserved exactly (SE(3), measure completeness, query independence). | V0 | Preregistered: LVT/GT ≤ 1.5 on interior pressure confirms; ≥ 2.0 falsifies ("interaction at the query itself is required" → next candidate is a canonical probe-set decode). Stratified prediction: gain over the SDF-normal base largest in the mid/far bands. Pilot (50 ep): 0.340 vs base 0.269. Full (500 ep, 2 seeds): 0.2326 / 0.2239 → LVT/GT 3.68 (falsifier fires) and 1.43x worse than the plain interior decode. Closed as built; wake-aligned probes and a canonical probe-set hybrid recorded, not launched, pending INV. | @sec-nb-v0-verdict; @sec-nb-v0-sdf-band; @sec-nb-lvt-verdict |
-| STEST | DONE — Branch B triggered on stall | The one-shot sealed test of the OOD lanes: eight checkpoints (aoa and stall × both architectures × seeds 42/43) on their own curated test lists (900 high-AoA, 723 post-stall cases), frozen inference configuration, protocol declared before any test case was read. Readout d_axis = OOD test pressure rel-L2 / in-distribution val pressure rel-L2. | HLGEN | Predictions: d_stall > d_aoa for both (held for ISLA only); d_GT < d_MT2 on at least one axis (held on both). Verdict: both architectures degrade about 10x (GeoTransolver d 10.5 / 9.3, ISLA 11.8 / 12.5 on aoa / stall); ISLA keeps the lower absolute OOD pressure error (0.244 vs 0.315 aoa, 0.260 vs 0.276 stall); GeoTransolver has the smaller ratio because its in-distribution floor is higher (0.030 vs 0.021). Branch B trigger d_GT ≤ 0.8 d_MT2: aoa 0.89 not triggered; stall 0.74 with disjoint seed intervals, triggered. No reruns, no failures. GeoTransolver arms are physical-drive; the ~10x degradation of both architectures stands, the ISLA-vs-GeoTransolver ordering (1.29 / 1.06) is a physical-drive measurement; no unit-drive rerun of the regime splits is preregistered. | @sec-nb-hl-ladder-ood-indist; @sec-nb-hl-sealed-test |
-| B1 | DONE — falsifier fired | Branch B mechanism discriminator: is GeoTransolver's residual transfer-ratio edge carried by pointwise raw-coordinate features? ISLA with the similarity gauge plus a `raw_coord_channel` that appends raw gauge-normalized coordinates and normals to the seed invariants, deliberately breaking SE(3) equivariance (24/24 contract tests, one asserting the break); 2 seeds, stall split, lr 1e-3, 500 epochs, otherwise frozen. One additional sealed `stall_test` evaluation, limited to the two B1 checkpoints, declared before the lanes existed. | STEST | Preregistered in readout units: raw features carry transfer if d ≤ 11.0 (at least halfway from ISLA's stall d toward GeoTransolver's 9.3) *and* OOD stall pressure < 0.245; they do not if d ≥ 12.0 or OOD pressure ≥ 0.255, in which case the next discriminator is a GeoTransolver ablation removing its raw coordinates. Stated caveat: the trigger is denominator-driven, so the absolute OOD readout is weighed at least as heavily as the ratio. Verdict: with the similarity gauge on plus the raw-coordinate channel, in-regime val 0.0206/0.0201, sealed stall test ≈0.27, d ≈ 13 on both seeds (vs 12.5 reference, 9.3 GeoTransolver): raw coordinates do not carry GeoTransolver's smaller ratio. | @sec-nb-hl-sealed-test; @sec-nb-b1-verdict |
-| G5 | PLANNED | Single-factor generalization on the forthcoming cfd-datagen 3D RANS corpus: exact-symmetry axes (pose and scale twins) versus coverage axes (Reynolds twins, held-out geometry banks, held-out boundary-condition profiles), with mesh twins defining the per-stratum label floor — the 3D test of what G3 found in 2D. | Corpus launch with twin draws (see dataset feedback); S1 gauge; G3K | Each arm's prediction and falsifier is stated in readout units in the preregistration; between-architecture differences below the A4 floor are reported as not resolvable | @sec-nb-g5-prereg |
-| HLREG | DONE — falsified (localization) | Where on the wing does ISLA's small-data advantage live? Hypothesis (@sec-mechanism): in resolving the small geometric features of multi-element wings (slat and flap gaps, a few dozen sampled points wide) from few samples, which smooth single-body morphs (DrivAerML) do not exercise. Instrument: split each validation surface into connected components (slat, main, flap) and into bands by distance to the nearest other element; per-band GeoTransolver/ISLA RMS pressure-error ratio, median over the 180 validation cases, at 35 and 210 cases, from existing checkpoints (eval-only; the ladder evaluations kept per-point predictions, so no re-evaluation is needed). | W2F, DRV-STA | Supported if the near-gap-band ratio is ≥ 1.5x the ratio on the rest of the surface at 35 cases (direction preserved at 210); falsified if uniform within 1.15x across bands, as the DrivAerML gap is across streamwise thirds; inconclusive between. Per-element ratios reported alongside. | @sec-nb-hlreg-prereg; verdict @sec-nb-hlreg-verdict. Component partition unavailable (single-body meshes); facing-surface-distance bands instead (@sec-nb-hlreg-amendment). Near ÷ rest 0.72 (35) / 0.78 (210); near band 2.01/1.87, open surface 3.00/2.57; ISLA's squared error 59%/71% in the near band. Artifacts results/hlreg_facing_distance_{35,210}_2026-09-08.json. **Physical-drive GeoTransolver; superseded as a comparison by UDRV / UDRV-L**: no advantage remains to localize at 35 cases; the perturbation follow-up is conditional on UDRV-L leaving an advantage at some rung. ISLA's own error concentration stands. |
-| UDRV | DONE at 35 cases — SUPPORTED far past the bar; fixed-angle lanes still training | Do the baselines pay for receiving the freestream as a physical velocity? ISLA's recipe consumes the unit direction; GeoTransolver's and Transolver's consume U_inf (2,679.5 in/s on HiLiftAeroML, 38.9 m/s on DrivAerML), unnormalized. At initialization GeoTransolver's global-context projector collapses from 191–232 effective slices per head at magnitude 1 to 1.00–1.02 at 2,679.5 (max context 0.66 → 1,530; results/geotransolver_drive_conditioning_2026-09-08.json). Control: GeoTransolver and Transolver retrained with the unit direction at 35 cases and on `single_aoa_12`, same cases, seeds, budget and learning rates (1e-3, 3e-3); hydra override only. | HLGEN, W2, W2F, INV | Bars in @sec-nb-udrv-prereg: supported if GeoTransolver ≤ 0.27 / Transolver ≤ 0.29 at 35 cases (one third of the log gap); falsified if ≥ 0.34 / ≥ 0.38. | **Result (35 cases, 180 validation cases, two seeds):** GeoTransolver 0.124 (0.124 / 0.125) vs 0.381 physical vs ISLA 0.138; Transolver 0.115 (0.117 / 0.113) vs 0.404 vs 0.138. Velocity 0.145 / 0.140 vs ISLA 0.168; wall shear 0.229 / 0.216 vs 0.256. Paired: GeoTransolver lower than ISLA on 130/180 cases (84/118 geometries; median ISLA/GT 1.09; p = 2e-9), Transolver on 152/180 (102/118; median 1.17; p = 8e-22); unit vs physical lower on 180/180 for both (median 3.4x / 3.8x). **Verdict: the baselines' small-data deficit was an input-scaling artifact of the comparison protocol; with it removed both baselines are 1.1–1.2x more accurate than ISLA at 35 cases (baseline ÷ ISLA 0.90 / 0.83).** Fixed-angle unit-drive lanes (4) at about epoch 200 of 500. results/udrv_reduction_2026-09-09.json; @sec-nb-udrv-prereg; @sec-nb-udrv-verdict; fixed angle (lanes 4–7) @sec-nb-udrv-single-verdict: unit-drive GT 0.0291, Transolver 0.0317 vs ISLA 0.0358, 18/18 geometries each (results/udrv_reduction_2026-09-09b.json) |
-| UDRV-L | DONE — both unit-direction baselines on every rung; at 1,260 cases GeoTransolver 0.0355 (0.88x) and Transolver 0.0385 (0.95x) vs constant gauge 0.0405 (@sec-nb-udrv-1260-verdict, @sec-nb-udrv-1260-transolver-verdict) | The HiLiftAeroML ladder with unit-drive baselines: GeoTransolver and Transolver at 210 cases (lanes 8–11), GeoTransolver at 4 and 21 training geometries (lanes 12–15), GeoTransolver at 1,260 cases (lanes 16–17, queued behind the fixed-angle lanes). Frozen ladder protocol, reference learning rates, seeds 42/43, hydra drive override only (highlift/hl_udrv_aga.sbatch, highlift/udrv_lanes.tsv). Decides whether any HiLiftAeroML comparison above 35 cases (2.2x at 210, parity at 1,260, 1.8x / 1.4x on unseen geometries, 5.0x fixed angle) survives as an ISLA advantage. | UDRV | Per rung, two-seed mean pressure rel-L2 against ISLA on the same validation cases with paired per-case and per-geometry counts: ISLA advantage only if baseline ÷ ISLA ≥ 1.10 with ISLA lower on ≥ 2/3 of cases (≥ 12/18 geometries on the geometry rungs); parity 0.95–1.05; baseline ahead ≤ 0.90; between, a small difference in the stated direction. Prediction: baselines match or beat ISLA at every rung. | @sec-nb-udrvl-prereg; results/udrv_ladder_preregistration_2026-09-09.md; geo40 rung measured (@sec-nb-udrvl-geo40-verdict): unit-drive GT 0.189 vs ISLA 0.250 (0.76 by the mean; 96/180 cases, 9/18 geometries), ISLA advantage bar not met; geo40 final in float32 (@sec-nb-geo40-final): unit GT 0.1884 (0.755 of ISLA; 0.907 of weights-off ISLA), unit Transolver 0.1928 (0.773; 0.928) |
-| CAMPA | DONE at 35 cases — orderings stand; 210-case rung (36 lanes) running | Is the 35-case ordering a property of the particular 35 cases? The four unit-drive arms (GeoTransolver 3e-3, Transolver 3e-3, ISLA weights on, ISLA weights off) retrained on three further geometry-stratified 35-case draws, three seeds each, float32 evaluation, alongside the curated draw as draw 0. | UDRV, FP32-EVAL | Preregistered per comparison: 'ISLA behind' stands if the ratio's 90% interval over draws lies below 0.97; weights-off 'between' if 0.93–0.97 persists on ≥2 of 3 draws. | GeoTransolver ÷ ISLA 0.881 / 0.892 / 0.957 (curated 0.895; mean 0.910, 90% interval 0.840–0.979); Transolver ÷ ISLA 0.846 / 0.852 / 0.900 (0.829; 0.866, 0.816–0.916); weights-off ÷ on 0.896 / 0.898 / 0.947 (0.885; 0.914, 0.865–0.963). Between-draw SD ÷ seed SD: 8.8 GeoTransolver, 10.9 Transolver, 3.4 ISLA, 8.4 weights-off ISLA; draw 3 is 24% harder than draw 1 for GeoTransolver. Chapter 5 @sec-de-result; `research/transfer_program/studies/campaign_a_draws/campaign_a_n35_fp32_2026-09-10.json`. |
-| QMASS | DONE | The query-token configuration's query weight is exp(qt_logw) × geometric mean of the source weights, so duplicating every source token at half weight (an identical discrete measure) changes outputs by 3.7% (query tokens) and 9.1% (query tokens + SDF) in a float64 probe on small random models (plain surface model 8e-16); source refinement, query count, query distribution and chunking can all change the field. Repair: `query_mass="source_total"` (query mass = learned fraction of total source measure ÷ query count) with contract tests, plus the composition fixes (gauge + surface local features scale contract; passive queries with boundary scalars / scale conditioning / raw seeds / odd head at unequal counts). Probe: trained QT and QT-SDF checkpoints at fixed sentinel queries with 1k/10k/40k companions, plane and near-wall sets, chunk layouts. | QT-SDF | Bounded if the sentinel change is < 1% relative; consumes the interior advantage if it exceeds the 0.005 absolute pressure margin over GT-volume. Trained checkpoints keep the old convention; impact measured before any switch. | Repair committed with contract tests (results/isla_contract_probes_2026-09-08.json). Trained QT+SDF checkpoint (seed 42, 4 validation cars, fixed 1,000 sentinel points, bf16): pressure error 0.110 with no companions, 0.077 with 1,000, 0.062 with 9,000 (training count), 0.056 with 39,000; relative change of the sentinel predictions versus the training count 0.100 / 0.051 / 0 / 0.029; passive control 0.000 in fp32. The advantage over GT-volume holds at or above the training query count and is consumed below it. Side finding: every ISLA interior arm received about 365 surface cells, not 10,000 (V0-SURF10K). results/isla_qt_companion_dependence_2026-09-08.json; @sec-nb-qmass-verdict |
-| EXPO | DONE — no unexposed HiLift geometry | Program-level exposure ledger keyed by case and geometry over training, tuning, diagnostics and prior test evaluations. Pinned manifest (revision bbec30bc): full_test shares 179/360 cases with the already-evaluated aoa_test ∪ stall_test, geometry_test 182, deflection_test 182; geometry_test and deflection_test share 37 and 40 cases with full_val; aoa_test and stall_test cover all 180 geometries. | HLGEN, STEST | Verdict: every remaining HiLift test split is held out per checkpoint but not a program-level confirmation; removing exposed cases post hoc is a selected population, not a replacement. Independent confirmation needs a prospective dataset. | @sec-nb-audit-2026-09-08; results/hilift_exposure_ledger_2026-09-08.json |
-| GEOSTAT | DONE | The W2-F and single-angle validation sets are 18 geometries × 10 angles; the saved paired statistics treat 172/180 case wins as independent (p ≈ 3e-41). Recompute with the geometry as the unit: per-geometry mean error per seed, paired geometry-level sign test (n = 18, smallest two-sided p 7.6e-6) and intervals, alongside the descriptive case counts; random-split rows annotated with 118 geometries. | W2, W2F | Case-level wins stay descriptive; the geometry-level result is what the chapters cite. | ISLA more accurate on 118/118 geometries at 35 cases, 116/118 at 210, 86/118 at 1,260 (interval on the ratio of means includes 1.0), 18/18 at both unseen-geometry rungs (p = 7.6e-6; ratio-of-means 95% intervals [1.56, 2.16] and [1.28, 1.54]) and 18/18 at the fixed angle ([4.70, 5.31]); @sec-nb-audit-geometry-stats; results/hilift_paired_stats_geometry_2026-09-08.json. **Physical-drive baselines; superseded as a comparison by UDRV / UDRV-L**: with the unit drive at 35 cases GeoTransolver is lower on 84/118 geometries and Transolver on 102/118 (results/udrv_reduction_2026-09-09.json). |
-| FORCE-REF | READY | The recipe integrates predictions and labels on the same 10,000 sampled cells (forces.py:296), so the 3% (35 cases) and 0.6% (fixed-angle lift) errors are against the sampled-cell label integral and shared quadrature cancels sampling error. Ladder: 10k / 20k / 40k sampled cells and the full surface, labels and predictions, repeated samples, on a preselected case set at 35 and 1,260 cases; tail errors reported. Dataset revision bbec30bc recorded (six force-monitor means replaced by surface-field integrations). | W2 (arm E) | 3% stands against the full surface if the full-surface error is within 1.5 percentage points of the sampled-cell error; if the sampled-cell reference deviates from the full-surface integral by more than the model error, force errors are restated against the full surface. | @sec-nb-audit-2026-09-08 |
-| MEM-INST | DONE | ISLA's 1.5 GB subtracts resident parameter/optimizer memory from max_memory_allocated (results/isla_memory_recompute_2026-09-07.json); GeoTransolver's 4.6 GB and the interior artifact's "peak allocated" values are the training logger's memory_reserved() (train.py:612). One harness: both surface models and both interior configurations, allocated and reserved peaks, optimizer state included, matched checkpointing, 10k and 20k tokens; end-to-end step time on one device. | MEM2 | The two-instrument statement is replaced by the measured factor. The within-ISLA 2.28x recompute saving is unaffected. | Measured on one GB300 (bf16, batch 1, 10k tokens, AdamW step; total peak allocated / reserved / step): GeoTransolver 4.07 / 4.58 GiB / 65 ms; ISLA as trained 9.26 / 9.53 GiB / 246 ms; ISLA current without recompute 3.40 / 3.63 GiB / 239 ms; ISLA current with recompute 1.57 / 1.77 GiB / 246 ms. The harness reproduces both trainer-log reserved figures (4.62 and 9.83 GiB). results/matched_memory_isla_gt_2026-09-08.json; @sec-nb-audit-2026-09-08 |
-| V0-SURF10K | DONE — null | Every ISLA interior arm was trained and evaluated with about 365 vehicle surface cells (the volume recipe applies a 10,000-cell and then a 10,000-point subsample to the boundary; the point cut keeps only fully retained cells), so the interior comparison never gave ISLA the surface sample the chapter describes; GeoTransolver-volume reads no boundary. Rerun ISLA query tokens + SDF (two seeds, 435 cars, frozen protocol) with the reader's new `boundary_subsample: cells` so 10,000 cells reach the model. | QT-SDF, QMASS | Supported (surface information matters for the interior) if pressure ≤ 0.054 or eddy viscosity ≤ 0.115 (5% better than the 365-token arm's 0.0567 / 0.1215, five times its seed spread); null if all three fields are within 3% of the 365-token arm. Either way the chapter's input description is corrected. | @sec-nb-v0surf-prereg; verdict @sec-nb-v0surf-verdict: 0.0572 / 0.0848 / 0.1187 vs 0.0567 / 0.0853 / 0.1215 (+0.9 / −0.6 / −2.3%), all within 3%; ν_t seeds 0.110 / 0.127. results/a35_v0_reduction_2026-09-09.json |
-| UDRV-INT | DONE — null | Does the interior comparison inherit the baselines' input-scale confound? GeoTransolver-volume consumes physical U_inf (38.9 m/s, constant on DrivAerML) where ISLA consumes the unit direction. Rerun the frozen GT-volume lane with `forward_kwargs.global_embedding=global_data.U_inf_dir`, two seeds, 435 cars. | UDRV (first readout), V0 | Confound present if pressure ≤ 0.0589 or velocity ≤ 0.1267 or eddy viscosity ≤ 0.0892 (5% better than the reference); null if all within 3%. Interior rows restated against the unit-drive baseline if present. | @sec-nb-udrv-int-prereg; verdict @sec-nb-udrv-int-verdict: −0.5 / −1.8 / −0.3% (pressure / velocity / ν_t); ISLA QT+SDF lower on pressure 44/48 cars, velocity 48/48; GT-volume lower on ν_t 38/48. results/udrv_int_reduction_2026-09-09.json |
-| QTDENS | DONE — neither | Is GeoTransolver-volume's eddy-viscosity lead a reading of the interior sample's density (mesh scale, hence the hybrid RANS/LES closure's filter length) or of neighbouring-point flow geometry? Two ISLA-native query-side channels on the QT+SDF arm (365 surface cells, matched to the reference): a density scalar (count of other queries within 0.05 gauge units) and a k=16 neighbour aggregation of pair invariants incl. wall-distance differences; two seeds each, 435 cars. | QT-SDF, V0-SURF10K | Closes the gap if ν_t ≤ 0.1033 (1.10x GT-volume 0.0939); fails if ≥ 0.1174 (1.25x); pressure/velocity changes > 5% reported. Density-only success = discretization artefact, channel not adopted. | @sec-nb-qt-density-prereg; verdict @sec-nb-qt-density-verdict: float32 ν_t density 0.1155 (1.32x GT-volume 0.0877), neighbours 0.1138 (1.30x), reference 0.1122 (1.28x); both above the 0.1099 failure line; pressure/velocity within 5%. Channels kept flag-gated, not adopted. results/qtdens_reduction_2026-09-10.json |
-| FARWAKE | STOPPED | Is ISLA's one remaining interior deficit (eddy viscosity in the far wake beyond 0.4 body lengths, 2.2% of a uniform sample, the whole 18%) an under-sampling effect? Train the reference query-token configuration with far-field-oversampled interior queries (SDF-band inclusion weights 1 / 3 / 8 at 0.05 and 0.4 L; exact inclusion probabilities recorded), two seeds, otherwise the frozen protocol. Approved by Peter 2026-09-10. | Far-wake diagnostics (companion), QCOUNT | Float32, two seeds, band decomposition: far-band ν_t ≤ 0.085 with near-wall and recipe p/v within 3% supported; ≥ 0.095 falsified. | Falsified 2026-09-11: far-shell ν_t 0.193 against the reference 0.118 and GeoTransolver-volume 0.071; recipe pressure +36%, velocity +22%, ν_t +48%; every band worse; the query-distribution swap for the interacting decode is stated as the confound, so the arm settles the deployable question, not the mechanism (@sec-nb-farwake-verdict; results/farwake_reduction_2026-09-11.json, results/farwake_far_field_shells_2026-09-11.json) |
-| QCOUNT | DONE — between: dependence reduced ~40%, not removed; 3.7% cost at the training count | Is the interior query-token configuration's dependence on the request size (reference: +38% pressure, +59% velocity, +49% ν_t at 2,000 requests vs 10,000; converges upward at 20,000) a training-distribution artifact? Train the reference configuration with the interior count drawn per sample in [2,000, 20,000] (`DomainMeshReader.interior_n_points_range`, default unchanged), two seeds, otherwise the frozen protocol. Mechanism: measure-consistent routing already permits one field at every count; the augmentation supplies the gradient that penalizes count-specific solutions; no new input, no architecture change. | QMASS, PASSIVE2 (passive route closed) | Float32, 48 cars, two seeds, evaluated at 2k / 10k / 20k: (1) 10k pressure ≤ 0.0563 (within 3% of 0.0547); (2) 2k ÷ 10k ≤ 1.10 pressure and ≤ 1.15 ν_t supported, ≥ 1.25 pressure falsified; (3) 20k ≤ 10k on all fields; (4) ISLA ÷ GeoTransolver-volume at 10k within 0.03 of 1.08. | @sec-nb-qcount-prereg; lanes v0_isla_qtsdfval_qcount_seed{42,43} (jobs 702153/702154, snapshot code_qcount); controls v0_evals_fp32_q2000 / q20000 |
-| PASSIVE2 | DONE — falsified via companion D1 (SUPPORT-12 1.43x pressure, 2.41x ν_t; passive route closed at matched depth) | Passive ISLA decodes through a separate four-block read decoder; query-token ISLA sends queries through twelve encoder blocks with token-type and weight parameters, and the SDF scalar is unavailable in passive mode, so 0.160 vs 0.064 prices the complete passive configuration, not query independence. Hold query depth, readout and inputs (SDF) fixed; disable only the writes from queries into the shared slice state. Completes the passive/interacting × normal-only/normal+SDF matrix. | QMASS, QT-SDF, V0 | Not a fundamental cost if within 1.3x of GT-volume on interior pressure; a cost of interaction if ≥ 2.0x; between, inconclusive. Bars fixed before launch. | @sec-nb-audit-2026-09-08 |
-| MOM2 | DONE — supported | Anchor collapse does not require rotational symmetry: five equal spherical components at azimuths {0,120,240,27,207}° vs {0,120,240,43,223}° about an axial drive have zero transverse first moment, differ in pairwise distances (0.56) and have no rotation preserving geometry and drive, yet ISLA's common-component outputs agree to 4e-15 (default and similarity gauge, two seeds); the local-distance channel separates them (0.039–0.063); a second-moment contraction distinguishes them (2.41 vs 1.99). Expressivity benchmark: base ISLA vs local-distance channel vs a per-slice second-moment channel on N random collision-family pairs, linear probe on the common-component output. | M3 | Supported if the second-moment channel separates ≥ 95% of pairs while the base is at chance, the distance channel reported alongside; falsified if neither channel exceeds 60%. A documented representation limitation until then; not established as the cause of any benchmark deficit. | @sec-nb-audit-2026-09-08; @sec-nb-mom2-prereg; results/isla_first_moment_collision_2026-09-08.json; verdict @sec-nb-mom2-verdict: both cheap channels recover φ (ridge R² 0.996–1.000, φ≥60 probe 0.99), base 0.54 and blind (<1e-12), all controls <1e-12 (results/mom2_second_moment_benchmark_2026-09-08.json). Preregistered family-label probe was ill-posed (exchangeable labels; chance for every arm) and replaced by azimuth probes. |
-| MOM2-T | DONE — free | Is the second-moment channel free where ISLA is trained? `mom2_mt2_lr1e3_seed{42,43}`: the reference DrivAerML surface configuration at 435 cars with `second_moment_features=true` (code_isla5, 52eb29ec5), two seeds, frozen protocol. | MOM2 | Free if two-seed mean pressure ≤ 0.0594 (reference 0.0577, seeds 0.0588/0.0567) and wall shear within 3%; falsified as a free ingredient if pressure ≥ 0.0594. Gains > 3% reported, not a bar. | @sec-nb-mom2t-prereg; verdict @sec-nb-mom2t-verdict: 0.0577/0.0588 → 0.0583 vs reference 0.0577 (+0.9%); wall shear not in the evaluation metrics (not measured). results/mom2t_reduction_2026-09-09.json |
-| MEAS-METRIC | DONE — falsified | Is the 12% gain from dropping ISLA's routing measure weights a measure–metric mismatch (model fits the area measure, metric scores points)? Eval-only on saved 35-case predictions with recomputed cell areas. | A35 | Mismatch supported if the unweighted/weighted ratio under the area-weighted metric R_w ≥ 0.97; falsified if ≤ 0.91. | R_w 0.896 vs R_u 0.894: falsified; weights are a cost under either measure (variance: cell areas span 400x). @sec-nb-measure-metric-verdict, results/measure_metric_35_2026-09-09.json |
-| NOW-L | DONE — ablation only (rule retired 2026-09-10, @sec-principle); DrivAerML 2.9% (fades), 210 cases 8.4% (persists) | Does the no-weights gain persist at 210 HiLift cases and on DrivAerML (435 cars)? Two seeds each, frozen protocol. | MEAS-METRIC | Persists if ≥ 5% better at both (HiLift ≤ 0.0618; DrivAerML ≤ 0.0548); fades if within 3% at both. | @sec-nb-noweights-prereg; DrivAerML rung measured: 0.0561 vs 0.0577 (2.8% better, 41/48 cars; fades band by 0.2 points; @sec-nb-noweights-drivaer-verdict); HiLift 210 pending |
-| WAVE-3 | RUNNING | One pass that completes the fair comparison: ISLA weights-off on the 1,260 / 4-geometry / 21-geometry / fixed-angle / deflection splits (+ seed 44 at 35); unit-drive Transolver on the three rungs it lacked; seed 44 for unit-drive GeoTransolver and Transolver at 35 and 210; lr steel-men for the new baselines at 35 (GT 3e-3, Transolver 1e-3); DrivAerML unit-drive GeoTransolver (3 seeds) and Transolver (two rates) at 435 cars plus ISLA seed 44; interior seed 44 for ISLA QT+SDF and unit-drive GT-volume. wave2_lanes.tsv rows 44–68, uw_aga.sbatch, v0_qt2 lane 2, v0_udrvint lane 2. | UDRV, NOW-L, node budget lifted | Per arm group, in @sec-nb-wave3-prereg: weights-off persists ≥ 5% / fades ≤ 3%; UDRV-L bands for Transolver rungs; steel-man moves a baseline number if ≥ 5% better; DrivAerML GT confound present if ≤ 0.0521, null within 3% of 0.0548. | @sec-nb-wave3-prereg; arm 5 measured (@sec-nb-uw-verdict): unit-drive GT 0.0556 (3 seeds; null vs physical 0.0548), Transolver 0.0563 at 3e-3; parity with ISLA 0.0577 within 4%, with weights-off 0.0561 within 1%; arms 3–4 and the 35-case weights-off third seed measured (@sec-nb-wave3-35-verdict): third seeds move no mean by > 0.001; unit-drive GT at 3e-3 0.111 (steel-man moves its number, 158/180 cases); Transolver at 1e-3 worse (0.127); ISLA weights off 0.123 on three seeds; arm 5 re-graded in float32: ISLA 10% behind unit-drive GT and 8% behind Transolver (7% / 5% with weights off); the bf16 'parity within 4%' is retired |
-| FP32-EVAL | DONE — 230 checkpoints | The +6.1% same-checkpoint discrepancy is bf16 evaluation rounding (two bf16 graphs give 0.0588 and 0.0624 for weights that score 0.0568 in float32; per case up to 31%). Float32 inference becomes the reporting instrument; every reported checkpoint is re-evaluated once, eval-only, outputs `*_evals_fp32/`, points asserted identical; per-checkpoint shift tabulated for all three architectures. Run by the scaling session. | SCALE (snapshot ladder) | Re-grade each rung under float32 in order: 35 cases, fixed angle and 4 geometries, DrivAerML surface, interior, the rest; a verdict changes only if its ordering or band changes under float32. | @sec-nb-fp32-instrument; group 1 (35 cases, 22 checkpoints) done: means move ≤ 0.3%, ratios unchanged to the third digit, architecture medians GT −0.10% / ISLA −0.14% / Transolver −0.30% (bar not fired at this rung), per-case maxima 1.5–3.1% ISLA vs 4.6–11.7% baselines (@sec-nb-fp32-35-regrade, results/fp32_reeval/fp32_shift_35_2026-09-09.json); groups 2–5 evaluating; group 3 (DrivAerML surface, 37 checkpoints) done: architecture-dependence bar FIRES (medians GT −9.1%, Transolver −7.8%, ISLA −3.2%); ISLA ÷ unit GT 0.902, ÷ Transolver 0.925 in fp32 (@sec-nb-fp32-drivaer-regrade); group 4 (interior, 34 runs): GT-volume −17/−18/−6% (p/u/ν_t), ISLA arms −2 to −12%; interior ratios re-graded (@sec-nb-fp32-interior-regrade, @sec-nb-fp32-interior-family); unit-drive GT-volume float32 0.0513/0.1070/0.0879 (transfer session); campaign complete (230 evaluations, 209 runs; results/fp32_reeval/fp32_shift_2026-09-09.json; @sec-nb-fp32-all-regrade): median pressure shifts ISLA −0.7% / GT −0.4% / Transolver −8.2% on HiLift, −3.1% / −9.6% / −7.8% on DrivAerML; every close comparison moved toward the baselines; owed clones: unit-drive GT at 210 / 21 geometries / 1,260 and the density/neighbour arms when their bf16 evaluations exist |
-| TRANSFER | RUNNING — POSE-BENCH, campaign A (35), campaign C (T1 null, T2 trade + decomposition, T3), campaign D, D1 done; A at 210 and the wake / latent-token arms running | The audit companion's four response-based directions, run as a separate Quarto companion (research/transfer_program) by a parallel session: D1 fixed computational support with a depth-matched passive readout (six DrivAerML volume lanes training); D2 boundary response with an exact principal part (PARTIAL: the Laplace DtN residual is low-rank and resolution-stable but a source-fitted basis misses held-out gaps, annuli and corners by 7–80x at equal rank); D3 port composition (NOT WORTH IT as proposed: smooth-mode local errors amplify 4–30x through the interface solve; a hybrid with exact low modes survives); D4 transferred correction spaces (STOPS: a free geometric coarse grid beats a frozen source-fitted space on every held-out system); POSE-BENCH and a geometry-stratified multi-draw study at 35 and 210 cases. | UDRV-INT, QMASS | Each study's bars are in its PREREG file and notebook entry (research/transfer_program/99-notebook.qmd: #sec-nb-d2-verdict, #sec-nb-d3-verdict, #sec-nb-d4-verdict). | research/transfer_program |
-| PRINCIPLE | DONE | Peter's 2026-09-10 redirect: the goal is accuracy by physically principled means; discretization consistency (convergence to one field under refinement and across samplings) is an acceptance criterion, not a metric. | — | Chapter 1 section, architecture audit, weights-off reworded as ablation everywhere, reference-configuration rule retired. | @sec-principle, #sec-nb-principle-redirect, #sec-nb-principle-audit |
-| BENCH | DONE — nothing consistent at 10k; only the similarity gauge converges | Does each architecture give the same field under uniform-over-cells, area-proportional and 10:1-biased sampling of the same surface, and converge as the count grows 2.5k → 40k? Evaluation only, float32, every reference checkpoint on DrivAerML and two HiLift rungs. | PRINCIPLE | \|D_area\|, \|D_biased\| at 40k: ≤ 3% consistent, ≥ 10% reads the sampling distribution; convergence ratios and fine-mesh gap. | #sec-nb-bench-prereg |
-| MW | DONE — research variant, not the released model (ruling 2026-09-11); lead survives; consistency not gained (frame, not pooling) | Is the baselines' lead carried by reading the sampling distribution? Give GeoTransolver's and Transolver's slice softmax the same measure weights ISLA carries (flag-gated, contract-tested) and retrain at 35 HiLift cases (3 seeds) and DrivAerML (2 seeds), unit drive. | UDRV, PRINCIPLE | Lead survives ≤ 0.131 (35) / ≤ 0.0530 (DrivAerML); was the read ≥ 0.1336 / ≥ 0.0541; density factor ≤ 1.5 measure-consistent. | #sec-nb-mw-prereg |
-| WAVE-4 | RUNNING (11 of 13 lanes read; 210 cases +2.0%, #sec-nb-wave4-scarce210; 21 geometries +2.9%; fixed angle +14.4%) | The similarity-gauge ISLA (1.21x under density bias vs 12.1x) on the six HiLift rungs it lacks plus a third seed at 35, so the reference configuration can move to the one that passes the consistency tests. | PRINCIPLE, BENCH | Per-rung in-distribution price stated; switch if BENCH passes where the constant gauge fails. | #sec-nb-wave4-prereg |
-| XFAM | DONE — no carrier; distributed | Which ISLA ingredient carries the cross-family zero-shot deficit (0.788 vs 0.612 on the fastback)? Rival arms: gauge (H1), n_slices 128/512 (H2), raw seeds (H3), weights off (H4), optimization (H5). | TRANSFER | Carries ≤ 0.70; contributes 0.70–0.76; does not ≥ 0.76 (three seeds). | #sec-nb-xfam-prereg; interim: H1 0.945, H4 0.806, partial H2 0.850 |
-| CENTER | DONE — DrivAerML joint pass; HiLift invariant but costly | Derivation (main session, #sec-nb-centroid-derivation): the only sampling-distribution-dependent quantity in the reference ISLA forward pass is the plain-mean centroid of the constant-gauge branch. Eval-only probe with `center_mode="measure"` on the trained reference checkpoints; then four lanes trained with measure centering. | PRINCIPLE | Probe: recovery ≤ 1.5x, falsifier ≥ 6x. Lanes: density ≤ 1.5x and within 3% of constant-gauge accuracy → reference becomes constant length + measure centering. | 12.1x → 1.12x (seeds 1.15x / 1.10x); weights-off 23x → 3.2x; frame cost on uniform 1.7x / 6.0x for plain-trained checkpoints. #sec-nb-center-probe-verdict |
-| RELFRAME | DONE — **REFERENCE CONFIGURATION (total-measure scale) by the rule, 2026-09-11**; consistent under all samplers on both datasets; DrivAerML 0.0552 at 1.235x; HiLift 35 0.1529 (+11%, the stated price) | Peter's ruling: no sample statistic in the frame. Drop the six centroid-dependent terms (seeds \|r\|, log\|r\|, r̂·d̂, r̂·n̂; relational z_mag, ẑ·d̂), keep the anchor-relative invariants; scale by the reference length or √(total measure). One flagship for both datasets. | CENTER | Joint: within 3% of 0.1377 / 0.0557 and density ≤ 1.2x on both datasets. | #sec-nb-relframe-prereg |
-| FRAME-FULL | DONE — DrivAerML passes (0.0544 at 1.13x); HiLift pays 14–16% (#sec-nb-frame-full-verdict); rule fires: reference = RELFRAME total-measure | Compute the frame statistics (centroid, extent) once from the full surface mesh at data-preparation time and pass them as global data, so the frame has no sampling dependence and no estimator variance. Does it recover the constant gauge's accuracy on heterogeneous meshes while keeping consistency? | CENTER | Within 3% of 0.1377 at 35 HiLift cases and density ≤ 1.2x on DrivAerML. | #sec-nb-center-lanes-verdict (motivation) |
-| RELFRAME-LADDER | DONE — six rungs read (#sec-nb-relframe-ladder-verdict; fixed-angle FRAME-FULL #sec-nb-frame-full-fixed-angle-verdict): reference vs constant-gauge variant DrivAerML −0.9%, 4 geo +1.0%, 21 geo +5.2%, fixed angle +10.3%, 35 +11.0%, 210 +11.3%; recurrence confirmed; fixed-angle FRAME-FULL pair running | Train the decided reference configuration (relative frame, total-measure scale) on the rungs where only the constant gauge exists, so its price is stated beside every constant-gauge number; the fixed angle runs both scales to test whether scale normalization is what cost the gauge 14% there. | RELFRAME, FRAME-FULL | Price bands ≤ 5% / 5–15% / > 15% vs the constant-gauge variant; scale discriminator: total-measure ≥ 5% worse than reference-length → scale cost real. | #sec-nb-relframe-ladder-prereg |
-| MWAW | DONE — research variant, diagnostic only (ruling 2026-09-11, #sec-nb-ruling-released-baselines); equal accuracy; HT-centred sample frame 1.03–1.04x (#sec-nb-mwaw-verdict) | Peter's ruling applied to the baselines' datapipe frame: does an area-weighted CenterMesh (HT centroid) buy accuracy over the plain mean for the measure-weighted GeoTransolver / Transolver? DrivAerML, two seeds each. | MW, PRINCIPLE | Buys ≥ 3%; equal ±3% (plain frame stays by the ruling); costs ≥ 3%. Density under the sample frame reported. | #sec-nb-mwaw-prereg |
-| MIX | DONE — swap penalties for all (ISLA least); mixing free for all | When meshing conventions mix in training (uniform-over-cells and area-proportional samplings of the same DrivAerML surfaces) or are swapped at inference, do density-reading models pay and does the measure-consistent model not? Three architectures, two seeds, float32. | BENCH | Preregistration to follow BENCH's D_area readout (bars in its units). | — |
-| KERNEL | DONE — default flipped | ISLA's point-over-slices softmax ran on PyTorch's serial middle-dimension kernel (85–95% of the step). Reducing along a contiguous last dimension is the same arithmetic in a different summation order. Is it neutral in training, and is evaluation kernel-independent? | — | Training control: DrivAerML reference configuration retrained with the fast kernel within 3% of the reference lanes in float32; evaluation: same checkpoint agrees across kernels in float32. | 0.0567 vs 0.0557 (+1.8%) at 0.161 s/step and 3.9 GB vs 0.273 s and 9.8 GB; float32 kernels agree to 1e-6 (bf16 differ 1–1.5%, moot under the float32 instrument). Default True in `ISLA`; pre-2026-09-10 checkpoints used the reference kernel. @sec-nb-fast-kernel-default |
-| KSTUDY | DONE — compiled path 1.05x (ckpt) / 0.86x (no ckpt) of GeoTransolver at 10k; 2.2x at 40k default, parity with the fused kernel | Where does ISLA's training step go, and which exact-arithmetic implementation options shorten it? Roofline, torch.profiler, Pareto of fusion / recompute / compile modes / a fused Triton geometry kernel, numerics gate ≤1e-6 output, ≤1e-5 gradient vs the eager reference. Delegated engineering study, isolated worktree. | KERNEL | Every adopted option reproduces the eager reference to fp32 roundoff; step time and peak memory on the GB300 at 10k and 40k tokens, bf16 and fp32, with GeoTransolver anchors | @sec-nb-kernel-study; results/kernel_study_2026-09-13/ (pareto_gb300_full_{bf16,fp32}.json, roofline_gb300.json, profile_*_gb300.json, TABLES.md); geo_kernel='fused' opt-in, defaults unchanged |
-| RELINT | DONE — supported (interior flagship moves to the reference frame at no price; eddy viscosity 12% better) | Does the interior query-token configuration keep its standing on the frame-free reference frame (no centroid, no sample scale) instead of the similarity gauge? Two seeds, frozen interior protocol, 10,000-cell boundary with the Horvitz–Thompson-corrected measure. First attempt void: uncorrected subsample areas made the total-measure length unit 200x too small (@sec-nb-relint-void). | FRAME-FULL, RELFRAME-LADDER | Float32, 48 cars at 10,000 queries: within 3% of the 10,000-cell similarity-gauge reference on every field supported; 3–10% pays; >10% fails | @sec-nb-relint-prereg, @sec-nb-relint-amend, @sec-nb-relint-verdict; results/relint2_reduction_2026-09-14.json |
-| GLOBIN | DONE — implemented and verified 2026-09-14; open: a non-aerodynamic ($K = 0$, one scalar parameter) training case | Can ISLA take the general steady-PDE input set, zero or more global vector inputs and zero or more global scalar inputs, without touching any trained checkpoint or any contract? Peter's ruling: the architecture targets steady boundary-value PDEs in general; the freestream is one instance of a global vector input; "drive" is retired. | Follows RELINT (the reference configuration fixed) | With one vector and no scalars the outputs are bitwise the former model's on every configuration; SE(3) covariance and measure-scale invariance hold for $K = 0$ and $K = 2$ and with scalars; all suites pass | @sec-nb-global-inputs; `test_isla_global_inputs.py` (15 tests), ISLA suites 136 passed, recipe suite 260 passed |
-| GLOBIN-ACCEPT | DONE — accepted at 9,000 steps (0.043 / 0.045); the scalar input helps by 1.41x | Does the zero-vector, one-scalar, Dirichlet-data configuration train and generalize on a boundary-value problem that is not aerodynamics? Screened Poisson inside random star-shaped bodies, exact labels, $\kappa \in [0,3]$ as the scalar input, the trace as the boundary scalar; the test also forced the boundary-data channel open on the interior paths. | Follows GLOBIN | T0 relative $L^2$ at most 0.10 on both seeds and at least 3x better than the trivial predictors; the $\kappa$-blind arm at least 1.5x worse | At 3,000 steps 0.109 / 0.099 (bar missed by one seed, blind arm 1.19x worse); at 9,000 steps 0.043 / 0.045, 13–17x over the trivial predictors, blind arm 1.41x worse on T0 and 1.58x under extrapolation; @sec-nb-globin-accept-prereg, @sec-nb-globin-accept-verdict, @sec-nb-globin-accept-extension-verdict |
-| GLOBIN-DISCRIM | DONE — both bars met | Is the scalar input decisive where the boundary data cannot substitute for it, and does appending it to the token seeds suffice? Screened Poisson inside a sphere with a trace independent of $\kappa$ by construction, exact Bessel interior, $\kappa \in [0, 6]$. | Follows GLOBIN-ACCEPT | Scalar arm T0 at most 0.10 on both seeds; blind arm at least 2x worse | 0.077 / 0.070; blind arm 3.8x worse (T0), 5.0x under extrapolation; generator verified (PDE residual $10^{-6}$); @sec-nb-globin-discrim-prereg, @sec-nb-globin-discrim-verdict |
-| KERNEL-NEUTRAL | DONE — stays opt-in (flip rule not met) | Does training with the exact fused Triton geometry kernel land within the seed noise of the eager reference, so the 2.2x (40k tokens, compiled) kernel can become the default? DrivAerML reference lanes, fused as the only change, float32 sealed evaluation. | Follows KSTUDY | Pressure within 3% of the eager twins on the seed mean and per seed within the eager spread plus 3% | Five pairs: ratios 1.008 / 1.089 / 0.978 / 1.002 / 0.971, mean 1.009; fused spread 11% vs eager 4.7%; seed 43 the only outlier; evaluation-time kernel difference 5e-7; 10k epoch gain 1.03–1.1x; @sec-nb-kernel-neutral-prereg, @sec-nb-kernel-neutral-verdict, @sec-nb-kernel-neutral-3seed-verdict, @sec-nb-kernel-neutral-5seed-verdict |
-| RFDIV | DONE — mechanism located; fix decision for Peter | Why does the reference configuration (relative frame, total-measure scale) diverge at the protocol rate at width 512 while the gauges and width 192 train? Localization matrix (30 epochs), diagnostic build, checkpoint probes, routing-temperature pair. | Followed the SCALE corner report (parallel session, ended) | Divergence localized to one factor with a mechanism stated and a fix class tested | Width, not tokens (512×10k diverges too); routing hardens to one slice per token with anchors at the centre; lr 5e-4 cures; head-frame singularity present but not causal; routing temperature 0.375 delays 3 epochs only; assignment biases 2–5x larger in diverged models; @sec-nb-relframe-divergence-matrix, @sec-nb-relframe-divergence-mechanism, @sec-nb-relframe-divergence-locmat2-verdict |
-| MAINLINE | RUNNING | Is ISLA's mainline a clear, evidence-grounded case and mature enough for PhysicsNeMo integration? (a) the evidence ledger of @sec-verdict kept current with every closed lane; the reference configuration measured at the scale corner (CORNER-WLR, width learning-rate rule); (b) a lean class (reference configuration + documented variants + interior modes + global inputs), every research-only option removed but runnable at tag `isla-research-full`, checkpoints of kept configurations loading unchanged, bitwise-identical outputs on twelve configurations, lint-clean, recipe README section, CHANGELOG entry, API docs, recipe configurations whose plain names carry the reference (`isla_surface`, `isla_volume`; @sec-nb-config-rename), no aliases of the pre-rename class name. | Follows GLOBIN, RFDIV, KNEUT | Bitwise gate passes on every kept configuration; ISLA and recipe suites pass; docs render; corner reference within 3% of GeoTransolver (or its price stated) | in progress; corner measured: reference 0.0442 at the width learning rate, 1.05x GeoTransolver and 1.03x the constant-gauge variant, sample-frame density factor 1.05 (@sec-nb-corner-wlr-verdict; the price is stated, not parity); rate confound closed by CG-WLR: constant gauge at 3.75e-4 = 0.0424, matched-rate frame price 4.2% (@sec-nb-cg-wlr-verdict) |
-| SCALE | RUNNING — DrivAerML half complete (bars 1–4 at the 512 × 80k corner, sample-frame density probes; ISLA similarity-gauge corner meets both bars: 0.0431 at 1.09x); HiLift half training, I/O-bound | Does the accuracy ordering, the absolute error or the cost frontier change when the models are given the memory they have? Width 384 and 512 and 40,000 / 80,000 sampled cells (plus a 384 × 40k corner) for ISLA, GeoTransolver and Transolver at full data on HiLiftAeroML (1,260) and DrivAerML (435), unit drive, reference learning rates, two seeds; ISLA also at width 384 with measure weights off. One agent per architecture (highlift/scale_lanes_<arch>.tsv, hl_scale_<arch>_aga.sbatch). | UDRV (unit-drive references), WAVE-3 | Width scales if the 512 arm is ≥ 5% better than the reference (saturated within 3%); resolution-limited if 80k is ≥ 5% better (sample-limited within 3%); scale favours ISLA / the baselines if baseline ÷ ISLA at the corner moves ≥ 0.05 from the reference; cost frontier per architecture. | @sec-nb-scale-prereg; synthesis @sec-nb-scale-drivaer-synthesis (GeoTransolver 0.0419, ISLA 0.0428 constant gauge / 0.0431 similarity gauge, Transolver 0.0431 at 512 × 80k in float32; ratio shift +0.08; density sensitivity in the sample frame 10.5x / 16.6x / 1.09x / 14.9x (pool frame 4.2x / 16.7x / 1.08x / 4.6x); baselines reach the corner error at 0.3–0.6x ISLA's GPU-hours; the gauge corner is the one principled scaled configuration); tracks @sec-nb-scale-gt-verdict, @sec-nb-scale-transolver-verdict, @sec-nb-scale-isla-launch |
-| POSE-BENCH | DONE — supported | Can exact equivariance earn accuracy where pose varies? DrivAerML surface, 435 cars, independent random SO(3) pose per case (train and validation); GeoTransolver and Transolver with SO(3) augmentation and unit drive, ISLA as is; two seeds. | UDRV (unit-drive baselines), node budget | Equivariance earns accuracy if the augmented baselines' error rises ≥ 10% over their canonical-frame error while ISLA's changes ≤ 3% and ISLA leads both by ≥ 5%; augmentation suffices if the baselines stay within 3%. | @sec-nb-pose-qcount-plan; run by the transfer session (research/transfer_program #sec-nb-campb-verdict, #sec-campaigns-pose; studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json): baselines ≥ 10% worse posed (1.20x, 1.31x), ISLA within 3% (1.01x), ISLA leads by 6% and 19%; one contract clause miscalibrated (augmented ISLA 0.0578, 1.2% above the unaugmented seeds' range, within 3%) and stated |
-| OVERFIT-1 | DONE | Is ISLA's deficit to the unit-drive baselines representational or a generalization effect? Each architecture (ISLA weights on / off, unit-drive GeoTransolver, unit-drive Transolver) trained on one HiLift case and one DrivAerML car for 20,000 single-sample steps in two forms (one fixed 10k-cell sample; 64 cycled views of the case); interior pair (ISLA query tokens + SDF, unit-drive GeoTransolver-volume) on one car. Readout: the recipe's area-weighted relative L2 on the same case, resampled, at 10k and 40k cells, float32; residual by facing-distance band. | UDRV, MEAS-METRIC | Capacity-limited if ISLA's floor ≥ 1.5x the unit-drive Transolver's; not if within 1.15x of the better baseline; weights a representational cost if off beats on by ≥ 5% on one field; interior ν_t capacity-limited if ≥ 1.25x GeoTransolver-volume. | Surface: ISLA 1.37x (bf16-trained) and 1.55x (float32-trained) the unit-drive Transolver on the wing, 1.31x on the car; 1.27x/1.39x GeoTransolver; gap wider than at 35 cases (1.20x/1.11x), so not a data limit; weights off 0.83x on both (representational cost, ablation only); deficit on open surfaces per unit area, not gaps (near/rest 1.15–1.20); fixed single sample = memorization (0.12–0.36 on a resampling) for every arm. @sec-nb-overfit-verdict. Mechanism addendum @sec-nb-overfit-routing-probe: the weights cut each slice's effective token count to 0.21x through the sampler's heavy area tail (flat-routing floor N/(1+CV²) = 862 of 9,983 wing cells, 1,637 of 10,000 car cells), not by saturating on a few cells; slice states move 1.9x (wing) and 2.3x (car) more between resamplings, slice diversity unchanged. Interior addendum @sec-nb-overfit-interior (one car, 64 views, float32, 10k queries): ISLA QT+SDF / GeoTransolver-volume unit = 1.25 (p) / 0.67 (u) / 1.64 (ν_t) against 0.92 / 0.65 / 1.30 at full data: the velocity lead is capacity, ν_t is capacity-limited (bar 1.25), the pressure lead is generalization; ν_t +61% from 10k to 40k queries (QCOUNT dependence). |
-| CAP | DONE — slice hypothesis falsified; width shared; the ISLA-specific part of the floor is query-count noise (GT ÷ ISLA 0.91 at 10k → 0.955 at 40k on 435 cars) | Which capacity axis is ISLA's single-case floor missing: the slice count (how finely the surface is partitioned) or per-token capacity (width, depth, MLP width)? Six one-factor arms on the OVERFIT-1 DrivAerML one-car instrument (constant gauge, seed 42, 20k steps, 64 views), baseline 0.1064 vs Transolver 0.0811 and GeoTransolver 0.0766. | OVERFIT-1 (mechanism: representational, on smooth large-cell regions); MIX bounds estimator variance at 3.5% | Per axis: closes the floor at or below 0.0852, carries capacity at or below 0.0950, null at or above 0.1010; prediction: slices and width carry, depth and MLP null | Slices null (prediction falsified), width carries (−10.9%), depth and MLP null; 40k-cell evaluation puts every arm within 1.03–1.10x of the baselines; next: QUAD-VAR (stratified inference draw, evaluation only); @sec-nb-cap-prereg, @sec-nb-cap-verdict |
-| QUAD-VAR | DONE — supported on the ISLA bars, control fired; ISLA-specific recovery about two points of ratio, the rest of the count slope is the weight-spread term | Is the count slope of ISLA's error (0.0561 at 10k to 0.0530 at 40k independent cells; baselines flat) the variance of the inference draw? A systematic draw along the Morton curve with the same inclusion law, evaluated on the existing constant-gauge, reference, GeoTransolver and Transolver checkpoints at 10k and 20k cells. | CAP (count-slope reading) | Supported if the stratified 10k draw recovers at least half of the 10k-to-40k gain (cg <= 0.0546, reference <= 0.0539); falsified if within 1% of the independent 10k value; baselines must move < 1% | cg 0.0561 → 0.0537, reference 0.0554 → 0.0531, GT 0.0509 → 0.0498, Transolver 0.0520 → 0.0509 at 10k; stratified draw recommended for inference (all models), scoreboard only as a complete labelled row; @sec-nb-quadvar-prereg, @sec-nb-quadvar-verdict |
-| QUAD-VAR-HL | DONE — free improvement on both datasets; prediction held in every clause | Does the stratified inference draw hold as a free improvement on HiLiftAeroML, where the independent-draw count slope at 35 cases is only 2 to 3% for ISLA and flat for the baselines? Same four architectures at 10k and 20k cells, 180 validation cases. | QUAD-VAR | Free improvement if no arm is worse by more than 1% at either count and ISLA's gains stay within its count slope (constant gauge at or above 0.1362, reference at or above 0.1506); dataset-specific otherwise | cg 0.1390 → 0.1371, reference 0.1551 → 0.1522, GT 0.1104 → 0.1108, Transolver 0.1148 → 0.1149 at 10k; recommendation stands for both datasets; @sec-nb-quadvar-hl-prereg, @sec-nb-quadvar-hl-verdict |
-| EQ-PRICE | DONE — partial, at the low end predicted; the contracts' price is about two and a half points | Is the 4 to 5 point trained-function deficit on DrivAerML the information ISLA is denied by construction (absolute position) or the slice-attention form? Constant-gauge ISLA with the research class's raw coordinate channel at 435 cars, two seeds, float32 on the sample-frame probe; a diagnostic that breaks SE(3) by design. | CAP, deficit anatomy | Position is the deficit at or below 0.0525 (within 1% of Transolver); partial between 0.0525 and 0.0550; null at or above 0.0550; prediction null or low partial | 0.0547 (0.0553 / 0.0540) vs constant gauge 0.0561; GeoTransolver ÷ arm 0.931 vs 0.907; density factor 13.2; @sec-nb-eqprice-prereg, @sec-nb-eqprice-verdict |
-| FORM-HEADS | DONE — carries (h8 at 0.813x the control, misses closes by 0.0017); ordering inverts at 40k cells | Is the two-point form deficit the routing multiplicity? Transolver routes each token through 8 heads x 256 slices per layer, ISLA once; the research option `n_heads` (branch isla-heads) gives ISLA H routings with head-split states and per-head anchors, contracts intact. One-car instrument, constant gauge, seed 42: h1 control, h4, h8. | EQ-PRICE, CAP | Closes at or below 0.0852; carries at or below 0.90x the h1 control; null at or above 0.95x; h1 within 3% of the CAP baseline | h1 0.1069 (sanity ok), h4 0.1012, h8 0.0869 at 10k; 0.0814 / 0.0751 / 0.0729 at 40k vs GeoTransolver 0.0780 and Transolver 0.0793; @sec-nb-formheads-prereg, @sec-nb-formheads-verdict |
-| HEADS-435 | RUNNING | Does the routing-multiplicity gain transfer from the one-car floor to the 435-car in-distribution error of the reference configuration? `n_heads` 4 and 8, two seeds each, protocol rate, probe instrument at 10k. | FORM-HEADS | Eight heads at or below 0.0530 closes the form gap and promotes the option to the mainline; at or below 0.0543 carries (documented variant); at or above 0.0549 null; density factor must stay 1.05 to 1.3 | @sec-nb-heads435-prereg |
-| SPARSE | DONE — not worth it | Can each point be routed to its k nearest anchors (k of 256) with negligible change, and what does it buy? `anchor_topk` option, exact at k = 256, contract-tested. One-GPU microbenchmark at 10,000 tokens (k ∈ {dense, 128, 64, 32, 16}, with/without geo_checkpoint) plus dense-vs-sparse output change on the trained 35-case checkpoint. | MEM2 | Worth a training arm if k = 32 gives ≥ 1.5x step-time reduction with ≤ 1% scalar-output change on the trained checkpoint; not worth it if < 1.2x or > 5%. | @sec-nb-sparse-routing-prereg; verdict @sec-nb-sparse-routing-verdict: slower than dense at every k (0.84–0.92x); incremental memory 3.37 → 1.71 GiB at k = 32 without recompute but 1.47 → 1.32 GiB with it; output change 21–46% at initialization; trained-checkpoint test failed to load (recorded). results/isla_sparse_routing_bench_2026-09-09.json |
-| ABUPT | PLANNED | Every baseline tested is from the Transolver family. Candidates under this protocol: AB-UPT (anchored neural-field decoder; TMLR, arXiv 2502.09692), whose design contradicts the interior finding that queries must interact; AB-GATr (arXiv 2605.18816), the scalable equivariant comparator; regularized family adaptation (arXiv 2605.27968) against scratch and full fine-tuning at a few target-data budgets on an untouched family; Transolver++ via the template's `plus` flag (a control, not a reproduction). | UDRV, QT-SDF | Each arm preregistered separately before launch; published numbers on other splits are not a comparison with ISLA. | @sec-nb-audit-2026-09-08 |
-| MT3 | PLANNED | The successor design brief, now evidence-constrained: keep exact rotation/translation; adopt the similarity gauge; keep a local channel (cheap in-family offset); carry parity-odd features in the trunk rather than a bolt-on odd head, or drop reflection covariance explicitly; treat Reynolds as explicit conditioning only where data varies it; and address what B1 says about the remaining G2-gap candidate. HLGEN's data-efficiency half was the Branch A condition (r(35) = 0.35 against physical-drive baselines); UDRV voids that premise (unit-drive baselines ahead at 35 cases), so the brief is gated on UDRV-L and UDRV-INT: what remains ISLA-specific is its contracts and, pending UDRV-INT, the interior configuration. | UDRV, UDRV-L, UDRV-INT, B1, INV, W2, CTRL, A35B, LVT, HLGEN, STEST, P1C, S1, K0, L1 | Gated on the UDRV-L and UDRV-INT readouts (whether any accuracy claim survives against unit-drive baselines), the B1 readout, A35b (which ingredient to keep) and LVT (whether the interior task needs interaction at the query); a preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-udrv-verdict; @sec-nb-udrvl-prereg; @sec-nb-hl-sealed-test; @sec-nb-parity-thread-closed; @sec-nb-p1pp-verdict; @sec-nb-s1-verdict |
+One row per node, in the order of the sub-trees. The "Depends on" column is
+the full dependency list, including edges the sub-trees do not draw. Every
+evidence link goes to the dated notebook entry holding the preregistration
+and the verdict; rows whose comparison was against baselines fed the
+physical freestream velocity say "superseded as a comparison" and keep
+their numbers as measurements of that protocol only.
 
-: The tech-tree ledger. Every status is as of 2026-09-09; evidence links go to the dated lab-notebook entry holding the preregistration and verdict. Rows marked "physical-drive baselines; superseded as a comparison by UDRV / UDRV-L" keep their numbers as measurements of the physical-drive protocol; they are no longer comparisons of architectures. Rows whose verdicts were later voided, retracted, or overturned say so and link both the original and the correcting entry. {#tbl-tech-tree}
+| ID | Status | Question and why it matters | Depends on / starts if | Acceptance criterion | Evidence or result |
+|---|---|---|---|---|---|
+| NSTAR | DONE | Reframe the goal: measure generalization as curves (error against training-set size and beyond the training hull), not points. | — | Preregistered framing adopted with a declared ladder design. | @sec-nb-generalization-northstar |
+| G1G2 | DONE | Do ISLA's contracts improve accuracy per sample, and does zero-shot transfer improve with in-family data? | NSTAR | 22-lane nested ladder, two seeds per rung, preregistered predictions scored. | @sec-nb-g1g2-verdict |
+| LOC | DONE (refuted) | Is GeoTransolver's data-compounding transfer carried by local features? | G1G2 | Monotone zero-shot decrease with ISLA's local channel; a flat curve refutes. Flat: a constant 3 to 5% in-family offset only. | @sec-nb-locality-verdict |
+| M1 | DONE (verdict void) | Is exact scale equivariance an over-symmetrization? | G1G2 | Over 5% in-family gain from scale conditioning at 218 cars. Read as refuted, then voided by CRIT: the constant gauge already fed absolute size. | @sec-nb-m1-verdict-wave-close; @sec-nb-critic-review |
+| M2 | DONE (closed) | Does anchor-conditioned decoding recover the accuracy the passive decode lost? | G1G2 | Pilot validation loss at most 0.01500; measured 0.01517. Re-opened resource-matched as V6. | @sec-nb-v5a4-gate; @sec-nb-campaign-review |
+| M3 | DONE (partial) | Does the invariant-only feature set have a provable expressivity ceiling? | G1G2 | Constructed pairs separate at roundoff against controls. Ceiling real; not established as a cause on cars; a reflection defect in the vector head opened PAR. | @sec-nb-m3-verdict; @sec-nb-audit-2026-09-08 |
+| M4 | DONE (retracted, then refuted) | Does ISLA miss a measure-weighted normalization that explains the density floor? | G1G2 | Closed by derivation, retracted by CRIT (unweighted centroid), refuted by S1 (weighted gauge cuts the penalty from 13 to 14.5x to 1.20x). | @sec-nb-lit-wave-prereg; @sec-nb-critic-review; @sec-nb-s1-verdict |
+| G3 | DONE (one verdict overturned) | Which boundary-condition generalization axes can architecture improve, on an exact 2D Laplace suite? | NSTAR | Per-axis degradation fingerprints. Amplitude extrapolation exact under linearity stands; the frequency verdict was overturned by G3K. | @sec-nb-g3-verdict; @sec-nb-g3-kernel-rerun |
+| HL | DONE | Does the DrivAerML frontier extend to Reynolds-varying physics on the HiLiftAeroML full split? | G1G2, LOC, M1 | Preregistered readouts with the learning-rate parity amendment. Parity at the best rate; GeoTransolver received the physical velocity, rerun in UDRVL. | @sec-nb-hl-lr-amendment; @sec-nb-hl-verdict |
+| N1 | DONE (non-discriminating) | Was the DrivAerML gap a property of noisy labels? | HL | Cross-architecture disagreement larger on HiLift than on DrivAerML. Shared-residual fraction 0.713 against 0.703: unsupported. | @sec-nb-n1-verdict |
+| R1 | DONE | Is learning-rate robustness a reproducible ISLA property? | HL | GeoTransolver degrades over 2x at 1e-2 (4 to 14x); ISLA under 1.5x (1.55x). | @sec-nb-instrument-wave-verdict |
+| V6 | DONE | Does anchor-conditioned decode win at matched peak memory? | M2 | Closure bar 1.3x; measured 3.1x worse. | @sec-nb-instrument-wave-verdict |
+| PAR | DONE (closed negative) | Can the vector head be made exactly reflection-covariant at no cost? | M3, L1 | Wall shear within 3% of the reference. Every exact construction cost at least 12% or failed to train. | @sec-nb-instrument-wave-verdict; @sec-nb-w1p-verdict; @sec-nb-l2-verdict; @sec-nb-w2-verdict; @sec-nb-parity-thread-closed |
+| L1 | DONE | Are DrivAerML's labels mirror-covariant, and does the default head exploit any asymmetry? | PAR | Antisymmetric energy over 10% if labels explain the penalty; measured 0.67%. The penalty is a representation effect. | @sec-nb-l1-verdict; @sec-nb-l1b-l2-prereg |
+| CRIT | DONE | Independent review of the written record against the code and artifacts. | N1, R1, M1, M4 | Seventeen graded claims verified in session. ISLA was not scale-equivariant and not measure-complete; actions S1, P1C, G3K preregistered. | @sec-nb-critic-review |
+| G3K | DONE | Does the exact kernel decoder generalize across boundary-condition frequency where the moment decoder could not? | CRIT, G3 | Frequency error under 0.15 overturns G3; measured 0.070. | @sec-nb-g3-kernel-rerun |
+| K0 | DONE (gate failed) | Is inviscid potential flow a usable prior for DrivAerML pressure? | G3K | Oracle relative L2 under 0.90; measured 4.79. The kernel line closed. | @sec-nb-kernel3d-scoping; @sec-nb-k0-verdict |
+| P1C | DONE | Does GeoTransolver recover pose invariance by canonicalizing its frame? | CRIT | Canonically trained GeoTransolver within 1.05x in pose; measured 1.01x. Equivariance is a contract, not an accuracy edge. | @sec-nb-p1-canon-verdict; @sec-nb-p1pp-verdict |
+| S1 | DONE | Does a measure-weighted similarity gauge change accuracy, the density floor, or transfer? | CRIT, M4 | In-family at most 0.066; density ratio under 2x. Held: 0.0638 / 0.0629 and 13 to 14.5x to 1.20x; transfer unchanged. | @sec-nb-s1-verdict |
+| G5 | PLANNED | Single-factor generalization on the forthcoming 3D RANS corpus with twin draws. | Corpus launch; S1; G3K | Per-arm predictions in readout units in the preregistration. | @sec-nb-g5-prereg |
+| HLGEN | DONE (superseded as a comparison) | The HiLift analogue of the data-efficiency ladder and the regime axes. | HL | Preregistered rung predictions. Baselines received the physical velocity; superseded by UDRV and UDRVL. | @sec-nb-hl-ladder-dataeff; @sec-nb-hl-ladder-ood-indist; @sec-nb-udrv-verdict |
+| CTRL | DONE | Is GeoTransolver's small-data collapse a learning-rate or training-length artifact? | HLGEN | Any control within 1.2x of ISLA voids the ladder. None approached; all kept the physical velocity, so none found the artifact UDRV found. | @sec-nb-hl-ladder-dataeff; @sec-nb-udrv-verdict |
+| T1 | DONE | Same-family control: plain Transolver on the 35- and 210-case rungs. | HLGEN | Transolver within 1.3x of ISLA. Physical velocity; superseded by UDRV (unit-direction Transolver ahead at 35 cases). | @sec-nb-transolver-control-prereg; @sec-nb-t1-35-verdict; @sec-nb-t1-210-verdict |
+| A35 | DONE | Which ISLA ingredient buys the 35-case result? Single-factor ablations. | T1 | Breaking equivariance costs at least 1.5x. Raw coordinates 1.04x, so equivariance is not the carrier; weights off 0.88x. | @sec-nb-a35-verdict |
+| A35B | DONE | Raw seeds and no relational geometry, one flag each. | A35 | The carrier degrades at least 1.5x. Raw seeds 0.99x, relational routing off 1.16x: distributed. | @sec-nb-a35-verdict; @sec-nb-a35b-verdict |
+| INV | DONE (not the carrier) | Do ISLA's invariants as baseline inputs transplant the small-data result? | A35B, T1 | Both baselines at most 0.235. Transolver 0.297 (inconclusive), GeoTransolver 0.394 (falsified). Physical velocity; superseded by UDRV. | @sec-nb-inv-prereg; @sec-nb-inv-verdict |
+| W2 | DONE | Third seeds, the 510-case rung, the 20,000-cell floor, the fixed angle, forces and paired statistics. | HLGEN, CTRL | Per-arm bars in the preregistration. The 20,000-cell arm: ratio 0.885 against 0.878 at 10,000, no token floor. Baseline comparisons superseded by UDRVL. | @sec-nb-w2-prereg; @sec-nb-w2e-paired; @sec-nb-w2a-35; @sec-nb-w2-medium-verdict; @sec-nb-w2c-floor-verdict |
+| W2F | DONE | Unseen-geometry ladder at 4 and 21 training geometries. | W2 | Falsifier baseline ÷ ISLA at least 0.8 with physical-velocity baselines: clear, but superseded by UDRVL. ISLA's response to geometry count stands. | @sec-nb-w2f-launch; @sec-nb-w2f-40-verdict; @sec-nb-w2f-210-verdict; @sec-nb-w2g-verdict |
+| DEFL | DONE (falsified) | Does ISLA's geometry generalization carry across a deflection-parameter boundary on a sealed test? | W2 | Carried if ISLA at most 0.7x GeoTransolver; falsified at or above 0.9x. ISLA 1.157x; both degrade 1.23x and 1.25x. | @sec-nb-deflection-prereg; @sec-nb-deflection-amend; @sec-nb-deflection-verdict |
+| STEST | DONE | Sealed one-shot regime tests (angle of attack, stall). | HLGEN | Preregistered degradation predictions. Both architectures degrade about 10x; the ordering was measured against physical-velocity baselines. | @sec-nb-hl-ladder-ood-indist; @sec-nb-hl-sealed-test |
+| B1 | DONE (falsified) | Do raw coordinates carry GeoTransolver's smaller regime-degradation ratio? | STEST | Ratio at most 11.0 and sealed pressure under 0.245. Measured about 13. | @sec-nb-hl-sealed-test; @sec-nb-b1-verdict |
+| HLREG | DONE (falsified) | Does ISLA's small-data advantage live near the slat and flap gaps? | W2F, DRVSTA | Near-gap ratio at least 1.5x the rest. Measured 0.72 and 0.78; no advantage remains to localize after UDRV. | @sec-nb-hlreg-prereg; @sec-nb-hlreg-amendment; @sec-nb-hlreg-verdict |
+| IO1 | STOPPED | HiLift lanes are dataloader-bound; can positional reads fix it? | — | Adopt at 1.5x faster epochs; measured 0.2 to 0.25x. The fix is dataset layout, an owner decision. | @sec-nb-hilift-io; @sec-nb-hilift-io-verdict |
+| UDRV | DONE | Do the baselines pay for receiving the freestream as a physical velocity? | HLGEN, W2, W2F, INV | Supported if GeoTransolver at most 0.27 and Transolver at most 0.29 at 35 cases. Measured 0.124 and 0.115 against 0.381 and 0.404; both ahead of ISLA. The small-data deficit was an input-scaling artifact. | @sec-nb-udrv-prereg; @sec-nb-udrv-verdict; @sec-nb-udrv-single-verdict |
+| UDRVL | DONE | The HiLift ladder with unit-direction baselines on every rung. | UDRV | ISLA advantage only if baseline ÷ ISLA at least 1.10 with ISLA lower on two thirds of cases. Prediction held at every rung; at 1,260 cases 0.88x and 0.95x against the constant-gauge variant. | @sec-nb-udrvl-prereg; @sec-nb-udrvl-geo40-verdict; @sec-nb-geo40-final; @sec-nb-udrvl-210-verdict; @sec-nb-udrvl-geo210-verdict; @sec-nb-udrvl-510-verdict; @sec-nb-udrv-1260-verdict; @sec-nb-udrv-1260-transolver-verdict |
+| CAMPA | DONE | Is the 35-case ordering a property of the particular 35 cases? Three further draws, three seeds. | UDRV, FP32 | "ISLA behind" stands if the ratio's 90% interval over draws lies below 0.97. It does (0.840 to 0.979 and 0.816 to 0.916); between-draw spread is 3 to 11x the seed spread. | @sec-de-result; research/transfer_program/studies/campaign_a_draws/campaign_a_n35_fp32_2026-09-10.json |
+| EXPO | DONE | Program-level exposure ledger for every HiLift split. | HLGEN, STEST | Every remaining test split is held out per checkpoint but is not a program-level confirmation. | @sec-nb-audit-2026-09-08; results/hilift_exposure_ledger_2026-09-08.json |
+| GEOSTAT | DONE | Recompute the paired statistics with the geometry as the unit. | W2, W2F | Geometry-level sign tests replace case counts in the chapters. Against unit-direction baselines at 35 cases GeoTransolver is lower on 84 of 118 geometries. | @sec-nb-audit-geometry-stats; results/hilift_paired_stats_geometry_2026-09-08.json |
+| FORCEREF | READY | Are the force errors against the full surface, not the sampled-cell label integral? | W2 | The 3% stands if the full-surface error is within 1.5 points of the sampled-cell error. | @sec-nb-audit-2026-09-08 |
+| WAVE3 | RUNNING | Complete the fair comparison: weights-off on the remaining splits, third seeds, learning-rate steel-men, DrivAerML unit-direction baselines. | UDRV, NOWL | Per arm group in the preregistration. DrivAerML arm read: ISLA 10% behind unit-direction GeoTransolver in float32. | @sec-nb-wave3-prereg; @sec-nb-uw-verdict; @sec-nb-wave3-35-verdict |
+| FP32 | DONE | Float32 becomes the reporting instrument; every reported checkpoint re-evaluated. | SCALE (snapshot ladder) | A verdict changes only if its ordering or band changes under float32. 230 evaluations; every close comparison moved toward the baselines. | @sec-nb-fp32-instrument; @sec-nb-fp32-35-regrade; @sec-nb-fp32-drivaer-regrade; @sec-nb-fp32-interior-regrade; @sec-nb-fp32-all-regrade |
+| ABUPT | PLANNED | Baselines outside the Transolver family under this protocol. | UDRV, UDRVL, QTSDF | Each arm preregistered separately before launch. | @sec-nb-audit-2026-09-08 |
+| MT3 | PLANNED | The successor design brief, evidence-constrained. | UDRV, UDRVL, UDRVINT, B1, INV, W2, CTRL, A35B, LVT, HLGEN, STEST, P1C, S1, K0, L1 | A preregistration with falsifiers, not a build, is the deliverable. | @sec-nb-udrv-verdict; @sec-nb-udrvl-prereg; @sec-nb-hl-sealed-test; @sec-nb-parity-thread-closed; @sec-nb-p1pp-verdict; @sec-nb-s1-verdict |
+| V0 | DONE | The first boundary-to-interior measurement on DrivAerML volume fields, four arms. | S1, K0 | ISLA-interior ÷ GeoTransolver in [1.3, 2.5]; the kernel arm's far-band pressure at most 1.0x. GeoTransolver leads 2.6 to 3.1x; the kernel line closed. | @sec-nb-v0-prereg; @sec-nb-v0-pilot; @sec-nb-v0-verdict; @sec-nb-v0-sdf-band; @sec-nb-audit-2026-09-08 |
+| LVT | STOPPED (falsified) | Can interior queries receive interaction while staying query-independent, through latent volume tokens? | V0 | Confirms at or below 1.5x GeoTransolver; falsifies at or above 2.0x. Measured 3.68x. | @sec-nb-v0-verdict; @sec-nb-v0-sdf-band; @sec-nb-lvt-verdict |
+| QT | DONE | Interior queries as interacting tokens on ISLA's routing. | V0, LVT | At most 1.3x GeoTransolver-volume on interior pressure; met in bf16 (1.03x), 1.19x in float32. | @sec-nb-qt-prereg; @sec-nb-qt-pilot; @sec-nb-qt-verdict |
+| QTSDF | DONE | Give the query tokens the signed distance, matching GeoTransolver-volume's inputs. | QT | Primary ratio to QT at most 0.85 supported: 0.89, inconclusive; secondary to GeoTransolver at most 1.1: met. Float32: 1.06x / 0.73x / 1.27x on pressure / velocity / eddy viscosity. | @sec-nb-qt-sdf-prereg; @sec-nb-qt-sdf-verdict; @sec-nb-fp32-interior-regrade |
+| V0L | DONE | Interior data efficiency at 54 and 109 cars. | QT | Ratio at most 0.9 or at least 1.15. GeoTransolver leads 1.19x and 1.18x, parity at 435 in float32. | @sec-nb-v0l-prereg; @sec-nb-v0l-verdict |
+| QTSDFL | DONE | Does the signed distance change the small-data ordering on the interior? | QTSDF, V0L | Closes at or below 1.05 on pressure and under 1.0 on velocity at 54 cars: velocity yes, pressure no (1.11). | @sec-nb-qtsdf-ladder-prereg; @sec-nb-qtsdf-ladder-verdict |
+| QTLF | STOPPED (falsified) | Local surface-patch features on the query tokens, aimed at the eddy-viscosity gap. | QTSDF | Supported at or below 1.10x GeoTransolver-volume; falsified at or above 1.25x. Measured 1.36x. | @sec-nb-qt-lf-prereg; @sec-nb-qt-lf-verdict |
+| QTH256 | DONE | Does width carry the remaining eddy-viscosity gap? | QTLF | Supported at or below 1.10x; falsified at or above 1.25x. Float32 1.17x: inconclusive, capacity not excluded. | @sec-nb-qt-h256-prereg; @sec-nb-qt-h256-verdict |
+| DRVSTA | DONE | Where on a DrivAerML car does the surface gap live? | Full-data DrivAerML evaluations | Wake hypothesis at rear ÷ front at least 1.3; falsified at or below 1.1. Measured 1.10 and 1.03: uniform. | @sec-nb-drivaer-station-verdict; @sec-nb-drivaer-percase |
+| QMASS | DONE | The query-token configuration's query weight makes source refinement and query count change the field; repair and measure. | QTSDF | Bounded if the sentinel change is under 1%. Repair committed; the dependence is real above and below the training count. | @sec-nb-qmass-verdict; results/isla_qt_companion_dependence_2026-09-08.json |
+| V0SURF | DONE (null) | Every interior arm had received about 365 surface cells; rerun with 10,000. | QTSDF, QMASS | Supported if pressure at most 0.054 or eddy viscosity at most 0.115; null within 3%. All three fields within 3%. | @sec-nb-v0surf-prereg; @sec-nb-v0surf-verdict |
+| UDRVINT | DONE (null) | Does the interior comparison inherit the input-scale confound? | UDRV, V0 | Confound if any field improves 5%; null within 3%. All within 2%. | @sec-nb-udrv-int-prereg; @sec-nb-udrv-int-verdict |
+| QTDENS | DONE (neither) | Is GeoTransolver-volume's eddy-viscosity lead a reading of the interior sample density? | QTSDF, V0SURF | Closes at or below 1.10x; fails at or above 1.25x. Density 1.32x, neighbours 1.30x. | @sec-nb-qt-density-prereg; @sec-nb-qt-density-verdict |
+| PASSIVE2 | DONE (falsified) | Query independence at matched depth, readout and inputs. | QMASS, QTSDF, V0 | Not a fundamental cost within 1.3x of GeoTransolver-volume; a cost of interaction at or above 2.0x. Passive read 1.43x on pressure, 2.41x on eddy viscosity. | @sec-nb-audit-2026-09-08 |
+| QCOUNT | DONE (between) | Is the interior configuration's dependence on request size a training-distribution artifact? | QMASS, PASSIVE2, UDRVINT | 2,000 ÷ 10,000 at most 1.10 on pressure supported; at least 1.25 falsified; 10,000-query pressure within 3%. Dependence reduced about 40% at a 3.7% cost. | @sec-nb-qcount-prereg; @sec-nb-qcount-verdict |
+| FARWAKE | STOPPED (falsified) | Is the far-wake eddy-viscosity deficit an under-sampling effect? | QCOUNT | Far-band eddy viscosity at most 0.085 supported; at least 0.095 falsified. Measured 0.193; every band worse. | @sec-nb-farwake-verdict; results/farwake_reduction_2026-09-11.json |
+| MOM2 | DONE | Does a second-moment channel separate the first-moment collision family? | M3 | Separates at least 95% of pairs while the base is at chance. Ridge R² 0.996 to 1.000; base blind. | @sec-nb-mom2-prereg; @sec-nb-mom2-verdict |
+| MOM2T | DONE | Is the second-moment channel free where ISLA is trained? | MOM2 | Free if pressure at most 0.0594. Measured 0.0583 (+0.9%). | @sec-nb-mom2t-prereg; @sec-nb-mom2t-verdict |
+| RELINT | DONE | Does the interior configuration keep its standing on the frame-free reference frame? | FRAMEFULL, RFLADDER | Within 3% of the similarity-gauge interior reference on every field. 1.000x / 0.990x / 0.880x; first attempt void. | @sec-nb-relint-prereg; @sec-nb-relint-amend; @sec-nb-relint-void; @sec-nb-relint-verdict |
+| MEASMET | DONE (falsified) | Is the weights-off gain a measure-metric mismatch? | A35 | Supported at a ratio of at least 0.97 under the area-weighted metric; falsified at or below 0.91. Measured 0.896. | @sec-nb-measure-metric-verdict |
+| NOWL | DONE (ablation only) | Does the weights-off gain persist at 210 cases and on DrivAerML? | MEASMET | Persists at 5% better at both; fades within 3%. DrivAerML 2.8%; the rule that would have adopted it was retired by PRINCIPLE. | @sec-nb-noweights-prereg; @sec-nb-noweights-drivaer-verdict |
+| PRINCIPLE | DONE | Accuracy by physically principled means; discretization consistency as acceptance criterion. | — | The criterion in @sec-principle; weights-off reworded as ablation everywhere. | @sec-nb-principle-redirect; @sec-nb-principle-audit |
+| BENCH | DONE | Does each architecture give the same field under three samplers and converge from 2,500 to 40,000 cells? | PRINCIPLE | Within 3% at 40,000 cells consistent; at least 10% reads the sampling distribution. Only the measure-weighted ISLA arms converge. | @sec-nb-bench-prereg; @sec-nb-bench-verdict |
+| MW | DONE (research variant) | Is the baselines' lead carried by reading the sampling distribution? Measure-weighted pooling for both baselines. | UDRV, PRINCIPLE | Lead survives at or below 0.131 (35 cases) and 0.0530 (DrivAerML). It survives; consistency is not gained (the frame, not the pooling). Released baselines are not modified. | @sec-nb-mw-prereg; @sec-nb-mw-verdict; @sec-nb-ruling-released-baselines |
+| MWAW | DONE (research variant) | Does a measure-weighted datapipe centre buy the baselines accuracy or consistency? | MW, PRINCIPLE | Buys at 3%; equal within 3%. Equal; sample-frame density 1.03 to 1.04x. Diagnostic only. | @sec-nb-mwaw-prereg; @sec-nb-mwaw-verdict |
+| MIX | DONE | Do models pay to swap sampling conventions, and to mix them in training? | BENCH | Bars in BENCH's units. Everyone pays to swap (ISLA least); everyone mixes for free. | @sec-nb-mix-prereg; @sec-nb-mix-verdict; @sec-nb-mix-refinement |
+| WAVE4 | RUNNING | The similarity-gauge variant on every HiLift rung. | PRINCIPLE, BENCH, CENTER | Per-rung price stated; switch if BENCH passes where the constant gauge fails. Eleven of thirteen lanes read. | @sec-nb-wave4-prereg; @sec-nb-wave4-scarce210 |
+| CENTER | DONE | Is the constant gauge's density collapse the plain-mean centroid? | PRINCIPLE | Probe recovery at or below 1.5x; falsifier at or above 6x. 12.1x to 1.12x. | @sec-nb-centroid-derivation; @sec-nb-center-probe-verdict; @sec-nb-center-lanes-verdict |
+| RELFRAME | DONE (reference configuration) | Drop every centroid term; positions enter only relative to anchors; length from the total measure. | CENTER | Within 3% of the constant gauge and density at or below 1.2x on both datasets. DrivAerML at parity and 1.235x; HiLift 35 cases pays 11%. Adopted by ruling. | @sec-nb-relframe-prereg; @sec-nb-relframe-verdict |
+| FRAMEFULL | DONE (diagnostic) | An exact frame from the full geometry: does it recover the constant gauge's accuracy while keeping consistency? | CENTER | Within 3% of the constant gauge at 35 cases and density at or below 1.2x. DrivAerML passes; HiLift pays 14 to 16%, more than the frame-free construction: the price is the mesher pattern. | @sec-nb-frame-full-verdict; @sec-nb-frame-full-fixed-angle-verdict |
+| RFLADDER | DONE | The reference configuration on every rung where only the constant gauge existed. | RELFRAME, FRAMEFULL | Price bands at most 5%, 5 to 15%, over 15%. Never-seen-geometry rungs 1 to 5%, recurring rungs about 11%, fixed angle 10 to 14.5%. | @sec-nb-relframe-ladder-prereg; @sec-nb-relframe-ladder-verdict |
+| XFAM | DONE (none) | Which ISLA ingredient carries the cross-family zero-shot deficit? | TRANSFER | Carries at or below 0.70; does not at or above 0.76. No arm carries it. | @sec-nb-xfam-prereg; @sec-nb-xfam-verdict |
+| TRANSFER | RUNNING | The cross-dataset companion program: fixed support, exact principal parts, port composition, transferred corrections, pose, multi-draw. | UDRVINT, QMASS | Each study's bars are in its own preregistration in research/transfer_program. | research/transfer_program (companion notebook) |
+| POSE | DONE | Can exact equivariance earn accuracy where pose varies? | UDRV | Baselines at least 10% worse posed, ISLA within 3%, ISLA leads by at least 5%. Held: 1.20x and 1.31x against 1.01x; ISLA leads by 6% and 19%. | @sec-nb-pose-qcount-plan; research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json |
+| MEM2 | DONE | Rebuild the per-slice geometry in the backward pass. | — | Bitwise-identical forward and gradients; 2.3x less peak memory at 1.16x step time. | @sec-nb-geo-recompute; results/isla_memory_recompute_2026-09-07.json |
+| MEMINST | DONE | One memory harness for both architectures. | MEM2 | The two-instrument statement replaced by a measured factor. ISLA with recompute 1.57 GiB against GeoTransolver 4.07 GiB allocated. | @sec-nb-audit-2026-09-08; results/matched_memory_isla_gt_2026-09-08.json |
+| SPARSE | DONE (not worth it) | Route each point to its k nearest anchors. | MEM2 | Worth a training arm at 1.5x faster; measured 0.84 to 0.92x. | @sec-nb-sparse-routing-prereg; @sec-nb-sparse-routing-verdict |
+| KERNEL | DONE | Is the row-parallel point softmax neutral in training? | — | Within 3% of the reference lanes in float32. +1.8%; default flipped. | @sec-nb-fast-kernel-default |
+| KSTUDY | DONE | Where does the step go, and which exact implementation options shorten it? | KERNEL | Every adopted option reproduces the eager reference to float32 roundoff. Compiled path 1.05x GeoTransolver at 10,000 tokens; fused kernel parity at 40,000. | @sec-nb-kernel-study; results/kernel_study_2026-09-13/ |
+| KNEUT | DONE (stays opt-in) | Does training with the fused kernel land within seed noise? | KSTUDY | Within 3% on the seed mean and per seed within the eager spread plus 3%. Mean ratio 1.009 but one seed at 1.089; the flip rule is not met. | @sec-nb-kernel-neutral-prereg; @sec-nb-kernel-neutral-verdict; @sec-nb-kernel-neutral-3seed-verdict; @sec-nb-kernel-neutral-5seed-verdict |
+| SCALE | RUNNING | Width 384 and 512, 40,000 and 80,000 cells, for all three architectures at full data. | UDRV, WAVE3, KERNEL | Width scales at 5% better; resolution-limited at 5% better; ordering moves at 0.05 in the ratio. DrivAerML half complete; HiLift half I/O-bound. | @sec-nb-scale-prereg; @sec-nb-scale-drivaer-synthesis; @sec-nb-scale-gt-verdict; @sec-nb-scale-transolver-verdict; @sec-nb-scale-isla-launch |
+| RFDIV | DONE | Why does the reference configuration diverge at width 512 at the protocol rate? | SCALE | Divergence localized to one factor with a fix class tested. Width, not tokens; routing hardens to one slice per token; a lower rate cures it. | @sec-nb-relframe-divergence-matrix; @sec-nb-relframe-divergence-mechanism; @sec-nb-relframe-divergence-locmat2-verdict |
+| OVERFIT | DONE | Is ISLA's deficit representational or a generalization effect? One case per architecture, 20,000 steps. | UDRV, MEASMET | Capacity-limited if ISLA's floor is at least 1.5x Transolver's; not if within 1.15x. Surface 1.31 to 1.55x: not a data limit; the weights cut each slice's effective token count to 0.21x. | @sec-nb-overfit-verdict; @sec-nb-overfit-routing-probe; @sec-nb-overfit-interior |
+| CAP | DONE | Which capacity axis is the single-case floor missing? | OVERFIT | Closes at or below 0.0852, carries at or below 0.0950, null at or above 0.1010. Slices null, width carries, depth and MLP null; at 40,000 cells every arm is within 1.03 to 1.10x of the baselines. | @sec-nb-cap-prereg; @sec-nb-cap-verdict |
+| QUADVAR | DONE | Is the count slope of ISLA's error the variance of the inference draw? A stratified draw, evaluation only. | CAP | Supported if the stratified 10,000-cell draw recovers half of the gain to 40,000; baselines move under 1%. ISLA bars met; the baselines also improved 2%, so about two points are ISLA-specific. | @sec-nb-quadvar-prereg; @sec-nb-quadvar-verdict |
+| QUADVARHL | DONE | Is the stratified draw a free improvement on the wings too? | QUADVAR | No arm worse by over 1%; ISLA's gain within its count slope. Held in every clause. | @sec-nb-quadvar-hl-prereg; @sec-nb-quadvar-hl-verdict |
+| EQPRICE | DONE (partial) | Is the trained-function deficit the positional information the contracts deny? Raw coordinates as a diagnostic. | CAP | Position is the deficit at or below 0.0525; partial to 0.0550; null above. Measured 0.0547: about two and a half points are the contracts' price. | @sec-nb-eqprice-prereg; @sec-nb-eqprice-verdict; @sec-nb-deficit-anatomy |
+| FORMHEADS | DONE (carries) | Is the remaining form deficit the routing multiplicity? One, four and eight routings per block on one car. | EQPRICE, CAP | Closes at or below 0.0852; carries at or below 0.90x the control; null at or above 0.95x. Eight heads 0.813x, monotone; below both baselines at 40,000 cells. | @sec-nb-formheads-prereg; @sec-nb-formheads-verdict |
+| HEADS435 | RUNNING | Does the routing-multiplicity gain transfer to 435 cars in the reference configuration? | FORMHEADS | Eight heads at or below 0.0530 closes and promotes; at or below 0.0543 carries; at or above 0.0549 null; density factor within 1.05 to 1.3. | @sec-nb-heads435-prereg |
+| GLOBIN | DONE | Zero or more global vector inputs and zero or more global scalar inputs, without touching any checkpoint or contract. | RELINT | Bitwise the former model with one vector and no scalars; contracts hold for zero and two vectors and with scalars. | @sec-nb-global-inputs |
+| GLOBACC | DONE | Does the zero-vector, one-scalar configuration train on a non-aerodynamic problem (screened Poisson)? | GLOBIN | Relative L2 at most 0.10 on both seeds and 3x better than trivial predictors. 0.043 / 0.045 at 9,000 steps. | @sec-nb-globin-accept-prereg; @sec-nb-globin-accept-verdict; @sec-nb-globin-accept-extension-verdict |
+| GLOBDIS | DONE | Is the scalar input decisive where the boundary data cannot substitute for it? | GLOBACC | Scalar arm at most 0.10; blind arm at least 2x worse. 0.077 / 0.070; blind arm 3.8x worse. | @sec-nb-globin-discrim-prereg; @sec-nb-globin-discrim-verdict |
+| MAINLINE | RUNNING | Is ISLA's mainline a clear, evidence-grounded case, mature enough for PhysicsNeMo integration? | GLOBIN, RFDIV, KNEUT | Bitwise gate on every kept configuration; suites pass; docs render; the corner price stated. Lean class merged; corner measured at 1.05x GeoTransolver under the width learning rate; the rate confound closed. | @sec-nb-config-rename; @sec-nb-corner-wlr-verdict; @sec-nb-cg-wlr-verdict; @sec-verdict |
 
+: The tech-tree ledger, one row per node. Statuses are as of 2026-09-18. Evidence links go to the dated lab-notebook entry holding the preregistration and verdict; where a node's verdict was later voided, retracted or overturned, the status says so and the row links both entries. {#tbl-tech-tree}
 
 ## Provenance {#sec-provenance}
 
@@ -504,10 +444,10 @@ reductions of evaluation runs, each named with the date of the run that
 produced it), or is a literal quoted from one of those files with the file
 named in the caption. The lab notebook (@sec-notebook) holds, for every
 artifact, the preregistration that preceded the run, the launch record,
-and the verdict entry; the tech-tree ledger above links each node to those
-entries. Training runs, checkpoints and per-point predictions live on the
-cluster in the task directory named in the notebook and are not needed to
-regenerate any figure in this book.
+and the verdict entry; the ledger above links each node to those entries.
+Training runs, checkpoints and per-point predictions live on the cluster in
+the task directory named in the notebook and are not needed to regenerate
+any figure in this book.
 
 Two protocol facts a reader should carry into every chapter: all HiLift and
 DrivAerML training runs used the same frozen recipe (10,000 sampled surface

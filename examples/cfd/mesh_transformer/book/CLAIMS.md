@@ -20,13 +20,21 @@ on the full split), 3e-3 for Transolver where stated.
   Inputs per surface point: position, unit normal, cell area (measure
   weight); global vector inputs ĝ_k, k = 1..K (K = 1 in this book: the unit
   freestream direction ĝ_1), and global scalar inputs (S = 0 in this book).
-  Seeds are invariants {|r|/L, r̂·ĝ_k, r̂·n, n·ĝ_k} relative to a gauge (centroid; reference length L,
-  constant 8.0 by default or the measure-weighted RMS radius with the
-  similarity gauge on). Encoder: 12 pre-LN soft-slice layers, 256 slices,
+  Reference configuration (the class default; frame_mode="relative",
+  scale_mode="total_measure"): no centre anywhere; the length unit is
+  L = sqrt(Σ w_i); the seed is the K invariants n·ĝ_k (one here) plus the S
+  global scalars; positions enter only as point-to-anchor differences.
+  The gauge variants (frame_mode="centered") subtract a centre (plain mean
+  of the sampled points with the constant reference length 8.0 = the
+  constant-gauge variant; measure-weighted centroid with the RMS radius =
+  the similarity-gauge variant) and carry 3+2K seeds and 6+2K relational
+  invariants. Encoder: 12 pre-LN soft-slice layers, 256 slices,
   hidden 192; each layer routes points to slices by softmax over points with
   the log-measure bias, forms equivariant anchors (weighted mean position and
-  mean normal per slice) and 8 point–anchor relational invariants that refine
-  routing and are pooled back. Decoder, reference configuration: the heads
+  mean normal per slice) and 5+K point–anchor relational invariants (six
+  here; 6+2K in the gauge variants) that refine routing and are pooled back.
+  Book presentation rules for chapters: `STYLE.md` (nomenclature, colours,
+  teaching pattern); shared figure style: `palette.py`. Decoder, reference configuration: the heads
   read directly from the interacting encoder tokens, so a prediction at one
   point depends (weakly, ~7% companion-set sensitivity) on which other points
   are in the sample; the OPTIONAL `query_independent=True` configuration

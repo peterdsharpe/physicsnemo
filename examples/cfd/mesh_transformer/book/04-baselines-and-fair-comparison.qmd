@@ -1,422 +1,438 @@
-# Baselines and the fair-comparison protocol {#sec-baselines}
+# The baselines, and what a fair comparison means {#sec-baselines}
 
-Every accuracy claim in this book compares ISLA against
-GeoTransolver, and where stated against plain Transolver, under one protocol
-that fixes everything except the architecture: matched sampled points per
-case and epochs, each architecture at its own best learning rate, two or
-more seeds, shared validation cases, and sealed test splits opened once. The
-baselines are strong, not straw: GeoTransolver has at least as many
-parameters as ISLA (9.0M against 8.9M) and receives raw coordinates that ISLA
-never sees. On the recipe's compiled path at 10,000 tokens ISLA's training
-step is 1.05x GeoTransolver's at half the peak memory (47 ms and 1.30 GiB
-against 45 ms and 2.70 GiB; @sec-resource-matching). One item of the
-protocol decides more than any architectural choice in this book: the scale
-at which each model receives the freestream. Every architecture receives it
-as a unit direction. Fed the physical freestream velocity instead
-(2,679.5 in/s on HiLiftAeroML), GeoTransolver's global-context projector
-collapses to one occupied slice and both baselines lose 3.4–3.8x at 35
-training cases, so a comparison against a physical-velocity baseline
-measures the input scale, not the architecture (@sec-part-baseline).
-Two further questions are settled here so that the results chapters need not
-carry them: ISLA's exact equivariance is *not* an accuracy advantage over a
-canonicalized GeoTransolver (exactly pose-invariant at 1.01x cost), and
-learning-rate choice belongs to the protocol because a shared rate would
-have decided the comparison by tuning.
+**ISLA is measured against the two released slice-attention transformers
+with the strongest record on industrial aerodynamics, GeoTransolver and
+Transolver, under one protocol that fixes everything except the
+architecture.** The baselines are strong, not straw: GeoTransolver has at
+least as many parameters as ISLA and receives raw coordinates that ISLA
+never sees; both are run at their own best learning rate; neither is ever
+modified. This chapter says what each baseline computes and sees, states the
+protocol as a list of rules, and settles three questions the evidence
+chapters would otherwise have to carry: why every model must receive the
+freestream as a unit direction, why ISLA's exact equivariance is a contract
+rather than an accuracy advantage over a canonicalized baseline, and why the
+learning rate belongs to the protocol.
+
+```{python}
+#| label: setup-baselines
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+import json, statistics
+from pathlib import Path
+RES = Path("..") / "results"
+J = lambda p: json.load(open(RES / p))
+mean = statistics.mean
+```
 
 ## The baselines and what each one sees {#sec-part-baseline}
 
-**The comparison is against two members of the Transolver family: the same
-soft-slice attention as ISLA, fed raw geometric inputs in place of ISLA's
-invariants.** Transolver (Wu et al., ICML 2024, arXiv
+**GeoTransolver and Transolver share ISLA's routing mechanism and differ in
+what they are allowed to see: raw coordinates in a frame, and the freestream
+as a raw vector.** Transolver (Wu et al., ICML 2024, arXiv
 [2402.02366](https://arxiv.org/abs/2402.02366)) is a transformer for physics
 fields on unstructured point sets. Each layer assigns every point a softmax
 mixture over a fixed number of *slices*, pools point features into one token
 per slice, runs attention among the slice tokens, and scatters the result
-back through the same mixture. ISLA (@sec-mt2) shares this backbone; it
-differs in what enters the routing and what the tokens may carry.
+back through the same mixture: *physics attention*. GeoTransolver adds a
+geometry encoder and a global-context projector. @fig-family-diagram places
+ISLA beside them.
 
-**GeoTransolver** is the recipe's reference surface model. Per surface point
-it receives the coordinates (centered on the case) and the unit normal as a
-six-channel feature; the freestream velocity vector is a three-channel global
-feature. Its *geometry encoder* takes the coordinates a second time through a
-dedicated embedding path that conditions the slice attention; the ball-query
-local-feature path (`include_local_features`) is off throughout this program.
-Twelve layers, hidden width 256, 256 slices, 9.0M parameters. It is not
+```{mermaid}
+%%| label: fig-family-diagram
+%%| fig-cap: >
+%%|   What each architecture is handed, and where they differ. Grey boxes
+%%|   are data; the routing mechanism (solid blue) is shared by the whole
+%%|   family. GeoTransolver and Transolver receive coordinates in the
+%%|   dataset's frame and the freestream as a vector; ISLA receives only
+%%|   invariants of the same inputs and its slices carry the surface measure
+%%|   (dashed blue: fixed maps with no parameters). How to read this: the
+%%|   diagram shows inputs and structure, not accuracy; the learned blocks are
+%%|   the same kind of object in all three.
+flowchart LR
+    classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
+    classDef learned fill:#e6f0fb,stroke:#2a78d6,color:#0b0b0b
+    classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
+
+    subgraph B["GeoTransolver / Transolver"]
+        direction TB
+        B1["per point: centred coordinates, unit normal<br/>global: freestream vector (unit direction under the protocol)"]:::data
+        B2["GeoTransolver only: geometry encoder,<br/>global-context projector"]:::learned
+        B3["physics attention × layers:<br/>softmax routing of points into slices,<br/>attention among slices, scatter back"]:::learned
+        B4["linear head: pressure, wall shear"]:::learned
+        B1 --> B2 --> B3 --> B4
+    end
+    subgraph I["ISLA"]
+        direction TB
+        I1["per point: position, unit normal, measure weight<br/>global: unit direction(s), scalars"]:::data
+        I2["invariant seed; length scale from the total measure"]:::fixed
+        I3["slice layers × 12:<br/>measure-weighted routing, anchors,<br/>relational invariants, read-back"]:::learned
+        I4["linear head on invariants → equivariant basis"]:::fixed
+        I1 --> I2 --> I3 --> I4
+    end
+```
+
+**GeoTransolver** is the recipe's reference surface model. Per surface
+point it receives the coordinates, centred on the case, and the unit normal
+as a six-channel feature; the freestream vector is a three-channel global
+feature. Its *geometry encoder* takes the coordinates a second time through
+a dedicated embedding path that conditions the slice attention; the
+ball-query local-feature path is off throughout this program. It is not
 rotation- or translation-equivariant: rotate the car and it sees a different
-input.
+input (@sec-pose).
 
 ::: {#sec-transolver}
 **Transolver** is the same family without the geometry encoder, the control
 that isolates what the encoder contributes. Per point it receives coordinates
-and normal; the freestream vector is broadcast to every point. Eight layers,
-hidden 256, 256 slices, 6.0M parameters. On HiLiftAeroML, the only dataset
-on which it is run in this book, it trains at learning rate 3e-3, its best
-of the two rates run.
+and normal; the freestream vector is broadcast to every point.
 :::
 
-**ISLA** receives position, unit normal and cell area per point and the unit
-freestream direction as its only global input in this book's datasets,
-consumed through invariants
-and equivariant anchors only (@sec-mt2): 12 layers, hidden 192, 256 slices,
-8.9M parameters.
+**ISLA** receives position, unit normal and measure weight per point and the
+freestream as a unit direction, consumed only through invariants and
+equivariant anchors (@sec-mt2). @tbl-architectures gives the three
+configurations side by side.
 
-**The numerical scale at which the freestream enters the baselines is a
-protocol variable, and on HiLiftAeroML it moves their error more than any
-architectural choice in this book.** ISLA consumes the unit freestream
-direction by construction. GeoTransolver and Transolver consume whatever
-vector the dataset pipeline hands them, and the pipelines pass the physical
-freestream velocity through without normalizing: 2,679.5 in/s on
-HiLiftAeroML (the dataset is in inches and seconds) and 38.9 m/s on
-DrivAerML. Coordinates and fields are nondimensionalized; this one global
-vector is not. GeoTransolver's global-context projector applies linear maps
-and a slice softmax to it directly, and its conditioning depends on the
-magnitude: with the production projector dimensions and untrained weights,
-the entropy-equivalent number of occupied slices per head is 191–232 at
-freestream magnitude 1, 1.0–3.8 at 38.9 and 1.00–1.02 at 2,679.5, while the maximum
-context magnitude rises from 0.66 to 22.7 to 1,530
-(results/geotransolver_drive_conditioning_2026-09-08.json); Transolver
-concatenates the raw vector into every point's features. Training can in
-principle rescale either path, so the conditioning numbers are the
-initialization signature of the hazard; the trained measurement is what
-counts.
-
-The trained measurement, at 35 HiLiftAeroML training cases with the same
-cases, seeds, budget and learning rates in both arms (GeoTransolver 1e-3,
-Transolver 3e-3): surface-pressure relative L2 on the 180 shared validation
-cases is 0.124 for GeoTransolver fed the unit direction against 0.381 fed
-the physical velocity (three seeds 0.374, 0.409, 0.359), and 0.115 for
-Transolver against 0.404. Each unit-direction baseline is lower than its
-physical-velocity twin on 180 of 180 cases, by a median factor of 3.4
-(GeoTransolver) and 3.8 (Transolver); velocity and wall shear move the same
-way (GeoTransolver 0.145 and 0.229 against ISLA's 0.168 and 0.256,
-Transolver 0.140 and 0.216;
-results/udrv_reduction_2026-09-09.json; @sec-nb-udrv-verdict). At its best
-learning rate (3e-3 at this rung) the unit-direction GeoTransolver reaches 0.111.
-Against ISLA's reference configuration (0.1529) and its constant-gauge
-variant (0.1377) the unit-direction baselines are ahead: GeoTransolver 0.73x and
-0.80x, Transolver 0.75x and 0.83x, and GeoTransolver at 1e-3 is lower than
-the constant-gauge variant on 130 of 180 cases, Transolver on 152
-(@sec-de-result). The 3.4–3.8x factor is a statement about what
-GeoTransolver and Transolver do when fed a vector of magnitude 2,679.5 at
-small data, and nothing else; at 1,260 cases the physical-velocity GeoTransolver
-reaches parity with ISLA regardless (@sec-data-efficiency).
-
-Three rules follow. First, every architecture receives the freestream as a
-unit direction, and a comparison against a baseline fed the physical
-velocity is reported as a measurement of the input scale, never as a
-comparison of architectures. Second, the unit-direction baseline is the
-reference baseline on every rung; the 35-, 210- and 510-case rungs, the 4-
-and 21-geometry rungs and the fixed-angle split each have one, and the
-1,260-case rung does not yet (@sec-data-efficiency, @sec-program-status).
-Third, the protocol fixes the input scale by rule rather than by control:
-learning-rate, training-length and seed controls vary the optimizer and
-cannot detect an input-scale defect, and neither can appending invariant
-features to the baselines' inputs (@sec-mechanism). On DrivAerML the hazard
-is smaller and its trained effect is nil: at 38.9 m/s the projector's collapse
-at initialization is partial, and GeoTransolver trained on the physical
-velocity scores 0.0498 against 0.0503 on the unit direction at 435 cars
-(float32; @sec-full-data). GeoTransolver's volume configuration on the
-interior task changes by under 2% on every field between the two freestream
-inputs, so
-the interior ordering is not an input-scale effect (@sec-nb-udrv-int-verdict).
-
-| architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at 10k tokens |
+| architecture | per-point inputs | global input | layers | hidden | slices | parameters | peak memory at 10,000 tokens |
 |---|---|---|--:|--:|--:|--:|--:|
-| GeoTransolver | centered coordinates, unit normal; coordinates again through the geometry encoder | freestream vector, consumed by the global-context projector: the unit direction under the protocol (the physical velocity is the hazard measured above) | 12 | 256 | 256 | 9.0M | 2.70 GiB |
-| Transolver | centered coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not measured |
-| ISLA | position, unit normal, cell area (via invariants and anchors only) | unit freestream direction | 12 | 192 | 256 | 8.9M | 1.30 GiB with the geometry recompute; 1.94 GiB without |
+| GeoTransolver | centred coordinates, unit normal; coordinates again through the geometry encoder | freestream vector through the global-context projector: the unit direction under the protocol | 12 | 256 | 256 | 9.0M | 2.70 GiB |
+| Transolver | centred coordinates, unit normal | freestream vector, broadcast per point: the unit direction under the protocol | 8 | 256 | 256 | 6.0M | not measured |
+| ISLA (reference configuration) | position, unit normal, measure weight, through invariants and anchors only | unit freestream direction | 12 | 192 | 256 | 8.9M | 1.30 GiB with the geometry recompute; 1.94 GiB without |
 
 : The three architectures compared on the aerodynamic datasets. *Per-point
-inputs*: channels attached to each of the 10,000 sampled surface points per
-case. *Global input*: the one per-case vector. *Layers*: soft-slice attention
-blocks in the encoder. *Hidden*: width of the per-point feature vector.
-*Slices*: slice tokens per layer. *Parameters*: trainable parameters of the
-recipe configuration. *Peak memory*: peak allocated GPU memory over one
-training step on one case of 10,000 sampled points in bfloat16 on one GB300,
-both models compiled as the recipe runs them, the same harness for both
-(results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json; @sec-mt2-cost).
-Not measured for Transolver, which serves only as a same-family control on
-HiLiftAeroML. Configuration source:
-`unified_external_aero_recipe/conf/model/{isla_surface,geotransolver_surface,transolver_surface}.yaml`
-(`isla_surface_constant_gauge.yaml` pins the constant-gauge variant; before
-2026-09-15 the two ISLA files were named `isla_surface_reference.yaml` and
-`isla_surface.yaml`).
+inputs*: channels attached to each of the 10,000 sampled surface cells per
+case. *Layers*: soft-slice attention blocks. *Hidden*: width of the per-point
+feature. *Parameters*: trainable parameters of the recipe configuration.
+*Peak memory*: peak allocated GPU memory over one training step on one case
+of 10,000 cells in bfloat16 on one GB300, both models compiled as the recipe
+runs them (results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json;
+@sec-mt2-cost); not measured for Transolver, which serves as a same-family
+control. Configuration source:
+`unified_external_aero_recipe/conf/model/{isla_surface,geotransolver_surface,transolver_surface}.yaml`.
 {#tbl-architectures}
+
+### The freestream must enter as a unit direction
+
+**The numerical scale at which the baselines receive the freestream is a
+protocol variable, and on HiLiftAeroML it moves their error more than any
+architectural choice in this book.** ISLA normalizes its global vector
+inputs by construction. GeoTransolver and Transolver consume whatever vector
+the pipeline hands them, and the dataset pipelines pass the physical
+freestream velocity through without normalizing: 2,679.5 in/s on
+HiLiftAeroML (the dataset is in inches and seconds) and 38.9 m/s on
+DrivAerML. Coordinates and fields are nondimensionalized; this one vector is
+not.
+
+Why it matters is visible before training. GeoTransolver's global-context
+projector applies linear maps and a slice softmax to the vector directly, so
+its conditioning depends on the magnitude: @tbl-projector shows how many
+slices each head of the untrained projector occupies as the magnitude
+grows. At unit magnitude a head spreads over most of the 256 slices; at the
+HiLiftAeroML magnitude it collapses onto one. Transolver concatenates the raw
+vector into every point's features, with the same hazard in a different
+place. Training can in principle rescale either path, so these numbers are
+the initialization signature; the trained measurement is what counts.
+
+```{python}
+#| label: tbl-projector
+#| output: asis
+cond = J("geotransolver_drive_conditioning_2026-09-08.json")["results"]
+out = "| magnitude of the freestream vector | occupied slices per head (entropy-equivalent, min to max over heads) | largest context entry |\n|---:|---|---:|\n"
+labels = {1.0: "1 (unit direction)", 38.9: "38.9 (DrivAerML, m/s)", 2679.5054741899685: "2,679.5 (HiLiftAeroML, in/s)"}
+for r in cond:
+    lab = next(v for k, v in labels.items() if abs(k - r["drive_magnitude"]) < 1e-6)
+    out += f"| {lab} | {r['effective_slices_min']:.1f} to {r['effective_slices_max']:.1f} of 256 | {r['context_abs_max']:.2f} |\n"
+print(out)
+print(": Conditioning of GeoTransolver's global-context projector at initialization against the magnitude of the "
+      "freestream vector it receives, at the recipe's projector dimensions with untrained weights. "
+      "How to read this: a head that occupies one slice has lost its ability to condition on the direction; "
+      "this is a property of the untrained network, and @tbl-unit-vs-physical is the trained consequence. "
+      "Data: results/geotransolver_drive_conditioning_2026-09-08.json. {#tbl-projector}")
+```
+
+The trained consequence, at 35 HiLiftAeroML training cases with the same
+cases, seeds and budget in both arms, is in @tbl-unit-vs-physical: each
+baseline fed the unit direction is more accurate than its physical-velocity
+twin on every one of the 180 validation cases, by a median factor above
+three, and the unit-direction baselines are ahead of both ISLA
+configurations.
+
+```{python}
+#| label: tbl-unit-vs-physical
+#| output: asis
+fp35 = J("fp32_reeval/fp32_shift_35_2026-09-09.json")["runs"]
+rf = J("relframe_reduction_2026-09-11.json")["hilift_val"]
+ud = J("udrv_reduction_2026-09-09.json")["paired"]
+fp = lambda keys: [fp35[k]["fields"]["pressure_l2"]["fp32_mean"] for k in keys]
+arms = [
+    ("GeoTransolver, physical velocity, lr 1e-3", fp([f"lad_hl_gt_super_scarce_seed{s}" for s in (42, 43, 44)])),
+    ("GeoTransolver, unit direction, lr 1e-3", fp([f"udrv_hl_gt_super_scarce_seed{s}" for s in (42, 43, 44)])),
+    ("GeoTransolver, unit direction, lr 3e-3 (its best at this rung)", fp([f"udrv_hl_gt_super_scarce_lr3e3_seed{s}" for s in (42, 43)])),
+    ("Transolver, physical velocity, lr 3e-3", fp([f"t1_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
+    ("Transolver, unit direction, lr 3e-3", fp([f"udrv_hl_transolver_super_scarce_lr3e3_seed{s}" for s in (42, 43, 44)])),
+    ("ISLA, reference configuration", [rf[f"rf_hl_mt2_meas_super_scarce_seed{s}"]["pressure_l2"] for s in (42, 43)]),
+    ("ISLA, constant-gauge variant", fp([f"lad_hl_mt2_super_scarce_seed{s}" for s in (42, 43, 44)])),
+]
+isla_ref = mean(arms[5][1])
+out = "| arm | surface pressure error, seed mean (seeds) | baseline ÷ ISLA reference |\n|---|---|---:|\n"
+for lab, v in arms:
+    ratio = "—" if lab.startswith("ISLA") else f"{mean(v)/isla_ref:.2f}"
+    out += f"| {lab} | {mean(v):.4f} ({' / '.join(f'{x:.4f}' for x in v)}) | {ratio} |\n"
+print(out)
+g, t = ud["gt_physical_35_vs_gt_unit_35"], ud["transolver_physical_35_vs_transolver_unit_35"]
+print(f": The input-scale control at 35 HiLiftAeroML training cases: area-weighted relative L2 of surface pressure "
+      f"on the 180 shared validation cases, float32, final-epoch checkpoints, 10,000 cells, 500 epochs. Paired per case, "
+      f"the unit-direction GeoTransolver is lower than its physical-velocity twin on {g['cases_where_second_is_lower']} of "
+      f"{g['n_cases']} cases (median factor {g['median_ratio_first_over_second']:.1f}) and the unit-direction Transolver on "
+      f"{t['cases_where_second_is_lower']} of {t['n_cases']} (median factor {t['median_ratio_first_over_second']:.1f}). "
+      f"How to read this: the physical-velocity rows measure an input scale, not an architecture, and appear nowhere else in "
+      f"the book as a comparison; the unit-direction rows are the protocol. Data: "
+      f"results/fp32_reeval/fp32_shift_35_2026-09-09.json, results/relframe_reduction_2026-09-11.json, "
+      f"results/udrv_reduction_2026-09-09.json (paired counts). {{#tbl-unit-vs-physical}}")
+```
+
+Three rules follow. Every architecture receives the freestream as a unit
+direction, and a comparison against a baseline fed the physical velocity is
+reported only as a measurement of the input scale. The unit-direction
+baseline is the reference baseline on every rung. And the input scale is
+fixed by rule rather than by control: learning-rate, training-length and
+seed controls vary the optimizer and cannot detect an input-scale defect.
+
+::: {.callout-note collapse="true" title="Where the hazard is small: DrivAerML and the interior task"}
+At the DrivAerML magnitude the projector's collapse at initialization is
+partial (@tbl-projector), and the trained effect is nil: GeoTransolver
+trained on the physical velocity and on the unit direction score within a
+percent of each other at 435 cars (@sec-full-data). GeoTransolver's volume
+configuration on the interior task changes by under 2% on every field
+between the two inputs (@sec-nb-udrv-int-verdict), so the interior ordering
+is not an input-scale effect. The rule is applied on every dataset
+regardless, because a rule that depends on the dataset's units is not a
+rule.
+:::
 
 ## The fair-comparison protocol {#sec-fair-comparison}
 
 **Every cross-architecture number in this book was produced under the
-following protocol; a comparison that violates any item is not reported.**
-Datasets and splits are defined in @sec-problem, the metric in @sec-metrics.
+following rules; a comparison that violates one is not reported.** The
+datasets and splits are in @sec-splits, the metric in @sec-metrics and the
+training recipe in @sec-protocol.
 
-1. **Matched tokens per case: 10,000 sampled surface points for every
-   architecture.** Accuracy still rises with tokens at 10,000 (6,500 to
-   10,000 is worth 8% for ISLA, @sec-resource-matching), so a token mismatch
-   would be a handicap disguised as an architecture difference.
-2. **Matched epochs: 500 for every arm, one case per step.** A short budget
-   favours the faster starter; the 1,000-epoch GeoTransolver controls at 35
-   and 210 training cases (@sec-data-efficiency) do not lower its error, so
-   500 does not under-train the baseline. Under the recipe's
-   step schedule (@sec-protocol) the second 500 epochs are a low-rate tail,
-   not a doubled optimization budget.
-3. **Learning rate chosen per architecture on the full split, by
-   validation, before any ladder or ablation ran.** From the grid
-   {1e-3, 3e-3, 1e-2} on DrivAerML and {1e-3, 3e-3} on HiLiftAeroML: ISLA 1e-3
-   on both datasets; GeoTransolver 1e-3 on HiLiftAeroML and 3e-3 on
-   DrivAerML; each then frozen for every smaller split and ablation. The one
-   departure is disclosed where it occurs: Transolver had no full-split run
-   on HiLiftAeroML, so it was trained at both 1e-3 and 3e-3 on the 35- and
-   210-case rungs and is reported at the better of the two per rung (3e-3 at
-   both), a choice that favours the baseline (@sec-data-efficiency). Choosing after seeing
-   ladder results would let the tuning budget set the gap (@sec-lr-protocol).
-4. **Every architecture receives the freestream as the unit direction**,
-   and, on a dataset whose speed varies between cases, a separately
-   normalized speed channel alongside it. The dataset pipelines do not
-   nondimensionalize global inputs, and a raw physical velocity of
-   2,679.5 in/s costs GeoTransolver and Transolver 3.4–3.8x at 35
-   HiLiftAeroML cases (@sec-part-baseline). A number produced with the
-   physical velocity is labelled physical-velocity and is a measurement of the
-   input scale, not a comparison of architectures.
-5. **Two or more seeds per cell, reported individually.** Seed spread is
-   the only noise estimate at 48 or 180 validation cases; every ratio is
-   quoted with both seeds so the reader can see whether it exceeds the
-   spread.
-6. **Shared validation cases.** All architectures are scored on the same
-   180 HiLiftAeroML cases or 48 DrivAerML cars, sampled with the same seed.
-7. **Paired per-case statistics where a ratio is claimed.** A ratio of
-   means can be carried by a few cases, so the count of validation cases on
-   which one architecture is more accurate, with median and worst-decile
-   per-case ratios, is reported alongside (@sec-data-efficiency).
-8. **Sealed test splits evaluated once.** The 360-case HiLiftAeroML test
-   set and the regime-extrapolation test lists (@sec-regime-extrapolation)
-   are taken verbatim from the dataset manifest and evaluated a single time.
-   "Sealed" is a per-checkpoint property (no model is scored on a case it
-   trained on); it is not a program-level one, because the manifests overlap
-   (@sec-splits) and the regime-extrapolation tests already read every
-   geometry, so no later HiLiftAeroML test evaluation is an independent
-   confirmation of the program's choices (@sec-limits-validation).
-9. **Preregistered bars.** Each experiment states, in readout units and
+1. **Matched tokens per case: 10,000 sampled surface cells for every
+   architecture.** Accuracy still rises with tokens at 10,000
+   (@tbl-token-control), so a token mismatch would be a handicap disguised as
+   an architecture difference.
+2. **Matched epochs: 500 for every arm.** Doubling GeoTransolver's budget at
+   the small rungs does not lower its error (@sec-data-efficiency), so 500
+   does not under-train the baseline.
+3. **Learning rate chosen per architecture on the full split, by validation,
+   before any ladder or ablation ran, then frozen.** Where a baseline had no
+   full-split run on a dataset it was trained at both grid rates on the
+   small rungs and is reported at the better, a choice that favours the
+   baseline (@sec-lr-protocol).
+4. **Every architecture receives the freestream as the unit direction**
+   (@sec-part-baseline).
+5. **Two or more seeds per cell, reported individually**, so the reader can
+   see whether a ratio exceeds the seed spread.
+6. **Shared validation cases**, sampled with the same seed, for every
+   architecture.
+7. **Paired per-case statistics where a ratio is claimed**: the count of
+   validation cases on which one architecture is more accurate, with median
+   and worst-decile per-case ratios, alongside the ratio of means.
+8. **Sealed test splits evaluated once**, taken verbatim from the dataset
+   manifest; sealed per checkpoint, not per program (@sec-splits).
+9. **Preregistered bars**: each experiment states, in readout units and
    before it runs, the value that confirms and the value that refutes.
 
 ### One instrument per dataset {#sec-review-instrument}
 
 The *instrument* for a dataset is its fixed validation set and evaluation
 configuration: on DrivAerML, surface pressure and wall shear on 48 held-out
-cars at 10,000 sampled cells; on HiLiftAeroML, pressure, velocity, wall
-shear, temperature and density on 180 held-out cases shared by every training
-split. An instrument is never widened after a result is read from it; a
-control that changes it (another token count, a rotated pose, a biased
-sampling density) is reported as such, never mixed into an in-family number.
-Its limits bind where stated: 48 cars is a small validation set and two seeds
-a thin noise estimate (@sec-limits).
+cars at 10,000 sampled cells; on HiLiftAeroML, pressure, velocity and wall
+shear on 180 held-out cases shared by every training split. An instrument is
+never widened after a result is read from it; a control that changes it
+(another cell count, a rotated pose, a biased sampling density) is reported
+as such and never mixed into an in-family number. Its limits bind where
+stated: 48 cars is a small validation set and two seeds a thin noise
+estimate (@sec-limits).
 
 ## Resource matching {#sec-resource-matching}
 
 **At the recipe operating point ISLA matches GeoTransolver on parameters
 and tokens per case, and on the compiled path it matches on step time at
 half the memory.** Parameters 8.9M against 9.0M; tokens per case 10,000
-each. On one GB300 in bfloat16 at batch 1, both models compiled as the
-recipe runs them (results/kernel_study_2026-09-13/pareto_gb300_full_bf16.json;
-@sec-mt2-cost), GeoTransolver steps in 45 ms at 2.70 GiB of peak memory.
-ISLA steps in 47 ms at 1.30 GiB with its geometry recompute on (1.05x) and
-in 39 ms at 1.94 GiB without it (0.86x); the two paths are bitwise
-identical in output and gradients. At 40,000 tokens the default compiled
-ISLA takes 119 ms against GeoTransolver's 53 ms (2.2x), and the exact fused
-geometry kernel (opt-in, `geo_kernel="fused"`) takes 52 ms at 4.5 GiB
-against 10.0 GiB. Every stage but the MLP is memory-bound, and the relational
-invariants carry 61% of the traffic (@sec-nb-kernel-study). Memory was not a
-controlled variable in any comparison: the checkpoints in this book were
-trained by an implementation of the same function (float64 agreement 4e-15)
-with a larger footprint, so no accuracy result depends on the footprint.
+each; on one GB300 in bfloat16 with both models compiled as the recipe runs
+them, ISLA's step is 1.05x GeoTransolver's at 10,000 tokens with the
+geometry recompute on and 0.86x with it off, at 1.30 and 1.94 GiB against
+2.70 GiB (@tbl-mt2-cost). Memory was not a controlled variable in any
+comparison and no accuracy result depends on it: the checkpoints in this
+book were trained by implementations of the same function that differ only
+in footprint.
 
-@tbl-token-control is a token-count control, not a matched-memory one. It
-reports DrivAerML validation pressure error, relative L2 per car averaged
-over 48 cars, at the frozen rate 3e-3 for both architectures (not ISLA's best
-rate; the comparison of interest is ISLA against ISLA), for ISLA's
-constant-gauge variant. Cutting ISLA's tokens from 10,000 to 6,500 costs 8%
-accuracy. The 8% is the price of fewer sampled points per case, which is
-why the protocol fixes tokens at 10,000 for every architecture; it is not
-evidence about memory.
+@tbl-token-control is the token-count control behind rule 1. It compares
+ISLA against itself at two cell counts, at one shared learning rate that is
+not ISLA's best, on the constant-gauge variant; the 8% it shows is the price
+of fewer sampled points per case, and the reason the protocol fixes tokens
+for every architecture.
 
 ```{python}
 #| label: tbl-token-control
 #| output: asis
-#| code-fold: true
-import json
-from pathlib import Path
-
-R = Path("..") / "results"
-iw = json.load(open(R / "instrument_wave_reduction_2026-09-01.json"))
+iw = J("instrument_wave_reduction_2026-09-01.json")
 p = lambda k: iw[k]["pressure_l2"]
-# artifact keys: "ref_mt2_v3c" is ISLA's constant-gauge variant at lr 3e-3
 mt2_const_10k = [p(f"ref_mt2_v3c_seed{s}") for s in (42, 43)]
 mt2_const_6500 = [p(f"iw_mt2_v3c_r6500_seed{s}") for s in (42, 43)]
 gt_10k = [p(f"ref_gt_fixed_seed{s}") for s in (42, 43)]
-mean = lambda v: sum(v) / len(v)
 ratio = mean(mt2_const_6500) / mean(mt2_const_10k)
-rows = [
-    ("ISLA, constant-gauge variant", "10,000", mt2_const_10k, 1.0),
-    ("ISLA, constant-gauge variant", "6,500", mt2_const_6500, ratio),
-    ("GeoTransolver", "10,000", gt_10k, None),
-]
-out = "| architecture | tokens per case | pressure rel-L2 (seed 42 / 43) | relative to ISLA at 10,000 |\n|---|--:|---|--:|\n"
+rows = [("ISLA, constant-gauge variant", "10,000", mt2_const_10k, 1.0),
+        ("ISLA, constant-gauge variant", "6,500", mt2_const_6500, ratio),
+        ("GeoTransolver", "10,000", gt_10k, None)]
+out = "| architecture | tokens per case | surface pressure error (seed 42 / 43) | relative to ISLA at 10,000 |\n|---|--:|---|--:|\n"
 for n, t, v, r in rows:
-    rr = "--" if r is None else f"{r:.2f}x"
-    out += f"| {n} | {t} | {v[0]:.4f} / {v[1]:.4f} | {rr} |\n"
+    out += f"| {n} | {t} | {v[0]:.4f} / {v[1]:.4f} | {'—' if r is None else f'{r:.2f}x'} |\n"
 print(out)
-print(": The token-count control on DrivAerML. *Tokens per case*: sampled "
-      "surface cells per car in training and validation. "
-      "*Pressure rel-L2*: relative L2 error of surface pressure per car, "
-      "mean over the 48 validation cars, scored in bfloat16, at learning "
-      "rate 3e-3 for every row (not ISLA's best rate); the ISLA rows are the "
-      "constant-gauge variant. The last column divides the row's seed mean by "
-      "that of ISLA at 10,000 tokens. This is a token-count control, not a "
-      "matched-memory one. Not "
-      "shown: wall shear, which moves the same way. Data: "
-      "results/instrument_wave_reduction_2026-09-01.json.")
+print(": The token-count control on DrivAerML: area-weighted relative L2 of surface pressure, mean over the 48 "
+      "validation cars, scored in bfloat16 (labelled: this table predates the float32 instrument and compares ISLA "
+      "with itself), at learning rate 3e-3 for every row. The last column divides the row's seed mean by that of ISLA "
+      "at 10,000 tokens. How to read this: a token-count control, not a matched-memory comparison; wall shear moves the "
+      "same way. Data: results/instrument_wave_reduction_2026-09-01.json. {#tbl-token-control}")
 ```
 
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}
 
-**ISLA is rotation- and translation-covariant by algebraic construction
-(exact in float64; the bf16 training path carries a finite-precision
-residual that is measured, not assumed, @sec-mt2-contracts);
-GeoTransolver trained in a canonical frame is exactly pose-invariant at 1.01x
-accuracy cost. Against a canonicalized baseline the two are equally good, so
-equivariance is a contract about what the model needs at inference, not an
-accuracy advantage. Against baselines that learn pose from SO(3)
-augmentation instead, ISLA leads by 6% (GeoTransolver) and 19% (Transolver)
-when every DrivAerML car arrives in a random pose (@sec-scoreboard-pose).**
+**ISLA is rotation- and translation-covariant by algebraic construction;
+GeoTransolver trained in a canonical frame is exactly pose-invariant at
+about a percent of accuracy cost. Against a canonicalized baseline the two
+are equally good, so equivariance is a contract about what the model needs
+at inference, not an accuracy advantage.** Against baselines that learn pose
+from rotation augmentation instead, ISLA leads when every car arrives in a
+random pose (@sec-scoreboard-pose).
 
 The two phrases mean different things. A model is *equivariant by
-construction* when every operation inside it commutes with rigid motions: its
-inputs are invariants or vectors in an equivariant basis, so a rotated case
-yields the rotated prediction to floating-point roundoff (ISLA's fp64 contract
-test, @sec-mt2). A pipeline is *invariant by canonicalization* when a
-preprocessing step estimates a frame from each case, expresses the case in
-that frame, runs an ordinary non-equivariant model, and rotates vector outputs
-back; it is invariant exactly when the frame estimate depends on the
-pose-free geometry alone.
-
-The canonical frame used here sends the freestream direction to +x and fixes
-the roll about it from the area-weighted principal axes of the surface in the
-transverse plane, sign from the third moment. On DrivAerML no case is within
-5% of a principal-axis degeneracy and the sign is consistent across all 48
-validation cars. Estimated from the 10,000 sampled cells the model sees, the
-frame is tilted 0.8° on average from the full-resolution frame (key `frame`
-of the artifact cited in @tbl-pose).
-
-@tbl-pose reports DrivAerML validation pressure error, relative L2 per car
-averaged over 48 cars, for GeoTransolver at learning rate 3e-3, 500 epochs,
-two seeds, evaluated *in pose* (cars as the dataset provides them) and on an
-*SO(3) orbit* (each car in a uniformly random orientation, rotation angles
-44–179°), vector outputs rotated back before scoring.
+construction* when every operation inside it commutes with rigid motions, so
+a rotated case yields the rotated prediction to roundoff (ISLA's float64
+contract test, @sec-mt2-contracts). A pipeline is *invariant by
+canonicalization* when a preprocessing step estimates a frame from each
+case, expresses the case in that frame, runs an ordinary model, and rotates
+vector outputs back; it is invariant exactly when the frame estimate depends
+on the pose-free geometry alone. The canonical frame used here sends the
+freestream direction to +x and fixes the roll about it from the
+area-weighted principal axes of the surface in the transverse plane, sign
+from the third moment. @tbl-pose measures GeoTransolver on DrivAerML under
+three treatments, *in pose* (cars as the dataset provides them) and on an
+*SO(3) orbit* (each car in a uniformly random orientation), with vector
+outputs rotated back before scoring.
 
 ```{python}
 #| label: tbl-pose
 #| output: asis
-#| code-fold: true
-import json
-from pathlib import Path
-
-R = Path("..") / "results"
-p1 = json.load(open(R / "p1_canonicalization_control_2026-09-02.json"))
-pp = json.load(open(R / "p1pp_canonical_training_2026-09-03.json"))
+p1 = J("p1_canonicalization_control_2026-09-02.json")
+pp = J("p1pp_canonical_training_2026-09-03.json")
 raw_in = [p1["table"][f"inpose|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
 raw_orb = [p1["table"][f"orbit|raw|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
 eval_canon_in = [p1["table"][f"inpose|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
 eval_canon_orb = [p1["table"][f"orbit|canon|gt_fixed_seed{s}"]["pressure_l2"] for s in (42, 43)]
 tr_in = [pp["results"][f"gt_canon_seed{s}"]["inpose_canon"][0] for s in (42, 43)]
 tr_orb = [pp["results"][f"gt_canon_seed{s}"]["orbit_SO3_canon"][0] for s in (42, 43)]
-mean = lambda v: sum(v) / len(v)
 ref = mean(raw_in)
-orbit_ratios = [v / p1["prior"]["gt_inpose_pressure_l2"]
-                for v in p1["prior"]["gt_p1_orbit_pressure_l2"].values()]
+orbit_ratios = [v / p1["prior"]["gt_inpose_pressure_l2"] for v in p1["prior"]["gt_p1_orbit_pressure_l2"].values()]
 fx = lambda r: f"{r:.0f}x" if r >= 10 else f"{r:.2f}x"
 def row(name, a, b):
-    return (f"| {name} | {a[0]:.4f} / {a[1]:.4f} ({fx(mean(a)/ref)}) "
-            f"| {b[0]:.4f} / {b[1]:.4f} ({fx(mean(b)/ref)}) |\n")
-out = "| GeoTransolver variant | in pose (seed 42 / 43) | SO(3) orbit (seed 42 / 43) |\n|---|---|---|\n"
+    return f"| {name} | {a[0]:.4f} / {a[1]:.4f} ({fx(mean(a)/ref)}) | {b[0]:.4f} / {b[1]:.4f} ({fx(mean(b)/ref)}) |\n"
+out = "| GeoTransolver treatment | in pose (seed 42 / 43) | SO(3) orbit (seed 42 / 43) |\n|---|---|---|\n"
 out += row("trained and evaluated in the recipe frame", raw_in, raw_orb)
 out += row("trained in the recipe frame, canonicalized at inference only", eval_canon_in, eval_canon_orb)
 out += row("trained and evaluated in the canonical frame", tr_in, tr_orb)
 print(out)
-print(f": Pose dependence of GeoTransolver on DrivAerML. *In pose*: the 48 "
-      f"validation cars in the orientation the dataset provides. *SO(3) "
-      f"orbit*: the same cars, each in a uniformly random orientation. Cells "
-      f"are surface-pressure relative L2 averaged over the 48 cars, seed 42 / "
-      f"seed 43; the parenthesized factor divides the seed mean by the "
-      f"in-pose seed mean of the first row ({ref:.4f}). Across three seeds "
-      f"of the recipe-frame model the orbit penalty spans "
-      f"{min(orbit_ratios):.0f}–{max(orbit_ratios):.0f}x. Not shown: ISLA, "
-      f"whose orbit and in-pose predictions agree to fp64 roundoff by "
-      f"construction; wall shear behaves the same way. Data: "
-      f"results/p1_canonicalization_control_2026-09-02.json (rows 1–2), "
-      f"results/p1pp_canonical_training_2026-09-03.json (row 3).")
+print(f": Pose dependence of GeoTransolver on DrivAerML: area-weighted relative L2 of surface pressure over the 48 "
+      f"validation cars, learning rate 3e-3, 500 epochs, seed 42 / seed 43; the parenthesized factor divides the seed "
+      f"mean by the in-pose seed mean of the first row ({ref:.4f}). Across three seeds of the recipe-frame model the "
+      f"orbit penalty spans {min(orbit_ratios):.0f} to {max(orbit_ratios):.0f}x. How to read this: ISLA is not shown "
+      f"because its orbit and in-pose predictions agree to roundoff by construction; wall shear behaves the same way. "
+      f"Data: results/p1_canonicalization_control_2026-09-02.json (rows 1 and 2), "
+      f"results/p1pp_canonical_training_2026-09-03.json (row 3). {{#tbl-pose}}")
 ```
 
-Three things follow. First, GeoTransolver in the recipe frame is not
-pose-robust: a random orientation takes it to 26–32x its in-pose error.
-Second, canonicalization must be in the training pipeline. Applied only at
-inference to a model trained in one exact pose it is pose-invariant but costs
-1.6–1.7x, because that model is hypersensitive to sub-degree frame tilt (a
-fixed 1° roll costs it 1.7–1.8x, 5° costs 6.5–6.8x; key `stage3` of the same
-artifact) and the frame estimate carries about 0.8° of it; a model that sees
-the estimator's tilt noise during training learns to ignore it, and the
-penalty falls to 1.01x (row 3 of @tbl-pose). Third, on
-this data ISLA's exact equivariance and canonicalized GeoTransolver deliver
-the same pose invariance, so no accuracy claim in this book is attributed to
-equivariance; the pose contract is scored as a contract.
+Three things follow. GeoTransolver in the recipe frame is not pose-robust: a
+random orientation multiplies its error by more than twenty. Canonicalization
+must be in the training pipeline: applied only at inference to a model
+trained in one exact pose it is pose-invariant but costs 1.6 to 1.7x,
+because that model is hypersensitive to the sub-degree tilt of the frame
+estimate, and a model that sees the estimator's tilt noise during training
+learns to ignore it (third row). And on this data ISLA's exact equivariance
+and canonicalized GeoTransolver deliver the same pose invariance, so no
+accuracy claim in this book is attributed to equivariance; the pose contract
+is scored as a contract.
 
-What the contract still buys is generality. Canonicalization needs a known
-freestream direction at inference and a principal frame whose sign can be
-resolved; both hold for every vehicle and wing dataset here. They fail for a
-PDE surrogate with no distinguished global direction, for bodies whose
-transverse inertia tensor is degenerate or whose third moment vanishes (a
-symmetry the estimator cannot break), and for assemblies of parts in mixed
-orientations, where no single frame canonicalizes every component. ISLA needs
-neither a frame estimate nor a freestream at inference; there the contract
-is the difference between a working surrogate and a 26–32x failure.
+::: {.callout-note collapse="true" title="What the contract still buys"}
+Canonicalization needs a known global direction at inference and a
+principal frame whose sign can be resolved; both hold for every vehicle and
+wing here (no DrivAerML case is within 5% of a principal-axis degeneracy).
+They fail for a PDE surrogate with no distinguished global direction, for
+bodies whose transverse inertia tensor is degenerate or whose third moment
+vanishes, and for assemblies of parts in mixed orientations, where no single
+frame canonicalizes every component. ISLA needs neither a frame estimate nor
+a global direction at inference; there the contract is the difference
+between a working surrogate and the first row of @tbl-pose. Against
+baselines that learn pose from augmentation rather than from a canonical
+frame, the contract also earns accuracy (@sec-scoreboard-pose).
+:::
 
 ## Learning-rate sensitivity is part of the protocol {#sec-lr-protocol}
 
-**The two architectures lose very different amounts of accuracy at a wrong
-learning rate: one grid step above its best, GeoTransolver degrades 4–14x on
-DrivAerML and 6.5x on HiLiftAeroML where ISLA degrades 1.55x and 1.14x, so a
-protocol sharing one rate would measure tuning luck instead of
-architecture.** The quantity is validation pressure error, relative L2 per
-case averaged over the validation cases, at 500 epochs and 10,000 tokens,
-for every rate run on the full splits: on DrivAerML (435 training cars, 48
-validation) the grid {1e-3, 3e-3, 1e-2}, two seeds per rung; on HiLiftAeroML
-(1,260 training cases, 180 validation) the grid {1e-3, 3e-3}, two seeds per
-rung. The full grid is plotted and reported as a robustness result in
-@sec-robustness-lr (@fig-lr-robustness); here the point is procedural.
+**The architectures lose very different amounts of accuracy at a wrong
+learning rate, so a protocol sharing one rate would measure tuning luck
+instead of architecture.** @tbl-lr-sensitivity reads the full-split rate
+grids of both datasets: one grid step above its best rate GeoTransolver
+degrades by a factor of six to nine, ISLA by about a tenth. The full
+grids are plotted as a robustness result in @sec-robustness-lr
+(@fig-lr-robustness); here the point is procedural.
 
-The grids are scored in bfloat16 and the ISLA arm is the constant-gauge
-variant; the within-architecture degradation factors are what this section
-uses. On DrivAerML, GeoTransolver's best rate is 3e-3 (0.0532) and at 1e-2
-it degrades 4–14x (0.221 and 0.739 on the two seeds); ISLA's best is 1e-3
-(0.0577) and at 1e-2 it degrades 1.55x (0.0874 and 0.0914). On HiLiftAeroML
-both are best at 1e-3; at 3e-3 GeoTransolver destabilizes to 0.148 and
-0.397, a 6.5x degradation of the seed mean, while ISLA moves from
-0.040/0.043 to 0.045/0.049, a 1.14x degradation, so its four grid points
-across both rates and both seeds span
-0.040–0.049^[`results/highlift_wave_reduction.json`]. The HiLiftAeroML grid
-fed GeoTransolver the physical velocity (@sec-part-baseline); its instability
-at the higher rate with the unit direction is not yet measured
-(@sec-program-status), so that figure is a physical-velocity measurement.
+```{python}
+#| label: tbl-lr-sensitivity
+#| output: asis
+SW = RES / "mixedres_training_2026-07-31" / "sweep"
+iw = J("instrument_wave_reduction_2026-09-01.json")
+round3 = json.load(open(SW / "round3_reduction.json"))
+mt2_const = json.load(open(SW / "mt2_v3c_reduction.json"))
+mega = json.load(open(SW / "mega_reduction.json"))
+hl = J("highlift_wave_reduction.json")
+dr = {"gt": {}, "isla": {}}
+for arch, key in (("gt", "gt"), ("isla", "mt2")):
+    for lr_key, lr in (("lr1e3", 1e-3), ("lr1e2", 1e-2)):
+        dr[arch][lr] = [iw[f"iw_{key}_{lr_key}_seed{s}"]["pressure_l2"] for s in (42, 43)]
+dr["gt"][3e-3] = [round3[f"gt_fixed_seed{s}"]["sweep_metrics"]["10000"]["mean"] for s in (42, 43, 44)]
+dr["isla"][3e-3] = ([mt2_const[f"mt2_v3c_seed{s}"]["sweep"]["10000"]["mean"] for s in (42, 43, 44)]
+                    + [mega[f"mt2_v3c_seed{s}"]["in10k"]["mean"] for s in (45, 46)])
+hlg = {"gt": {1e-3: [hl[f"gt_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"gt_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]},
+       "isla": {1e-3: [hl[f"mt2_hl_lr1_seed{s}"]["pressure_l2"] for s in (42, 43)], 3e-3: [hl[f"mt2_hl_seed{s}"]["pressure_l2"] for s in (42, 43)]}}
+name = {"gt": "GeoTransolver", "isla": "ISLA, constant-gauge variant"}
+out = "| dataset | architecture | best rate (error) | one grid step above (error) | degradation |\n|---|---|---|---|---:|\n"
+for ds, grid, steps in (("DrivAerML, 435 cars", dr, [1e-3, 3e-3, 1e-2]), ("HiLiftAeroML, 1,260 cases", hlg, [1e-3, 3e-3])):
+    for arch in ("gt", "isla"):
+        m = {lr: mean(grid[arch][lr]) for lr in steps}
+        best = min(m, key=m.get); above = steps[min(steps.index(best) + 1, len(steps) - 1)]
+        f = lambda lr: f"{lr:.0e}".replace("e-0", "e-")
+        if above == best:
+            out += f"| {ds} | {name[arch]} | {f(best)} ({m[best]:.4f}) | none run above | — |\n"; continue
+        out += f"| {ds} | {name[arch]} | {f(best)} ({m[best]:.4f}) | {f(above)} ({m[above]:.4f}) | {m[above]/m[best]:.2f}x |\n"
+print(out)
+print(": Learning-rate sensitivity on the full splits: area-weighted relative L2 of surface pressure, seed means, "
+      "scored in bfloat16 (labelled: these grids predate the float32 instrument and are used only for "
+      "within-architecture degradation factors), 500 epochs, 10,000 cells; DrivAerML grid {1e-3, 3e-3, 1e-2}, "
+      "HiLiftAeroML grid {1e-3, 3e-3}. The HiLiftAeroML grid fed GeoTransolver the physical velocity, so its "
+      "degradation there is a physical-velocity measurement. How to read this: the ratio in the last column is the "
+      "price of one wrong grid step, within one architecture; it is not a comparison between architectures. Data: "
+      "results/instrument_wave_reduction_2026-09-01.json, results/mixedres_training_2026-07-31/sweep/"
+      "{round3_reduction,mt2_v3c_reduction,mega_reduction}.json, results/highlift_wave_reduction.json. {#tbl-lr-sensitivity}")
+```
 
-Two consequences are built into the protocol. First, because GeoTransolver's
-best rate differs between datasets (3e-3 on DrivAerML, 1e-3 on HiLiftAeroML),
-"best rate per architecture, chosen on the full split" is the only rule under
-which the GeoTransolver baseline is the strongest version of itself on both.
-The rate choice moves GeoTransolver's DrivAerML error by 3% between 1e-3
-and 3e-3 (0.0548 against 0.0532, bfloat16) and does not decide the
-comparison; the float32 standing under the best-rate rule is GeoTransolver
-0.0503 against ISLA's reference configuration 0.0552 (@sec-full-data).
-Second, the rate is chosen once and frozen for every smaller split: retuning
-at 35 or 210 training cases would hand the baseline search that ISLA did not
-get. Rate, training-length and seed controls at the small splits
-(@sec-data-efficiency) move GeoTransolver's error by far less than its
-input-scale sensitivity, which is why the input scale is fixed by rule and
-not tested by control (@sec-part-baseline).
+Two consequences are built into the protocol. Because GeoTransolver's best
+rate differs between datasets, "best rate per architecture, chosen on the
+full split" is the only rule under which the baseline is the strongest
+version of itself on both; the rate choice moves GeoTransolver's DrivAerML
+error by a few percent and does not decide the comparison (@sec-full-data).
+And the rate is chosen once and frozen for every smaller split: retuning at
+35 or 210 training cases would hand the baseline a search that ISLA did not
+get. Rate, training-length and seed controls at the small splits move
+GeoTransolver's error by far less than its input-scale sensitivity
+(@tbl-unit-vs-physical), which is why the input scale is fixed by rule and
+not tested by control.
