@@ -307,6 +307,7 @@ flowchart TB
     GLOBACC["GLOBACC: non-aerodynamic acceptance case<br/>DONE"]:::done
     GLOBDIS["GLOBDIS: scalar-input discriminator<br/>DONE"]:::done
     MAINLINE(["MAINLINE: prepared for PhysicsNeMo integration<br/>RUNNING"]):::running
+    PRECRES(["PRECRES: bf16/fp32 contract residual on the trained path<br/>RUNNING"]):::running
     MEM2 --> MEMINST
     MEM2 --> SPARSE
     KERNEL --> KSTUDY
@@ -324,6 +325,8 @@ flowchart TB
     GLOBIN --> MAINLINE
     RFDIV --> MAINLINE
     KNEUT --> MAINLINE
+    KNEUT --> PRECRES
+    PRECRES --> MAINLINE
 ```
 
 ## The ledger {#sec-ledger}
@@ -429,6 +432,7 @@ their numbers as measurements of that protocol only.
 | EQPRICE | DONE (partial) | Is the trained-function deficit the positional information the contracts deny? Raw coordinates as a diagnostic. | CAP | Position is the deficit at or below 0.0525; partial to 0.0550; null above. Measured 0.0547: about two and a half points are the contracts' price. | @sec-nb-eqprice-prereg; @sec-nb-eqprice-verdict; @sec-nb-deficit-anatomy |
 | FORMHEADS | DONE (carries) | Is the remaining form deficit the routing multiplicity? One, four and eight routings per block on one car. | EQPRICE, CAP | Closes at or below 0.0852; carries at or below 0.90x the control; null at or above 0.95x. Eight heads 0.813x, monotone; below both baselines at 40,000 cells. | @sec-nb-formheads-prereg; @sec-nb-formheads-verdict |
 | HEADS435 | RUNNING | Does the routing-multiplicity gain transfer to 435 cars in the reference configuration? | FORMHEADS | Eight heads at or below 0.0530 closes and promotes; at or below 0.0543 carries; at or above 0.0549 null; density factor within 1.05 to 1.3. | @sec-nb-heads435-prereg |
+| PRECRES | RUNNING | How far from exact are the rotation and translation contracts on the trained GPU path, in float32 and bf16, and is the bf16 residual small against the pose test's 1% reading? | KNEUT (the compiled and fused paths are the deployed ones) | Float32 residuals below 1e-4 on every car; bf16 mean scalar residual below 0.5% negligible, above 2% material (then float32 inference is required where the contract is load-bearing). | @sec-nb-precres-prereg |
 | GLOBIN | DONE | Zero or more global vector inputs and zero or more global scalar inputs, without touching any checkpoint or contract. | RELINT | Bitwise the former model with one vector and no scalars; contracts hold for zero and two vectors and with scalars. | @sec-nb-global-inputs |
 | GLOBACC | DONE | Does the zero-vector, one-scalar configuration train on a non-aerodynamic problem (screened Poisson)? | GLOBIN | Relative L2 at most 0.10 on both seeds and 3x better than trivial predictors. 0.043 / 0.045 at 9,000 steps. | @sec-nb-globin-accept-prereg; @sec-nb-globin-accept-verdict; @sec-nb-globin-accept-extension-verdict |
 | GLOBDIS | DONE | Is the scalar input decisive where the boundary data cannot substitute for it? | GLOBACC | Scalar arm at most 0.10; blind arm at least 2x worse. 0.077 / 0.070; blind arm 3.8x worse. | @sec-nb-globin-discrim-prereg; @sec-nb-globin-discrim-verdict |
