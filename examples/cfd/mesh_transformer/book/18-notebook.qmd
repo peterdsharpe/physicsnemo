@@ -19352,3 +19352,15 @@ prefetch factor of four (`kernel/p200k_fleet/p200k_hl_aga.sbatch`); the
 other rungs, whose epochs are short, keep the recipe's four workers. The
 change touches the input pipeline's throughput only, not what any model
 sees.
+
+**Addendum, 16:40 PDT (chain resume).** Two ladder lanes blocked within the
+first hours with truncated checkpoints: a four-hour link killed while the
+trainer was writing leaves the newest trainer-state file (and sometimes the
+model file and a zero-byte normalizer-statistics file) as an unreadable zip,
+and the next link fails to resume twice and is blocked by the two-strike
+guard. Every launcher now runs a checkpoint pre-flight before training
+(`kernel/ckpt_preflight.py`): the files of the newest three epochs are
+zip-validated, an incomplete epoch's files move aside together, and the lane
+resumes from the newest intact epoch, losing at most two epochs. The two
+blocked lanes were repaired by hand the same way and resumed; a sweep of all
+eighty lanes found no other incomplete epoch.
