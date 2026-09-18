@@ -374,8 +374,10 @@ the cell centroids with the same uniform-over-cells inclusion law and
 weights, so nothing about the trained model or its estimand changes, only
 the variance of the draw. On DrivAerML at 10,000 cells it lowers every
 model's float32 pressure error (GeoTransolver and Transolver by 2%, ISLA
-by 4%); the book records it as a labelled scoreboard row and keeps the
-independent draw for its headline comparisons.
+by 4%); on HiLiftAeroML at 35 training cases it lowers ISLA's by 1 to 2%
+and leaves the baselines within 0.4%. It is never worse than the
+independent draw on either dataset; the book records it as a labelled
+scoreboard row and keeps the independent draw for its headline comparisons.
 
 **Data-to-model mapping** (surface reference):
 

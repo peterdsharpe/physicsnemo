@@ -18255,7 +18255,86 @@ cells, float32, 180 validation cases; lanes `bench/bench_lanes_strat_hl.tsv`.
 - **Prediction**: ISLA arms improve by 1 to 2%, baselines by less than
   1%; the HiLift 35-case ratios move by at most one point. The HiLift
   deficit at this rung is therefore not count noise, consistent with the
-  frame-price and capacity readings of @sec-nb-cap-verdict. If supported, the
+  frame-price and capacity readings of @sec-nb-cap-verdict.
+
+## 2026-09-17 — Verdict, QUAD-VAR-HL: on HiLift the stratified draw improves ISLA by 1.4 to 1.9%, leaves the baselines within 0.4%, and stays inside the count slope; a free improvement on both datasets {#sec-nb-quadvar-hl-verdict}
+
+**What was run.** The sixteen lanes of @sec-nb-quadvar-hl-prereg (job
+779228; float32, 180 HiLift validation cases, two seeds per arm;
+results/quadvar_hl_reduction_2026-09-17.json).
+
+**What we saw** (pressure rel-L2, two-seed means; independent-draw values
+from the consistency benchmarks):
+
+| arm | independent 10k | independent 20k | independent 40k | **stratified 10k** | stratified 20k | stratified ÷ independent at 10k | share of the 10k-to-40k gain |
+|---|---|---|---|---|---|---|---|
+| ISLA constant gauge | 0.1390 | 0.1367 | 0.1362 | **0.1371** | 0.1351 | 0.986 | 0.66 |
+| ISLA reference | 0.1551 | not measured | 0.1506 | **0.1522** | 0.1497 | 0.981 | 0.64 |
+| GeoTransolver | 0.1104 | 0.1103 | 0.1100 | **0.1108** | 0.1096 | 1.004 | control: within 1% |
+| Transolver | 0.1148 | 0.1148 | 0.1145 | **0.1149** | 0.1143 | 1.001 | control: within 1% |
+
+**Against the bars.** *Free improvement on both datasets.* No arm is worse
+than its independent-draw value by more than 1% at either count (the
+largest move against is GeoTransolver's 0.35% at 10,000 cells, inside seed
+noise), and both ISLA arms' gains stay within their count slope: the
+stratified 10,000-cell values (0.1371, 0.1522) lie above the independent
+40,000-cell values (0.1362, 0.1506), recovering about two thirds of the
+slope, the same fraction as on DrivAerML before the shared component is
+removed. The prediction held in every clause: ISLA improves by 1.4 and
+1.9%, the baselines by less than 0.5%, and GeoTransolver ÷ ISLA at 35
+cases moves one point, from 0.794 to 0.808.
+
+**Why it matters.** On HiLift the baselines do not move at all, so the
+two-point shared component seen on DrivAerML is a property of that
+dataset's metric estimator (the car's area distribution has a coefficient
+of variation of 2.3 against 3.3 on the wing, but its uniform-over-cells
+sample is the noisier estimator of the area-weighted error), not of the
+draw. The ISLA-specific gain is again about two thirds of the count slope,
+and the slope itself is what differs between datasets: 5.5% on DrivAerML,
+2 to 3% on HiLift. The HiLift deficit at 35 cases, 0.79 to 0.81, is not
+count noise; it is the frame price where geometries recur and the shared
+capacity axis, as @sec-nb-cap-verdict read it. The recipe recommendation
+stands for both datasets and all four models: the stratified draw at a
+fixed cell budget is never worse and helps the measure-consistent model
+most.
+
+## 2026-09-17 — Synthesis: the anatomy of ISLA's DrivAerML deficit at the reference size; about half of the 10,000-cell gap is finite-sample noise, the trained function is 4 to 5% behind {#sec-nb-deficit-anatomy}
+
+**The question.** The scoreboard's DrivAerML row at the reference size
+(width 192, 10,000 cells, 435 cars) reads GeoTransolver ÷ ISLA 0.90 to
+0.91 on surface pressure. The studies of 2026-09-11 to 2026-09-17
+(OVERFIT-1, CAP, QUAD-VAR, QUAD-VAR-HL, the consistency benchmark's count
+ladders, MIX, SCALE) each measured one piece of that gap. This entry puts
+the pieces on one line, in the ratio's units (points of GeoTransolver ÷
+ISLA, constant-gauge variant, float32, 48 validation cars), so that the
+case chapters can state what the gap is made of.
+
+| component | how it was isolated | points of ratio |
+|---|---|---|
+| the metric's own finite-sample estimator on a 10,000-cell independent draw (shared by every architecture) | QUAD-VAR control: GeoTransolver and Transolver improve 2% under a lower-variance draw of the same cells (@sec-nb-quadvar-verdict) | about 2 |
+| ISLA's slice-integral variance on a 10,000-cell independent draw, removable by a stratified draw at the same budget | QUAD-VAR: ISLA's excess gain over the baselines' (@sec-nb-quadvar-verdict) | about 2 |
+| the remaining count dependence at 10,000 cells: the Horvitz–Thompson weight spread of a uniform-over-cells sample, removable only by more cells | consistency benchmark: the stratified 10,000-cell ratio 0.927 against the independent 40,000-cell ratio 0.955 (@sec-nb-cap-verdict) | about 3 |
+| the trained function's deficit, seen once the sample is fine enough | GeoTransolver ÷ ISLA at 40,000 cells 0.955; at the 512 × 80,000 corner 0.98 (constant gauge) and 0.95 (reference under the width rule) | 4 to 5 |
+| the reference frame's price on DrivAerML | reference against constant gauge: none at the reference size, 3 to 4% at the corner (@sec-nb-cg-wlr-verdict) | 0 (reference size) |
+
+The pieces sum to the measured 9 to 10 points at the scoreboard's budget.
+What CAP adds is what the last row is *not*: not the slice count (flat
+from 128 to 1,024 slices), not depth, not MLP width, and the one axis that
+moves it, width, moves every architecture by the same 9 to 11% per step
+(SCALE), so it is a shared capacity axis rather than an ISLA defect. What
+MIX adds is that area-proportional training buys only 3.5%, so the
+weight-spread row is bounded and is not the lever it was thought to be
+(@sec-nb-overfit-routing-probe).
+
+**How to state the case.** At the reference size ISLA's in-distribution
+surface deficit on DrivAerML is 9 to 10% on the scoreboard's instrument,
+of which about half is finite-sample noise that vanishes with cells or a
+better draw and none of which is the frame. At deployment resolution the
+deficit is 4 to 5%, and at the scale corner 2 to 5%. Those are the numbers
+to put beside ISLA's exact contracts (pose, sampling consistency, general
+inputs) when the trade is made; the 25 to 28% at 35 HiLift cases is a
+different mechanism (the mesher-pattern cue where geometries recur,
+@sec-nb-frame-full-verdict) and is priced separately. If supported, the
 stratified draw becomes the recipe's inference sampler for ISLA (a
 sampling-design choice that leaves the estimand and the training
 convention untouched) and the scoreboard gains a labelled row; if

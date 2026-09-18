@@ -389,6 +389,22 @@ print(": Surface-pressure relative L2 (float32, final-epoch checkpoints, seed va
       + "; ".join(sorted({S[k]['src'] for k in S})) + ". {#tbl-scoreboard-surface}")
 ```
 
+What the DrivAerML gap at the reference size is made of. Of the 9 to 10
+points by which GeoTransolver leads ISLA's constant-gauge variant at
+10,000 independently drawn cells, about two are the metric's own
+finite-sample estimator (every architecture improves by 2% under a
+lower-variance draw of the same cells), about two are ISLA's slice-integral
+variance at that budget (the stratified-draw row above removes them), about
+three are the residual count dependence that only more cells remove (the
+ratio is 0.955 at 40,000 cells), and four to five are the trained
+function's, which the capacity ladder attributes to width, an axis that
+moves every architecture alike, and not to the slice count, depth or MLP
+width (@sec-nb-deficit-anatomy, @sec-nb-cap-verdict, @sec-nb-quadvar-verdict).
+The frame contributes nothing on DrivAerML at this size. At deployment
+resolution the deficit is therefore 4 to 5%, and at the scale corner 2 to
+5%; the 25 to 28% at 35 HiLift cases is a different mechanism, the
+mesher-pattern cue where geometries recur (@sec-nb-frame-full-verdict).
+
 Two facts qualify the table. First, the measure-weighted baselines, which
 carry the same quadrature measure in their slice pooling that ISLA does,
 keep the lead: at 35 HiLift cases they score
