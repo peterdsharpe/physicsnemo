@@ -18988,3 +18988,57 @@ GeoTransolver degrades 9x one step above its best; diverges at 1e-2", and
 the width rule remains the operating guidance for anything above the
 protocol rate. The verdict on the 3e-3 pair and the posed pair follows when
 they finish.
+
+## 2026-09-18 — Preregistration, STEELMAN: the Horvitz–Thompson-centred, measure-weighted baselines through the refinement benchmark {#sec-nb-steelman-prereg}
+
+**Setting.** The scoreboard's consistency figure shows that GeoTransolver
+and Transolver become consistent under the 10:1 sampling-density bias
+(density factors 1.04 and 1.03 at 10,000 cells) once their slice pooling
+carries the cell measure and their datapipe centres on the
+Horvitz–Thompson estimate of the surface centroid (@sec-nb-mwaw-verdict).
+Peter asked the question any reader will ask of that figure: why not use
+that GeoTransolver? The chapter now answers it (the fix buys consistency
+with a body centroid, the construct ISLA declines, and does not make the
+model covariant), but the variant has only been measured on the single-count
+density probe. A steel-man of the consistency claim needs it on the
+instrument the claim is made with.
+
+**Question.** Under the refinement benchmark (uniform, area-proportional and
+10:1-biased samplers at 2,500, 10,000 and 40,000 cells, float32, 48
+validation cars), do the HT-centred, measure-weighted GeoTransolver and
+Transolver converge toward their own uniform-sampling answer with cell count
+as the measure-weighted ISLA arms do, and at what in-distribution accuracy?
+
+**Instrument.** Evaluation only: the four existing checkpoints (two seeds
+each of the two variants, trained with the HT-centred datapipe) through the
+consistency-benchmark launcher on copies of the three benchmark dataset
+configurations with the datapipe's area-weighted centring switched on, under
+the code snapshot whose centring weights by the composed Horvitz–Thompson
+measure (`bench/bench_lanes_steelman.tsv`, 36 lanes). Readouts as in
+@sec-consistency-bench: each arm's area-sampler and biased-sampler error
+divided by its uniform error at each count, and the uniform error itself.
+
+**Bars, written before the run.**
+
+- **Consistent**: at 40,000 cells both samplers within 3% of the uniform
+  answer for both variants (the benchmark's bar), with the deviation falling
+  with count. Reading: the property is fully portable; the chapter states
+  that a GeoTransolver with the measure semantics and an integral centre
+  matches ISLA on consistency at every count, and ISLA's remaining claim is
+  covariance and centre-freeness.
+- **Partially consistent**: within 3% at 40,000 under the area sampler but
+  not the biased one, or converging but above 3%. Reading: the centroid
+  frame is consistent to first order and the residual is the raw-coordinate
+  path's sensitivity to the sample; stated as measured.
+- **Inconsistent**: deviations that do not fall with count. Reading: the
+  single-count probe was not representative; investigated before the
+  chapter's sentence stands.
+- **Accuracy**: the uniform error at 10,000 within 1% of the released
+  GeoTransolver's (0.0503) as on the probe; a larger gap is reported as the
+  price of the HT frame.
+
+**Prediction.** Consistent: the datapipe centre is an integral and the
+pooling is a quadrature, so the same mechanism that makes ISLA's arms
+converge applies; the biased-sampler deviation at 40,000 will be a little
+larger than ISLA's because the raw coordinates still see the sample's point
+distribution through the attention.
