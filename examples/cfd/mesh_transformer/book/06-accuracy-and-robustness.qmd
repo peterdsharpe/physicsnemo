@@ -72,8 +72,8 @@ fd_ref = mean([rfdr[f"rf_dr_mt2_meas_seed{s}"]["pressure_l2"] for s in (42, 43)]
 #| output: asis
 phys = (f" The input scale is neutral on this dataset: GeoTransolver fed the physical freestream velocity scores {fd_gt_phys:.4f}, inside the seed band."
         if fd_gt_phys is not None else "")
-print(f"**At 435 DrivAerML cars, in float32, GeoTransolver scores {fd_gt:.4f}, Transolver {fd_t:.4f} and ISLA's reference "
-      f"configuration {fd_ref:.4f}: baseline ÷ ISLA {fd_gt/fd_ref:.2f} and {fd_t/fd_ref:.2f}.** The numbers are on the 48-car validation "
+print(f"**At 435 DrivAerML cars, in float32, GeoTransolver scores {fd_gt:.4f}, Transolver {fd_t:.4f} and ISLA "
+      f"{fd_ref:.4f}: baseline ÷ ISLA {fd_gt/fd_ref:.2f} and {fd_t/fd_ref:.2f}.** The numbers are on the 48-car validation "
       "split, seed means over two or three seeds, final-epoch checkpoints of the frozen protocol (@sec-protocol): 10,000 sampled "
       "points per case, 500 epochs, bfloat16 training, no augmentation, the freestream as a unit direction for every architecture, "
       f"each at its own best learning rate (GeoTransolver 1e-3, Transolver 3e-3, ISLA 1e-3).{phys} The similarity-gauge variant "
