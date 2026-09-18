@@ -112,3 +112,28 @@ def test_total_measure_scale_sees_the_surface_area_through_the_corrected_field()
     corrected_L = float(sub.cell_data["quadrature_measure"].sum().sqrt())
     assert abs(corrected_L**2 - full) / full < 0.15
     assert raw_L**2 / full < 0.3
+
+
+@pytest.mark.parametrize(
+    "model, dataset",
+    [
+        ("isla_surface", "drivaer_ml_surface"),
+        ("isla_volume", "drivaer_ml_volume_reference"),
+        ("isla_volume_support", "drivaer_ml_volume_support"),
+    ],
+)
+def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
+    """The ISLA configs read the unit freestream direction as ``global_data.U_inf_dir``;
+    the paired dataset must compute it (``ComputeFreestreamDirection`` -> ``U_inf_dir``).
+    The volume reference dataset lacked the transform until 2026-09-18 and the
+    interior configuration could not run as shipped."""
+    cfg = _compose(model, dataset)
+    gv = cfg.forward_kwargs.get("global_vectors")
+    assert gv == "global_data.U_inf_dir", gv
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    producers = [
+        t for t in raw
+        if "ComputeFreestreamDirection" in t["_target_"] and t.get("output_field") == "U_inf_dir"
+    ]
+    assert producers, f"{dataset}.yaml never computes U_inf_dir; transforms: {[t['_target_'] for t in raw]}"

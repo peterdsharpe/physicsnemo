@@ -71,6 +71,12 @@ pipeline:
       global_data: [TimeValue]
     - _target_: ${dp:CenterMesh}
       use_area_weighting: false
+    # The unit freestream direction is ISLA's global vector input
+    # (isla_volume.yaml reads global_data.U_inf_dir); U_inf itself stays
+    # physical for re-dimensionalization. Mirrors drivaer_ml_volume_support.yaml.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
     - _target_: ${dp:NonDimensionalizeByMetadata}
       fields:
         UMeanTrim: velocity
