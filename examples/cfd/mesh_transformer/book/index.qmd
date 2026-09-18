@@ -26,12 +26,15 @@ guarantees that no other mesh transformer offers, and the trade is
 priced.** Three things are true at once, and the book is organized around
 keeping all three in view:
 
-1. **In distribution, the baselines are slightly more accurate.**
-   With every model given the same inputs and scored on the same instrument,
-   GeoTransolver and Transolver lead ISLA on every surface benchmark measured
-   on the two production aerodynamics datasets, DrivAerML (cars) and
-   HiLiftAeroML (wings). The size of the gap depends on how it is measured;
-   the table below states it at three resolutions.
+1. **In distribution, the baselines are slightly more accurate at the
+   exploration budget, and the gap closes with cells.** With every model
+   given the same inputs and scored on the same instrument at 10,000 sampled
+   cells per case, GeoTransolver and Transolver lead ISLA on every surface
+   benchmark measured on the two production aerodynamics datasets, DrivAerML
+   (cars) and HiLiftAeroML (wings). Trained and scored at 80,000 cells the
+   gap to GeoTransolver is 1.5% and ISLA is ahead of Transolver
+   (@sec-scoreboard-tokens); the reporting protocol is moving to the recipe's
+   default of 200,000. The table below states the gap at three resolutions.
 2. **ISLA's guarantees are exact and they earn accuracy where they matter.**
    Rotation and translation covariance hold by construction, so when
    geometries arrive in arbitrary poses ISLA leads baselines that learned
@@ -268,7 +271,9 @@ page. The throughline reads completely with all of them closed.
 ## What this book does not claim {#sec-not-claimed}
 
 - **Not that ISLA is more accurate in distribution.** On the surface task the
-  baselines lead on every rung measured (@sec-scoreboard). Comparisons
+  baselines lead on every rung measured at the 10,000-cell exploration budget
+  (@sec-scoreboard); at 80,000 cells the gap is 1.5% against GeoTransolver and
+  ISLA leads Transolver, and the 200,000-cell reporting lanes are not yet in. Comparisons
   against baselines fed the physical freestream velocity measure the
   protocol's input scale, not the architectures, and appear only as such
   (@sec-part-baseline).

@@ -19182,3 +19182,84 @@ GeoTransolver and, with the fused kernel, for ISLA; the training lanes are
 data-loading-bound in any case. The one open cost item is a multi-head
 fused kernel, needed only if HEADS-435 promotes multi-head routing, since
 the fused kernel is single-routing.
+
+## 2026-09-18 — Verdict, TOK-PROTO: count is the lever; trained and scored at 40,000 cells GeoTransolver ÷ ISLA is 0.965 and at 80,000 it is 0.985, with ISLA ahead of Transolver at 80,000 (1.016) {#sec-nb-tokproto-verdict}
+
+**Setting.** The preregistration (@sec-nb-tokproto-prereg) scored the
+scale study's width-192 lanes, trained at 40,000 and 80,000 cells per case
+on 435 DrivAerML cars, in float32 at their training count on the 48
+validation cars: GeoTransolver, Transolver and ISLA's legacy centered
+variant, two seeds each (results/tokproto_reduction_2026-09-18.json). The
+10,000-cell comparators are the scoreboard's: GeoTransolver 0.0503,
+Transolver 0.0517, legacy centered ISLA 0.0558.
+
+**What we saw.** Every model improves with count, and ISLA improves most.
+
+| cells (train and score) | GeoTransolver | Transolver | ISLA (legacy centered) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 0.0503 | 0.0517 | 0.0558 | 0.901 | 0.927 |
+| 40,000 | 0.0475 (0.0473 / 0.0477) | 0.0482 (0.0477 / 0.0487) | 0.0492 (0.0496 / 0.0488) | 0.965 | 0.980 |
+| 80,000 | 0.0461 (0.0462 / 0.0460) | 0.0476 (0.0473 / 0.0478) | 0.0468 (0.0472 / 0.0464) | 0.985 | 1.016 |
+
+The **count-is-the-lever** bar is met: GeoTransolver ÷ ISLA rises from
+0.901 to 0.965 at 40,000 and to 0.985 at 80,000, and Transolver ÷ ISLA
+crosses one at 80,000. From 10,000 to 80,000 cells GeoTransolver's error
+falls 8%, Transolver's 8% and ISLA's 16%.
+
+**Why it matters.** The book's headline in-distribution deficit is mostly
+an artifact of the 10,000-cell protocol: the deficit anatomy's count-noise
+attribution holds for training as well as evaluation, and at 80,000 cells,
+still 2.5 times below the recipe's default of 200,000, ISLA is within 1.5%
+of GeoTransolver and ahead of Transolver. This is on the legacy centered
+variant; ISLA's own 10,000-cell value is within 1% of the legacy variant's
+on this dataset, so the ratios are expected to read across, and the
+relative-frame lanes at the recipe default (@sec-nb-proto200k-prereg) are
+the measurement that replaces this one in the main results. The reporting
+protocol moves to 200,000 cells per case, the recipe's default, with
+10,000 kept as the exploration count and stated as such.
+
+**What's next.** PROTO-200K: ISLA and both baselines trained and scored at
+200,000 cells, two seeds each, launched today; the width-192 40,000- and
+80,000-cell rows above enter the book as the trend line toward it, labeled
+legacy centered variant.
+
+## 2026-09-18 — Ruling and preregistration, PROTO-200K: the reporting protocol adopts the recipe's default of 200,000 sampled cells per case; ISLA, GeoTransolver and Transolver trained there at 435 cars {#sec-nb-proto200k-prereg}
+
+**Ruling (Peter, 2026-09-18).** The 10,000-cell protocol was the program's
+exploration count; the comparison the book reports should be run as the
+unified recipe ships, at 200,000 sampled cells per case, so that strong
+baselines meet a strong contender. The cost sweep (@sec-nb-cost-sweep)
+removes the cost objection: every model fits one GB300 at 200,000 tokens,
+and the training lanes are data-loading-bound.
+
+**Question.** At the recipe's default count, what is the in-distribution
+standing of ISLA against GeoTransolver and Transolver on DrivAerML at 435
+cars, and does the deficit anatomy's prediction, a remaining gap of about
+two and a half points from the positional information the contracts deny
+plus under a point of routing form, hold?
+
+**Instrument.** Six lanes (`kernel/proto200k_aga.sbatch`): ISLA (relative
+frame, total-measure unit, default eager geometry path, learning rate
+1e-3), GeoTransolver (unit direction, 1e-3) and Transolver (unit direction,
+3e-3), seeds 42 and 43, 500 epochs, bf16, 200,000 cells per case; float32
+scoring at 200,000 cells on the 48 validation cars. The configuration is
+the current ISLA; if HEADS-435 or LEN-RMS changes the class default, the two
+ISLA lanes are rerun with the promoted configuration and these become the
+single-routing, total-measure control.
+
+**Bars, written before the run.**
+
+- **Parity**: GeoTransolver ÷ ISLA at or above 0.99 and Transolver ÷ ISLA
+  at or above 1.00. The thesis's in-distribution clause is restated as parity
+  at the recipe default with the contracts as the difference.
+- **Anatomy holds**: GeoTransolver ÷ ISLA between 0.96 and 0.99: the
+  remaining gap is the positional information the contracts deny and the
+  routing form, as the anatomy says, and the book states that price at the
+  recipe default.
+- **Gap persists**: below 0.96: count was not the whole of the noise, and
+  the anatomy is revised at the new count.
+- Absolute errors of every model fall from their 80,000-cell values; a
+  model whose error rises is a training defect and is investigated.
+
+**Prediction.** Anatomy holds at the upper edge: GeoTransolver ÷ ISLA about
+0.98 to 0.99, Transolver ÷ ISLA about 1.02.

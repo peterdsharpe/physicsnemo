@@ -1791,3 +1791,12 @@ interior control @sec-nb-udrv-int-prereg.
   5x GeoTransolver at 200k and the fused kernel is at parity or better in
   0.44x the memory; every model fits a GB300 at 200k, GeoTransolver would
   not fit 80 GB.
+
+## TOK-PROTO (2026-09-18; results/tokproto_reduction_2026-09-18.json) and the protocol ruling
+- Width 192, trained and scored at the same count, 435 cars, fp32, two seeds
+  (ISLA = legacy centered variant): 40,000 cells GeoTransolver 0.0475 /
+  Transolver 0.0482 / ISLA 0.0492 (ratios 0.965, 0.980); 80,000 cells 0.0461 /
+  0.0476 / 0.0468 (0.985, 1.016). 10,000 cells: 0.901, 0.927.
+- Ruling (Peter): the reporting protocol is the recipe default, 200,000
+  cells per case (PROTO-200K running); 10,000 is the exploration count and
+  is labeled as such wherever its numbers appear.
