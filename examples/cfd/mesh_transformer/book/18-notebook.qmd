@@ -19342,3 +19342,13 @@ seen before.
 the 27-car ladder lanes at epoch 100, the wing lanes at epochs 1 to 18 and
 the GeoTransolver interior lanes at epoch 12; the 1,260-case wing rung will
 finish last, in days.
+
+**Addendum, 16:10 PDT (loader).** The 510- and 1,260-case wing lanes at
+200,000 cells were data-loading-bound at launch: 0.4 s of GPU work inside a
+6.6 s iteration with four loader workers per rank, which projects to about
+twelve days for the 1,260-case rung. Their twelve lanes were cancelled after
+two epochs and relaunched with sixteen loader workers per rank and a
+prefetch factor of four (`kernel/p200k_fleet/p200k_hl_aga.sbatch`); the
+other rungs, whose epochs are short, keep the recipe's four workers. The
+change touches the input pipeline's throughput only, not what any model
+sees.
