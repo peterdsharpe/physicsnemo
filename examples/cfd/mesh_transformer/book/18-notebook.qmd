@@ -18850,3 +18850,84 @@ learning rates 3e-3 and 1e-2 in the native frame. Readout in float32 on the
 **Prediction.** POSE-REF supports (posed within 2%). LR-REF: 3e-3 within
 1.2x, 1e-2 between 1.3x and divergence; the claim narrows from "a decade"
 to "half a decade" for the reference.
+
+## 2026-09-18 — Ruling and preregistration, LEN-RMS: the reference's length unit is to become the RMS pairwise distance once validated; the similarity-gauge variant is to leave the main results on principle {#sec-nb-lenrms-prereg}
+
+**Ruling (Peter, 2026-09-18).** Two decisions, both to be validated before
+they change the class default. First, the similarity-gauge variant leaves
+the book's main results on the same principle as the constant-gauge
+variant: a PDE has no notion of "the body", and the area-weighted centroid
+of a two-dimensional surface is not a point three-dimensional physics
+distinguishes, so handing every token its distance and direction from that
+point is information a general PDE surrogate should not have. ISLA's slice
+anchors are the legitimate version of the same object: reference points the
+network derives from measure-weighted means of subsets it chooses, with
+none privileged from outside. SG-REF (@sec-nb-sgref-prereg) continues to
+run; its result becomes the price of not being told the body's centre, not
+a configuration choice. Second, the relative frame's length unit changes
+from the square root of the total measure to the **measure-weighted RMS
+pairwise distance** of the sample, once validated.
+
+**Why the length unit.** Peter's worry was a boundary with structure at
+every scale, a Koch snowflake. Traced through the reference configuration,
+everything is well posed under refinement except one quantity: the total
+measure. The routing bias is $\log w_i$ inside a softmax, invariant to a
+constant factor; the anchors and separations are normalized sums; but the
+length unit $\sqrt{\sum_i w_i}$ is an *unnormalized* integral, and on a
+fractal boundary the total length or area diverges with refinement, so every
+relational invariant, a distance in that unit, drifts to zero. The
+similarity gauge's centroid and RMS radius are *normalized* moments and
+converge. The centre-free repair is the RMS pairwise distance, $L^2 \equiv
+\sum_{ij} \tilde w_i \tilde w_j\,\lvert x_i - x_j\rvert^2$ with $\tilde w =
+w/\sum w$, a normalized two-point statistic that names no centre; by the
+variance identity it equals $2\sum_i \tilde w_i \lvert x_i - c\rvert^2$ with
+$c$ the weighted mean, so it costs one pass and the mean is an intermediate
+of a scalar, never a frame. It converges wherever the normalized measure
+converges, is exactly covariant under a geometric rescale, and gains an
+invariance the total-measure unit lacks: a uniform rescale of the weights
+alone, or of the points alone, leaves the output unchanged.
+
+**What was built.** `scale_mode="rms_distance"` in the ISLA class as an
+opt-in option (mainline commit of 2026-09-18; the default stays
+`"total_measure"` until validation). Two tests: the contract test (exact
+translation invariance at $10^{-12}$, rotation covariance at $10^{-10}$,
+invariance to points $\times 2.5$ with and without weights $\times 2.5^2$,
+invariance to weights $\times 137$, and the contrast that the total-measure
+unit is not weight-rescale invariant), and a fractal-refinement test on the
+Koch curve: across levels 0 to 6 the total measure grows by exactly $4/3$
+per level (1.00, 1.33, 1.78, 2.37, 3.16, 4.21, 5.62) while the RMS pairwise
+distance converges (0.358, 0.381, 0.3841, 0.3847, 0.38486, 0.38489), the
+last two levels agreeing to $10^{-4}$. All 58 ISLA tests pass.
+
+**Instrument for the accuracy validation.** Two seeds (42, 43) of the
+reference configuration with `scale_mode=rms_distance` at 435 DrivAerML
+cars, 10,000 cells, learning rate 1e-3, 500 epochs, bf16, code snapshot
+`code_lenrms` (the lean class plus this option) and the same recipe copy as
+the reference seeds (`kernel/lenrms_aga.sbatch`); then float32 evaluation
+of both pairs under the stratified and the independent 10,000-cell draws
+and the sample-frame density probe.
+
+**Bars, written before the run.**
+
+- **Validated**: the RMS-distance unit is within 1.5% of the total-measure
+  reference under the stratified draw (seed means) with overlapping seed
+  ranges, trains without divergence at 1e-3, and keeps its density factor
+  within 1.05 to 1.3. The class default and the recipe configs then switch
+  to `rms_distance`, the book's reference configuration is restated, and the
+  Koch-curve test becomes the documented reason.
+- **Better**: at least 1.5% below the reference with non-overlapping seed
+  ranges; adopted, and the notebook records that the normalized unit also
+  helps in distribution (the total measure of a sub-sampled surface is a
+  noisier estimate than its normalized second moment).
+- **Worse**: more than 1.5% above the reference with non-overlapping seed
+  ranges; not adopted, and the fractal argument is recorded as a known
+  limitation of the total-measure unit with the option kept for boundaries
+  where it matters.
+- A divergence at 1e-3 would be read against the unit's interaction with
+  the routing (as in the width-512 mechanism) and investigated before any
+  decision.
+
+**Prediction.** Validated, within noise: on CFD surfaces that are smooth at
+the mesh scale the two units differ by a case-dependent constant factor
+that the network absorbs, so the trained functions should be
+indistinguishable at two seeds.
