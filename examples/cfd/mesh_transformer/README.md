@@ -14,7 +14,10 @@ external-aerodynamics recipe under
   `quarto render` inside `book/`.
 - `results/` — dated result artifacts (JSON reductions, preregistrations,
   archived run scripts) that the book's figures and tables are generated
-  from. Read-only provenance; nothing here is edited after the fact.
+  from. Measurements and provenance manifests are retained unchanged;
+  identical source snapshots and binary payloads share copies through
+  relative links. See [ARCHIVE.md](ARCHIVE.md) for the layout and the
+  retrieval instructions for obsolete artifacts retained in Git history.
 - `research/` — the transfer-program and cross-dataset campaign artifacts
   the book cites by path.
 

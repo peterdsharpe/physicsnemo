@@ -64,17 +64,11 @@ from physicsnemo.mesh.transformations.geometric import (
     translate,
 )
 from physicsnemo.mesh.utilities._padding import _pad_by_tiling_last, _pad_with_value
-from physicsnemo.mesh.utilities._row_gather import gather_rows
 from physicsnemo.mesh.utilities._scatter_ops import scatter_aggregate
 from physicsnemo.mesh.utilities.mesh_repr import format_mesh_repr
 from physicsnemo.mesh.validation import validate
 from physicsnemo.mesh.visualization.draw_mesh import draw
 from physicsnemo.nn.functional import safe_normalize
-
-### slice_points remaps cells through a full-mesh lookup table unless the mesh
-### has more than this many points per cell-vertex entry, in which case it
-### binary-searches the kept ids instead (see slice_points for the measurement).
-_SEARCH_REMAP_RATIO = 64
 
 ### slice_points remaps cells through a full-mesh lookup table unless the mesh
 ### has more than this many points per cell-vertex entry, in which case it
@@ -1579,17 +1573,6 @@ class Mesh:
         # cast: TensorDict[bool_mask] returns TensorCollection | Tensor statically;
         # the runtime is always TensorDict because cell_data is itself a TensorDict.
         new_cell_data = cast(TensorDict, self.cell_data[valid_cells_mask])
-
-        ### Slice points and point_data. gather_rows reads memory-mapped rows
-        ### as one range when the kept ids are local instead of one page per row.
-        new_points = gather_rows(self.points, kept_indices)
-        new_point_data = cast(
-            TensorDict,
-            self.point_data.apply(
-                lambda leaf: gather_rows(leaf, kept_indices),
-                batch_size=torch.Size([n_kept]),
-            ),
-        )
 
         return Mesh(
             points=new_points,

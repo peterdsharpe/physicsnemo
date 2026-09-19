@@ -399,9 +399,9 @@ forward_kwargs:
 `ComputeFreestreamDirection` in the surface dataset YAMLs (`U_inf` stays
 physical, so inference-side re-dimensionalization is unaffected).
 `_target_quadrature_measure` is the Horvitz-Thompson cell measure that
-`MeshToDomainMesh` records for the subsampled interior points, so the
-total-measure scale sees the full surface area at any
-`sampling_resolution`. The volume reference reads the equivalent
+`MeshToDomainMesh` records for the subsampled interior points. It carries
+the represented surface measure through subsampling for routing and
+geometry scaling. The volume reference reads the equivalent
 `boundaries.vehicle.cell_data.quadrature_measure` written by
 `ComposeQuadratureMeasure` in `datasets/drivaer_ml_volume_reference.yaml`.
 
@@ -409,8 +409,8 @@ total-measure scale sees the full surface area at any
 `frame_mode: centered`, `scale_mode: reference_length`, `reference_length: 8.0`
 (see the `SetGlobalField` note in `drivaer_ml_surface.yaml` for the
 calibration); the reference configuration before 2026-09-11, kept as the
-ablation that isolates what the relative frame and the total-measure scale
-buy. Similarity gauge: `similarity_gauge: true` on the centered frame derives
+ablation that isolates what the relative frame and a geometry-derived length
+unit buy. Similarity gauge: `similarity_gauge: true` on the centered frame derives
 the centroid and length scale from the measure-weighted geometry and adds
 equivariance to geometric scale. The names `isla_surface_reference` and
 `isla_volume_reference`, under which the reference configurations were first
@@ -431,20 +431,18 @@ parameters; `global_scalars` has shape `(B, S)`) and `n_boundary_scalars`
 (per-cell `boundary_scalars`). The freestream direction is the K = 1, S = 0
 instance.
 
-**Measured standing** (float32, as recorded in the book's `CLAIMS.md`).
-DrivAerML surface pressure: ISLA 0.0552 (reference configuration, 435 cars)
-vs GeoTransolver 0.0503 and Transolver 0.0517, so the released baselines
-lead on in-distribution surface accuracy. ISLA leads where equivariance and
-the measure matter: with every case in its own random pose, ISLA 0.0566
-without augmentation vs augmented GeoTransolver 0.0602 and Transolver
-0.0676; on the DrivAerML interior (48 cars) pressure 0.0550 / velocity
-0.0782 / eddy viscosity 0.1005 vs GeoTransolver-volume 0.0513 / 0.1070 /
-0.0879 (velocity ahead, pressure and eddy viscosity behind); and at 10k
-tokens compiled, 1.30 GiB peak memory vs 2.70 GiB at matched step time
-(47 ms vs 45 ms). Under an area-proportional sampler, the measure-weighted
-ISLA arms are the only ones whose predictions converge toward the
-uniform-sampling answer as the cell count grows from 2.5k to 40k; every
-other arm's curve is flat. The full evidence, protocols and caveats are in
+**Measured standing.** At the reporting protocol of 200,000 sampled cells
+and 435 DrivAerML training cases, float32 pressure relative L2 is 0.0444
+for ISLA with the default RMS-distance scale, 0.0445 for GeoTransolver,
+and 0.0473 for Transolver. These are two-seed means at each model's
+protocol learning rate: ISLA matches GeoTransolver and leads Transolver
+by about 6%. The earlier total-measure ISLA variant scores 0.0446 under
+the same protocol. See the
+[recorded results](../../mesh_transformer/results/p200k_trio_reduction_2026-09-19.json).
+GeoTransolver remains more data-efficient below the full DrivAerML training
+set, and the baselines lead on the 35-case HiLiftAeroML benchmark. Pose,
+sampling, interior-field and resource comparisons have their own protocols;
+the full evidence and caveats are in
 [`examples/cfd/mesh_transformer/book`](../../mesh_transformer/book).
 
 ## Scripts
@@ -697,14 +695,14 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
 # ISLA (Invariant Slice Attention), reference configuration: relative frame,
-# total-measure scale, geo_checkpoint on. Add +model.geo_kernel=fused for the
+# RMS-distance scale, geo_checkpoint on. Add +model.geo_kernel=fused for the
 # exact fused Triton geometry kernel (CUDA only, opt-in).
 python src/train.py model=isla_surface dataset=drivaer_ml_surface \
     training.optimizer.lr=1e-3 compile=false
 
 # ISLA interior reference: boundary -> volume queries as SDF query tokens.
 # Pair with drivaer_ml_volume_reference, which writes the Horvitz-Thompson
-# corrected boundary measure the total-measure scale needs.
+# corrected boundary measure used by routing and geometry scaling.
 python src/train.py model=isla_volume \
     dataset=drivaer_ml_volume_reference training.optimizer.lr=1e-3 compile=false
 

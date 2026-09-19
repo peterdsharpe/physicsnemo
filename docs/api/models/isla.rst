@@ -27,7 +27,8 @@ Contracts
 
 Every constructor argument and every ``forward`` input is keyword-only. The
 reference configuration uses the relative frame (``frame_mode="relative"``) with
-the total-measure scale (``scale_mode="total_measure"``), both class defaults:
+the measure-weighted RMS pairwise-distance scale
+(``scale_mode="rms_distance"``), both class defaults:
 
 .. code-block:: python
 
