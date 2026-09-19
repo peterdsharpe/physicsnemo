@@ -20094,3 +20094,45 @@ the reporting protocol as they were at the exploration budget
 pair, smaller. The book may quote either 0.0446 or 0.0444 for ISLA at 435
 cars; the standing tables keep 0.0446 because the ladder and pose lanes
 carry the total-measure unit, and name the unit when it matters.
+
+## 2026-09-19 — Interim, PROTO-200K-FLEET wings, 4-geometry rung: GeoTransolver ÷ ISLA 0.76 at 200,000 cells against 0.75 at 10,000; both ISLA and GeoTransolver 6 to 7% worse than at 10,000 cells, inside their seed spread; GeoTransolver 3e-3 controls launched on every wing rung {#sec-nb-p200k-wings-geo4}
+
+**Setting.** The 4-geometry rung (`highlift_surface_geometry_super_scarce`)
+trains on four wing geometries at all their operating points and scores
+18 held-out geometries (180 cases); it is the wing ladder's geometry-transfer
+rung. GeoTransolver ran at 1e-3 on it in both protocols; Transolver at
+3e-3.
+
+**What we saw** (surface-pressure error, float32, seed means with seeds;
+results/p200k_fleet_reduction_2026-09-19.json):
+
+| model | 10,000 cells | 200,000 cells | 200k ÷ 10k |
+|---|---|---|---|
+| ISLA | 0.2519 (0.2599 / 0.2440) | 0.2659 (0.2778 / 0.2541) | 1.06 |
+| GeoTransolver (1e-3) | 0.1884 (0.1885 / 0.1883) | 0.2021 (0.1924 / 0.2118) | 1.07 |
+| Transolver (3e-3) | 0.1928 | 0.1929 (0.1883 / 0.1975) | 1.00 |
+
+GeoTransolver ÷ ISLA **0.76** (0.75 at 10,000 cells); Transolver ÷ ISLA
+0.73 (0.77).
+
+**Two readings.** First, as on the 35-case rung, the ratio moved by less
+than 0.03, so the geometry-transfer deficit is not count noise either: "the
+wings differ" for the second wing rung in a row. Second, the
+preregistration's defect clause fires for both ISLA and GeoTransolver,
+whose 200,000-cell errors exceed their 10,000-cell errors by 6 and 7%. The
+increases are inside each model's two-seed spread on this rung (ISLA's
+seeds differ by 9%, GeoTransolver's by 10% at 200,000 cells; held-out
+geometry transfer from four wings is a high-variance measurement), and
+Transolver, trained the same way, did not move, so the likelier reading is
+seed noise on a small-support rung rather than a training defect. It is
+recorded as a flag, not explained away: the row is written with the
+increase stated.
+
+**GeoTransolver's rate on the wings.** The fleet ran GeoTransolver at 1e-3
+on every wing rung except the 35-case one, and RATE-GT showed on DrivAerML
+that its better rate at 200,000 cells is 3e-3 on every rung. Twelve
+controls are launched (`kernel/p200k_fleet/p200k_hl_aga.sbatch`, lanes 42
+to 53): GeoTransolver at 3e-3 on the 105-case, 510-case, 1,260-case,
+4-geometry, geometry-scarce and single-angle rungs, two seeds each; the
+larger rungs take days. Each wing row will take GeoTransolver's better rate
+and say so, as the DrivAerML rows do.

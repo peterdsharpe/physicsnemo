@@ -1894,3 +1894,8 @@ interior control @sec-nb-udrv-int-prereg.
   are at 3e-3, say so.
 
 - LEN-RMS at 200k (2026-09-19): rms_distance 0.0444/0.0444 vs total_measure 0.0446 at 435 cars = 0.996; either may be quoted for ISLA at 435 cars, name the unit.
+
+## PROTO-200K-FLEET wings, 4-geometry rung (2026-09-19)
+- 200k: ISLA 0.2659, GT (1e-3) 0.2021, T 0.1929 -> GT/ISLA 0.76 (10k 0.75), T/ISLA 0.73 (0.77). ISLA and GT
+  6-7% ABOVE their 10k errors (inside 9-10% seed spread; Transolver unchanged): state the increase, do not
+  explain it away. Wing GT rows are provisional until the 3e-3 controls (hl lanes 42-53) report.
