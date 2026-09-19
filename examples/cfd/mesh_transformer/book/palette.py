@@ -33,7 +33,7 @@ from matplotlib.colors import LinearSegmentedColormap
 
 # --- Architecture hues -------------------------------------------------------
 BLUE = "#2a78d6"        # ISLA (reference configuration)
-BLUE_LIGHT = "#8fbbea"  # ISLA variants (constant gauge, similarity gauge)
+BLUE_LIGHT = "#8fbbea"  # ISLA frame variants (legacy centered, similarity gauge); diagnostic notes only
 BLUE_PALE = "#c9def5"   # ISLA ablations / diagnostics (hatched)
 RED = "#e34948"         # GeoTransolver (surface and volume)
 RED_LIGHT = "#f2a3a2"   # GeoTransolver research variants
@@ -62,7 +62,7 @@ SEQUENTIAL = "viridis"
 STYLE = {
     "isla_ref": dict(label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
     "isla_cg": dict(label="ISLA, constant-gauge variant", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
-    "isla_sg": dict(label="ISLA, similarity-gauge variant", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
+    "isla_sg": dict(label="ISLA, similarity-gauge variant (diagnostic)", color=BLUE_LIGHT, marker="D", ls="--", mfc="none", hatch=""),
     "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
     "gt": dict(label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""),
     "gt_var": dict(label="GeoTransolver + ISLA feature (ablation)", color=RED_LIGHT, marker="o", ls=":", mfc="none", hatch=""),

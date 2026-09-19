@@ -198,7 +198,7 @@ the surface rungs are the pose test and the interior task, where ISLA leads.
 #|   same validation cases (GeoTransolver red circles, Transolver amber
 #|   triangles), so markers left of the line at 1 favor the baseline and
 #|   markers right of it favor ISLA. Filled markers divide by ISLA;
-#|   the two open-marker rows divide by a variant, named in the row label,
+#|   the one open-marker row divides by a variant, named in the row label,
 #|   where ISLA is not yet measured. Every
 #|   row carries the seed-mean ratio. The bottom rows are the pose test
 #|   (baselines trained with rotation augmentation, ISLA without, every case
@@ -231,10 +231,9 @@ pB = poseB["arms"]
 rows.append(("DrivAerML, every case in a random pose — ISLA measured on the legacy centered variant", pB["gt_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"],
              pB["transolver_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"], False))
 def intf(keys, f): return mean(fp(fpint, keys, f))
-gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]
+gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]  # isq: similarity-gauge interior variant, diagnostic note only
 for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
     rows.append((f"DrivAerML interior, {lab}", ri2["gt_vol_unit"][f]["mean"] / ri2["relint2"][f]["mean"], None, True))
-    rows.append((f"DrivAerML interior, {lab} — vs the similarity-gauge interior variant", intf(gtv, f) / intf(isq, f), None, False))
 fig, ax = plt.subplots(figsize=(9.6, 5.6))
 y = list(range(len(rows)))[::-1]
 for yy, (label, rg, rt, filled) in zip(y, rows):
@@ -431,26 +430,23 @@ training count of 10,000 queries, which is the deployment count
 #|   seeds (dots). Red: GeoTransolver-volume (27.6M parameters, unit
 #|   direction). Blue: ISLA (query tokens
 #|   with the signed distance, relative frame, total-measure scale,
-#|   Horvitz–Thompson-corrected boundary measure; 8.9M). Light blue: the
-#|   similarity-gauge interior variant at the reference width (8.9M) and at
-#|   hidden width 344 (27.6M, parameter-matched to GeoTransolver-volume). The
-#|   label above each ISLA bar is GeoTransolver-volume's error divided by
-#|   that arm's (above 1 favors ISLA). How to read this: the arms receive
+#|   Horvitz–Thompson-corrected boundary measure; 8.9M). The
+#|   label above the ISLA bar is GeoTransolver-volume's error divided by
+#|   ISLA's (above 1 favors ISLA). How to read this: the arms receive
 #|   the same per-point geometry (signed distance and its gradient) and
-#|   differ in how the query consumes it and in width; the matched-width pair
-#|   is the fair one. The values hold at the training count of 10,000 queries
+#|   differ in how the query consumes it and in width (ISLA has a third of
+#|   the parameters; a parameter-matched ISLA exists only for the
+#|   similarity-gauge variant, in the diagnostic note below). The values hold
+#|   at the training count of 10,000 queries
 #|   (@sec-interior-companion). Data: results/relint2_reduction_2026-09-14.json;
-#|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json;
-#|   research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json.
+#|   results/fp32_reeval/fp32_shift_interior_2026-09-09.json.
 #| code-fold: true
 fields = [("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "eddy viscosity")]
-h344 = campD["isla_qtsdf_h344"]["per_seed"]
-fig, axs = plt.subplots(1, 3, figsize=(13.0, 4.3))
+h344 = campD["isla_qtsdf_h344"]["per_seed"]  # similarity-gauge variant at width 344; diagnostic note only
+fig, axs = plt.subplots(1, 3, figsize=(10.0, 4.3))
 for ax, (f, name) in zip(axs, fields):
     arms = [("GeoTransolver-\nvolume\n27.6M", fp(fpint, gtv, f), "gt"),
-            ("ISLA\nreference\n8.9M", ri2["relint2"][f]["seeds"], "isla_ref"),
-            ("ISLA\nsimilarity-\ngauge variant\n8.9M", fp(fpint, isq, f), "isla_sg"),
-            ("ISLA\nsimilarity-\ngauge variant\n27.6M", [h344[s][f] for s in ("42", "43")], "isla_sg")]
+            ("ISLA\n8.9M", ri2["relint2"][f]["seeds"], "isla_ref")]
     means = [mean(v) for _, v, _ in arms]
     for x_, (_, v, k) in enumerate(arms):
         ax.bar(x_, means[x_], width=0.62, zorder=2, **bar_kwargs(k))
@@ -480,26 +476,53 @@ h3 = {f: [h344[s][f] for s in ("42", "43")] for f, _ in fields}
 out = "| arm, 435 training cars | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
 out += row("GeoTransolver-volume, 27.6M, unit direction", gtd)
 out += row("ISLA, query tokens + signed distance, 8.9M (GeoTransolver-volume ÷ ISLA)", rfd, gtd)
-out += row("ISLA, similarity-gauge variant, query tokens + signed distance, 8.9M (ratio)", isd, gtd)
-out += row("ISLA, similarity-gauge variant, hidden 344, 27.6M (ratio)", h3, gtd)
-out += "| *below full data, similarity-gauge variant (GeoTransolver-volume with the physical velocity; its unit-direction twin changes every field by under 2%)* | | | |\n"
+print(out)
+print(": Interior error (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, 10,000 "
+      "interior queries per car, 500 epochs, learning rate 1e-3 for both arms). Ratios in parentheses are "
+      "GeoTransolver-volume ÷ ISLA (above 1 favors ISLA). ISLA "
+      "reads a 10,000-cell boundary sample with the Horvitz–Thompson-corrected measure. "
+      "Data: results/relint2_reduction_2026-09-14.json; "
+      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json. "
+      "{#tbl-scoreboard-interior}")
+```
+
+::: {.callout-note collapse="true" title="Interior rows measured only on the similarity-gauge variant (diagnostic): the parameter-matched width and the rungs below full data"}
+The interior program was built on the similarity-gauge variant (measure-weighted
+centroid and RMS-radius length unit) before the relative frame replaced it; the
+variant reads a center estimated from the sample, so it appears only here. Two of
+its measurements have no ISLA twin yet: the width-344 arm that matches
+GeoTransolver-volume's 27.6M parameters, and the 54- and 109-car rungs. At
+435 cars ISLA matches the variant on interior pressure and velocity (1.000x
+and 0.991x) and is 12% more accurate on eddy viscosity
+(results/relint2_reduction_2026-09-14.json), and on the surface the price of
+not being told the body's center is at most about 2%, inside seed noise
+(SG-REF, @sec-nb-sgref-verdict), so these trends are expected to carry to
+ISLA; they are not rows until measured on it.
+
+```{python}
+#| label: tbl-scoreboard-interior-sg
+#| output: asis
+out = "| arm (similarity-gauge variant, diagnostic) | pressure | velocity | eddy viscosity |\n|---|---|---|---|\n"
+out += row("GeoTransolver-volume, 27.6M, unit direction, 435 cars", gtd)
+out += row("similarity-gauge variant, query tokens + signed distance, 8.9M, 435 cars (GeoTransolver-volume ÷ variant)", isd, gtd)
+out += row("similarity-gauge variant, hidden 344, 27.6M, 435 cars (ratio)", h3, gtd)
+out += "| *below full data (GeoTransolver-volume with the physical velocity; its unit-direction twin changes every field by under 2%)* | | | |\n"
 for n in (54, 109):
     g = {f: fp(fpint, [f"v0l_gt_vol_n{n}_seed{s}" for s in (42, 43)], f) for f, _ in fields}
     i = {f: fp(fpint, [f"v0l_isla_qtsdfval_n{n}_seed{s}" for s in (42, 43)], f) for f, _ in fields}
     out += row(f"{n} cars: GeoTransolver-volume", g)
-    out += row(f"{n} cars: ISLA, similarity-gauge variant, query tokens + signed distance, 8.9M (ratio)", i, g)
+    out += row(f"{n} cars: similarity-gauge variant, query tokens + signed distance, 8.9M (ratio)", i, g)
 print(out)
-print(": Interior error (relative L2 over the 48 DrivAerML validation cars, float32, two seeds, 10,000 "
-      "interior queries per car, 500 epochs, learning rate 1e-3 for every arm). Ratios in parentheses are "
-      "GeoTransolver-volume ÷ ISLA on the same rung (above 1 favors ISLA). ISLA "
-      "reads a 10,000-cell boundary sample with the Horvitz–Thompson-corrected measure; the "
-      "similarity-gauge arms read about 365 boundary cells, a difference measured to be immaterial "
-      "(@sec-interior-task). Below full data ISLA trails on pressure and eddy viscosity and leads on "
-      "velocity, the same pattern as at 435 cars. Data: results/relint2_reduction_2026-09-14.json; "
-      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json; "
+print(": Interior error of the similarity-gauge variant (relative L2 over the 48 DrivAerML validation cars, "
+      "float32, two seeds, 10,000 interior queries per car, 500 epochs, learning rate 1e-3 for every arm). "
+      "Ratios in parentheses are GeoTransolver-volume ÷ variant on the same rung (above 1 favors the variant). "
+      "The variant's arms read about 365 boundary cells, a difference measured to be immaterial "
+      "(@sec-interior-task). Below full data the variant trails on pressure and eddy viscosity and leads on "
+      "velocity, the same pattern as at 435 cars. Data: results/fp32_reeval/fp32_shift_interior_2026-09-09.json; "
       "research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json. "
-      "{#tbl-scoreboard-interior}")
+      "{#tbl-scoreboard-interior-sg}")
 ```
+:::
 
 ## Arbitrary poses: where the contract earns accuracy {#sec-scoreboard-pose}
 
@@ -569,7 +592,7 @@ mesher would deliver.
 #|   unbiased by the pipeline (pool frame); the two rows marked "HT-centered
 #|   datapipe" are baselines retrained with the datapipe centering on the
 #|   Horvitz–Thompson estimate of the geometric centroid. Color follows the
-#|   book's key: ISLA blue (the similarity-gauge variant lighter),
+#|   book's key: ISLA blue,
 #|   GeoTransolver red, Transolver amber, ablations in the lighter
 #|   tints. How to read this: a bar near 1 means the configuration's
 #|   answer does not depend on the sampling law at this count; it does not
@@ -580,7 +603,6 @@ mesher would deliver.
 R = MAT["rows"]
 items = [  # (label, sample-frame factor, pool-frame factor or None, style key)
     ("ISLA", R["isla_relative_frame_meas"]["density_factor"], None, "isla_ref"),
-    ("ISLA, similarity-gauge variant", R["isla_similarity_gauge_lr1e3"]["density_factor"], None, "isla_sg"),
     ("GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_gt_unit_lr1e3"]["probe_sfht"]["ratio_mean"], None, "gt_var"),
     ("Transolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)", mwaw["runs"]["mwaw_dr_transolver_unit_lr3e3"]["probe_sfht"]["ratio_mean"], None, "t_var"),
     ("GeoTransolver", R["geotransolver_unit"]["density_factor"], R["geotransolver_unit"]["density_factor_pipeline_frame"], "gt"),
@@ -628,7 +650,6 @@ def cell(arms, arm):
     return f"{D(arms, arm, 'area'):+.0%} / {D(arms, arm, 'biased'):+.0%}"
 rows = [
     ("ISLA", "in-model, none", (Brf, "rf_dr_mt2_meas"), (Brf, "rf_hl_mt2_meas_super_scarce")),
-    ("ISLA, similarity-gauge variant (lr 3e-3)", "in-model, HT centroid and scale", (B0, "iw_mt2_gauge"), None),
     ("GeoTransolver", "pipeline pool mean (unbiased)", (B0, "uw_gt_unit_lr1e3"), (B0, "udrv_hl_gt_super_scarce_lr3e3")),
     ("Transolver", "pipeline pool mean (unbiased)", (B0, "uw_transolver_unit_lr3e3"), (B0, "udrv_hl_transolver_super_scarce_lr3e3")),
     ("GeoTransolver + ISLA's measure-weighted pooling (ablation)", "pipeline pool mean (unbiased)", (Bmw, "mw_dr_gt_unit_lr1e3"), (Bmw, "mw_hl_gt_super_scarce_lr3e3")),
@@ -676,6 +697,31 @@ print(": The legacy centered variant under the two consistency instruments of th
       "configuration measured. Data: results/accuracy_consistency_matrix_2026-09-10.json; "
       "results/consistency_bench/consistency_bench_2026-09-10.json and its _mcenter companion. "
       "{#tbl-scoreboard-legacy-consistency}")
+```
+:::
+
+::: {.callout-note collapse="true" title="The similarity-gauge variant under the same probes (diagnostic)"}
+The similarity-gauge variant centers on the measure-weighted centroid and
+scales by the RMS radius, both integrals of the sampled geometry, so it is
+consistent under a change of sampling law like ISLA; what it adds is a
+center estimated from the sample, which ISLA declines on principle. Its
+price, on the surface at 435 cars: the price of not being told the body's
+center is at most about 2%, inside seed noise (SG-REF,
+@sec-nb-sgref-verdict).
+
+```{python}
+#| label: tbl-scoreboard-sg-consistency
+#| output: asis
+sgc = [("similarity-gauge variant (lr 1e-3)", R["isla_similarity_gauge_lr1e3"]["density_factor"], None, None),
+       ("similarity-gauge variant (lr 3e-3)", None, (B0, "iw_mt2_gauge"), None)]
+out = "| configuration (diagnostic) | 10:1 density bias, sample frame: biased ÷ uniform | 40,000 cells, DrivAerML: area / biased | 40,000 cells, HiLift 35 cases: area / biased |\n|---|---:|---:|---:|\n"
+for label, df, dr, hl in sgc:
+    out += f"| {label} | {f'{df:.2f}x' if df else 'not run'} | {cell(*dr) if dr else 'not run'} | {cell(*hl) if hl else 'not run'} |\n"
+print(out)
+print(": The similarity-gauge variant under the two consistency instruments of this section. Data: "
+      "results/accuracy_consistency_matrix_2026-09-10.json; "
+      "results/consistency_bench/consistency_bench_2026-09-10.json. "
+      "{#tbl-scoreboard-sg-consistency}")
 ```
 :::
 
@@ -882,8 +928,8 @@ live status of each is in @sec-program-status.
   running (@sec-nb-refprops-prereg).
 - **ISLA below full data on DrivAerML**, on the
   surface ladder and the interior ladder; both were measured on ISLA
-  variants that this chapter no longer reports as rows
-  (@tbl-scoreboard-interior).
+  variants that this chapter reports only in diagnostic notes
+  (@tbl-scoreboard-legacy-rungs, @tbl-scoreboard-interior-sg).
 - **The baselines' consistency with a Horvitz–Thompson centroid on the
   wings.** It is measured on DrivAerML only, and only as a ablation.
 - **Multi-head slice routing at 435 cars.** On a one-car instrument eight
@@ -894,8 +940,8 @@ live status of each is in @sec-program-status.
 The far-wake deficit carries ISLA's interior eddy-viscosity gap. The one
 remedy tested, oversampling the far field in the interior training queries
 with exact measure weights, makes every field worse. Trained that way and
-scored on the standard uniform interior sample, ISLA is worse than the
-similarity-gauge interior variant it was built from on every field and in
+scored on the standard uniform interior sample, the arm is worse than the
+similarity-gauge interior variant (diagnostic) it was built from on every field and in
 every wall-distance band (pressure, velocity and eddy viscosity
 `{python} f"{fw['two_seed_mean']['pressure_l2']/fw['reference_three_seed_fp32']['pressure_l2']-1:+.0%}"`,
 `{python} f"{fw['two_seed_mean']['velocity_l2']/fw['reference_three_seed_fp32']['velocity_l2']-1:+.0%}"` and

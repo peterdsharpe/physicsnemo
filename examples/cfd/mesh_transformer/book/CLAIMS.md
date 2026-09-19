@@ -1814,3 +1814,16 @@ interior control @sec-nb-udrv-int-prereg.
   "unattributed; multi-head routing tested null at full data". ISLA stays
   single-routing; n_heads lives on branch isla-heads only. Supersedes the
   FORM-HEADS one-car reading as a statement about the trained function.
+
+## SG-REF (2026-09-18; results/sgref_reduction_2026-09-18.json)
+- 435 cars, 10k exploration budget, three seeds, fp32 consistency instrument:
+  similarity gauge 0.0524 vs ISLA 0.0533 stratified (0.982; ranges overlap),
+  0.980 independent 10k, 0.984 independent 40k; density 1.21 / 1.21 = within noise.
+- Rule: the similarity-gauge variant appears in no main table, figure or ladder;
+  only in collapsed notes labeled "similarity-gauge variant (diagnostic)", quoted
+  as "the price of not being told the body's center: at most about 2%, inside
+  seed noise". Never write that the similarity gauge "recovers" positional deficit.
+- Ladder at 200k (interim): the 27-car GeoTransolver pair (0.1813) exceeds its
+  10k predecessor (0.1536); the row is held until the lr 3e-3 rate control
+  (p200k_dr_{gt_unit,isla}_n27_lr3e3_seed4{2,3}) reports. Do not write the 27-car
+  200k row before then.

@@ -135,7 +135,7 @@ per-slice geometry spans all 20,000 tokens. The passive configuration has
 the volume dataset exist, one delivering about 365 cells per car after a
 point cut and one delivering the nominal 10,000 cells with the measure
 corrected to sum to the surface area; the similarity-gauge interior variant
-scores within the preregistered 3% null band on every field between them,
+(diagnostic) scores within the preregistered 3% null band on every field between them,
 so 27 times more surface information adds nothing measurable on this task.
 Data: results/v0_interior_resources_2026-09-07.json,
 results/isla_qt_cost_2026-09-07.json, results/relint2_reduction_2026-09-14.json.
@@ -223,12 +223,6 @@ rows = [
      {f: rel["gt_vol_unit"][f]["seeds"] for f, _ in FIELDS}),
     ("ISLA: query tokens + signed distance (relative frame, total-measure scale, corrected boundary measure)", "10,000 cells", "8.9M",
      {f: rel["relint2"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA, similarity-gauge variant: query tokens + signed distance", "10,000 cells", "8.9M",
-     {f: rel["ref_surf10k_gauge"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA, similarity-gauge variant: query tokens + signed distance (three seeds)", "365 cells", "8.9M",
-     {f: rel["ref_365_gauge"][f]["seeds"] for f, _ in FIELDS}),
-    ("ISLA, similarity-gauge variant: query tokens, wall normal only (no signed distance)", "365 cells", "8.9M",
-     {f: fp("v0_isla_qt_sdf", f) for f, _ in FIELDS}),
     ("ISLA, passive decode, wall normal from the signed-distance gradient", "365 cells", "9.9M",
      {f: fp("v0_mt2_int_sdf", f) for f, _ in FIELDS}),
     ("ISLA, passive decode, proxy normal", "365 cells", "9.9M",
@@ -247,10 +241,49 @@ print(": Interior relative L2 error on the 48 DrivAerML validation cars in float
       "seeds; per-seed pressure in parentheses), 10,000 interior queries per car, 500 epochs, learning rate 1e-3. The "
       "boundary-sample column names which surface sample the ISLA and exact-kernel arms consumed; GeoTransolver-volume "
       "reads none. Ratios are GeoTransolver-volume ÷ arm, so above one favors the ISLA arm. The arms are not "
-      "resource-matched and do not receive the same inputs (the collapsed note in @sec-interior-task). Data: "
-      "results/relint2_reduction_2026-09-14.json (GeoTransolver-volume and the three query-token + signed-distance rows); "
+      "resource-matched and do not receive the same inputs (the collapsed note in @sec-interior-task). The two "
+      "query-token arms without the signed distance and with the 365-cell boundary were run on the similarity-gauge "
+      "variant and are in the diagnostic note below. Data: "
+      "results/relint2_reduction_2026-09-14.json (GeoTransolver-volume and the ISLA query-token row); "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (the rest). {#tbl-interior}")
 ```
+
+::: {.callout-note collapse="true" title="The query-token arms measured on the similarity-gauge variant (diagnostic)"}
+The interior program was built on the similarity-gauge variant (measure-weighted
+centroid and RMS-radius length unit), a diagnostic that estimates a center from
+the sample (@sec-mt2-variants). Three of its arms have no ISLA twin: the same
+query-token + signed-distance configuration on the 10,000-cell and on the
+365-cell boundary, and the query-token arm without the signed distance. At 435
+cars ISLA matches the variant on pressure and velocity (1.000x and 0.991x
+against the 10,000-cell arm) and is 12% more accurate on eddy viscosity
+(results/relint2_reduction_2026-09-14.json), so the ingredient readings below
+carry to ISLA; on the surface the price of not being told the body's center is
+at most about 2%, inside seed noise (SG-REF, @sec-nb-sgref-verdict).
+
+```{python}
+#| label: tbl-interior-sg
+#| output: asis
+sg_rows = [
+    ("GeoTransolver-volume (as @tbl-interior)", "none", "27.6M", {f: rel["gt_vol_unit"][f]["seeds"] for f, _ in FIELDS}),
+    ("similarity-gauge variant: query tokens + signed distance", "10,000 cells", "8.9M",
+     {f: rel["ref_surf10k_gauge"][f]["seeds"] for f, _ in FIELDS}),
+    ("similarity-gauge variant: query tokens + signed distance (three seeds)", "365 cells", "8.9M",
+     {f: rel["ref_365_gauge"][f]["seeds"] for f, _ in FIELDS}),
+    ("similarity-gauge variant: query tokens, wall normal only (no signed distance)", "365 cells", "8.9M",
+     {f: fp("v0_isla_qt_sdf", f) for f, _ in FIELDS}),
+]
+out = "| arm (diagnostic) | boundary sample | parameters | pressure (per seed) | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / U / ν_t) |\n|---|---|---|---|---|---|---|\n"
+for lab, bnd, par, v in sg_rows:
+    m = {f: mean(v[f]) for f, _ in FIELDS}
+    out += (f"| {lab} | {bnd} | {par} | {m['pressure_l2']:.4f} ({' / '.join(f'{x:.4f}' for x in v['pressure_l2'])}) | "
+            f"{m['velocity_l2']:.4f} | {m['nut_l2']:.4f} | {gt['pressure_l2']/m['pressure_l2']:.2f} / {gt['velocity_l2']/m['velocity_l2']:.2f} / {gt['nut_l2']/m['nut_l2']:.2f} |\n")
+print(out)
+print(": The similarity-gauge variant's query-token arms, same instrument and columns as @tbl-interior (float32, 48 "
+      "validation cars, 10,000 interior queries per car, 500 epochs, learning rate 1e-3). Data: "
+      "results/relint2_reduction_2026-09-14.json (the two signed-distance rows); "
+      "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (the wall-normal-only row). {#tbl-interior-sg}")
+```
+:::
 
 ```{python}
 #| label: fig-interior-arms
@@ -260,24 +293,22 @@ print(": Interior relative L2 error on the 48 DrivAerML validation cars in float
 #|   relative L2; dots are the individual seeds. The label above each bar is
 #|   the ratio GeoTransolver-volume ÷ arm (above one favors the ISLA arm).
 #|   Colors follow the book's key: GeoTransolver-volume red, ISLA
-#|    blue, its similarity-gauge variant light blue, the passive
+#|   blue, the passive
 #|   decodes hatched light blue, and the exact-kernel decoder (an earlier
 #|   design, not one of the book's architectures) gray. How to read this: it
 #|   shows the pressure column of @tbl-interior only; velocity and eddy
-#|   viscosity rank the arms the same way except among the query-token arms,
-#|   where every signed-distance arm leads on velocity and trails on eddy
-#|   viscosity. Data: as @tbl-interior.
+#|   viscosity rank the arms the same way except that ISLA's query-token arm
+#|   leads GeoTransolver-volume on velocity and trails on eddy
+#|   viscosity. The similarity-gauge variant's arms are in @tbl-interior-sg.
+#|   Data: as @tbl-interior.
 #| code-fold: true
 arms = [("GeoTransolver-\nvolume", rel["gt_vol_unit"]["pressure_l2"]["seeds"], "gt"),
-        ("ISLA reference\nquery tokens\n+ signed distance", rel["relint2"]["pressure_l2"]["seeds"], "isla_ref"),
-        ("ISLA sim. gauge\nquery tokens\n+ signed distance", rel["ref_surf10k_gauge"]["pressure_l2"]["seeds"], "isla_sg"),
-        ("ISLA sim. gauge\nquery tokens\n+ SD, 365 cells", rel["ref_365_gauge"]["pressure_l2"]["seeds"], "isla_sg"),
-        ("ISLA sim. gauge\nquery tokens\nno signed distance", fp("v0_isla_qt_sdf"), "isla_sg"),
+        ("ISLA\nquery tokens\n+ signed distance", rel["relint2"]["pressure_l2"]["seeds"], "isla_ref"),
         ("ISLA passive\nwall normal", fp("v0_mt2_int_sdf"), "isla_abl"),
         ("ISLA passive\nproxy normal", fp("v0_mt2_int"), "isla_abl"),
         ("exact-kernel\ndecoder", fp("v0_mt1k_vol"), None)]
 means = [mean(v) for _, v, _ in arms]; gtp = means[0]
-fig, ax = plt.subplots(figsize=(10.5, 4.6))
+fig, ax = plt.subplots(figsize=(8.5, 4.6))
 for i, (name, vals, key) in enumerate(arms):
     kw = bar_kwargs(key) if key else dict(color=MUTED, edgecolor="white")
     ax.bar(i, means[i], width=0.6, zorder=2, **kw)
@@ -290,14 +321,16 @@ ax.set_title("DrivAerML interior pressure, float32; label = GeoTransolver-volume
 plt.tight_layout(); plt.show()
 ```
 
-Three things in the table carry the section. **Interaction closes most of
-the gap.** The same ISLA, with its queries allowed to interact and given
-only the wall normal, moves from about a third of GeoTransolver-volume's
-pressure accuracy to about four fifths of it, on either frame and either
-boundary sample, without the signed-distance value and without the extra
-parameters. **The signed distance closes most of the rest, and most on the
-fields tied to distance from the wall.** Adding it lowers the
-similarity-gauge variant's pressure error by about a tenth and its velocity
+Three things in the table carry the section; the two ingredient readings
+were measured on the similarity-gauge variant's arms (the diagnostic note
+above), which ISLA matches or beats on every field. **Interaction closes
+most of the gap.** The same architecture, with its queries allowed to
+interact and given only the wall normal, moves from about a third of
+GeoTransolver-volume's pressure accuracy to about four fifths of it, on
+either boundary sample, without the signed-distance value and without the
+extra parameters. **The signed distance closes most of the rest, and most
+on the fields tied to distance from the wall.** Adding it lowers the
+pressure error by about a tenth and the velocity
 error by about two fifths, which turns the velocity standing into a lead.
 **What remains is eddy viscosity**, the one field on which
 GeoTransolver-volume's 2.8x parameters and six-radius local features still
@@ -317,6 +350,13 @@ query count (@sec-interior-query-tokens), a prediction at one point is a
 function of the whole request. @tbl-interior-qcount reads the effect on the
 recipe metric; @tbl-interior-companion reads it at fixed points.
 
+::: {.callout-note collapse="true" title="The two measurements, made on the similarity-gauge variant (diagnostic)"}
+Both instruments below were run on the similarity-gauge variant's query-token
+configuration, which ISLA matches on pressure and velocity and beats on eddy
+viscosity at 435 cars (results/relint2_reduction_2026-09-14.json); the
+dependence they measure is a property of the interacting decode, shared by
+both frames, so the readings are expected to carry to ISLA.
+
 ```{python}
 #| label: tbl-interior-qcount
 #| output: asis
@@ -329,7 +369,7 @@ r_ref, r_aug = qc["ratios_2k_over_10k"]["reference"], qc["ratios_2k_over_10k"]["
 out += (f"| penalty at 2,000 ÷ 10,000 | {r_ref['pressure']:.2f} / {r_ref['velocity']:.2f} / {r_ref['nut']:.2f} | "
         f"{r_aug['pressure']:.2f} / {r_aug['velocity']:.2f} / {r_aug['nut']:.2f} |\n")
 print(out)
-print(": Request-size dependence of the interacting decode (ISLA similarity-gauge variant, query tokens + signed distance, "
+print(": Request-size dependence of the interacting decode (similarity-gauge variant, diagnostic; query tokens + signed distance, "
       "365-cell boundary, two seeds, float32, 48 cars). Left column: the checkpoint trained at a fixed 10,000 queries. "
       "Right column: the same configuration trained with the request size drawn per sample between 2,000 and 20,000, "
       "which reduces the dependence by about 40% at a small cost at the training count and does not remove it. "
@@ -346,14 +386,15 @@ print(": Request-size dependence of the interacting decode (ISLA similarity-gaug
 
 : Companion-query dependence at fixed points. 1,000 fixed sentinel points on
 four validation cars, predicted alone, with 1,000 companions, with 9,000
-(the training count) and with 39,000, by the trained ISLA similarity-gauge
-variant (query tokens + signed distance, seed 42), bfloat16 inference;
+(the training count) and with 39,000, by the trained similarity-gauge
+variant (diagnostic; query tokens + signed distance, seed 42), bfloat16 inference;
 relative L2 in the recipe's normalized target space. Within-model changes
 under one instrument; the absolute errors are four-car bfloat16 values and
 are not the float32 48-car means of @tbl-interior. The passive
 configuration is the control: its predictions at the sentinels are
 identical whatever else is queried. Data:
 results/isla_qt_companion_dependence_2026-09-08.json. {#tbl-interior-companion}
+:::
 
 Read against the headline: ISLA's pressure deficit
 to GeoTransolver-volume is a few thousandths of relative L2 and its
@@ -522,32 +563,36 @@ three-dimensional aerodynamics on every readout in this book.
 interior it leads on one field of three at a third of the parameters and on
 two of three at matched parameters; the remaining deficit is eddy viscosity
 in the far wake, and it is a capacity limit.** The diagnostics below were
-run on the similarity-gauge variant, which matches the reference on
-pressure and velocity and trails it on eddy viscosity (the frame and the
+run on the similarity-gauge variant (diagnostic), which ISLA matches on
+pressure and velocity (1.000x, 0.991x) and beats by 12% on eddy viscosity
+at 435 cars (results/relint2_reduction_2026-09-14.json; the frame and the
 corrected boundary measure changed together, and the gain is not attributed
 between them); they are read as statements about the interacting
-query-token configuration.
+query-token configuration, and each sits in a collapsed note until measured
+on ISLA.
 
+::: {.callout-note collapse="true" title="The parameter budget, measured on the similarity-gauge variant (diagnostic)"}
 ```{python}
 #| label: tbl-interior-width
 #| output: asis
 def cm(key): return campD[key]["mean"]
 g = campD["udrv_gt_vol"]["mean"]
 rows = [("GeoTransolver-volume, 27.6M", "udrv_gt_vol"), ("GeoTransolver-volume without local features, 27.6M", "gt_vol_nolocal"),
-        ("ISLA similarity-gauge variant, query tokens + signed distance, width 192 (8.9M)", "isla_qtsdfval"),
-        ("ISLA similarity-gauge variant, query tokens + signed distance, width 344 (27.6M)", "isla_qtsdf_h344")]
+        ("similarity-gauge variant, query tokens + signed distance, width 192 (8.9M)", "isla_qtsdfval"),
+        ("similarity-gauge variant, query tokens + signed distance, width 344 (27.6M)", "isla_qtsdf_h344")]
 out = "| arm | pressure | velocity | eddy viscosity | GeoTransolver-volume ÷ arm (p / U / ν_t) |\n|---|---:|---:|---:|---|\n"
 for lab, k in rows:
     m = cm(k)
     out += f"| {lab} | {m['pressure_l2']:.4f} | {m['velocity_l2']:.4f} | {m['nut_l2']:.4f} | {g['pressure_l2']/m['pressure_l2']:.2f} / {g['velocity_l2']/m['velocity_l2']:.2f} / {g['nut_l2']/m['nut_l2']:.2f} |\n"
 h256 = {f: mean(fp("v0_isla_qtsdf_h256", f)) for f, _ in FIELDS}
-out += f"| ISLA similarity-gauge variant, width 256 (about 15.7M) | {h256['pressure_l2']:.4f} | {h256['velocity_l2']:.4f} | {h256['nut_l2']:.4f} | {g['pressure_l2']/h256['pressure_l2']:.2f} / {g['velocity_l2']/h256['velocity_l2']:.2f} / {g['nut_l2']/h256['nut_l2']:.2f} |\n"
+out += f"| similarity-gauge variant, width 256 (about 15.7M) | {h256['pressure_l2']:.4f} | {h256['velocity_l2']:.4f} | {h256['nut_l2']:.4f} | {g['pressure_l2']/h256['pressure_l2']:.2f} / {g['velocity_l2']/h256['velocity_l2']:.2f} / {g['nut_l2']/h256['nut_l2']:.2f} |\n"
 print(out)
-print(": The parameter budget. Interior relative L2 on the 48 validation cars, float32, two seeds, 10,000 queries; "
-      "the width-344 ISLA matches GeoTransolver-volume's parameter count. Ratios are GeoTransolver-volume (27.6M, with "
+print(": The parameter budget, on the similarity-gauge variant (diagnostic). Interior relative L2 on the 48 validation cars, float32, two seeds, 10,000 queries; "
+      "the width-344 arm matches GeoTransolver-volume's parameter count. Ratios are GeoTransolver-volume (27.6M, with "
       "local features) ÷ arm. Data: research/transfer_program/studies/computational_support/campaign_d_verdict_2026-09-10.json; "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json (width 256). {#tbl-interior-width}")
 ```
+:::
 
 **Parameter budget.** At matched parameters the pressure ordering changes:
 the width-344 variant leads GeoTransolver-volume on pressure and on
@@ -604,10 +649,11 @@ principle of @sec-principle regardless of the result
 (results/qtdens_reduction_2026-09-10.json).
 :::
 
+::: {.callout-note collapse="true" title="The standings below full data, measured on the similarity-gauge variant (diagnostic)"}
 ```{python}
 #| label: tbl-interior-smalldata
 #| output: asis
-out = "| training cars | GeoTransolver-volume (p / U / ν_t) | ISLA query tokens, no signed distance | ISLA query tokens + signed distance | GeoTransolver-volume ÷ ISLA with signed distance |\n|---|---|---|---|---|\n"
+out = "| training cars | GeoTransolver-volume (p / U / ν_t) | variant, query tokens, no signed distance | variant, query tokens + signed distance | GeoTransolver-volume ÷ variant with signed distance |\n|---|---|---|---|---|\n"
 def trip(fam, seeds=(42, 43)): return {f: mean(fp(fam, f, seeds)) for f, _ in FIELDS}
 def fmt(m): return f"{m['pressure_l2']:.3f} / {m['velocity_l2']:.3f} / {m['nut_l2']:.3f}"
 for n in (54, 109):
@@ -616,11 +662,12 @@ for n in (54, 109):
 g_ = {f: rel["gt_vol_unit"][f]["mean"] for f, _ in FIELDS}; a = trip("v0_isla_qt_sdf"); b = {f: rel["ref_365_gauge"][f]["mean"] for f, _ in FIELDS}
 out += f"| 435 | {fmt(g_)} | {fmt(a)} | {fmt(b)} | {g_['pressure_l2']/b['pressure_l2']:.2f} / {g_['velocity_l2']/b['velocity_l2']:.2f} / {g_['nut_l2']/b['nut_l2']:.2f} |\n"
 print(out)
-print(": The interior standings below full data (ISLA similarity-gauge variant, 365-cell boundary; float32, 48 validation "
+print(": The interior standings below full data (similarity-gauge variant, diagnostic; 365-cell boundary; float32, 48 validation "
       "cars, two seeds at 54 and 109 cars). With the signed distance the velocity standing moves from parity to a lead as "
       "data grow, the pressure ratio rises toward one, and eddy viscosity stays behind throughout. Data: "
       "results/fp32_reeval/fp32_shift_interior_2026-09-09.json; results/relint2_reduction_2026-09-14.json (435 cars). {#tbl-interior-smalldata}")
 ```
+:::
 
 **Small data.** The standings are mostly full-data statements
 (@tbl-interior-smalldata). The eddy-viscosity gap, flat across an eightfold

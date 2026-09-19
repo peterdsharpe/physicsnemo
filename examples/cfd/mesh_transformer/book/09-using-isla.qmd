@@ -31,14 +31,17 @@ model:
   geo_checkpoint: true        # rebuild per-slice geometry in backward: same numbers, half the memory
 ```
 
-The configuration table below is the whole decision. The similarity-gauge
-variant exists because the program measured it; it is not recommended for
-new work (@sec-mt2-variants states the open question about it).
+The configuration table below is the whole decision. ISLA is preferred on
+principle (no center is estimated from the sample) and the measurement leaves
+that preference unopposed on accuracy: the similarity-gauge variant is within
+2% of ISLA at 435 cars, inside seed noise (SG-REF, @sec-nb-sgref-verdict). The
+variant exists because the program measured it; it is a diagnostic and is not
+recommended for new work (@sec-mt2-variants).
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
-| **reference** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
-| similarity-gauge variant (measure-weighted center and RMS radius) | `similarity_gauge: true` on a centered frame | a diagnostic comparison of frame choices | a frame still estimated from the sample; equal accuracy to the reference |
+| **ISLA** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
+| similarity-gauge variant (diagnostic; measure-weighted center and RMS radius) | `similarity_gauge: true` on a centered frame | a diagnostic comparison of frame choices only | a frame still estimated from the sample, for at most about 2% of accuracy, inside seed noise (@sec-nb-sgref-verdict) |
 | passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
 
 ::: {.callout-note collapse="true" title="The legacy centered variant (diagnostic)"}

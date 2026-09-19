@@ -101,7 +101,7 @@ rows = [
     ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "ISLA is consistent; every sample-centered configuration collapses"),
     ("Interior fields from the surface, DrivAerML: pressure / velocity / eddy viscosity", "GeoTransolver-volume", "ISLA with query tokens", f"{inter['pressure_l2']:.2f} / {inter['velocity_l2']:.2f} / {inter['nut_l2']:.2f}", "ISLA leads on velocity, trails on pressure and eddy viscosity, at a third of the parameters"),
 ]
-out = "| Setting | GeoTransolver / Transolver | ISLA (reference) | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
+out = "| Setting | GeoTransolver / Transolver | ISLA | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(": The thesis in six rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML rungs, where the gaps are larger, are not shown (@sec-data-efficiency). Errors are the area-weighted relative L2 of surface pressure "
@@ -193,7 +193,7 @@ The names below are canonical; their definitions are in the chapters cited.
 |---|---|---|
 | **ISLA** | the model as shipped, named without qualifier: relative frame, total-measure length unit, the class defaults | @sec-mt2 |
 | **legacy centered variant** (diagnostic) | the constant-gauge frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge, so it appears only in collapsed diagnostic notes, never in a main result | @sec-mt2-variants |
-| **similarity-gauge variant** | ISLA centered on the measure-weighted centroid with the RMS radius as length unit | @sec-mt2-variants |
+| **similarity-gauge variant** (diagnostic) | ISLA centered on the measure-weighted centroid with the RMS radius as length unit. It estimates a center from the sample and presumes one closed body, so it appears only in collapsed diagnostic notes, never in a main result; measured within noise of ISLA (@sec-nb-sgref-verdict) | @sec-mt2-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
 | **GeoTransolver**, **Transolver**, **GeoTransolver-volume** | the public slice-attention baselines, named without qualifier and never modified. "GeoTransolver + ISLA's *feature* (ablation)" is a baseline with one of ISLA's features added to isolate an effect; it is not a variant of the public model | @sec-baselines |
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
@@ -214,12 +214,14 @@ The names below are canonical; their definitions are in the chapters cited.
 #|   The book's visual key. Each architecture keeps its hue in every figure;
 #|   a variant of an architecture is the same hue at a lighter tint with an
 #|   open marker, and an ablation is hatched. Color is never the only cue:
-#|   the marker shape and the line style carry the same distinction.
+#|   the marker shape and the line style carry the same distinction. ISLA's
+#|   two frame variants (legacy centered, similarity gauge) share the light
+#|   blue with open markers and appear only inside collapsed diagnostic notes.
 #| code-fold: true
-fig, ax = plt.subplots(figsize=(8.0, 2.3))
-order = ["isla_ref", "isla_cg", "isla_sg", "isla_abl", "gt", "gt_var", "t", "t_var"]
+fig, ax = plt.subplots(figsize=(8.0, 1.9))
+order = ["isla_ref", "isla_abl", "gt", "gt_var", "t", "t_var"]  # the two frame variants live only in diagnostic notes
 for i, k in enumerate(order):
-    y = -(i % 4); col = i // 4
+    y = -(i % 3); col = i // 3
     x0 = 0.05 + col * 0.5
     kw = series_kwargs(k, lw=2.0, ms=8)
     ax.plot([x0, x0 + 0.08], [y, y], **{a: kw[a] for a in ("color", "ls", "lw")})
@@ -227,7 +229,7 @@ for i, k in enumerate(order):
     if STYLE[k]["hatch"]:
         ax.add_patch(mpl.patches.Rectangle((x0 + 0.10, y - 0.3), 0.04, 0.6, **bar_kwargs(k)))
     ax.text(x0 + 0.16, y, STYLE[k]["label"], va="center", fontsize=9.5, color=INK)
-ax.set_xlim(0, 1); ax.set_ylim(-3.6, 0.6)
+ax.set_xlim(0, 1); ax.set_ylim(-2.6, 0.6)
 clean_axes(ax); ax.set_aspect("auto")
 plt.show()
 ```

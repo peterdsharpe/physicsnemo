@@ -61,7 +61,7 @@ was retracted) lives in the notebook and the status chapter only.
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
 | the sample-frame probe | "the probe instrument" alone | the 10,000-cell uniform and 10:1-biased DrivAerML evaluation draws, each model's frame taken from the drawn sample |
 | $M$ slices, $S$ global scalars | $S$ for the slice count | symbol discipline: $M = 256$ slices; $S$ is reserved for global scalars |
-| the similarity-gauge variant | | `frame_mode="centered"`, `similarity_gauge=True` |
+| the similarity-gauge variant (diagnostic) | "the similarity gauge" in a main result; "gauge ISLA" | `frame_mode="centered"`, `similarity_gauge=True`; cut from every main figure and table on 2026-09-18 after SG-REF (within noise of ISLA, @sec-nb-sgref-verdict); appears only in collapsed diagnostic notes, labeled; its result is phrased as "the price of not being told the body's center: at most about 2%, inside seed noise", never as recovering a deficit |
 | the weights-off ablation | "uniform ISLA" | `use_measure_weights=False`; diagnostic, never adopted |
 | the raw-coordinate diagnostic | | `raw_coord_channel`; breaks the contracts by design |
 | GeoTransolver, Transolver, GeoTransolver-volume | "GeoTransolver, released"; "the released baselines"; "the baselines" without naming them; "GT"/"T" outside code | the definitive public models, never modified; no qualifier |
@@ -90,7 +90,7 @@ radial basis vector. Definitions use $\equiv$.
 | Concept | Color | Marker / line | Notes |
 |---|---|---|---|
 | ISLA reference | `BLUE` | filled square, solid | |
-| ISLA variants | `BLUE_LIGHT` | open diamond (similarity gauge, dashed); open square dotted is reserved for the legacy centered variant inside diagnostic notes | same hue, lighter |
+| ISLA variants | `BLUE_LIGHT` | open diamond dashed (similarity-gauge variant) and open square dotted (legacy centered variant); both keys are used only inside collapsed diagnostic notes, never in a main figure | same hue, lighter |
 | ISLA ablations | `BLUE_PALE`, hatched | | never adopted |
 | GeoTransolver | `RED` | filled circle, solid | also GeoTransolver-volume |
 | Transolver | `AMBER` | filled triangle, dashed | |

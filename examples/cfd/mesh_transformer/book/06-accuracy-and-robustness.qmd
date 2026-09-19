@@ -76,8 +76,7 @@ print(f"**At 435 DrivAerML cars, in float32, GeoTransolver scores {fd_gt:.4f}, T
       f"{fd_ref:.4f}: baseline ÷ ISLA {fd_gt/fd_ref:.2f} and {fd_t/fd_ref:.2f}.** The numbers are on the 48-car validation "
       "split, seed means over two or three seeds, final-epoch checkpoints of the frozen protocol (@sec-protocol): 10,000 sampled "
       "points per case, 500 epochs, bfloat16 training, no augmentation, the freestream as a unit direction for every architecture, "
-      f"each at its own best learning rate (GeoTransolver 1e-3, Transolver 3e-3, ISLA 1e-3).{phys} The similarity-gauge variant "
-      f"scores {MR['isla_similarity_gauge_lr1e3']['in_family']:.4f} at the same rate, within 2% of ISLA. "
+      f"each at its own best learning rate (GeoTransolver 1e-3, Transolver 3e-3, ISLA 1e-3).{phys} "
       f"GeoTransolver and Transolver with ISLA's measure-weighted pooling, "
       f"ablations that carry ISLA's quadrature measure in their slice pooling, score {MR['geotransolver_unit_mw']['in_family']:.4f} and "
       f"{MR['transolver_unit_mw']['in_family']:.4f}: the measure costs the baselines nothing, so their lead is not a measure effect. "
@@ -90,21 +89,43 @@ print(f"**At 435 DrivAerML cars, in float32, GeoTransolver scores {fd_gt:.4f}, T
 ```{python}
 #| label: para-scale-corner
 #| output: asis
-g, cg, t, sg = (SC[k] for k in ("geotransolver_unit_512x80k", "isla_constant_gauge_512x80k", "transolver_unit_512x80k", "isla_similarity_gauge_512x80k"))
+g, cg, t = (SC[k] for k in ("geotransolver_unit_512x80k", "isla_constant_gauge_512x80k", "transolver_unit_512x80k"))
 ref_c = CW["in_family_80k_seed_mean"]
 print(f"At hidden width 512 and 80,000 sampled cells per car, in float32 and two seeds, GeoTransolver scores {g['in_family']:.4f}, "
-      f"Transolver {t['in_family']:.4f}, the similarity-gauge variant {sg['in_family']:.4f}, "
+      f"Transolver {t['in_family']:.4f} "
       f"and ISLA, which trains there only under the width learning-rate rule of @sec-using-lr, {ref_c:.4f} "
       f"(GeoTransolver ÷ reference {g['in_family']/ref_c:.2f}). The legacy centered variant (diagnostic) scores {cg['in_family']:.4f} "
       f"at the protocol rate and {CGW['cg_wlr_80k_seed_mean']:.4f} retrained at the reference's rate, so the reference's corner excess "
       f"({(CGW['ratio_reference_wlr_to_cg_wlr']-1)*100:.0f}%) is the frame's and not the rate's. Training cost in GPU-hours: "
       f"GeoTransolver {g['gpu_hours']:.1f}, Transolver {t['gpu_hours']:.1f}, legacy centered variant {cg['gpu_hours']:.1f}. Density "
       f"factor at the corner, sample frame: GeoTransolver {g['density_factor']:.1f}x, Transolver {t['density_factor']:.1f}x, "
-      f"similarity-gauge variant {sg['density_factor']:.2f}x, reference {CW['density_factor_80k']:.2f}x, legacy centered variant "
+      f"ISLA {CW['density_factor_80k']:.2f}x, legacy centered variant "
       f"{cg['density_factor']:.1f}x. Deploy an 80,000-cell model "
       "at its training count: queried at 10,000 cells the corner models are well above their native error. Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json (scale corner), results/corner_wlr_reduction_2026-09-15.json, "
       "results/cg_wlr_reduction_2026-09-16.json.")
+```
+:::
+
+::: {.callout-note collapse="true" title="The similarity-gauge variant at full data and at the corner (diagnostic)"}
+```{python}
+#| label: para-full-data-sg
+#| output: asis
+SG = json.load(open(RES / "sgref_reduction_2026-09-18.json"))
+sgv, sga = SG["verdict"], SG["arms"]
+sgc = SC["isla_similarity_gauge_512x80k"]
+def rng(t): return f"{t['min']:.4f} to {t['max']:.4f}"
+print("The similarity-gauge variant centers on the measure-weighted centroid and scales by the RMS radius, both "
+      "integrals of the sampled geometry; it reads a center from the sample and presumes one closed body, which is why "
+      "it is a diagnostic and not a main-results configuration (@sec-mt2-variants). SG-REF measured its accuracy against "
+      f"ISLA at 435 cars with three seeds each in float32: under the stratified 10,000-cell draw {sga['similarity_gauge']['table']['strat_10000']['mean']:.4f} "
+      f"(seeds {rng(sga['similarity_gauge']['table']['strat_10000'])}) against ISLA's {sga['isla']['table']['strat_10000']['mean']:.4f} "
+      f"(seeds {rng(sga['isla']['table']['strat_10000'])}), a ratio of {sgv['sg_over_isla_strat_10k']:.3f} with overlapping seed ranges; "
+      f"{sgv['sg_over_isla_unif_10000']:.3f} on the independent 10,000-cell draw and {sgv['sg_over_isla_unif_40000']:.3f} at 40,000 cells. "
+      "The price of not being told the body's center is at most about 2%, inside seed noise (SG-REF, @sec-nb-sgref-verdict). "
+      f"At the scale corner (width 512, 80,000 cells, two seeds, protocol rate) the variant scores {sgc['in_family']:.4f} with a density factor of "
+      f"{sgc['density_factor']:.2f}x and {sgc['gpu_hours']:.1f} GPU-hours of training. Data: results/sgref_reduction_2026-09-18.json; "
+      "results/accuracy_consistency_matrix_2026-09-10.json (scale corner).")
 ```
 :::
 
@@ -367,7 +388,6 @@ bias, and every downstream quantity moves with it.
 #| label: tbl-density
 #| output: asis
 rows = [("ISLA", MR["isla_relative_frame_meas"]),
-        ("ISLA, similarity-gauge variant", MR["isla_similarity_gauge_lr1e3"]),
         ("GeoTransolver", MR["geotransolver_unit"]),
         ("Transolver", MR["transolver_unit"]),
         ("GeoTransolver + ISLA's measure-weighted pooling (ablation)", MR["geotransolver_unit_mw"]),
@@ -411,6 +431,19 @@ print(f"The legacy centered variant, which centers on the plain mean of the samp
 ```
 :::
 
+::: {.callout-note collapse="true" title="The similarity-gauge variant under the same probe (diagnostic)"}
+```{python}
+#| label: para-density-sg
+#| output: asis
+r = MR["isla_similarity_gauge_lr1e3"]
+print(f"The similarity-gauge variant, whose center and scale are measure-weighted integrals of the sample, scores "
+      f"{r['in_family']:.4f} under uniform sampling and degrades {r['density_factor']:.2f}x under the same probe, the same "
+      "consistency as ISLA: an integral-estimated frame survives the biased draw where the plain mean does not. "
+      "The price of not being told the body's center is at most about 2%, inside seed noise (SG-REF, @sec-nb-sgref-verdict). "
+      "Data: results/accuracy_consistency_matrix_2026-09-10.json.")
+```
+:::
+
 ## Consistency under refinement and across samplers {#sec-consistency-bench}
 
 **No configuration gives the same field under a different sampling of the
@@ -450,10 +483,10 @@ B = json.load(open(RES / "consistency_bench" / "consistency_bench_2026-09-10.jso
 A = dict(B["arms"]); COUNTS = [str(c) for c in B["counts"]]
 A.update(json.load(open(RES / "consistency_bench" / "consistency_bench_rf_2026-09-11.json"))["arms"])
 ROWS = [
- ("DrivAerML, 48 cars", {"isla_ref": "rf_dr_mt2_meas", "isla_sg": "iw_mt2_gauge", "gt": "uw_gt_unit_lr1e3", "t": "uw_transolver_unit_lr3e3"}),
+ ("DrivAerML, 48 cars", {"isla_ref": "rf_dr_mt2_meas", "gt": "uw_gt_unit_lr1e3", "t": "uw_transolver_unit_lr3e3"}),
  ("HiLift, 35 training cases", {"isla_ref": "rf_hl_mt2_meas_super_scarce", "gt": "udrv_hl_gt_super_scarce_lr3e3", "t": "udrv_hl_transolver_super_scarce_lr3e3"}),
 ]
-LABELS = {"isla_sg": "ISLA, similarity-gauge variant (lr 3e-3)"}
+LABELS = {}
 SAMPLERS = [("unif", "uniform over cells"), ("area", "area-proportional"), ("biased", "10:1 front/back bias")]
 def err(arm, sampler, count):
     return A[arm]["table"][sampler][count]["pressure_l2"]["mean"]
@@ -492,7 +525,6 @@ def conv(arm, sampler):
     t = A[arm]["table"][sampler]; lo = "2500" if "2500" in t else "10000"
     return t[lo]["pressure_l2"]["mean"] / t["40000"]["pressure_l2"]["mean"]
 rows = [("DrivAerML", "ISLA", "rf_dr_mt2_meas"),
-        ("DrivAerML", "ISLA, similarity-gauge variant (lr 3e-3)", "iw_mt2_gauge"),
         ("DrivAerML", "GeoTransolver", "uw_gt_unit_lr1e3"), ("DrivAerML", "Transolver", "uw_transolver_unit_lr3e3"),
         ("DrivAerML", "GeoTransolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_dr_gt_unit_lr1e3"), ("DrivAerML", "Transolver + ISLA's measure-weighted pooling (ablation; pool frame)", "mw_dr_transolver_unit_lr3e3"),
         ("HiLift 35", "ISLA", "rf_hl_mt2_meas_super_scarce"),
@@ -507,6 +539,18 @@ def table_rows(rows):
 print(table_rows(rows))
 print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. ISLA passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centered on the drawn sample their frame collapses, and holds only when the center is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for ISLA). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf companions. {#tbl-consistency-40k}")
 ```
+
+::: {.callout-note collapse="true" title="The similarity-gauge variant in the consistency benchmark (diagnostic)"}
+```{python}
+#| label: tbl-consistency-40k-sg
+#| output: asis
+print(table_rows([("DrivAerML", "similarity-gauge variant (lr 3e-3)", "iw_mt2_gauge")]))
+print(": The similarity-gauge variant at the benchmark's largest count, same columns as @tbl-consistency-40k. Its frame is "
+      "two integrals of the sample (measure-weighted centroid, RMS radius), so it converges like ISLA; the variant is a "
+      "diagnostic because that center is estimated from the sample. Float32, two-seed means. Data: "
+      "results/consistency_bench/consistency_bench_2026-09-10.json. {#tbl-consistency-40k-sg}")
+```
+:::
 
 Three readings, in order of weight. **Consistency in the fine-mesh limit is
 a property of the measure-weighted estimator standing on a frame that
@@ -649,16 +693,16 @@ out = ("| configuration | in-family error | density 10:1 (x) | pose, random SO(3
        "| zero-shot fastback | few-shot gain from pretraining |\n|---|---:|---:|---:|---:|---:|\n")
 LABEL = {"geotransolver_unit": "GeoTransolver", "geotransolver_unit_mw": "GeoTransolver + ISLA's measure-weighted pooling (ablation)",
          "transolver_unit": "Transolver", "transolver_unit_mw": "Transolver + ISLA's measure-weighted pooling (ablation)",
-         "isla_relative_frame_meas": "ISLA", "isla_similarity_gauge_lr1e3": "ISLA, similarity-gauge variant"}
-for key in ("isla_relative_frame_meas", "isla_similarity_gauge_lr1e3", "geotransolver_unit", "geotransolver_unit_mw", "transolver_unit", "transolver_unit_mw"):
+         "isla_relative_frame_meas": "ISLA"}
+for key in ("isla_relative_frame_meas", "geotransolver_unit", "geotransolver_unit_mw", "transolver_unit", "transolver_unit_mw"):
     r = M["rows"][key]
     pose = f(r["pose_factor"], "{:.2f}") + (" (augmented)" if r.get("pose_note") else "")
     out += (f"| {LABEL[key]} | {r['in_family']:.4f} | {r['density_factor']:.1f} | {pose} "
             f"| {f(r['zero_shot_fastback'], '{:.2f}')} | {f(r['few_shot_gain'], '{:.0%}')} |\n")
 sc = M["scale_corner"]["rows"]
 out += "| *scale corner, 512 wide × 80,000 cells* | | | | | |\n"
-CLABEL = {"geotransolver_unit_512x80k": "GeoTransolver, 512 × 80k", "isla_similarity_gauge_512x80k": "ISLA, similarity-gauge variant, 512 × 80k", "transolver_unit_512x80k": "Transolver, 512 × 80k"}
-for key in ("geotransolver_unit_512x80k", "isla_similarity_gauge_512x80k", "transolver_unit_512x80k"):
+CLABEL = {"geotransolver_unit_512x80k": "GeoTransolver, 512 × 80k", "transolver_unit_512x80k": "Transolver, 512 × 80k"}
+for key in ("geotransolver_unit_512x80k", "transolver_unit_512x80k"):
     r = sc[key]
     out += (f"| {CLABEL[key]} | {r['in_family']:.4f} | {r['density_factor']:.1f} | not measured "
             f"| not measured | {r['gpu_hours']:.1f} GPU-h |\n")
@@ -675,6 +719,24 @@ print(": Accuracy beside consistency on DrivAerML at full data, float32, unit-di
       "baselines' pool-frame values, 4.2x and 4.6x). The last column is training cost in GPU-hours. Data: "
       "results/accuracy_consistency_matrix_2026-09-10.json (provenance per cell inside), results/corner_wlr_reduction_2026-09-15.json. {#tbl-consistency-matrix}")
 ```
+
+::: {.callout-note collapse="true" title="The similarity-gauge variant in the same matrix (diagnostic)"}
+```{python}
+#| label: tbl-consistency-matrix-sg
+#| output: asis
+out = ("| configuration (diagnostic) | in-family error | density 10:1 (x) | pose, random SO(3) (x) "
+       "| zero-shot fastback | few-shot gain from pretraining |\n|---|---:|---:|---:|---:|---:|\n")
+r = M["rows"]["isla_similarity_gauge_lr1e3"]
+out += (f"| similarity-gauge variant | {r['in_family']:.4f} | {r['density_factor']:.1f} | {f(r['pose_factor'], '{:.2f}')} "
+        f"| {f(r['zero_shot_fastback'], '{:.2f}')} | {f(r['few_shot_gain'], '{:.0%}')} |\n")
+r = sc["isla_similarity_gauge_512x80k"]
+out += f"| similarity-gauge variant, 512 × 80k | {r['in_family']:.4f} | {r['density_factor']:.1f} | not measured | not measured | {r['gpu_hours']:.1f} GPU-h |\n"
+print(out)
+print(": The similarity-gauge variant's rows of @tbl-consistency-matrix, same columns and instruments. The price of not being "
+      "told the body's center is at most about 2%, inside seed noise (SG-REF, @sec-nb-sgref-verdict). Data: "
+      "results/accuracy_consistency_matrix_2026-09-10.json. {#tbl-consistency-matrix-sg}")
+```
+:::
 
 The measure-weighted rows give the baselines every advantage the principle
 of @sec-principle can name, and they split the story in two. Accuracy: once GeoTransolver and Transolver
@@ -723,7 +785,7 @@ rows = [
     ("GeoTransolver, rotation augmentation", rot_in / gt10, rot_zs, "not measured", f"{rot_pose:.2f}", GT_MEM),
     ("GeoTransolver, canonical frame", canon_in / gt10, None, "not measured", "1.00 (canonicalized)", GT_MEM),
     ("ISLA (8.9M), legacy centered variant (diagnostic)", mt2c_in / gt10, mt2c_zs, f"{min(mt2_dens_const):.1f}–{max(mt2_dens_const):.1f}x", f"{mt2_pose:.2f} (exact)", MT2_MEM),
-    ("ISLA (8.9M), similarity-gauge variant", gauge_in / gt10, gauge_zs, f"{mean(mt2_dens_gauge):.2f}x", "1.00 (exact)", MT2_MEM),
+    ("ISLA (8.9M), similarity-gauge variant (diagnostic)", gauge_in / gt10, gauge_zs, f"{mean(mt2_dens_gauge):.2f}x", "1.00 (exact)", MT2_MEM),
     ("GeoTransolver, two families", gtm_in / gt10, gtm_zs, "not measured", "not measured", GT_MEM),
     ("ISLA, two families, legacy centered variant (diagnostic)", mt2m_in / gt10, mt2m_zs, "not measured", "1.00 (exact)", MT2_MEM),
 ]
@@ -742,8 +804,8 @@ print(f": The DrivAerML frontier at full data, bfloat16 evaluation, every row tr
 ```
 
 On the common held-out fastback family no single-family row transfers:
-GeoTransolver scores 0.59 (0.82 with rotation augmentation) and ISLA 0.95
-to 0.99 in either gauge, against 1.0 for predicting the mean; a second
+GeoTransolver scores 0.59 (0.82 with rotation augmentation) and ISLA's two
+frame variants 0.95 to 0.99, against 1.0 for predicting the mean; a second
 training family moves both architectures to 0.11 to 0.13. Cross-family
 transfer is governed by training-data diversity, with an
 architecture-dependent offset that does not change the verdict

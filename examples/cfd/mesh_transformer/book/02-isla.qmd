@@ -640,9 +640,14 @@ book reports instead admits queries as interacting tokens
 **One documented variant replaces the relative frame with a frame estimated
 from the sample: the similarity-gauge variant centers on the measure-weighted
 centroid and scales by the measure-weighted RMS radius, both integrals of
-the geometry.** It is selected by `frame_mode="centered"` with
+the geometry.** It is a diagnostic, not a main-results configuration: it
+appears in this book only inside collapsed notes labeled as such, and its
+one measured role is to price what ISLA gives up by declining a center. That
+price, the price of not being told the body's center, is at most about 2%
+of surface-pressure error at 435 cars, inside seed noise (SG-REF,
+@sec-nb-sgref-verdict). It is selected by `frame_mode="centered"` with
 `similarity_gauge=True`, subtracts its center $c$ before scaling, $r_i =
-(x_i - c)/L$, and differs from the reference in three places: its seed is
+(x_i - c)/L$, and differs from ISLA in three places: its seed is
 $3 + 2K$ scalars (the rotation invariants of $\{r_i, \hat n_i, \hat
 g_k\}$, which now include the distance from the center and its direction
 cosines); its relational invariants gain $1 + K$ more that describe the
@@ -650,17 +655,23 @@ anchor's position relative to the center; and its head's radial basis vector
 is the direction from the center instead of from the token's anchor. Because
 the center and the length unit are integrals, it is exactly covariant under
 rigid motions and rescaling and consistent under a change of sampling, like
-the reference. What it adds is information: every token learns where it is
+ISLA. What it adds is information: every token learns where it is
 relative to the body's centroid.
 
-The reference is preferred on principle, not on a measured accuracy
-difference. A PDE does not know what "the body" is, and the area-weighted
+ISLA is preferred on principle, and the measurement leaves the preference
+unopposed. A PDE does not know what "the body" is, and the area-weighted
 centroid of a surface is not a point the physics distinguishes; for an open
 or truncated boundary, a multi-body scene, or a boundary with structure at
 every scale, that centroid is an artifact of where the domain was cut. The
 relative frame presumes none of this. Whether the extra information buys
-measurable accuracy on closed single bodies is an open measurement
-(@sec-program-status); the deliberation is recorded in the notebook.
+measurable accuracy on closed single bodies was measured at 435 DrivAerML
+cars with three seeds each (SG-REF, @sec-nb-sgref-verdict): under the
+stratified 10,000-cell draw the variant scores 0.0524 against ISLA's 0.0533,
+a ratio of 0.98 with overlapping seed ranges, and the same 1.6 to 2.0%
+offset on the independent draws at 10,000 and 40,000 cells. Being told the
+centroid recovers essentially none of the positional deficit the anatomy
+measures against GeoTransolver (@sec-deficit-anatomy); the deliberation is
+recorded in the notebook.
 
 ::: {.callout-note collapse="true" title="The centered construction, in symbols"}
 With a center $c$ and $r_i = (x_i - c)/L$, $\hat r_i = r_i/\lvert r_i\rvert$,
