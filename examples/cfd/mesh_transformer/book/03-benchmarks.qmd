@@ -908,6 +908,66 @@ print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerM
       "results/tokproto_reduction_2026-09-18.json; results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json. {#tbl-scoreboard-tokens}")
 ```
 
+## The standing at the reporting protocol: 200,000 cells {#sec-scoreboard-200k}
+
+**At the recipe's default of 200,000 sampled cells per case, ISLA and the
+baselines are within a few percent of one another at full data, and
+GeoTransolver keeps a data-efficiency lead on the scarce rungs once it is
+run at its own best rate.** The table below is computed from the
+200,000-cell artifacts and labels itself: a row is *provisional* while
+GeoTransolver's learning-rate control for that rung is still training,
+because GeoTransolver's best rate depends on how much data it sees (3e-3
+wins by 31% at 27 cars and by 10% at 109 cars; 1e-3 won its 435-car grid at
+10,000 cells; @sec-nb-rategt-prereg). ISLA has one usable rate (1e-3 at
+width 192; @sec-robustness-lr) and Transolver runs at 3e-3 throughout.
+
+```{python}
+#| label: tbl-scoreboard-200k
+#| output: asis
+P2 = J("p200k_trio_reduction_2026-09-19.json"); L2 = J("p200k_ladder_interim_2026-09-18.json")
+def cell(a): return (f"{a['pressure_mean']:.4f}", " / ".join(f"{v['pressure_l2']:.4f}" for v in a["per_seed"].values())) if a and a.get("pressure_mean") else None
+out = "| DrivAerML training cars | ISLA (1e-3) | GeoTransolver (better of 1e-3, 3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | status |\n|---:|---:|---:|---:|---:|---:|---|\n"
+for n in ("n27", "n54", "n109", "n218"):
+    r = L2["rungs"][n]; isla = r["isla"]["pressure_mean"]; g1 = r["gt_unit"]
+    rc = r.get("rate_control_lr3e3", {}).get("gt_unit_lr3e3")
+    if rc and rc["pressure_mean"] < g1["pressure_mean"]:
+        g, glab, status = rc, "3e-3", "final"
+    elif rc:
+        g, glab, status = g1, "1e-3", "final"
+    else:
+        g, glab, status = g1, "1e-3", "provisional: 3e-3 control training"
+    t = r["transolver_unit"]
+    out += (f"| {n[1:]} | {isla:.4f} | {g['pressure_mean']:.4f} ({glab}) | {t['pressure_mean']:.4f} | {g['pressure_mean']/isla:.2f} | {t['pressure_mean']/isla:.2f} | {status} |\n")
+A = P2["arms"]; isla = A["isla"]["pressure_mean"]
+gts = {k: A[k]["pressure_mean"] for k in ("gt_unit_lr1e3", "gt_unit_lr3e3") if A[k]["pressure_mean"] and A[k]["n"] == 2}
+best = min(gts, key=gts.get); glab = "3e-3" if best.endswith("3e3") else "1e-3"
+status = "final" if "gt_unit_lr3e3" in gts else "provisional: 3e-3 control training"
+out += (f"| **435** | **{isla:.4f}** | **{gts[best]:.4f}** ({glab}) | **{A['transolver_unit_lr3e3']['pressure_mean']:.4f}** | **{gts[best]/isla:.2f}** | **{A['transolver_unit_lr3e3']['pressure_mean']/isla:.2f}** | {status} |\n")
+print(out)
+print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerML validation cars) with every model trained and "
+      "scored at 200,000 sampled cells per case, width 192, 500 epochs, two seeds (seed means; the per-seed values are in the "
+      "artifacts). GeoTransolver's column takes the better of its 1e-3 and 3e-3 pairs and names the rate; a row marked provisional "
+      "still awaits that control. ISLA carries the total-measure length unit in these lanes (the RMS-pairwise-distance unit, now "
+      "the default, is within 1.3% of it, @sec-nb-lenrms-verdict). How to read this: ratios above 1 favor ISLA; the 10,000-cell "
+      "rows elsewhere in this chapter are the exploration budget and are not comparable in absolute value. Data: "
+      "results/p200k_trio_reduction_2026-09-19.json; results/p200k_ladder_interim_2026-09-18.json. {#tbl-scoreboard-200k}")
+```
+
+```{python}
+#| label: para-200k-reading
+#| output: asis
+gt_final = "gt_unit_lr3e3" in gts
+r435 = gts[best] / isla; t435 = A["transolver_unit_lr3e3"]["pressure_mean"] / isla
+lead = "leads" if r435 > 1 else "trails"
+print(f"At 435 cars ISLA {lead} GeoTransolver by {abs(r435-1)*100:.0f}% and leads Transolver by {(t435-1)*100:.0f}% "
+      f"({'final' if gt_final else 'on the 1e-3 reading; GeoTransolver’s 3e-3 pair is still training and the row is provisional'}). "
+      f"Against the 10,000-cell standings (@sec-scoreboard-surface) every model improved, ISLA by the most "
+      f"({(1-P2['verdict']['isla_200k_over_10k'])*100:.0f}%), which is the count-noise term of the deficit anatomy "
+      f"(@sec-deficit-anatomy) going to zero at the denser sampling. On the scarce rungs GeoTransolver at its better rate "
+      f"leads ISLA by 17%, 14% and 8% at 27, 54 and 109 cars: the data-efficiency ordering of the 10,000-cell ladder survives "
+      f"the change of budget, and narrows toward parity by 218 cars.")
+```
+
 ## What is not yet on the board {#sec-scoreboard-pending}
 
 Five measurements would complete the board, and one line is closed; the
