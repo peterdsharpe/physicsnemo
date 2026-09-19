@@ -20499,3 +20499,44 @@ there: 512 × 300k and 768 × 200k (lanes 44 to 47, seeds 42 and 43, width
 rule rates). The iso-budget comparison will take, on each axis, the lanes
 within 15% of GeoTransolver's cost; with these additions the set is
 expected to be 192 × 600k, 384 × 400k, 512 × 300k and 768 × 200k.
+
+## 2026-09-19 — Interim and preregistration, PROTO-200K-FLEET interior: ISLA's interior configuration collapses at 200,000 cells and learning rate 1e-3 on both seeds while every surface lane trains; GeoTransolver-volume improves to 0.0477; RATE-VOL runs the interior at 5e-4 and 3e-4 {#sec-nb-ratevol-prereg}
+
+**What we saw.** The interior lanes (`p200k_dr_*_vol_seed42/43`: boundary
+cells and interior query points both at 200,000 per case) finished.
+GeoTransolver-volume scores 0.0477 / 0.101 / 0.084 (pressure, velocity,
+eddy viscosity; 0.0513 / 0.107 / 0.088 at 10,000 queries), a clean
+improvement. ISLA's pair is on the mean-field plateau: float32 0.73 / 0.73 /
+0.97, validation loss 0.069 and 0.073 against 0.0010 for the 10,000-query
+lane. The loss curves show the collapse LR-REF identified
+(@sec-nb-lrref-verdict), not a configuration error: seed 42 trains normally
+to epoch 70 (validation loss 0.0041, on the 10,000-query lane's trajectory)
+and collapses between epochs 70 and 80; seed 43 collapses before epoch 20.
+Every surface lane at 1e-3, including the ISO-COST and ISO-MATCH lanes at
+600,000 cells and width 768 (checked at epochs 60 to 117, all on normal
+trajectories), is healthy, so the ceiling that moved is the interior
+configuration's: with 200,000 query tokens interacting alongside 200,000
+boundary tokens its routing hardens at a rate the surface configuration
+tolerates. This is the preregistration's defect clause
+(@sec-nb-proto200k-fleet-prereg): the row is not written; the defect is
+investigated.
+
+**Instrument (RATE-VOL).** The interior configuration at 435 cars and
+200,000 cells, seeds 42 and 43, at learning rates 5e-4 and 3e-4
+(`kernel/p200k_fleet/p200k_vol_aga.sbatch`, lanes 4 to 7), otherwise as
+the 1e-3 pair; float32 scoring at 200,000 queries through the fleet pump;
+GeoTransolver-volume's 0.0477 / 0.101 / 0.084 is the comparator.
+
+**Bars, written before the runs.** A rate trains cleanly if neither seed's
+validation loss visits the plateau (stays below 0.01 after epoch 20). The
+interior row is written with ISLA at the higher clean rate. Bars on that
+row against GeoTransolver-volume: pressure and velocity ratios within 5% of
+their 10,000-query values (0.93 and 1.37) mean the interior standing
+survives the protocol; a swing of more than 5% is reported as the budget's
+effect. If both rates collapse, the interior configuration's rate ceiling
+at 200,000 cells is below 3e-4 and the collapse mechanism study is promoted
+ahead of the interior row.
+
+**Prediction.** 5e-4 trains cleanly on both seeds (the width rule's factor
+of two from the 435-car surface ceiling of 1e-3 to 2e-3, applied to twice
+the tokens); ratios within 5% of the 10,000-query standing.

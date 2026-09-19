@@ -5,10 +5,33 @@
       "arms": {
         "isla": {
           "runs": {
-            "p200k_dr_isla_vol_seed42": null,
-            "p200k_dr_isla_vol_seed43": null
+            "p200k_dr_isla_vol_seed42": {
+              "nut_l2": 0.9605401357014974,
+              "pressure_l2": 0.7271471818288168,
+              "velocity_l2": 0.7196844418843588
+            },
+            "p200k_dr_isla_vol_seed43": {
+              "nut_l2": 0.9754557609558105,
+              "pressure_l2": 0.7323149045308431,
+              "velocity_l2": 0.7408972581227621
+            }
           },
-          "n_evaluated": 0
+          "n_evaluated": 2,
+          "pressure_l2_mean": 0.72973104317983,
+          "pressure_l2_seeds": [
+            0.7271471818288168,
+            0.7323149045308431
+          ],
+          "velocity_l2_mean": 0.7302908500035604,
+          "velocity_l2_seeds": [
+            0.7196844418843588,
+            0.7408972581227621
+          ],
+          "nut_l2_mean": 0.967997948328654,
+          "nut_l2_seeds": [
+            0.9605401357014974,
+            0.9754557609558105
+          ]
         },
         "gt_unit": {
           "runs": {
@@ -41,7 +64,29 @@
           ]
         }
       },
-      "status": "pending"
+      "status": "complete",
+      "ratios_over_isla": {
+        "gt_unit": {
+          "pressure_l2": 0.06538526442878276,
+          "velocity_l2": 0.1380464296862872,
+          "nut_l2": 0.08711623681583103
+        }
+      },
+      "tenk_reference": {
+        "source": "results/relint2_reduction_2026-09-14.json (ISLA interior, 10,000 queries, 2 seeds); results/fp32_reeval/fp32_shift_interior_2026-09-09.json (udrv_gt_vol)",
+        "isla": {
+          "pressure_l2": 0.055,
+          "velocity_l2": 0.0782,
+          "nut_l2": 0.1005
+        },
+        "gt_unit": {
+          "pressure_l2": 0.0513,
+          "velocity_l2": 0.107,
+          "nut_l2": 0.0879
+        },
+        "note": "quoted from the book's interior standing (@sec-scoreboard-interior); the 200k ISLA pair collapsed at lr 1e-3 (mean-field plateau from epoch ~20 / ~75), so its 200k row is a training defect under investigation (RATE-VOL), not a standing"
+      },
+      "flag": "ISLA interior at 200k, lr 1e-3: both seeds on the mean-field plateau (val loss 0.069 / 0.073 against 0.0010 at 10k); fp32 0.73 / 0.73 / 0.97. RATE-VOL lanes at 5e-4 and 3e-4 launched 2026-09-19."
     },
     "highlift_surface_deflection": {
       "arms": {

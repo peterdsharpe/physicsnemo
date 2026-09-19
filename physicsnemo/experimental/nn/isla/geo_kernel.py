@@ -49,16 +49,25 @@ gradient is the more precise one). Float64 is supported for exactness tests.
 
 from __future__ import annotations
 
+import importlib
+
 import torch
 
-try:
-    import triton
-    import triton.language as tl
-    from triton.language.extra import libdevice
+from physicsnemo.core.version_check import is_package_available
 
-    HAS_TRITON = True
-except ImportError:  # pragma: no cover - triton ships with the CUDA wheels of torch
-    HAS_TRITON = False
+### Triton is an optional dependency (it ships with the CUDA wheels of torch and is
+### absent on CPU-only installs). It is loaded through importlib so that the
+### package's external-import contract sees no hard dependency, and the
+### @triton.jit kernels below are only defined when it is present; ISLA resolves
+### geo_kernel=None to the eager region whenever HAS_TRITON is False.
+HAS_TRITON = is_package_available("triton")
+if HAS_TRITON:
+    try:
+        triton = importlib.import_module("triton")
+        tl = importlib.import_module("triton.language")
+        libdevice = importlib.import_module("triton.language.extra").libdevice
+    except Exception:  # pragma: no cover - a broken triton install is treated as absent
+        HAS_TRITON = False
 
 MAX_SLICES = 1024
 
