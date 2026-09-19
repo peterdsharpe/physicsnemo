@@ -257,13 +257,14 @@ estimate (@sec-limits).
 
 ## Resource matching {#sec-resource-matching}
 
-**At the recipe operating point ISLA matches GeoTransolver on parameters
-and tokens per case, and on the compiled path it matches on step time at
-half the memory.** Parameters 8.9M against 9.0M; tokens per case 10,000
-each; on one GB300 in bfloat16 with both models compiled as the recipe runs
-them, ISLA's step is 1.05x GeoTransolver's at 10,000 tokens with the
-geometry recompute on and 0.86x with it off, at 1.30 and 1.94 GiB against
-2.70 GiB (@tbl-mt2-cost). Memory was not a controlled variable in any
+**ISLA and GeoTransolver are matched on parameters (8.9M against 9.0M)
+and on cells per case (200,000 at the reporting protocol), and at that
+point ISLA trains in about a third of GeoTransolver's memory and step time
+with the fused kernel (@tbl-equal-budget-cost).** At the exploration budget
+of 10,000 tokens, on one GB300 in bfloat16 with both models compiled as the
+recipe runs them, ISLA's step is 1.05x GeoTransolver's with the geometry
+recompute on and 0.86x with it off, at 1.30 and 1.94 GiB against 2.70 GiB
+(@tbl-mt2-cost). Memory was not a controlled variable in any
 comparison and no accuracy result depends on it: the checkpoints in this
 book were trained by implementations of the same function that differ only
 in footprint.
@@ -298,6 +299,57 @@ print(": The token-count control on DrivAerML: area-weighted relative L2 of surf
       "control run on the legacy centered variant, so its reading is the token count's, not the frame's; wall shear moves the "
       "same way. Data: results/instrument_wave_reduction_2026-09-01.json. {#tbl-token-control}")
 ```
+
+## The comparison at equal budget {#sec-equal-budget}
+
+**A user does not match parameters or tokens; they have a GPU and a
+wall-clock budget. At GeoTransolver's recipe default (9.05M parameters,
+200,000 cells per case), ISLA at its own default trains in about a third
+of the memory and a third of the step time, so the question the book has
+to answer is what ISLA does with the rest of that budget.** The parameter
+counts and the training costs below are measured; the accuracy at equal
+budget is the ISO-MATCH study (@sec-nb-isomatch-prereg), which trains ISLA
+at five splits of GeoTransolver's budget between cells and width and is
+scored at the reporting protocol as its lanes finish. This section is
+written to read those artifacts; until they land it shows the cost side.
+
+```{python}
+#| label: tbl-equal-budget-cost
+#| output: asis
+IC = J("isocost_training_cost_acceptance_2026-09-19.json")
+P = IC["params"]; C = IC["cost"]
+def row(label, key, pkey):
+    cells = ["100k", "200k", "400k"]
+    vals = [f"{C[key][c]['peak_memory_gb']:.0f} GB, {C[key][c]['step_s']:.2f} s" if c in C[key] else "—" for c in cells]
+    return f"| {label} | {P[pkey]/1e6:.1f}M | " + " | ".join(vals) + " |\n"
+out = "| model, width | parameters | 100,000 cells | 200,000 cells | 400,000 cells |\n|---|--:|---|---|---|\n"
+out += row("ISLA, 192 (default; fused kernel)", "isla_fused_w192", "isla_w192")
+out += row("ISLA, 384 (fused kernel)", "isla_fused_w384", "isla_w384")
+out += row("GeoTransolver, 256 (recipe default)", "geotransolver_w256", "geotransolver_w256")
+out += row("GeoTransolver, 512", "geotransolver_w512", "geotransolver_w512")
+out += row("Transolver, 256 (recipe default)", "transolver_w256", "transolver_w256")
+print(out)
+g = IC["geotransolver_recipe_default"]
+print(f": Training cost per lane: peak GPU memory per device and time per optimizer step, bfloat16, four GB300 GPUs, one "
+      f"case per GPU-step, 435 DrivAerML cars, from the first chain link of each ISO-COST lane (step times are early "
+      f"readings and noisy; the study's reduction takes per-lane medians over the whole run). GeoTransolver's recipe "
+      f"default is the 200,000-cell column of its 256-wide row: {g['params']/1e6:.2f}M parameters, {g['peak_memory_gb']:.0f} GB, "
+      f"{g['step_s']:.2f} s per step. How to read this: at equal cells and default widths ISLA uses about a third of "
+      f"GeoTransolver's memory and step time with the fused kernel; the accuracy those savings buy when spent on more "
+      f"cells or a wider model is @sec-nb-isomatch-prereg's question. Parameters counted from the composed recipe "
+      f"configurations. Data: results/isocost_training_cost_acceptance_2026-09-19.json. {{#tbl-equal-budget-cost}}")
+```
+
+The iso-parameter comparison exists already: at 200,000 cells and about 9M
+parameters each, ISLA scores 0.0446 and GeoTransolver 0.0445 at its better
+rate (@sec-scoreboard-200k). The iso-time and iso-memory comparisons take
+GeoTransolver's default as the budget and give ISLA, with the fused kernel,
+the splits 192 wide × 600,000 cells, 288 × 400,000, 384 × 400,000, 512 ×
+200,000 and 768 × 100,000, each at the width learning-rate rule
+(@sec-using-lr). The preregistered readings are a lead of at least 3% at
+both budgets, parity within 3%, or a deficit; the recommended split is
+whichever of the five scores best within each budget. The result table
+and figure replace this paragraph when the lanes report.
 
 ## Pose: equivariant by construction, invariant by canonicalization {#sec-pose}
 
