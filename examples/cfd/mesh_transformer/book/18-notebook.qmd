@@ -19897,3 +19897,81 @@ and 109 cars, each at its better rate) that narrows toward zero by 218 to
 Transolver trails ISLA by 6% at full data. Whether ISLA's 2% lead at 435
 cars survives GeoTransolver's 3e-3 control is the one open number; the
 thesis's in-distribution clause is written after it.
+
+## 2026-09-19 — Verdict, RATE-WINDOW: ISLA's safe learning-rate window at width 192 is 3e-4 to 1e-3 (3e-4 scores 1.08x the 1e-3 error), 1e-3 is best, and the ceiling lies between 1e-3 and 2e-3 {#sec-nb-ratewindow-verdict}
+
+**Setting.** LR-REF (@sec-nb-lrref-verdict) showed ISLA at width 192
+collapsing at 3e-3 and diverging at 1e-2; RATE-WINDOW
+(@sec-nb-ratewindow-prereg) bracketed the safe window with two seeds each
+at 3e-4 and 2e-3 on the 10,000-cell exploration budget, 435 DrivAerML cars,
+500 epochs, bf16, scored in float32 on the sample-frame probe against the
+1e-3 seeds. The 2e-3 pair collapsed by epoch 22 and was stopped
+(@sec-nb-ratewindow-interim).
+
+**What we saw.** At 3e-4 the surface-pressure error is **0.0597** (seeds
+0.0599 / 0.0595) against 0.0552 at 1e-3, a factor **1.08**, inside the
+preregistered 1.1x clause; the density factor is 1.18, inside the contract
+band. The loss curve is the 1e-3 curve slowed: at epoch 500 its validation
+loss (0.00090) is where the 1e-3 lane's was near epoch 150, so the 8% is
+undertraining within the fixed 500-epoch budget rather than a different
+optimum. Artifact: results/ratewindow_reduction_2026-09-19.json.
+
+**Verdict.** The window extends half a decade downward and not at all
+upward: **3e-4 to 1e-3 at width 192, 1e-3 best, collapse between 1e-3 and
+2e-3.** The prediction (3e-4 within 1.1x; 2e-3 collapses with probability
+about 0.5) held on both points. The operating manual states the window and
+the warning that the protocol rate sits within a factor of two of the
+collapse; above width 192 the width rule applies. The mechanism question
+(why the relative frame's routing hardens at a rate the centered variant
+tolerates) stays open as a separate node.
+
+## 2026-09-19 — Verdict, PROTO-200K-FLEET pose test: at 200,000 cells ISLA in random poses scores 0.0453 (1.015x its native-frame 0.0446), 12% below the rotation-augmented GeoTransolver and 21% below the augmented Transolver {#sec-nb-p200k-pose-verdict}
+
+**Setting.** The pose test of the fleet (@sec-nb-proto200k-fleet-prereg)
+repeats POSE-REF (@sec-nb-poseref-verdict) at the reporting protocol:
+every DrivAerML training and validation car in its own random SO(3) pose,
+435 cars, 200,000 sampled cells per case, ISLA trained without
+augmentation, GeoTransolver and Transolver with rotation augmentation,
+two seeds each, float32 at 200,000 cells on the 48 posed validation cars.
+The bar is POSE-REF's: ISLA posed within 3% of its native-frame error and
+at least 5% below both augmented baselines.
+
+**What we saw** (results/p200k_pose_reduction_2026-09-19.json; the
+native-frame values are the trio's, @sec-nb-proto200k-interim):
+
+| model | native frame | every case in a random pose | posed ÷ native |
+|---|---|---|---|
+| ISLA (no augmentation) | 0.0446 | **0.0453** (0.0450 / 0.0456) | 1.015 |
+| GeoTransolver (rotation-augmented; native at 1e-3) | 0.0455 | 0.0508 (0.0506 / 0.0509) | 1.12 |
+| Transolver (rotation-augmented) | 0.0473 | 0.0550 (0.0552 / 0.0547) | 1.16 |
+
+**Verdict: supports.** ISLA's posed error is 1.5% above its native error,
+the same residual POSE-REF measured at 10,000 cells (the bf16 training
+path); the augmented baselines pay 12% and 16% for the poses, so **ISLA
+leads GeoTransolver by 12% and Transolver by 21%** when geometries arrive
+in arbitrary orientations. The lead is larger than at 10,000 cells (7% and
+17%) because ISLA gained more from the denser sampling in the native
+frame. GeoTransolver's posed lanes ran at 1e-3; if its 3e-3 pair lowers
+its native-frame error at 435 cars the augmented-posed comparison would
+need the same control, and this entry will say so when that pair reports.
+
+## 2026-09-19 — Interim, RATE-GT: at 218 cars GeoTransolver at 3e-3 scores 0.0490 against 0.0512 at 1e-3, 3% below ISLA's 0.0507; the ladder is complete at each model's better rate and the 435-car pair is the last open number {#sec-nb-rategt-interim-218}
+
+**What we saw.** GeoTransolver at 3e-3 on 218 cars: **0.0490** (seeds
+0.0488 / 0.0492), against 0.0512 at 1e-3 and ISLA's 0.0507. At each
+model's better rate, **GeoTransolver ÷ ISLA = 0.97** at 218 cars. The
+ladder now reads, GeoTransolver at its better rate throughout: 0.83, 0.86,
+0.92, 0.97 at 27, 54, 109 and 218 cars. GeoTransolver's 3e-3 advantage
+over its own 1e-3 shrinks 31%, 24%, 10%, 4% along the same rungs, so at
+435 cars the two rates are predicted to be within about 2% of each other
+and the 435-car row (ISLA 0.0446 against GeoTransolver 0.0455 at 1e-3) is
+expected to land at parity within noise. Artifact:
+results/p200k_ladder_interim_2026-09-18.json, now complete for the ladder.
+
+**Reading.** At the reporting protocol GeoTransolver is the more
+data-efficient model on DrivAerML by 17% at 27 cars, narrowing
+monotonically to 3% at 218 cars; ISLA reaches it around the full training
+set. This is the 10,000-cell ladder's ordering with a smaller gap at every
+rung (that ladder, against the legacy centered variant, read 16%, 22%,
+28%, 25%), and it is the honest statement of ISLA's data efficiency: not a
+win, a narrowing deficit that closes at full data.

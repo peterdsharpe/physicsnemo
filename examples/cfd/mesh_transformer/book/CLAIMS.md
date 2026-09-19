@@ -1865,3 +1865,16 @@ interior control @sec-nb-udrv-int-prereg.
   (1.02x); Transolver 0.0473 (1.06x). 200k/10k: ISLA 0.81, GT 0.90, T 0.91.
 - Rule: the 435-car 200k row is PROVISIONAL until GeoTransolver's 3e-3 pair is scored; never write
   "ISLA leads at full data" before then. RATE-GT at 109 cars: GT 3e-3 0.0565 vs ISLA 0.0614 (0.92).
+
+## RATE-WINDOW (2026-09-19; results/ratewindow_reduction_2026-09-19.json)
+- ISLA width 192, 435 cars, 10k budget: 3e-4 = 0.0597 (1.08x of 1e-3's 0.0552); 1e-3 best; 2e-3 and 3e-3
+  collapse; 1e-2 diverges. Write: "safe window 3e-4 to 1e-3 at width 192, 1e-3 best, ceiling between 1e-3
+  and 2e-3; width rule above 192". Never write a rate above 1e-3 as usable for ISLA at width 192.
+
+## PROTO-200K-FLEET pose + RATE-GT 218 (2026-09-19)
+- Pose at 200k (results/p200k_pose_reduction_2026-09-19.json): ISLA posed 0.0453 (1.015x native 0.0446);
+  GT-aug posed 0.0508 (1.12x its native 0.0455 at 1e-3); T-aug posed 0.0550 (1.16x). ISLA leads posed
+  GT by 12%, T by 21%. Write "12% and 21%" for the 200k pose lead; "7% and 17%" is the 10k reading.
+- Ladder at 200k, GT at its better rate (3e-3 on every rung): GT / ISLA = 0.83, 0.86, 0.92, 0.97 at
+  27, 54, 109, 218 cars. Write ISLA's data efficiency as "a narrowing deficit that closes at full
+  data", never as a win. The 435-car GT 3e-3 pair is the last open number.

@@ -1,0 +1,53 @@
+{
+  "study": "RATE-WINDOW: ISLA (relative frame, total-measure unit) at 435 DrivAerML cars, 10k exploration budget, width 192; float32 on the sample-frame probe",
+  "reference_1e3": {
+    "unif_10k": [
+      0.0549,
+      0.0558
+    ],
+    "mean": 0.0552,
+    "source": "rf_dr_mt2_meas_seed42/43"
+  },
+  "rates": {
+    "3e-4": {
+      "per_seed": {
+        "seed42": {
+          "unif": 0.05988844235738119,
+          "biased": 0.07070148984591167
+        },
+        "seed43": {
+          "unif": 0.059534226854642235,
+          "biased": 0.06998239954312642
+        }
+      },
+      "unif_mean": 0.05971133460601171,
+      "over_1e3": 1.0817270761958644,
+      "density_factor_mean": 1.1780258732559523,
+      "verdict": "within 1.1x"
+    },
+    "1e-3": {
+      "unif_mean": 0.0552,
+      "over_1e3": 1.0,
+      "verdict": "best (protocol rate)"
+    },
+    "2e-3": {
+      "verdict": "collapses (mean-field plateau, val loss 0.063 / 0.058 by epoch 22; lanes stopped)",
+      "source": "lr_dr_isla_ref_lr2e3_seed42/43"
+    },
+    "3e-3": {
+      "unif_mean": 0.7633,
+      "over_1e3": 13.827898550724637,
+      "verdict": "collapses (results/refprops_reduction_2026-09-18.json)"
+    },
+    "1e-2": {
+      "verdict": "diverges (NaN at epochs 21 and 32)"
+    }
+  },
+  "verdict": {
+    "safe_window_width192": "3e-4 to 1e-3 (1e-3 best; 3e-4 within 1.1x at 1.08x); ceiling between 1e-3 and 2e-3",
+    "bars": {
+      "lower": "3e-4 within 1.1x of 1e-3 = window extends half a decade down: MET",
+      "upper": "2e-3 collapses = ceiling between 1e-3 and 2e-3"
+    }
+  }
+}
