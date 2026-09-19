@@ -101,7 +101,6 @@ from utils import (
 )
 
 from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
-from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.datapipes.keys import as_nested_key, with_leaf_name
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.mesh import DomainMesh
@@ -285,9 +284,9 @@ def attach_and_save(
     Writes ``pred_<name>`` and ``true_<name>`` onto a copy of the
     interior's ``point_data`` (the training-space target fields are
     dropped to avoid ambiguity with their physical ``true_<name>``
-    counterparts; non-target inputs like ``sdf`` are kept). Private target
-    quadrature bookkeeping is consumed for scoring and deliberately omitted
-    from the saved prediction artifact. The result is saved with
+    counterparts; non-target inputs like ``sdf`` are kept). Explicit point
+    measures are retained and follow geometric rescaling, so the saved sample
+    can still be integrated in physical coordinates. The result is saved with
     :meth:`DomainMesh.save` as a native ``.pdmsh`` tree.
 
     When *rescale_geometry* is set, every mesh in the domain is first
@@ -295,7 +294,7 @@ def attach_and_save(
     physical-coordinate center in ``global_data.center`` when available.
     This inverts the DrivAerML surface pipeline's center-then-scale order:
     ``x* = (x - center) / L_ref``. Geometry transforms leave
-    ``point_data`` untouched, so the attached fields are not affected.
+    ordinary ``point_data`` untouched; effective measures follow the geometry.
     """
     if rescale_geometry:
         if "L_ref" in domain.global_data:
@@ -307,16 +306,13 @@ def attach_and_save(
     interior = domain.interior
     ### Drop training-space targets (replaced by physical true_<name>);
     ### keep non-target inputs such as sdf / sdf_normals for inspection. The
-    ### private measure belongs to the transformed training geometry and would
-    ### become dimensionally stale if the output geometry is rescaled.
+    ### effective point measure has already followed any geometric rescaling.
     ### Names may spell nested leaves ("solution.p"); ``key in td`` and
     ### ``exclude`` resolve them, and the pred_/true_ prefix goes on the
     ### leaf so the nesting is preserved: ("solution", "pred_p").
     target_keys = [as_nested_key(n) for n in target_config]
     present_targets = [k for k in target_keys if k in interior.point_data]
     drop_keys = list(present_targets)
-    if TARGET_QUADRATURE_MEASURE_KEY in interior.point_data:
-        drop_keys.append(TARGET_QUADRATURE_MEASURE_KEY)
     new_pd = interior.point_data.exclude(*drop_keys).clone()
     for key, val in pred_phys.items(include_nested=True, leaves_only=True):
         new_pd[with_leaf_name(key, lambda n: f"pred_{n}")] = val
@@ -399,7 +395,9 @@ def _check_summary_in_range(
         lo_k, hi_k, mean_k = lo[k].item(), hi[k].item(), averages[k]
         tol = 1e-5 * (abs(lo_k) + abs(hi_k) + 1.0)
         if not (lo_k - tol <= mean_k <= hi_k + tol):
-            bad.append(f"{k}: summary {mean_k:.6g} outside per-sample range [{lo_k:.6g}, {hi_k:.6g}]")
+            bad.append(
+                f"{k}: summary {mean_k:.6g} outside per-sample range [{lo_k:.6g}, {hi_k:.6g}]"
+            )
     if bad:
         raise RuntimeError(
             "Inference summary is inconsistent with its own per-sample metrics "

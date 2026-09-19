@@ -1,6 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """The ISLA recipe configurations compose to the intended architecture (2026-09-15).
 
 The plain names carry the reference configuration (relative frame, total-measure scale):
@@ -23,7 +36,7 @@ sys.path.insert(0, str(_RECIPE_ROOT / "src"))
 from domain_transforms import ComposeQuadratureMeasure  # noqa: E402
 
 from physicsnemo.mesh import Mesh  # noqa: E402
-from physicsnemo.mesh.calculus.measure import compose_measure_weights  # noqa: E402
+from physicsnemo.mesh.calculus.measure import scale_measures  # noqa: E402
 
 ISLA_TARGET = "physicsnemo.experimental.nn.ISLA"
 
@@ -41,6 +54,7 @@ def _compose(model, dataset):
 
 
 def test_plain_surface_name_is_the_reference_configuration():
+    """Surface defaults route the complete point measure to ISLA."""
     cfg = _compose("isla_surface", "drivaer_ml_surface")
     m = cfg.model
     assert m._target_ == ISLA_TARGET
@@ -49,12 +63,12 @@ def test_plain_surface_name_is_the_reference_configuration():
     assert m.geo_checkpoint is True
     assert cfg.forward_kwargs.global_vectors == "global_data.U_inf_dir"
     assert (
-        cfg.forward_kwargs.measure_weights
-        == "interior.point_data._target_quadrature_measure"
+        cfg.forward_kwargs.measure_weights == "interior.point_data._effective_measure"
     )
 
 
 def test_constant_gauge_variant_pins_the_centered_frame():
+    """The constant-gauge ablation keeps its fixed reference length."""
     m = _compose("isla_surface_constant_gauge", "drivaer_ml_surface").model
     assert m._target_ == ISLA_TARGET
     assert m.frame_mode == "centered" and m.scale_mode == "reference_length"
@@ -71,6 +85,7 @@ def test_constant_gauge_variant_pins_the_centered_frame():
 def test_deprecated_reference_names_resolve_to_the_plain_configs(
     deprecated, plain, dataset
 ):
+    """Deprecated config aliases retain the current model and field mappings."""
     old, new = _compose(deprecated, dataset), _compose(plain, dataset)
     for key in ("model", "forward_kwargs"):
         assert OmegaConf.to_container(
@@ -79,6 +94,7 @@ def test_deprecated_reference_names_resolve_to_the_plain_configs(
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
+    """The volume pipeline materializes the boundary measure expected by ISLA."""
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference")
     m = cfg.model
@@ -86,7 +102,7 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     assert m.query_tokens is True and m.n_query_scalars == 1
     assert (
         cfg.forward_kwargs.measure_weights
-        == "boundaries.vehicle.cell_data.quadrature_measure"
+        == "boundaries.vehicle.cell_data._effective_measure"
     )
     raw = OmegaConf.to_container(
         ds.pipeline.transforms, resolve=False
@@ -107,10 +123,10 @@ def test_total_measure_scale_sees_the_surface_area_through_the_corrected_field()
     mesh = Mesh(points=pts, cells=torch.arange(3000).reshape(1000, 3))
     full = float(mesh.cell_areas.sum())
     sub = mesh.slice_cells(torch.arange(0, 1000, 5))
-    compose_measure_weights(sub, 5.0)
+    scale_measures(sub, 5.0)
     sub = ComposeQuadratureMeasure()(sub)
     raw_L = float(sub.cell_areas.sum().sqrt())
-    corrected_L = float(sub.cell_data["quadrature_measure"].sum().sqrt())
+    corrected_L = float(sub.cell_data["_effective_measure"].sum().sqrt())
     assert abs(corrected_L**2 - full) / full < 0.15
     assert raw_L**2 / full < 0.3
 
@@ -134,10 +150,14 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     producers = [
-        t for t in raw
-        if "ComputeFreestreamDirection" in t["_target_"] and t.get("output_field") == "U_inf_dir"
+        t
+        for t in raw
+        if "ComputeFreestreamDirection" in t["_target_"]
+        and t.get("output_field") == "U_inf_dir"
     ]
-    assert producers, f"{dataset}.yaml never computes U_inf_dir; transforms: {[t['_target_'] for t in raw]}"
+    assert producers, (
+        f"{dataset}.yaml never computes U_inf_dir; transforms: {[t['_target_'] for t in raw]}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -157,6 +177,7 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
 
 
 def test_cli_override_still_wins_over_the_pinned_rate():
+    """Explicit learning-rate overrides take precedence over model defaults."""
     with initialize_config_dir(
         config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
     ):

@@ -40,7 +40,7 @@ from conftest import make_surface_domain_mesh, make_volume_domain_mesh
 from omegaconf import OmegaConf
 
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import compose_measure_weights
+from physicsnemo.mesh.calculus.measure import scale_measures
 
 
 def _closed_tetrahedron() -> Mesh:
@@ -100,7 +100,7 @@ def test_measure_weighted_subsample_force_is_not_area_fraction_shrunk():
     """HT cell measures recover a constant full-surface traction integral."""
     full = _closed_tetrahedron()
     retained = full.slice_cells(torch.tensor([0, 1]))
-    compose_measure_weights(retained, full.n_cells / retained.n_cells)
+    scale_measures(retained, full.n_cells / retained.n_cells)
 
     c = 2.0
     cf = torch.tensor([[c, 0.0, 0.0]]).repeat(retained.n_cells, 1)

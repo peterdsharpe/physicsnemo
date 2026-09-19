@@ -76,12 +76,11 @@ from physicsnemo.datapipes.transforms.mesh import (
     SubsampleMesh,
 )
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
-from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.datapipes.transforms.mesh.transforms import (
-    SubsampleMesh,
     _compact_points,
 )
-from physicsnemo.mesh.calculus.measure import compose_measure_weights
+from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
 
 
 @register()
@@ -173,6 +172,7 @@ class SetDomainGlobalField(SetGlobalField):
     """
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Set the configured domain-level global fields."""
         reference = domain.interior.points
         new_gd = domain.global_data.clone()
         new_gd.update(self._fields.to(device=reference.device, dtype=reference.dtype))
@@ -250,6 +250,7 @@ class ComputeFreestreamDirection(MeshTransform):
         return new_mesh
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Derive the flow direction from domain-level velocity metadata."""
         new_gd = domain.global_data.clone()
         new_gd[self._output_field] = self._direction(domain.global_data)
         return DomainMesh(
@@ -288,8 +289,12 @@ class SplitInteriorSupport(MeshTransform):
     ``examples/cfd/mesh_transformer/research/transfer_program/studies/computational_support``).
     """
 
-    def __init__(self, n_support: int, boundary_name: str = "support",
-                 point_data_fields: tuple[str, ...] = ("sdf", "sdf_normals")) -> None:
+    def __init__(
+        self,
+        n_support: int,
+        boundary_name: str = "support",
+        point_data_fields: tuple[str, ...] = ("sdf", "sdf_normals"),
+    ) -> None:
         super().__init__()
         if n_support <= 0:
             raise ValueError("n_support must be positive")
@@ -297,10 +302,13 @@ class SplitInteriorSupport(MeshTransform):
         self.boundary_name = boundary_name
         self.point_data_fields = tuple(point_data_fields)
 
-    def __call__(self, mesh: Mesh) -> Mesh:  # bare Mesh: identity (support needs a DomainMesh)
+    def __call__(
+        self, mesh: Mesh
+    ) -> Mesh:  # bare Mesh: identity (support needs a DomainMesh)
         return mesh
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Split interior samples into support inputs and prediction queries."""
         interior = domain.interior
         n = interior.points.shape[0]
         if n <= self.n_support:
@@ -310,23 +318,35 @@ class SplitInteriorSupport(MeshTransform):
         idx = torch.arange(n, device=interior.points.device)
         support = interior.slice_points(idx[: self.n_support])
         queries = interior.slice_points(idx[self.n_support :])
-        keep = {k: support.point_data[k] for k in self.point_data_fields if k in support.point_data.keys()}
+        keep = {
+            k: support.point_data[k]
+            for k in self.point_data_fields
+            if k in support.point_data.keys()
+        }
         missing = [k for k in self.point_data_fields if k not in keep]
         if missing:
-            raise KeyError(f"SplitInteriorSupport: interior point_data lacks {missing!r}")
+            raise KeyError(
+                f"SplitInteriorSupport: interior point_data lacks {missing!r}"
+            )
         support_mesh = Mesh(
             points=support.points,
             cells=support.cells,
             point_data=TensorDict(keep, batch_size=[support.points.shape[0]]),
             global_data=interior.global_data,
         )
-        boundaries = dict(domain.boundaries.items()) if hasattr(domain.boundaries, "items") else {
-            name: domain.boundaries[name] for name in domain.boundary_names
-        }
+        boundaries = (
+            dict(domain.boundaries.items())
+            if hasattr(domain.boundaries, "items")
+            else {name: domain.boundaries[name] for name in domain.boundary_names}
+        )
         if self.boundary_name in boundaries:
-            raise KeyError(f"SplitInteriorSupport: boundary {self.boundary_name!r} already exists")
+            raise KeyError(
+                f"SplitInteriorSupport: boundary {self.boundary_name!r} already exists"
+            )
         boundaries[self.boundary_name] = support_mesh
-        return DomainMesh(interior=queries, boundaries=boundaries, global_data=domain.global_data)
+        return DomainMesh(
+            interior=queries, boundaries=boundaries, global_data=domain.global_data
+        )
 
     def extra_repr(self) -> str:
         return f"n_support={self.n_support}, boundary_name={self.boundary_name!r}, fields={self.point_data_fields!r}"
@@ -359,6 +379,7 @@ class BoundaryMeshToDomainMesh(MeshToDomainMesh):
     """
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:  # type: ignore[override]
+        """Convert the selected boundary into a surface prediction domain."""
         available = list(domain.boundary_names)
         if self._boundary_name not in available:
             raise KeyError(
@@ -454,8 +475,10 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
         w = torch.ones(len(indices), device=device)
         if n_rest > 0:
             w[self.n_prefix :] = (n - self.n_prefix) / n_rest
-        compose_measure_weights(mesh, w)
+        scale_measures(mesh, w)
         return mesh
+
+
 ### ---------------------------------------------------------------------
 ### Contract-axis probe transforms (prereg: contract_axis_probes_2026-08-09)
 ### Job-local additions for the 2026-08-06-defect4-incumbent task dir.
@@ -528,7 +551,7 @@ class BiasedSubsampleMesh(SubsampleMesh):
         mesh = mesh.slice_cells(indices)
         if self.compact:
             mesh = _compact_points(mesh)
-        compose_measure_weights(mesh, 1.0 / pi)
+        scale_measures(mesh, 1.0 / pi)
         return mesh
 
 
@@ -555,8 +578,13 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
 
     _WEIGHT_MODES = ("front_back", "area")
 
-    def __init__(self, n_cells_expected: int, bias: float = 10.0,
-                 compact: bool = True, weight_mode: str = "front_back") -> None:
+    def __init__(
+        self,
+        n_cells_expected: int,
+        bias: float = 10.0,
+        compact: bool = True,
+        weight_mode: str = "front_back",
+    ) -> None:
         super().__init__()
         self.n_cells_expected = int(n_cells_expected)
         self.bias = float(bias)
@@ -573,10 +601,13 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
             ### Degenerate (zero / non-finite) areas get weight 0: never
             ### drawn, so no 1/pi is ever formed for them.
             areas = mesh.cell_areas
-            return torch.where(torch.isfinite(areas), areas, torch.zeros_like(areas)).clamp_min(0.0)
+            return torch.where(
+                torch.isfinite(areas), areas, torch.zeros_like(areas)
+            ).clamp_min(0.0)
         x = mesh.cell_centroids[:, 0]
-        return torch.where(x < x.median(), torch.full_like(x, self.bias),
-                           torch.ones_like(x))
+        return torch.where(
+            x < x.median(), torch.full_like(x, self.bias), torch.ones_like(x)
+        )
 
     def __call__(self, mesh: Mesh) -> Mesh:
         n = mesh.n_cells
@@ -600,7 +631,7 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
         mesh = mesh.slice_cells(indices)
         if self.compact:
             mesh = _compact_points(mesh)
-        compose_measure_weights(mesh, 1.0 / kept_pi)
+        scale_measures(mesh, 1.0 / kept_pi)
         return mesh
 
 
@@ -639,7 +670,9 @@ class StratifiedSubsampleMesh(MeshTransform):
         span = (centroids.max(dim=0).values - lo).clamp_min(1e-12)
         levels = 2**self.bits
         q = ((centroids - lo) / span * (levels - 1)).round().long().clamp(0, levels - 1)
-        code = torch.zeros(centroids.shape[0], dtype=torch.int64, device=centroids.device)
+        code = torch.zeros(
+            centroids.shape[0], dtype=torch.int64, device=centroids.device
+        )
         for b in range(self.bits):
             for axis in range(3):
                 code |= ((q[:, axis] >> b) & 1) << (3 * b + axis)
@@ -657,14 +690,20 @@ class StratifiedSubsampleMesh(MeshTransform):
         offset = torch.rand((), device=order.device, generator=generator) * step
         ### floor(offset + k * step), k = 0..n-1: n distinct positions in [0, N)
         ### because step >= 1, each cell included with probability exactly n / N.
-        positions = torch.floor(
-            offset + step * torch.arange(self.n_cells, device=order.device, dtype=torch.float64)
-        ).long().clamp(max=n_before - 1)
+        positions = (
+            torch.floor(
+                offset
+                + step
+                * torch.arange(self.n_cells, device=order.device, dtype=torch.float64)
+            )
+            .long()
+            .clamp(max=n_before - 1)
+        )
         indices = order[positions].sort().values
         mesh = mesh.slice_cells(indices)
         if self.compact:
             mesh = _compact_points(mesh)
-        compose_measure_weights(mesh, n_before / self.n_cells)
+        scale_measures(mesh, n_before / self.n_cells)
         return mesh
 
     def extra_repr(self) -> str:
@@ -722,16 +761,27 @@ class FixedRandomPose(MeshTransform):
     def __call__(self, mesh: Mesh) -> Mesh:
         R = self._matrix(mesh.global_data, mesh.points)
         return mesh.transform(
-            R, transform_point_data=True, transform_cell_data=True,
-            transform_global_data=True, assume_invertible=True,
+            R,
+            transform_point_data=True,
+            transform_cell_data=True,
+            transform_global_data=True,
+            assume_invertible=True,
         )
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
-        gd = domain.global_data if self.key_field in domain.global_data.keys() else domain.interior.global_data
+        """Apply the sample-specific fixed pose to geometry and vector fields."""
+        gd = (
+            domain.global_data
+            if self.key_field in domain.global_data.keys()
+            else domain.interior.global_data
+        )
         R = self._matrix(gd, domain.interior.points)
         return domain.transform(
-            R, transform_point_data=True, transform_cell_data=True,
-            transform_global_data=True, assume_invertible=True,
+            R,
+            transform_point_data=True,
+            transform_cell_data=True,
+            transform_global_data=True,
+            assume_invertible=True,
         )
 
     def extra_repr(self) -> str:
@@ -797,7 +847,9 @@ class SetGlobalFieldsFromTable(MeshTransform):
     sample statistic).
     """
 
-    def __init__(self, table: str, fields: Sequence[str], key_field: str = "case_key") -> None:
+    def __init__(
+        self, table: str, fields: Sequence[str], key_field: str = "case_key"
+    ) -> None:
         super().__init__()
         self._table_path = str(table)
         self._fields = tuple(fields)
@@ -810,9 +862,12 @@ class SetGlobalFieldsFromTable(MeshTransform):
                 continue
             key = zlib.crc32(name.encode()) & 0x7FFFFFFF
             if key in self._rows:
-                raise ValueError(f"SetGlobalFieldsFromTable: case-key collision for {name!r} in {table}")
+                raise ValueError(
+                    f"SetGlobalFieldsFromTable: case-key collision for {name!r} in {table}"
+                )
             self._rows[key] = TensorDict(
-                {k: torch.as_tensor(row[k], dtype=torch.float64) for k in self._fields}, batch_size=[]
+                {k: torch.as_tensor(row[k], dtype=torch.float64) for k in self._fields},
+                batch_size=[],
             )
 
     def __call__(self, mesh: Mesh) -> Mesh:
@@ -823,9 +878,13 @@ class SetGlobalFieldsFromTable(MeshTransform):
             )
         key = int(mesh.global_data[self._key_field])
         if key not in self._rows:
-            raise KeyError(f"SetGlobalFieldsFromTable: case key {key} not in {self._table_path}")
+            raise KeyError(
+                f"SetGlobalFieldsFromTable: case key {key} not in {self._table_path}"
+            )
         new_gd = mesh.global_data.clone()
-        new_gd.update(self._rows[key].to(device=mesh.points.device, dtype=mesh.points.dtype))
+        new_gd.update(
+            self._rows[key].to(device=mesh.points.device, dtype=mesh.points.dtype)
+        )
         return mesh.with_data(global_data=new_gd)
 
     def extra_repr(self) -> str:
@@ -856,9 +915,14 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
     after the SDF transform. Bare ``Mesh`` inputs pass through unchanged.
     """
 
-    def __init__(self, n_points_expected: int, band_edges: Sequence[float] = (0.05, 0.4),
-                 band_weights: Sequence[float] = (1.0, 3.0, 8.0), sdf_field: str = "sdf",
-                 pi_field: str = "inclusion_pi") -> None:
+    def __init__(
+        self,
+        n_points_expected: int,
+        band_edges: Sequence[float] = (0.05, 0.4),
+        band_weights: Sequence[float] = (1.0, 3.0, 8.0),
+        sdf_field: str = "sdf",
+        pi_field: str = "inclusion_pi",
+    ) -> None:
         super().__init__()
         if n_points_expected <= 0:
             raise ValueError("n_points_expected must be positive")
@@ -866,8 +930,12 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
         weights = [float(w) for w in band_weights]
         if len(weights) != len(edges) + 1:
             raise ValueError("band_weights must have one more entry than band_edges")
-        if any(e2 <= e1 for e1, e2 in zip(edges, edges[1:])) or any(w <= 0 for w in weights):
-            raise ValueError("band_edges must increase and band_weights must be positive")
+        if any(e2 <= e1 for e1, e2 in zip(edges, edges[1:])) or any(
+            w <= 0 for w in weights
+        ):
+            raise ValueError(
+                "band_edges must increase and band_weights must be positive"
+            )
         self.n_points_expected = int(n_points_expected)
         self.band_edges = tuple(edges)
         self.band_weights = tuple(weights)
@@ -876,6 +944,7 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
         self._generator: torch.Generator | None = None
 
     def set_generator(self, generator: torch.Generator) -> None:
+        """Set the random generator used for inclusion draws."""
         self._generator = generator
 
     def _weights(self, sdf: torch.Tensor) -> torch.Tensor:
@@ -895,10 +964,13 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
                 pi[free] = (pi[free] * (1 + deficit / pi[free].sum())).clamp(max=1.0)
         return pi
 
-    def __call__(self, mesh: Mesh) -> Mesh:  # bare Mesh: identity (needs the DomainMesh interior)
+    def __call__(
+        self, mesh: Mesh
+    ) -> Mesh:  # bare Mesh: identity (needs the DomainMesh interior)
         return mesh
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Subsample interior points and correct explicit quadrature measures."""
         interior = domain.interior
         n = interior.points.shape[0]
         if n <= self.n_points_expected:
@@ -918,45 +990,41 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
         kept = interior.slice_points(idx)
         pd = kept.point_data.clone()
         pd[self.pi_field] = pi[idx].to(kept.points.dtype)[:, None]
-        new_interior = Mesh(points=kept.points, cells=kept.cells, point_data=pd,
-                            global_data=interior.global_data)
-        return DomainMesh(interior=new_interior, boundaries=domain.boundaries,
-                          global_data=domain.global_data)
+        new_interior = Mesh(
+            points=kept.points,
+            cells=kept.cells,
+            point_data=pd,
+            global_data=interior.global_data,
+        )
+        if EFFECTIVE_MEASURE_KEY in new_interior.point_data:
+            scale_measures(new_interior, 1.0 / pi[idx], association="points")
+        return DomainMesh(
+            interior=new_interior,
+            boundaries=domain.boundaries,
+            global_data=domain.global_data,
+        )
 
     def extra_repr(self) -> str:
-        return (f"n_points_expected={self.n_points_expected}, band_edges={self.band_edges}, "
-                f"band_weights={self.band_weights}, sdf_field={self.sdf_field!r}")
+        return (
+            f"n_points_expected={self.n_points_expected}, band_edges={self.band_edges}, "
+            f"band_weights={self.band_weights}, sdf_field={self.sdf_field!r}"
+        )
 
 
 @register()
 class ComposeQuadratureMeasure(MeshTransform):
-    r"""Write each mesh's Horvitz–Thompson-corrected cell measure to ``cell_data``.
+    """Materialize the shared effective cell measure for model field lookup.
 
-    ``cell_areas`` of a subsampled boundary sum to the area of the kept cells,
-    not of the body: with 10,000 of N cells kept, the sum is ``10,000/N`` of
-    the surface area. The reader records the inverse inclusion probability of
-    every subsampling stage in ``cell_data["_measure_weights"]``
-    (:mod:`physicsnemo.mesh.calculus.measure`), and the effective cell measure
-    ``cell_areas * _measure_weights`` is an unbiased estimate of the full-mesh
-    measure whose sum is the surface area. ISLA's routing softmax and the
-    similarity gauge are invariant to the per-sample factor and never noticed
-    the difference; the reference configuration's measure-weighted length unit
-    (``scale_mode="rms_distance"``, the weighted RMS pairwise distance; and
-    the optional ``"total_measure"``, ``L = sqrt(sum w)``) is not, and needs
-    the corrected measure (notebook #sec-nb-relint-void, 2026-09-13).
-
-    Writes ``cell_data[output_field]`` on every mesh that has cells; meshes
-    without cells (point-cloud interiors) are returned unchanged. Point
-    ``forward_kwargs.measure_weights`` at ``boundaries.<name>.cell_data.<output_field>``.
+    Readers and samplers have already applied their corrections through the
+    mesh measure API. This adapter only ensures the complete measure is stored
+    under the shared key; it does not normalize it or apply another factor.
+    Meshes without cells are unchanged, including point-cloud interiors.
     """
 
-    def __init__(self, output_field: str = "quadrature_measure"):
-        self.output_field = output_field
-
     def __call__(self, mesh: Mesh) -> Mesh:
-        if mesh.cells is None or mesh.n_cells == 0:
+        if mesh.n_cells == 0:
             return mesh
-        from physicsnemo.mesh.calculus.measure import cell_measures
+        from physicsnemo.mesh.calculus.measure import cell_measures, set_cell_measures
 
-        mesh.cell_data[self.output_field] = cell_measures(mesh).to(mesh.points.dtype)
+        set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype))
         return mesh

@@ -51,18 +51,17 @@ from typing import NamedTuple
 import hydra
 import pytest
 import torch
-from hydra import compose, initialize_config_dir
-from omegaconf import DictConfig, OmegaConf
-from tensordict import TensorDict
-
-from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
-from physicsnemo.mesh import DomainMesh, Mesh
-
 from collate import build_collate_fn
 from datasets import _apply_dataset_reader_overrides
+from hydra import compose, initialize_config_dir
 from loss import LossCalculator
+from omegaconf import DictConfig, OmegaConf
 from output_normalize import normalize_output_to_tensordict
+from tensordict import TensorDict
 from utils import field_dim
+
+from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -155,7 +154,7 @@ def _surface_domain_mesh(
     (``*_mw``) templates consume as ``forward_kwargs.measure_weights``.
     """
     domain = make_surface_domain_mesh(target_config, n_cells=n_cells)
-    domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = torch.rand(n_cells) + 0.5
+    domain.interior.point_data[EFFECTIVE_MEASURE_KEY] = torch.rand(n_cells) + 0.5
     return domain
 
 

@@ -392,18 +392,31 @@ forward_kwargs:
   points: interior.points
   normals: boundaries.vehicle.cell_data.normals
   global_vectors: global_data.U_inf_dir
-  measure_weights: interior.point_data._target_quadrature_measure
+  measure_weights: interior.point_data._effective_measure
 ```
 
 `U_inf_dir` is the unit freestream direction, written by
 `ComputeFreestreamDirection` in the surface dataset YAMLs (`U_inf` stays
 physical, so inference-side re-dimensionalization is unaffected).
-`_target_quadrature_measure` is the Horvitz-Thompson cell measure that
+`_effective_measure` is the Horvitz-Thompson cell measure that
 `MeshToDomainMesh` records for the subsampled interior points. It carries
 the represented surface measure through subsampling for routing and
 geometry scaling. The volume reference reads the equivalent
-`boundaries.vehicle.cell_data.quadrature_measure` written by
+`boundaries.vehicle.cell_data._effective_measure` written by
 `ComposeQuadratureMeasure` in `datasets/drivaer_ml_volume_reference.yaml`.
+Both fields store complete measures, including all sampling corrections; do not
+multiply them by cell area again. Explicit point measures carry their represented
+dimension and follow geometric scaling, including physical-coordinate inference
+exports. Native volume query points have no implied volume measure.
+
+For cached meshes or saved configuration overrides from before this unification,
+convert `_measure_weights` to `cell_areas * weights` and remove the old key;
+rename centroid `_target_quadrature_measure` to `_effective_measure` using
+`set_point_measures(..., dimension=2)`. Update field mappings to the paths above
+and remove the old `ComposeQuadratureMeasure.output_field` option. The
+[mesh calculus documentation](../../../../docs/api/mesh/calculus.rst)
+provides conversion examples. ISLA's model parameters and checkpoint layout
+are unchanged.
 
 **Variants.** Constant gauge (`isla_surface_constant_gauge.yaml`):
 `frame_mode: centered`, `scale_mode: reference_length`, `reference_length: 8.0`

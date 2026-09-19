@@ -21,7 +21,7 @@
 # Copy of geotransolver_surface.yaml with one declared delta: the slice
 # pooling in every GALE block and in the geometry tokenizer weights each
 # point by its quadrature measure (cell area x sampling weight, the same
-# `_target_quadrature_measure` tensor ISLA consumes), so slice tokens are
+# `_effective_measure` tensor ISLA consumes), so slice tokens are
 # surface integrals rather than means over the sampler's draw. The stock
 # pooling counts every sampled point equally and its error grows with the
 # sampling-density skew; this is the principled, measure-consistent
@@ -47,7 +47,7 @@ forward_kwargs:
     - boundaries.vehicle.cell_data.normals
   local_positions: interior.points
   global_embedding: global_data.U_inf
-  measure_weights: interior.point_data._target_quadrature_measure
+  measure_weights: interior.point_data._effective_measure
 
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver

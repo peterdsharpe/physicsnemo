@@ -55,9 +55,9 @@ import torch
 from tensordict import TensorDict
 from utils import FieldType
 
-from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.datapipes.keys import as_nested_key, format_leaf_keys
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, point_measures
 
 ### ---------------------------------------------------------------------------
 ### Path walking
@@ -305,8 +305,8 @@ def extract_target_measure(domain: DomainMesh | Mesh) -> torch.Tensor | None:
     effective source-cell measure under a private bookkeeping key. Native
     point-cloud domains have no implied measure and return ``None``.
     """
-    source_td, _ = _target_point_data(domain)
-    return source_td.get(TARGET_QUADRATURE_MEASURE_KEY, None)
+    mesh = domain.interior if isinstance(domain, DomainMesh) else domain
+    return point_measures(mesh) if EFFECTIVE_MEASURE_KEY in mesh.point_data else None
 
 
 def extract_targets(

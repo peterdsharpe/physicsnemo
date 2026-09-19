@@ -29,7 +29,6 @@ from tensordict import TensorDict
 
 import physicsnemo.datapipes as dp
 from physicsnemo.datapipes.transforms.mesh import (
-    TARGET_QUADRATURE_MEASURE_KEY,
     ComputeSurfaceNormals,
     DropMeshFields,
     MeshToDomainMesh,
@@ -39,6 +38,7 @@ from physicsnemo.datapipes.transforms.mesh import (
     SetGlobalField,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 
 
 def _surface_mesh() -> Mesh:
@@ -278,11 +278,9 @@ class TestMeshToDomainMesh:
     def test_nested_target_moved_to_interior(self):
         mesh = _surface_mesh()
         domain = MeshToDomainMesh(cell_data_targets=["solution.pMeanTrim"])(mesh)
-        ### This branch's MeshToDomainMesh also materializes the private target
-        ### quadrature measure beside the centroid queries.
         assert _leaves(domain.interior.point_data) == {
             ("solution", "pMeanTrim"),
-            TARGET_QUADRATURE_MEASURE_KEY,
+            EFFECTIVE_MEASURE_KEY,
         }
         boundary = domain.boundaries["vehicle"]
         assert ("solution", "pMeanTrim") not in boundary.cell_data

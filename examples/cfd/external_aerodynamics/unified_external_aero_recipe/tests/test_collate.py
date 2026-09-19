@@ -40,11 +40,11 @@ from collate import _add_batch_dim_token, build_collate_fn
 from tensordict import TensorDict
 
 from physicsnemo.datapipes.transforms.mesh import (
-    TARGET_QUADRATURE_MEASURE_KEY,
     MeshToDomainMesh,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus import cell_measures
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 
 ### ---------------------------------------------------------------------------
 ### Fixtures
@@ -153,8 +153,9 @@ class TestTensorInputCollate:
         assert tuple(batch["targets"]["wss"].shape) == (1, 6, 3)
 
     def test_target_measure_gets_one_matching_batch_dim(self, domain):
+        """Add the same batch dimension to tensor targets and their measures."""
         measure = torch.arange(1, 7, dtype=torch.float32)
-        domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = measure
+        domain.interior.point_data[EFFECTIVE_MEASURE_KEY] = measure
         collate = build_collate_fn(
             "tensors",
             {"geometry": "interior.points"},
@@ -256,8 +257,9 @@ class TestMeshInputCollate:
         assert tuple(batch["targets"]["wss"].shape) == (6, 3)
 
     def test_target_measure_stays_aligned_and_unbatched(self, domain):
+        """Keep point measures aligned without adding a batch axis for mesh inputs."""
         measure = torch.arange(1, 7, dtype=torch.float32)
-        domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = measure
+        domain.interior.point_data[EFFECTIVE_MEASURE_KEY] = measure
         collate = build_collate_fn(
             "mesh",
             {"prediction_points": "interior.points"},
@@ -270,6 +272,7 @@ class TestMeshInputCollate:
         assert torch.equal(batch["target_measure"], measure)
 
     def test_trace_identity_keeps_query_target_and_measure_in_cell_order(self):
+        """Preserve cell order across query locations, targets, and measures."""
         source = Mesh(
             points=torch.tensor(
                 [

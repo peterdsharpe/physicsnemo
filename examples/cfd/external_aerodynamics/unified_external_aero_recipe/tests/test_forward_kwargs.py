@@ -35,8 +35,8 @@ from forward_kwargs import (
 )
 from tensordict import TensorDict
 
-from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 
 ### ---------------------------------------------------------------------------
 ### Fixtures
@@ -421,12 +421,14 @@ class TestExtractTargets:
         assert set(result.keys()) == {"pressure"}
 
     def test_private_target_measure_is_extracted_separately(self, simple_domain):
+        """Read effective measures separately from supervised target fields."""
         measure = torch.linspace(0.1, 1.0, simple_domain.interior.n_points)
-        simple_domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = measure
+        simple_domain.interior.point_data[EFFECTIVE_MEASURE_KEY] = measure
 
         assert extract_target_measure(simple_domain) is measure
         targets = extract_targets(simple_domain, {"pressure": "scalar"})
         assert set(targets.keys()) == {"pressure"}
 
     def test_native_point_cloud_has_no_implied_target_measure(self, simple_domain):
+        """Keep native point-cloud quadrature absent unless explicitly supplied."""
         assert extract_target_measure(simple_domain) is None

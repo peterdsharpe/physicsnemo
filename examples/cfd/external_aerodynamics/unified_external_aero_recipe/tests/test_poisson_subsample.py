@@ -33,9 +33,8 @@ from domain_transforms import PoissonBiasedSubsampleMesh
 from physicsnemo.datapipes.transforms.mesh.transforms import _compact_points
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import (
-    cell_measure_weights,
     cell_measures,
-    compose_measure_weights,
+    scale_measures,
 )
 
 
@@ -82,7 +81,7 @@ def _reference_front_back(mesh: Mesh, n_expected: int, bias: float, seed: int) -
     keep = torch.rand(n, generator=g) < pi
     indices = keep.nonzero(as_tuple=True)[0]
     out = _compact_points(mesh.slice_cells(indices))
-    compose_measure_weights(out, 1.0 / pi[indices])
+    scale_measures(out, 1.0 / pi[indices])
     return out
 
 
@@ -98,7 +97,7 @@ def test_area_mode_inclusion_proportional_to_area():
     sub = tf(mesh)
     assert 0 < sub.n_cells < mesh.n_cells
     # weight_i = 1/pi_i = total_area / (n_expected * area_i)
-    prod = cell_measure_weights(sub) * sub.cell_areas
+    prod = cell_measures(sub)
     expected = areas.sum() / n_expected
     torch.testing.assert_close(
         prod, torch.full_like(prod, expected.item()), rtol=1e-4, atol=0.0
@@ -149,9 +148,10 @@ def test_default_front_back_mode_is_bit_identical():
         assert got.n_cells == ref.n_cells
         assert torch.equal(got.points, ref.points)
         assert torch.equal(got.cells, ref.cells)
-        assert torch.equal(cell_measure_weights(got), cell_measure_weights(ref))
+        assert torch.equal(cell_measures(got), cell_measures(ref))
 
 
 def test_invalid_weight_mode_rejected():
+    """Reject unsupported sampling-weight modes."""
     with pytest.raises(ValueError, match="weight_mode"):
         PoissonBiasedSubsampleMesh(n_cells_expected=10, weight_mode="volume")

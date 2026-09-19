@@ -31,11 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary-condition scalars, and interior query modes. The API is
   keyword-only; the reference configuration and its variants are documented
   in the unified external-aerodynamics recipe.
+- `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
+  complete effective measure on the interior under the mesh-owned
+  `_effective_measure` point-data key, so
+  integrals and weighted losses over the query points remain possible after
+  the cells are gone.
 - Unified external aero recipe: `NonDimensionalizeByMetadata` gains
   `scale_geometry` so chained instances scale the geometry once; inference
   re-dimensionalizes with the field maps of every instance.
 
 ### Changed
+
+- Mesh integration uses a shared `_effective_measure` field for complete cell
+  and point measures. Cell measures fall back to geometry; point measures are
+  explicit and independent of connectivity. `Mesh.integrate_samples` evaluates
+  point quadrature separately from existing cell and vertex-field integration.
+  Sampling, centroid conversion, geometric transformations, subdivision and
+  GLOBE use the mesh-owned measure API. Point measures carry their represented
+  dimension so geometric scaling preserves their physical units.
 
 - `Mesh.slice_points` picks its cell-remapping algorithm by mesh shape: the
   full-mesh lookup table as before, or a binary search over the kept ids when the

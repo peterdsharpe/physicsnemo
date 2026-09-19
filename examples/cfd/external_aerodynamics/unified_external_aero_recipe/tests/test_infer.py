@@ -35,8 +35,12 @@ from nondim import NonDimensionalizeByMetadata, freestream_scales
 from omegaconf import OmegaConf
 from tensordict import TensorDict
 
-from physicsnemo.datapipes.transforms.mesh import TARGET_QUADRATURE_MEASURE_KEY
 from physicsnemo.mesh import DomainMesh
+from physicsnemo.mesh.calculus.measure import (
+    EFFECTIVE_MEASURE_KEY,
+    POINT_MEASURE_DIMENSION_KEY,
+    set_point_measures,
+)
 
 _RECIPE = Path(__file__).resolve().parent.parent
 _DATASETS = _RECIPE / "datasets"
@@ -282,7 +286,9 @@ def test_check_summary_in_range_accepts_a_true_mean():
     # A single sample: mean == min == max, roundoff-free.
     infer._check_summary_in_range({"k": 0.5}, {"k": 0.5}, {"k": 0.5}, 1, "cpu")
     # Nothing evaluated: nothing to check.
-    infer._check_summary_in_range({"k": 0.0}, {"k": float("inf")}, {"k": float("-inf")}, 0, "cpu")
+    infer._check_summary_in_range(
+        {"k": 0.0}, {"k": float("inf")}, {"k": float("-inf")}, 0, "cpu"
+    )
 
 
 def test_check_summary_in_range_refuses_an_impossible_mean():
@@ -383,12 +389,12 @@ def test_attach_and_save_restores_center_after_geometry_scale(tmp_path):
     torch.testing.assert_close(reloaded.global_data["center"], center)
 
 
-def test_attach_and_save_drops_private_target_measure(tmp_path):
-    """Training-geometry quadrature metadata must not leak into artifacts."""
+def test_attach_and_save_preserves_physical_point_measures(tmp_path):
+    """Exported quadrature remains usable after restoring physical geometry."""
     targets = {"pressure": "scalar", "wss": "vector"}
     domain = make_surface_domain_mesh(targets, n_cells=16)
-    domain.interior.point_data[TARGET_QUADRATURE_MEASURE_KEY] = torch.ones(
-        domain.interior.n_points
+    set_point_measures(
+        domain.interior, torch.ones(domain.interior.n_points), dimension=2
     )
     phys = domain.interior.point_data.select("pressure", "wss")
     out_path = tmp_path / "measure_free.pdmsh"
@@ -403,4 +409,8 @@ def test_attach_and_save_drops_private_target_measure(tmp_path):
     )
 
     reloaded = DomainMesh.load(str(out_path))
-    assert TARGET_QUADRATURE_MEASURE_KEY not in reloaded.interior.point_data
+    torch.testing.assert_close(
+        reloaded.interior.point_data[EFFECTIVE_MEASURE_KEY],
+        torch.ones(domain.interior.n_points) * domain.global_data["L_ref"] ** 2,
+    )
+    assert int(reloaded.interior.global_data[POINT_MEASURE_DIMENSION_KEY]) == 2
