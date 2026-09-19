@@ -399,8 +399,12 @@ def build_dataset(
 
     transforms = resolved if resolved else None
     return MeshDataset(
-        reader, transforms=transforms, device=device, num_workers=num_workers,
-        cache_host=cache_host, cache_host_views=cache_host_views,
+        reader,
+        transforms=transforms,
+        device=device,
+        num_workers=num_workers,
+        cache_host=cache_host,
+        cache_host_views=cache_host_views,
     )
 
 

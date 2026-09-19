@@ -80,6 +80,7 @@ from physicsnemo.datapipes.transforms.mesh.transforms import (
     _compact_points,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
+from physicsnemo.mesh.geometry import compute_cell_areas
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, scale_measures
 
 
@@ -404,30 +405,36 @@ class BoundaryMeshToDomainMesh(MeshToDomainMesh):
 
 @register()
 class DropDegenerateCells(MeshTransform):
-    r"""Drop cells whose fp32 area is non-finite or non-positive.
+    r"""Drop cells with non-finite or degenerate current geometry.
 
-    DrivAerML surfaces contain sliver cells with areas down to ~1e-11 --
-    deep enough in cross-product cancellation territory that any fp32
-    coordinate perturbation (centering, rotation, device-specific
-    evaluation order) can round the recomputed area to exact zero, which
-    downstream measure validation rightly rejects. Place this LAST in the
-    transform chain so it sees exactly the points the model will: the
-    same tensor, device, and kernel produce the same areas at encode.
-    Dropped cells carry ~1e-12 of the total measure, so the effective
-    quadrature is unchanged to fp32 precision.
+    Recompute geometric measures from the current coordinates, in the mesh's
+    dtype, using the same area routine as ``Mesh.cell_areas``. Its direct
+    triangle area calculation preserves thin valid faces without Gram
+    cancellation. Cached areas are ignored: centering, rotation, and scaling
+    can collapse a face through rounding. Cells whose area is zero or
+    non-finite in the mesh's dtype cannot supply usable quadrature weights.
+
+    Place this last in the transform chain so it sees the same coordinates
+    the model will. Meshes without rejected cells pass through unchanged.
+    Only cells and their associated data are sliced; vertices are retained.
     """
 
     def __call__(self, mesh: Mesh) -> Mesh:
-        areas = mesh.cell_areas
-        keep = torch.isfinite(areas) & (areas > 0)
+        if mesh.n_cells == 0:
+            return mesh
+        cell_points = mesh.points[mesh.cells]
+        edges = cell_points[:, 1:] - cell_points[:, :1]
+        finite_points = torch.isfinite(cell_points).all(dim=(-2, -1))
+        areas = compute_cell_areas(edges)
+        keep = finite_points & torch.isfinite(areas) & (areas > 0)
         n_bad = int((~keep).sum())
         if n_bad == 0:
             return mesh
         warn(
             f"DropDegenerateCells: dropping {n_bad} cell(s) with "
-            "non-finite or non-positive fp32 area"
+            "non-finite or degenerate geometry"
         )
-        return mesh.slice_cells(keep.nonzero(as_tuple=True)[0])
+        return mesh.slice_cells(keep)
 
 
 @register()

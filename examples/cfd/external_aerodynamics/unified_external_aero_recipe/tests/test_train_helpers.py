@@ -107,6 +107,90 @@ def test_forward_pass_preserves_query_measure_in_loss_metrics_and_gradients():
     torch.testing.assert_close(predictions.grad, torch.tensor([[[0.0], [1.0]]]))
 
 
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA required"
+            ),
+        ),
+    ],
+)
+def test_isla_training_on_filtered_thin_triangles(device):
+    """Thin faces keep positive measures through filtering, ISLA, and weighted loss."""
+    from collate import build_collate_fn
+    from domain_transforms import DropDegenerateCells
+
+    from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
+    from physicsnemo.experimental.nn.isla import ISLA
+    from physicsnemo.mesh.calculus import scale_measures
+
+    mesh = Mesh(
+        points=torch.tensor(
+            [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1e-4, 0.0],
+                [3.0, 0.0, 0.0],
+                [4.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0],
+                [6.0, 0.0, 0.0],
+                [5.0, 1.0, 0.0],
+            ],
+            device=device,
+        ),
+        cells=torch.arange(9, device=device).reshape(3, 3),
+        cell_data={"pressure": torch.tensor([1.0, 2.0, 3.0], device=device)},
+        global_data={"U_inf_dir": torch.tensor([1.0, 0.0, 0.0], device=device)},
+    )
+    scale_measures(mesh, 3.0)
+    with pytest.warns(UserWarning, match="dropping 1 cell"):
+        filtered = DropDegenerateCells()(mesh)
+    filtered.cell_data["normals"] = filtered.cell_normals
+    domain = MeshToDomainMesh(cell_data_targets=["pressure"])(filtered)
+    targets = {"pressure": "scalar"}
+    batch = build_collate_fn(
+        "tensors",
+        {
+            "points": "interior.points",
+            "normals": "boundaries.vehicle.cell_data.normals",
+            "global_vectors": "global_data.U_inf_dir",
+            "measure_weights": "interior.point_data._effective_measure",
+        },
+        targets,
+    )([(domain, {})])
+    measure = batch["target_measure"]
+    torch.testing.assert_close(measure, measure.new_tensor([[0.00015, 1.5]]))
+    torch.testing.assert_close(
+        batch["forward_kwargs"]["measure_weights"].reshape_as(measure), measure
+    )
+    model = ISLA(
+        hidden=16, n_layers=1, n_slices=4, out_vectors=0, geo_kernel="eager"
+    ).to(device)
+    with torch.no_grad():
+        prediction = model(**batch["forward_kwargs"])[..., 0]
+        error = prediction - batch["targets"]["pressure"]
+        expected = (measure * error.square()).sum() / measure.sum()
+    loss, _, _ = train.forward_pass(
+        batch,
+        model,
+        "float32",
+        train.LossCalculator(targets, loss_type="mse"),
+        train.MetricCalculator(targets, metrics=["mae"]),
+        output_type="tensors",
+        target_config=targets,
+    )
+    torch.testing.assert_close(loss, expected)
+    loss.backward()
+    gradients = [p.grad for p in model.parameters() if p.grad is not None]
+    assert gradients and all(torch.isfinite(g).all() for g in gradients)
+    assert any((g != 0).any() for g in gradients)
+
+
 ### ---------------------------------------------------------------------------
 ### _walk_batch_for_logging
 ### ---------------------------------------------------------------------------

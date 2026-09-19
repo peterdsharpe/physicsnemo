@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   boundary-condition scalars, and interior query modes. The API is
   keyword-only; the reference configuration and its variants are documented
   in the unified external-aerodynamics recipe.
+- Adds `DropDegenerateCells` to the unified external aerodynamics surface
+  pipelines, dropping collapsed or non-finite cells before centroid conversion.
 - `MeshToDomainMesh` in `cell_centroids` mode records each source cell's
   complete effective measure on the interior under the mesh-owned
   `_effective_measure` point-data key, so
@@ -94,6 +96,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the final epoch is always checkpointed. Resume metadata reports
   scheduler/scaler restoration; exact trajectory continuation is unverified
   because RNG and stochastic data state are not restored.
+- Triangle areas use direct area components and a rescaled norm, preserving
+  thin faces and their quadrature measures without Gram cancellation or
+  overflow/underflow in the norm.
+
 - Fixes mesh dtype handling: preserves integer-coordinate precision, normalizes
   connectivity safely, and rejects integer `.to()` casts. Floating/complex casts
   preserve the source mesh.
