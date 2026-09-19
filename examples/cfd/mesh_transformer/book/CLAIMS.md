@@ -1805,3 +1805,12 @@ interior control @sec-nb-udrv-int-prereg.
   evidence lane is P200KFLEET (#sec-nb-proto200k-fleet-prereg). Until a row's
   200,000-cell lanes report, its 10,000-cell number is labeled "exploration
   budget".
+
+## HEADS-435 (2026-09-18; results/heads435_reduction_2026-09-18.json)
+- 435 cars, 10k exploration budget, fp32 sample-frame probe, two seeds:
+  four routings 0.0540 (0.0537/0.0543; 0.975x ISLA; density 1.23) = carries;
+  eight routings 0.0563 (0.0578/0.0548; 1.017x ISLA; density 1.20) = null.
+- Rule: never attribute the anatomy's residual to "routing form"; write
+  "unattributed; multi-head routing tested null at full data". ISLA stays
+  single-routing; n_heads lives on branch isla-heads only. Supersedes the
+  FORM-HEADS one-car reading as a statement about the trained function.

@@ -19364,3 +19364,42 @@ zip-validated, an incomplete epoch's files move aside together, and the lane
 resumes from the newest intact epoch, losing at most two epochs. The two
 blocked lanes were repaired by hand the same way and resumed; a sweep of all
 eighty lanes found no other incomplete epoch.
+
+## 2026-09-18 — Verdict, HEADS-435: eight routings per block are null at 435 cars (0.0563 against ISLA's 0.0554) while four carry (0.0540); the one-car ordering does not transfer, and multi-head routing stays a research option {#sec-nb-heads435-verdict}
+
+**Setting.** HEADS-435 (@sec-nb-heads435-prereg) trained ISLA with four
+and eight independent routings per block on 435 DrivAerML cars at the
+exploration budget of 10,000 cells, two seeds each, and scored them in
+float32 on the sample-frame probe against ISLA's 0.0554
+(results/heads435_reduction_2026-09-18.json). The one-car study
+(@sec-nb-formheads-verdict) had found eight routings 19% better than one and
+monotone in the head count, and the preregistration's bars were written for
+the eight-head pair: closes at or below 0.0530, carries at or below 0.0543,
+null at or above 0.0549.
+
+**What we saw.** Four routings score **0.0540** (seeds 0.0537 and 0.0543),
+0.975x ISLA, the carries band, with density factor 1.23 inside the contract
+band. Eight routings score **0.0563** (seeds 0.0578 and 0.0548), 1.017x
+ISLA, the **null** band, with density factor 1.20; GeoTransolver ÷ ISLA
+would fall from 0.919 to 0.904 with eight heads and rise to 0.943 with
+four. The seed spread of the eight-head pair (0.003) is the largest of any
+ISLA arm at this rung.
+
+**Reading.** The one-car floor overstated the routing-multiplicity effect
+and inverted its ordering at full data: eight heads, the best one-car arm,
+are worse than one at 435 cars, while four heads recover about half the
+one-car gain. Whatever the one-car instrument measures (capacity to fit one
+geometry), it is not the form deficit of the trained function across cars,
+and the deficit anatomy's remaining point is therefore **unattributed**
+rather than "the single-routing form". By the preregistration's rule the
+option is not promoted: ISLA stays single-routing, `n_heads` stays on the
+research branch `isla-heads`, and the four-head result is recorded as a
+carried variant at the exploration budget. Two facts argue against pursuing
+it further now: the reporting protocol has moved to 200,000 cells, where
+the whole form residual is under a point (@sec-nb-tokproto-verdict), and the
+fused geometry kernel that keeps ISLA at GeoTransolver's step cost at that
+budget is single-routing only. If the 200,000-cell standing leaves a gap
+the anatomy cannot place, a four-head lane at that budget is the test.
+
+**Status.** HEADS-435 closed as null on its preregistered arm; the ledger
+records the four-head carry.

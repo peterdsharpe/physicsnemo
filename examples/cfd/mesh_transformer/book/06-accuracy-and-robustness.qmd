@@ -139,8 +139,8 @@ isla_impr = 1 - qv["isla_ref"]["strat"]["10000"]["mean"] / qv["isla_ref"]["unif"
 #| output: asis
 print(f"**The {gap10:.0f}-point gap at the reference size is not one thing. About {(p_draw + p_count) / gap10:.0%} of it is "
       f"finite-sample noise that vanishes with a better draw or more cells; of the rest, about {p_pos:.1f} points are the positional "
-      f"information the invariance contracts deny the model and about {p_form:.1f} point is the single-routing *form* of its slice "
-      "attention, the structural choice of one routing per layer where Transolver uses several; none is the frame.** Each part "
+      f"information the invariance contracts deny the model and about {p_form:.1f} point is unattributed (the *form* of the slice "
+      "attention was the candidate; multi-head routing tested null at full data); none is the frame.** Each part "
       "was isolated by an experiment designed to move it and nothing else, and @fig-deficit-anatomy lays them end to end in the "
       "ratio's own units, points of GeoTransolver ÷ ISLA.\n")
 print("The reasoning runs from the outside in. The scoreboard's instrument is a 10,000-cell *independent* draw of each car's "
@@ -161,12 +161,10 @@ print(f"3. **Raw coordinates as a diagnostic.** Appending each cell's centered c
       "raw channel presupposes). That is the price of denying the model absolute position, and it is the honest cost of exact pose "
       f"invariance and sampling consistency. The diagnostic's own density factor rises to {eqp['density_factor']:.0f}x, showing what "
       "it reads; it is never a configuration.")
-print(f"4. **Routing multiplicity.** Transolver's physics attention routes each token through eight independent heads per layer; "
-      f"ISLA routes it once. On a one-car overfitting instrument, eight independent routings per block lower ISLA's one-car floor by "
-      f"{heads_gain:.0%} relative to a same-code single-routing control, monotone in the head count, and put it below both baselines "
-      f"at 40,000 evaluation cells. The remaining {p_form:.1f} point is therefore attributed to the single-routing form; whether the "
-      "gain transfers to 435 cars is a running study (@sec-program-status), and until it lands ISLA is "
-      "single-routing.\n")
+print(f"4. **Routing multiplicity, tested.** Transolver's physics attention routes each token through eight independent heads per "
+      f"layer; ISLA routes it once. On a one-car overfitting instrument eight independent routings per block lower ISLA's floor by "
+      f"{heads_gain:.0%}, but trained on 435 cars four routings score 0.975x ISLA and eight 1.017x, so the one-car ordering does not "
+      f"transfer and the remaining {p_form:.1f} point stays unattributed (@sec-nb-heads435-verdict). ISLA is single-routing.\n")
 print("The frame contributes nothing at the reference size: the centered frames the program measured sit within 1 to 2% of the "
       "reference, and at the scale corner the reference's excess against a rate-matched centered frame is the same few percent "
       "(the scale-corner note above).")
@@ -186,7 +184,7 @@ print("The frame contributes nothing at the reference size: the centered frames 
 #|   contracts deny (a raw-coordinate diagnostic on the legacy centered
 #|   variant, measured at 10,000 cells and shown against the fine-sample
 #|   residual), and the remainder, which
-#|   the one-car routing-multiplicity study attributes to the single-routing
+#|   multi-head routing was tested for and does not explain at full data (the
 #|   form. The frame's contribution is zero and is marked. How to read this:
 #|   the two left bars are noise the deployment can remove; the two right
 #|   bars are properties of the trained function, the first of which is the
@@ -200,7 +198,7 @@ parts = [
     ("draw variance of ISLA's slice integrals\n(stratified draw of the same 10,000 cells)", r_ind10, r_strat10, BLUE_LIGHT, ""),
     ("weight-spread count noise\n(40,000 cells instead of 10,000)", r_strat10, r_ind40, BLUE_LIGHT, ""),
     ("positional information the contracts deny\n(raw-coordinate diagnostic on the legacy centered variant, 10,000 cells)", r_ind40, r_pos, BLUE_PALE, "///"),
-    (f"single-routing form (remainder; eight routings\nlower the one-car floor by {heads_gain:.0%})", r_pos, 1.0, VIOLET, ""),
+    (f"unattributed remainder (multi-head routing\ntested null at 435 cars)", r_pos, 1.0, VIOLET, ""),
 ]
 fig, ax = plt.subplots(figsize=(10.4, 4.8))
 y = list(range(len(parts)))[::-1]
@@ -222,7 +220,7 @@ plt.show()
 The consequence for deployment is the recommendation of @sec-using-sampler:
 use the stratified draw, or more cells. The consequence for the
 architecture is stated in the thesis: a couple of points bought with the
-contracts, and a form point that the routing study may yet recover.
+contracts, and under a point that no tested mechanism explains.
 The 25 to 28% at 35 HiLift cases is a different mechanism, the mesher
 pattern where geometries recur (@sec-data-efficiency), and is priced there.
 

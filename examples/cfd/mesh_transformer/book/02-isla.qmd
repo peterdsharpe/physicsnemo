@@ -504,14 +504,16 @@ which is bitwise identical in outputs and gradients and halves peak memory
 (@sec-mt2-cost).
 :::
 
-::: {.callout-note collapse="true" title="Multi-head routing (under study, not on the mainline)"}
+::: {.callout-note collapse="true" title="Multi-head routing (tested, not adopted)"}
 Transolver's physics attention runs several independent routings per
-layer ("heads"). ISLA's mainline runs one. A research branch adds `n_heads`
-independent routings per block, each with its own anchors and invariants;
-on a one-car overfitting instrument eight heads lowered ISLA's floor by 19%
-relative to a same-code single-routing control, and a run at 435 cars is in
-progress (@sec-nb-formheads-verdict, @sec-program-status). Until that
-verdict lands, ISLA is single-routing.
+layer ("heads"). ISLA runs one. A research branch adds `n_heads`
+independent routings per block, each with its own anchors and invariants.
+On a one-car overfitting instrument eight heads lowered ISLA's floor by 19%
+relative to a same-code single-routing control; trained on 435 cars at the
+exploration budget, four heads scored 0.975x ISLA and eight heads 1.017x,
+so the one-car ordering did not transfer and the option was not promoted
+(@sec-nb-heads435-verdict). ISLA is single-routing, and the fused geometry
+kernel is single-routing only.
 :::
 
 ## Idea 6: vectors from an equivariant basis {#sec-mt2-heads}
@@ -826,7 +828,7 @@ training cases, two seeds, which was run on the legacy centered variant
 | the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centered configurations degrade 10 to 16x; that collapse is the plain-mean center alone (the legacy centered checkpoint with a measure-weighted center swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the baselines stay at 3 to 7x | against the legacy centered variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
 | measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
 | passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centered variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
-| single routing per layer (idea 3) | simplicity, the fused kernel | about two points of form against multi-head routing on the one-car instrument; under study | @sec-nb-formheads-verdict |
+| single routing per layer (idea 3) | simplicity, the fused kernel | nothing measurable at full data: four routings recover 2.5% at 435 cars, eight are 1.7% worse; not adopted | @sec-nb-heads435-verdict |
 
 ::: {.callout-note collapse="true" title="The flags that select these configurations"}
 | flag (default) | what it changes |
