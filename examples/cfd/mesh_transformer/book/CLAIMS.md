@@ -1878,3 +1878,8 @@ interior control @sec-nb-udrv-int-prereg.
 - Ladder at 200k, GT at its better rate (3e-3 on every rung): GT / ISLA = 0.83, 0.86, 0.92, 0.97 at
   27, 54, 109, 218 cars. Write ISLA's data efficiency as "a narrowing deficit that closes at full
   data", never as a win. The 435-car GT 3e-3 pair is the last open number.
+
+## PROTO-200K-FLEET wings, 35-case rung (2026-09-19; results/p200k_fleet_reduction_2026-09-19.json)
+- 200k: ISLA 0.1500, GT (3e-3) 0.1098, T 0.1101 -> GT/ISLA 0.73, T/ISLA 0.73; 10k was 0.72 / 0.75.
+- Rule: on the wings the budget was NOT the gap (ratio moved < 0.03); write the 27% deficit at 35 wings as
+  a property of the trained functions, not count noise; the mesher-pattern mechanism is the next study.
