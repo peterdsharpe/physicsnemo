@@ -20377,3 +20377,28 @@ lanes, before any ISLA number: GeoTransolver at width 512 trains at 51,
 on a GB300; the recipe's configurations do not carry `geo_kernel`
 explicitly and gain the key in the repository so the fused kernel can be
 selected without the append syntax.
+
+**Addendum, ISO-COST acceptance (2026-09-19, 14:30 PDT).** All thirty-six
+lanes are accepted (alive, no traceback, epochs 11 to 24). The training
+cost readouts from the first links, before any accuracy number, are
+already the cost half of the study (bf16, four GB300 GPUs per lane, one
+case per GPU-step; peak memory and step time from each lane's log):
+
+| model, width | 100k cells | 200k cells | 400k cells |
+|---|---|---|---|
+| ISLA fused, 192 | 13 GB, 0.11 to 0.14 s | 26 GB, 0.15 s | 52 GB, 0.26 s |
+| ISLA fused, 384 | 22 GB, 0.12 to 0.13 s | 43 GB, 0.17 to 0.19 s | 86 GB, 0.31 to 0.59 s |
+| GeoTransolver, 256 | 40 GB, 0.22 to 0.50 s | 80 GB, 0.39 to 0.41 s | 158 GB, 0.76 s |
+| GeoTransolver, 512 | 51 GB, 0.23 to 0.46 s | 100 GB, 0.44 to 0.55 s | 199 GB, 0.85 s |
+| Transolver, 256 | 27 GB, 0.09 to 0.87 s | (existing lanes) | 106 GB, 0.34 to 2.6 s |
+
+In training at matched cells ISLA with the fused kernel uses about a third
+of GeoTransolver's peak memory and a third of its step time (26 against 80
+GB and 0.15 against 0.40 s at 200,000 cells and default widths); doubling
+ISLA's width to 384 costs 1.6 to 1.7x memory and little time at the
+smaller counts. Every 400,000-cell lane fits on a GB300, GeoTransolver at
+width 512 with 80 GB to spare, so the memory frontier of the grid is not
+reached and the iso-memory comparison will rest on the fit rather than on
+an out-of-memory boundary. Step times at these early epochs are noisy
+(the ranges are the two seeds' latest readings); the reduction will take
+per-lane medians over the whole run.
