@@ -43,6 +43,19 @@
 input_type: tensors
 output_type: tensors
 
+# Learning rate (protocol, 2026-09-17; ceiling measured 2026-09-18): 1e-3 at
+# hidden 192. Pinned here because the recipe's default of 3e-3 (GeoTransolver's)
+# collapses ISLA within five epochs to a mean-field plateau (validation loss
+# 0.06 against 0.0008 at 1e-3; book notebook: lrref-verdict) and 1e-2 diverges.
+# Above hidden 192 use the width rule lr = 1e-3 x 192 / hidden (3.75e-4 at 512):
+# at width 512 the relative frame diverges at 1e-3 (routing hardens to one slice
+# per token), trains cleanly under the rule, and the rule costs the centered
+# variant nothing (notebook: relframe-divergence, corner-wlr, cg-wlr verdicts).
+# A CLI override still wins.
+training:
+  optimizer:
+    lr: 1.0e-3
+
 forward_kwargs:
   points: interior.points
   normals: boundaries.vehicle.cell_data.normals
@@ -59,11 +72,6 @@ model:
   mlp_ratio: 4
   frame_mode: relative
   scale_mode: total_measure
-  # Learning rate (protocol, 2026-09-17): 1e-3 at hidden 192. Above 192 use the
-  # width rule lr = 1e-3 x 192 / hidden (3.75e-4 at 512): at width 512 the
-  # relative frame diverges at 1e-3 (routing hardens to one slice per token),
-  # trains cleanly under the rule, and the rule costs the centered variant
-  # nothing (book notebook: relframe-divergence, corner-wlr, cg-wlr verdicts).
   # Rebuild the per-slice geometric invariants inside backward instead of
   # storing them: forward and gradients bitwise identical, lower peak training
   # memory for a modest step-time cost. Set false to trade memory for speed.

@@ -137,3 +137,35 @@ def test_isla_global_vector_is_produced_by_the_dataset_pipeline(model, dataset):
         if "ComputeFreestreamDirection" in t["_target_"] and t.get("output_field") == "U_inf_dir"
     ]
     assert producers, f"{dataset}.yaml never computes U_inf_dir; transforms: {[t['_target_'] for t in raw]}"
+
+
+@pytest.mark.parametrize(
+    "model, dataset",
+    [
+        ("isla_surface", "drivaer_ml_surface"),
+        ("isla_surface_reference", "drivaer_ml_surface"),
+        ("isla_volume", "drivaer_ml_volume_reference"),
+        ("isla_volume_support", "drivaer_ml_volume_support"),
+    ],
+)
+def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
+    """The recipe's default rate (3e-3, GeoTransolver's) collapses the relative frame to a mean-field
+    plateau within five epochs (LR-REF, 2026-09-18), so every ISLA config must carry its own 1e-3."""
+    cfg = _compose(model, dataset)
+    assert cfg.training.optimizer.lr == pytest.approx(1.0e-3)
+
+
+def test_cli_override_still_wins_over_the_pinned_rate():
+    with initialize_config_dir(
+        config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
+    ):
+        cfg = compose(
+            config_name="train",
+            overrides=[
+                "model=isla_surface",
+                "dataset=drivaer_ml_surface",
+                "+out_dim=5",
+                "training.optimizer.lr=3.75e-4",
+            ],
+        )
+    assert cfg.training.optimizer.lr == pytest.approx(3.75e-4)

@@ -42,6 +42,13 @@
 input_type: tensors
 output_type: tensors
 
+# Learning rate pinned at ISLA's protocol rate: the recipe default of 3e-3
+# collapses the relative frame to a mean-field plateau at width 192 (book
+# notebook: lrref-verdict; see isla_surface.yaml). Width rule above 192.
+training:
+  optimizer:
+    lr: 1.0e-3
+
 forward_kwargs:
   points: boundaries.vehicle.cell_centroids
   normals: boundaries.vehicle.cell_normals
