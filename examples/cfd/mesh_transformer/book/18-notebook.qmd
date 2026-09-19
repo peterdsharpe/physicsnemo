@@ -20235,3 +20235,66 @@ in the table above. A principled study of that trade, one that keeps the
 weighted estimator (and so the consistency) while lowering its variance, is
 the next node to preregister; a stratified or area-balanced *training*
 draw is the candidate.
+
+## 2026-09-19 — Preregistration, ISO-COST: error as a joint function of cells per case and width for ISLA and GeoTransolver at 435 cars, with step time and peak memory as the cost axes; does ISLA's memory advantage buy accuracy at equal cost, and does the training budget bind? {#sec-nb-isocost-prereg}
+
+**Setting.** At 200,000 cells ISLA uses 0.46x GeoTransolver's inference
+memory; with the fused geometry kernel (accuracy-neutral,
+@sec-nb-kernel-neutral-verdict) it also takes 0.86x the step time
+(@sec-mt2-cost). Peter asked (2026-09-19) whether that footprint buys
+accuracy at equal cost, which of cells and parameters ISLA converts into
+accuracy more cheaply, and whether the fixed 500-epoch budget binds. The
+program has two points on the cells axis at width 192 (10,000 to 200,000
+bought ISLA 19% and GeoTransolver 12%) and one width corner (512 wide,
+80,000 cells, within 3%), no joint fit, and no budget control at full data
+(ISLA at 3e-4 was still improving at epoch 500, @sec-nb-ratewindow-verdict).
+
+**Instrument** (`kernel/isocost_aga.sbatch`, 36 lanes, seeds 42 and 43,
+435 DrivAerML cars, bf16 training, chain-ahead links; float32 scoring at
+the 200,000-cell reporting protocol through the fleet pump; each lane's
+step time and peak memory read from its own log and GPU sampler):
+
+| arm | width | cells per case | learning rate | epochs |
+|---|---|---|---|---|
+| ISLA, fused kernel | 192 | 100k, 200k, 400k | 1e-3 | 500 |
+| ISLA, fused kernel | 384 | 100k, 200k, 400k | 5e-4 (width rule) | 500 |
+| GeoTransolver | 256 (default) | 100k, 400k (200k exists at 3e-3) | 3e-3 | 500 |
+| GeoTransolver | 512 | 100k, 200k, 400k | 1e-3 and 3e-3 (its better is kept) | 500 |
+| Transolver | 256 (default) | 100k, 400k (200k exists) | 3e-3 | 500 |
+| budget controls | default | 200k | as above | 1000 |
+
+Fit per model: error = a·N^(−α) + b·P^(−β) + c on the seed means, where N
+is cells per case and P parameters; report the iso-memory and iso-time
+frontiers (best error at each memory and each wall-clock budget across the
+grid). Lanes that run out of memory are recorded as such; they are data
+for the frontier, not failures.
+
+**Bars, written before the runs.**
+
+- **Cells exponent**: ISLA's α exceeds GeoTransolver's by at least 0.1
+  (the count-noise mechanism predicts ISLA converts cells into accuracy
+  faster); otherwise the two models have the same cells response and
+  ISLA's memory advantage is the whole iso-memory story.
+- **Iso-memory frontier**: at every memory budget spanned by the grid the
+  best ISLA lane is at or below the best GeoTransolver lane (within 2%);
+  falsified if GeoTransolver's frontier is lower at any budget by more
+  than 2%.
+- **Iso-time frontier**: with the fused kernel ISLA's frontier is within
+  3% of GeoTransolver's at every wall-clock budget; if GeoTransolver's is
+  lower by more than 3%, the time axis is where ISLA still pays.
+- **Width**: ISLA at 384 improves on 192 by at least 3% at 200k (the
+  corner study's 512 did not beat GeoTransolver, so a null here would say
+  ISLA is cell-bound, not parameter-bound at this data size); GeoTransolver
+  at 512 is reported at its better rate.
+- **Budget**: the 1000-epoch controls improve on 500 by more than 2% for
+  either model, in which case every 200k standing carries the label "at
+  500 epochs" and a budget ladder is the next study; within 2%, the
+  500-epoch protocol is declared converged at full data.
+
+**Prediction.** α about 0.25 for ISLA and 0.15 for GeoTransolver; the
+iso-memory frontier favors ISLA at every budget; the iso-time frontier is
+a tie within 3%; width 384 buys ISLA 3 to 5% at 200k and 400k; the
+budget control moves ISLA 3% and GeoTransolver 1% (ISLA is the slower
+learner at 1e-3, RATE-WINDOW). The 400k lanes at width 384 and 512 are
+the memory-frontier probes and one of GeoTransolver's may not fit on a
+GB300 in training.
