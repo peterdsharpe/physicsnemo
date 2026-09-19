@@ -231,10 +231,11 @@ deployment, use the stratified draw, or more cells.
 The in-distribution gap to the baselines halves from the 10,000-cell
 independent draw to 80,000 cells, because most of it is estimator variance
 in the slice states (@sec-deficit-anatomy). The default compiled step is
-2.2x GeoTransolver's at 40,000 tokens; the fused geometry kernel
-(`+model.geo_kernel=fused`, CUDA only, exact) brings it to parity there
-(@sec-using-cost). If the budget allows 40,000 cells, use them with the fused
-kernel; if it allows 10,000, use the stratified draw.
+2.2x GeoTransolver's at 40,000 tokens on the eager region; the fused
+geometry kernel, the default on CUDA, brings it to parity there and to a
+third of GeoTransolver's step time and memory at 200,000 cells
+(@sec-using-cost). If the budget allows 40,000 cells or more, use them; if
+it allows 10,000, use the stratified draw.
 :::
 
 ## Loading a trained model {#sec-using-checkpoint}
@@ -273,9 +274,12 @@ against 10.0 GiB (@tbl-mt2-cost). Two practical consequences:
 
 - **Leave `geo_checkpoint: true` unless you are short of time and long on
   memory.** It is bitwise identical in outputs and gradients.
-- **Use `+model.geo_kernel=fused` at 40,000 tokens and above.** It computes
-  the same function (relative difference at most $5.5 \times 10^{-7}$ in
-  bf16) and is opt-in only because it requires CUDA and Triton.
+- **Leave `geo_kernel` at its default (`null`).** On CUDA with one global
+  vector the model selects the exact fused Triton kernel at the first forward
+  pass (relative difference to the eager region at most $5.5 \times 10^{-7}$
+  in bf16) and logs the choice; off CUDA, or with several global vectors, it
+  falls back to the eager region. Force `eager` only to reproduce a pre-2026-09-19
+  checkpoint's exact arithmetic path.
 
 The passive decoder adds 1.1M parameters and four read blocks; the
 query-token interior configuration adds almost no parameters but spans every

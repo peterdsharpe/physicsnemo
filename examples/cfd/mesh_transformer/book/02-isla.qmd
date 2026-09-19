@@ -817,8 +817,10 @@ parameters against GeoTransolver's 9.0M, and on the path the recipe runs
 its training step costs 1.05x GeoTransolver's at 10,000 tokens in half the
 memory.** The step is memory-bound at every stage but the MLP; the
 relational invariants alone move 61% of the traffic, which is why the ratio
-grows with tokens and why an opt-in fused kernel exists for the geometry
-region. Every path in @tbl-mt2-cost computes the same function (output
+grows with tokens and why a fused Triton kernel exists for the geometry
+region, the default wherever it can run (CUDA, one global vector, at most
+1,024 slices; `geo_kernel=None` resolves to it at the first forward pass and
+to the eager region elsewhere, @sec-nb-geokernel-auto). Every path in @tbl-mt2-cost computes the same function (output
 relative L2 against the eager reference at most $5.5 \times 10^{-7}$ in
 bf16).
 
@@ -826,7 +828,7 @@ bf16).
 |---|---:|---:|---:|
 | compiled, geometry recompute on (the recipe's default) | 47 | 1.05x | 1.30 (2.70) |
 | compiled, geometry recompute off | 39 | 0.86x | 1.94 (2.70) |
-| compiled with the fused geometry kernel (`geo_kernel="fused"`, opt-in) | 45 | 1.00x | 1.27 (2.70) |
+| compiled with the fused geometry kernel (the default on CUDA) | 45 | 1.00x | 1.27 (2.70) |
 | eager, geometry recompute on | 87 | 1.28x | 1.52 (4.07) |
 | eager, point softmax in its middle-dimension layout (`fast_point_softmax=False`) | 245 | 3.61x | 1.52 (4.07) |
 
@@ -887,7 +889,7 @@ training cases, two seeds, which was run on the legacy centered variant
 | `query_tokens`, `n_query_scalars` | the interior configuration: queries as interacting tokens with per-query scalars (the signed distance) |
 | `n_global_vectors` (1), `n_global_scalars` (0) | $K$ and $S$; each vector adds one seed cosine, one relational cosine and three basis vectors |
 | `n_boundary_scalars` (0) | per-cell boundary-condition scalars, pass-through to the seeds |
-| `geo_checkpoint` (on in the recipe), `geo_kernel` (`"eager"`) | rebuild the geometry in the backward pass; `"fused"` selects the exact fused kernel |
+| `geo_checkpoint` (on in the recipe), `geo_kernel` (`None` = automatic) | rebuild the geometry in the backward pass; the kernel is the exact fused Triton region on CUDA with one global vector and at most 1,024 slices, the eager region otherwise; `"eager"` or `"fused"` forces one |
 
 This is the mainline class as prepared for PhysicsNeMo integration. The
 research-only options the program built and refuted or used as diagnostics

@@ -20402,3 +20402,88 @@ reached and the iso-memory comparison will rest on the fit rather than on
 an out-of-memory boundary. Step times at these early epochs are noisy
 (the ranges are the two seeds' latest readings); the reduction will take
 per-lane medians over the whole run.
+
+## 2026-09-19 — Preregistration, ISO-MATCH: at GeoTransolver's recipe-default training budget, which split of cells and width gives ISLA its best accuracy, and how does that compare at iso-time, iso-memory and iso-parameters? {#sec-nb-isomatch-prereg}
+
+**Setting.** Peter asked (2026-09-19) for the comparison a user would
+actually make: take GeoTransolver as the unified recipe ships it and give
+ISLA the same budget, measured either as training time per iteration or
+as peak memory, with ISLA's knobs (cells per case, width) set at their
+accuracy-optimal split. The recipe default for GeoTransolver is 200,000
+cells per case, `n_hidden` 256 and 12 layers (9,046,016 parameters,
+counted from the composed configuration) at learning rate 3e-3; on four
+GB300 GPUs it trains at about 80 GB peak memory and 0.40 s per step
+(ISO-COST acceptance readings, @sec-nb-isocost-prereg). ISLA at its
+default width 192 has 8,912,796 parameters, so the existing 200,000-cell
+pair (0.0446 against 0.0445, @sec-nb-proto200k-verdict) is already the
+iso-parameter comparison; ISLA there trains at 26 GB and 0.15 s per step
+with the fused kernel, a third of GeoTransolver's budget on both axes.
+
+**Instrument.** ISLA with the fused kernel, 435 DrivAerML cars, seeds 42
+and 43, 500 epochs, at five splits of GeoTransolver's budget along the
+cells-versus-width line (the memory and time estimates are extrapolated
+from the ISO-COST acceptance readings and are themselves readouts):
+
+| width (parameters) | cells per case | learning rate (width rule) | expected peak memory | expected step time |
+|---|---|---|---|---|
+| 192 (8.9M) | 600,000 | 1e-3 | about 78 GB | about 0.39 s |
+| 288 (19.5M) | 400,000 | 6.67e-4 | about 65 GB | about 0.35 s |
+| 384 (34.3M) | 400,000 | 5e-4 | 86 GB (measured) | 0.31 to 0.59 s (measured) |
+| 512 (60.3M) | 200,000 | 3.75e-4 | about 60 GB | about 0.25 s |
+| 768 (134M) | 100,000 | 2.5e-4 | about 45 GB | about 0.25 s |
+
+The 384 × 400k point is in the ISO-COST grid; the other four are new lanes
+(`kernel/isocost_aga.sbatch`, lanes 36 to 43). All are scored in float32 at
+the 200,000-cell reporting protocol. Peak memory and step time are read
+from each lane's log (medians over the run); the iso-time and iso-memory
+comparisons take, for each axis, the ISLA lanes whose measured cost is
+within 15% of GeoTransolver's default (80 GB, 0.40 s) and report the best
+of them against GeoTransolver's 0.0445.
+
+**Bars, written before the runs.**
+
+- **Iso-budget lead**: the best ISLA lane within the time budget, and the
+  best within the memory budget, each beat GeoTransolver's 0.0445 by at
+  least 3%; **parity** if within 3%; **deficit** if worse by more than 3%.
+- **Optimal split**: cells win if the 192 × 600k lane is the best of the
+  five; width wins if the 512 × 200k or 768 × 100k lane is; balanced if a
+  middle point is. This is reported as the recommendation for spending a
+  budget on ISLA.
+- **Width rule**: every lane trains without the routing collapse of
+  @sec-nb-relframe-divergence-mechanism (validation loss not on the
+  mean-field plateau); a collapse at 768 would mark the rule's edge.
+
+**Prediction.** Iso-budget lead of 4 to 7% on both axes; the optimal split
+is balanced (288 × 400k or 384 × 400k) rather than either extreme, because
+the count-noise term is already small at 200,000 cells and the width study
+found little at 512 wide on the same data. Probability of a lead of at
+least 3% on both axes: 0.6.
+
+## 2026-09-19 — Ruling: the fused geometry kernel is ISLA's default wherever it can run; `geo_kernel=None` resolves at the first forward pass to fused on CUDA (one global vector, at most 1,024 slices, Triton importable) and to eager otherwise {#sec-nb-geokernel-auto}
+
+**Ruling (Peter, 2026-09-19).** KERNEL-NEUTRAL (@sec-nb-kernel-neutral-verdict)
+found the fused Triton region accuracy-neutral (five pairs, mean 1.009)
+and left it opt-in because neither preregistered clause was met. Peter's
+instruction today supersedes that: the fused kernel is to be the default
+whenever the hardware supports it, through a `None` default that resolves
+to fused where possible and falls back to eager safely. The cost case is
+now measured in training as well as inference: at 200,000 cells the fused
+region trains ISLA at about a third of the eager step time and memory
+(@sec-nb-isocost-prereg acceptance, 26 GB and 0.15 s against the eager
+path's earlier readings; inference 91 against 529 ms, @sec-mt2-cost).
+
+**What changed.** The class default is `geo_kernel=None` ("auto"). At the
+first forward pass `resolve_geo_kernel(points)` chooses `"fused"` when the
+points are on CUDA, Triton imports, the model has exactly one global vector
+and at most 1,024 slices (the kernel's limits), else `"eager"`; the decision
+is cached per device, logged once, and written into every block (and every
+read block of the passive decoder). Explicit `"eager"` and `"fused"` are
+honored as before, and an explicit `"fused"` still raises at construction
+when the global-vector constraint cannot be met. Checkpoints that recorded
+`geo_kernel="eager"` load and run eager, as recorded. Tests: the default is
+asserted, auto resolves to eager on CPU with outputs identical to an
+explicit eager model, two global vectors keep auto on eager while an
+explicit fused request is refused. The recipe's ISLA configurations set
+`geo_kernel: null`. The ISO-COST and ISO-MATCH lanes already run fused by
+explicit override; earlier ISLA lanes (all eager) stand, the kernel being
+exact.

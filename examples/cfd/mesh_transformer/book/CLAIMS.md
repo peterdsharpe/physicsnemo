@@ -1906,3 +1906,9 @@ interior control @sec-nb-udrv-int-prereg.
 - Rule: write "on the trained sampling pattern the baselines lead by 27%; under a 10:1 density bias ISLA
   leads them 1.8x and 2.1x". The factor-3 clause was NOT met: say "between" on that clause; never write
   "pattern-bound" as a met bar. Calibrate future density thresholds to the cell count.
+
+## GEO-KERNEL AUTO (2026-09-19, ruling)
+- Supersedes KERNEL-NEUTRAL's "eager stays default": geo_kernel=None (default) resolves to fused
+  on CUDA with one global vector and <= 1024 slices, eager otherwise. Write "fused wherever it can
+  run, eager otherwise"; training cost at 200k: fused ~26 GB, 0.15 s/step (ISLA 192) vs GT 80 GB,
+  0.40 s. Never write that eager is the default.
