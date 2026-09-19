@@ -20298,3 +20298,64 @@ budget control moves ISLA 3% and GeoTransolver 1% (ISLA is the slower
 learner at 1e-3, RATE-WINDOW). The 400k lanes at width 384 and 512 are
 the memory-frontier probes and one of GeoTransolver's may not fit on a
 GB300 in training.
+
+## 2026-09-19 — Preregistration, TRAIN-AREA: is the wing deficit the variance of the measure weights? Train on an area-proportional draw that keeps the estimator unbiased and makes the weights nearly uniform {#sec-nb-trainarea-prereg}
+
+**Setting.** Every candidate mechanism for the 27% in-pattern wing deficit
+at 35 cases has now been closed except one: count noise
+(@sec-nb-p200k-wings-35), recurring geometries (@sec-nb-p200k-wings-geo4),
+draw variance (@sec-nb-wingbench-verdict) and positional information
+(@sec-nb-a35-verdict) are out. The survivor is the one the 10,000-cell
+ablations pointed at: on wing meshes whose cell areas vary by hundreds
+(coefficient of variation 3.3 against 2.3 on the cars), ISLA's routing and
+pooling are weighted by the cells' quadrature measure, and under a
+uniform-over-cells draw those weights are as variable as the areas; turning
+them off bought 12% at 35 wings (@sec-nb-a35-verdict) but discards the
+consistency contract. The principled version of the same move is to change
+the *draw*, not the weights: sample cells with inclusion probability
+proportional to area (a Poisson draw with exact Horvitz-Thompson weights,
+`PoissonBiasedSubsampleMesh` with `weight_mode=area`, already in the
+recipe as the consistency benchmark's "area" sampler). The estimator stays
+unbiased, so the consistency contract stands, and the measure weights the
+network reads become nearly uniform, so if weight variance is the
+mechanism, the deficit should shrink. The uniform-over-cells law is, as the
+consistency study noted, the mesher's refinement pattern; sampling by area
+is the law a uniform point-cloud generator over the surface would produce,
+which is also the more physical choice for a general PDE surrogate.
+
+**Instrument.** Dataset `highlift_surface_super_scarce_area.yaml`: the
+35-wing training configuration with a 1,000,000-cell uniform pool and an
+area-proportional Poisson draw of 200,000 expected cells per case,
+applied in training and validation alike; otherwise identical (same
+augmentations, transforms, normalization, targets). Six lanes
+(`kernel/p200k_fleet/p200k_hl_aga.sbatch`, lanes 54 to 59): ISLA at 1e-3,
+GeoTransolver at 3e-3 and Transolver at 3e-3 as controls, seeds 42 and 43,
+500 epochs, bf16. Readout: float32 error on the 180 validation wings under
+the independent uniform-over-cells draw (the standing instrument), the
+area draw (the training law) and the 10:1-biased draw, via the consistency
+benchmark at 200,000 cells; compared with the uniform-draw lanes of
+@sec-nb-wingbench-verdict.
+
+**Bars, written before the runs** (independent uniform-over-cells draw,
+two-seed means, against ISLA's 0.1502 and GeoTransolver's 0.1098).
+
+- **Mechanism supported**: ISLA under the area draw improves by at least 5%
+  on the independent draw while GeoTransolver and Transolver move by less
+  than 2%; the wing deficit is then the weight variance and the area draw
+  becomes the recommended training law for ISLA on non-uniform meshes
+  (adopted only after the same test on DrivAerML).
+- **Sampler effect, not mechanism**: all three models improve by 5% or
+  more; the area draw is a better training law for everyone and says
+  nothing specific about ISLA.
+- **Null**: ISLA moves by less than 5%; weight variance is not the
+  mechanism, and the deficit is the trained function's response to the
+  wing geometry itself (the last candidate standing would be the
+  slice-attention form on multi-element surfaces).
+- **Consistency**: ISLA's density factor stays within 1.05 to 1.3 (the
+  weights are still read, only less variable); a rise beyond 1.5 would mean
+  the area draw traded the contract for accuracy and is rejected.
+
+**Prediction.** Mechanism supported, in part: ISLA improves 6 to 10% (the
+weights-off ablation's 12% is the ceiling), GeoTransolver within 2%; the
+deficit narrows from 27% to about 20%. Probability about 0.5; the null is
+the other half.
