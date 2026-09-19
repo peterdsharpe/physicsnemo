@@ -12,7 +12,7 @@ unless a variant is named; the reasons behind each recommendation are in
 
 ## Which configuration {#sec-using-config}
 
-Use **ISLA as shipped**: the relative frame with the total-measure
+Use **ISLA as shipped**: the relative frame with the RMS-pairwise-distance
 length unit. It is the class default, so `ISLA()` with no
 frame arguments is it, and the recipe's `isla_surface.yaml` states the two
 settings explicitly:
@@ -27,7 +27,7 @@ model:
   n_slices: 256
   mlp_ratio: 4
   frame_mode: relative        # positions enter only as point-to-anchor differences
-  scale_mode: total_measure   # length unit = sqrt(total quadrature measure)
+  scale_mode: rms_distance    # length unit = measure-weighted RMS pairwise distance of the sample
   geo_checkpoint: true        # rebuild per-slice geometry in backward: same numbers, half the memory
 ```
 
@@ -40,7 +40,8 @@ recommended for new work (@sec-mt2-variants).
 
 | configuration | recipe config | when to use | what you give up |
 |---|---|---|---|
-| **ISLA** (relative frame, total-measure scale) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
+| **ISLA** (relative frame, RMS-pairwise-distance length unit) | `isla_surface`, `isla_volume` | every new surface or interior task | nothing among ISLA's options; against the baselines, in-distribution accuracy on every surface rung measured, from 2% at the scale corner to 28% at 35 wing cases (@sec-scoreboard) |
+| total-measure unit (`scale_mode: total_measure`) | option on `isla_surface`, `isla_volume` | reproducing the evidence lanes trained before 2026-09-18 evening | nothing measurable: within 1.3% of the default at 435 cars (@sec-nb-lenrms-verdict); not normalized, and divergent under refinement of a boundary whose area does not converge |
 | similarity-gauge variant (diagnostic; measure-weighted center and RMS radius) | `similarity_gauge: true` on a centered frame | a diagnostic comparison of frame choices only | a frame still estimated from the sample, for at most about 2% of accuracy, inside seed noise (@sec-nb-sgref-verdict) |
 | passive decoder (`query_independent: true`) | `isla_volume_support` | when the prediction at a point must not depend on which other points are queried | 3.0 to 3.7x in accuracy (@sec-query-independence) |
 
@@ -79,8 +80,12 @@ Three of these need a word.
 
 - **The measure weights must sum to the surface area.** When the recipe
   keeps $n$ of $N$ cells, each kept cell carries the Horvitz–Thompson weight,
-  its area times $N/n$, so that the total measure, which is ISLA's length
-  unit, is the full surface area at any `sampling_resolution`. The surface
+  its area times $N/n$, so that the weights stand for the full surface at
+  any `sampling_resolution`: the routing's quadrature sums, and the
+  total-measure unit when that option is used, then read the surface area
+  rather than the retained fraction of it (the default RMS-pairwise-distance
+  unit normalizes the weights and is indifferent to the factor, but the
+  quadrature sums are not). The surface
   dataset writes this as `_target_quadrature_measure`; the volume dataset
   writes the equivalent `quadrature_measure` through its
   `ComposeQuadratureMeasure` stage. Feeding raw sub-sampled areas shrinks the

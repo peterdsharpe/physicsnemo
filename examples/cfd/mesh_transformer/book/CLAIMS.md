@@ -1843,3 +1843,12 @@ interior control @sec-nb-udrv-int-prereg.
   0.0602 (0.93x) and Transolver 0.0676 (0.83x); same checkpoints native-frame 0.0550/0.0567.
 - Rule: the pose row and headline pose factor read on ISLA; drop every "measured on the
   legacy centered variant" label for the pose test; write "7% and 17% ahead" (not 6%/19%).
+
+## LEN-RMS (2026-09-18; results/lenrms_reduction_2026-09-18.json)
+- RMS-pairwise-distance unit vs total-measure unit, 435 cars, 10k budget, fp32 consistency
+  instrument: 0.0526 vs 0.0533 strat (0.987, ranges overlap); 0.990 / 0.989 independent 10k / 40k;
+  density 1.24 vs 1.21 = validated.
+- Rule: ISLA's length unit is "the RMS pairwise distance of the measure-weighted sample"
+  (scale_mode="rms_distance", the class and recipe default from 2026-09-18 evening). The
+  total-measure unit is an option; lanes trained before that carry it, state "total-measure
+  unit" when quoting them. Never write that the total measure is ISLA's unit in present tense.

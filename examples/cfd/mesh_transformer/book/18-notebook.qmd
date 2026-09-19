@@ -19679,3 +19679,53 @@ the relative frame's principle (no external center) would act on the
 routing's early sharpness, for example a warm-up of the learning rate or of
 the routing temperature; that is a separate study, preregistered before it
 is run.
+
+## 2026-09-18 — Verdict, LEN-RMS: validated; the RMS-pairwise-distance length unit scores 0.0526 against the total-measure unit's 0.0533 under the stratified draw (0.987, overlapping seed ranges, density factor 1.24) and becomes ISLA's default {#sec-nb-lenrms-verdict}
+
+**Setting.** ISLA's relative frame needs one length unit to make its
+geometric invariants dimensionless. Until today that unit was the square
+root of the total quadrature measure of the sampled boundary, which is
+center-free and cheap but diverges on boundaries whose measure grows under
+refinement (a Koch-type surface) and is not invariant to the weights' overall
+scale. Peter's ruling of 2026-09-18 (@sec-nb-lenrms-prereg) named the
+root-mean-square pairwise distance of the measure-weighted sample as the
+unit to adopt once validated: it is center-free, normalized by
+construction (weight-rescale invariant), and converges wherever the sample
+has finite second moment, including on fractal boundaries; the class gained
+it as `scale_mode="rms_distance"`, computed through the variance identity
+in O(N), with contract tests and a Koch-curve convergence test.
+
+**What was run.** Two seeds of ISLA with the new unit at 435 DrivAerML
+cars on the 10,000-cell exploration budget, learning rate 1e-3, 500 epochs,
+bf16 (`kernel/lenrms_aga.sbatch`, snapshot `code_lenrms`), scored in
+float32 on the consistency-benchmark instrument (job 790885) against the
+three total-measure seeds that served SG-REF. Reduction:
+results/lenrms_reduction_2026-09-18.json.
+
+**What we saw.** Surface-pressure error, seed mean with seeds in brackets:
+
+| draw | total-measure unit (3 seeds) | RMS-pairwise-distance unit (2 seeds) | ratio (RMS ÷ total) |
+|---|---|---|---|
+| stratified, 10,000 cells (readout) | 0.0533 (0.0525 / 0.0537 / 0.0538) | 0.0526 (0.0518 / 0.0535) | 0.987 |
+| independent, 10,000 cells | 0.0557 (0.0549 / 0.0558 / 0.0562) | 0.0551 (0.0544 / 0.0558) | 0.990 |
+| independent, 40,000 cells | 0.0525 (0.0518 / 0.0527 / 0.0530) | 0.0520 (0.0512 / 0.0527) | 0.989 |
+| density factor (biased ÷ independent) | 1.21 | 1.24 (1.21 / 1.26) | |
+
+**Verdict: validated.** The two units are within 1.3% on every draw with
+overlapping seed ranges, both lanes trained without incident (final
+validation losses 0.00073 and 0.00076 against 0.00077), and the density
+factor stays inside the 1.05 to 1.3 contract band. The prediction (within
+noise, a hair better) held.
+
+**Consequences.** The RMS-pairwise-distance unit becomes ISLA's default
+(`scale_mode="rms_distance"` in the class, the recipe configurations and
+the book's statement of the architecture); the total-measure unit stays
+available as an option and is documented as the unit the evidence lanes
+trained before this evening carry, the two being interchangeable within
+noise at 435 cars. The 435-car 200,000-cell ISLA pair is duplicated with the
+new unit (`kernel/proto200k_rms_aga.sbatch`, runs `p200k_dr_isla_rms_seed42/43`) so the
+equivalence is also on record at the reporting protocol; until it reports,
+the 200k standings are stated with the unit named. LEN-RMS closes the frame
+deliberation of 2026-09-18: ISLA's frame is relative and center-free, and
+its length unit is now also finite on every boundary with a finite second
+moment.

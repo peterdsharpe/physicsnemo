@@ -238,19 +238,49 @@ frame is arbitrary; ISLA is never handed coordinates.** Two things are
 needed to make this work: a unit of length, and a way to say where a point
 is.
 
-The unit of length is the square root of the total measure,
+The unit of length is how far apart the boundary's points typically are:
+take every pair of sampled points, weight each pair by the measure the two
+points stand for, and average their squared separation. The square root of
+that average is $L$. It is a property of the boundary, not of the mesher,
+because the weights are areas; it needs no center, because only
+differences between points enter; it does not change when every weight is
+multiplied by the same constant, because the weights are normalized to one
+before they are used; and it stays finite under refinement on any boundary
+whose points have a finite second moment, which includes fractal boundaries
+where the total area itself keeps growing (the Koch-curve test
+`test_rms_distance_converges_on_koch_curve_where_total_measure_diverges`
+in `test/experimental/nn/test_isla.py`). In symbols, with
+$\tilde w_i \equiv w_i / \sum_j w_j$,
 
 $$
-L \equiv \Big(\sum_i w_i\Big)^{1/2}, \qquad r_i \equiv x_i / L ,
+L^2 \equiv \sum_{i,j} \tilde w_i \tilde w_j \,|x_i - x_j|^2
+      = 2 \sum_i \tilde w_i \,|x_i - \bar x|^2 ,
+\qquad r_i \equiv x_i / L ,
 $$
 
-the square root of the total surface area, an integral of the geometry.
-Being an integral, it does not move when the sampling law changes; being a
-length, it makes a uniform rescale of the geometry (points by $k$, areas by
-$k^2$) invisible to everything downstream. The alternatives, a fixed
+where the second form, the variance identity, is what the code evaluates
+in $O(N)$ (`rms_pairwise_distance` in `model.py`); the measure-weighted mean
+$\bar x$ appears only inside this one scalar and is never used as a frame
+origin. Being a length of the geometry, $L$ makes a uniform rescale of the
+points invisible to everything downstream. The alternatives, a fixed
 constant or a statistic of the sampled points, are the gauge variants of
 @sec-mt2-variants, and @fig-isla-frame shows why a point statistic is a
 poor frame.
+
+::: {.callout-note collapse="true" title="The total-measure unit (option; the unit the evidence before 2026-09-18 evening was trained with)"}
+Until 2026-09-18 the unit was the square root of the total measure,
+$L = (\sum_i w_i)^{1/2}$, the square root of the surface area: also an
+integral of the geometry and also center-free, but not normalized (a
+rescale of the weights alone changes it) and divergent under refinement of
+a boundary whose area does not converge. It remains available as
+`scale_mode="total_measure"`. The two units were compared at 435 DrivAerML
+cars: 0.0526 against 0.0533 surface-pressure error under the stratified
+draw (0.987, overlapping seed ranges), within 1.3% on every draw, with the
+density factor inside the contract band (@sec-nb-lenrms-verdict,
+results/lenrms_reduction_2026-09-18.json). Evidence lanes trained before
+that evening carry the total-measure unit; where a chapter quotes one, it
+says so.
+:::
 
 Where a point is, ISLA states only *relative to other things*: the scaled
 positions $r_i$ are used solely in differences $r_i - z_s$ against slice
@@ -588,7 +618,7 @@ and they live at the git tag `isla-research-full`.
 
 The symbols above are tied to the identifiers in
 `physicsnemo/experimental/nn/isla/model.py`; ISLA is
-`frame_mode="relative"`, `scale_mode="total_measure"`, the class default.
+`frame_mode="relative"`, `scale_mode="rms_distance"`, the class default.
 
 | symbol | code | meaning |
 |---|---|---|
@@ -720,8 +750,9 @@ input and weights.
 |---|---|---|
 | rotation covariance: scalars unchanged, vectors $v \mapsto vQ^\top$ for a proper rotation $Q$ | `test_rotation_equivariance`, `test_qi_rotation_equivariance` | $10^{-10}$ |
 | translation invariance, with no centering anywhere | `test_translation_invariance`, `test_relative_frame_contracts` | $10^{-10}$ / $10^{-12}$ |
-| geometric-scale invariance: points $\times k$, areas $\times k^2$ leave every output unchanged, while areas alone do not | `test_relative_frame_contracts` | $10^{-12}$ |
-| the default is ISLA | `test_default_is_relative_total_measure` | exact |
+| geometric-scale invariance: points $\times k$ (with or without areas $\times k^2$) leave every output unchanged; so does a rescale of the areas alone, because the unit is normalized | `test_rms_distance_scale_contracts` | $10^{-10}$ |
+| with the total-measure unit (option): points $\times k$, areas $\times k^2$ leave every output unchanged, while areas alone do not | `test_relative_frame_contracts`, `test_rms_distance_scale_contracts` (the contrast) | $10^{-12}$ / changes by $> 10^{-3}$ |
+| the default is ISLA | `test_default_is_relative_rms_distance` | exact |
 | query independence in the passive decoder: 50 queries alone equal the same 50 among 150 | `test_query_set_independence` | $10^{-12}$, rtol 0 |
 | off-surface queries keep every contract | `test_interior_queries_contracts` | $10^{-10}$ / $10^{-12}$ |
 | zero and several global vectors; global scalars; magnitude invariance | `test_isla_global_inputs.py` (12 tests) | $10^{-10}$ |
@@ -732,10 +763,13 @@ input and weights.
 | the diagnostics break covariance by design | `test_raw_coord_channel_breaks_equivariance_by_design` | $> 10^{-3}$ |
 
 ::: {.callout-warning collapse="true" title="What is not a contract"}
-- **Measure-weight scale alone.** The total measure is the length unit, so
-  multiplying every $w_i$ by a constant without rescaling the positions
-  changes the output, and the test asserts that it does. The gauge variants
-  have the opposite pair.
+- **Measure-weight scale alone, under the total-measure option.** With
+  `scale_mode="total_measure"` the length unit is the square root of the
+  total measure, so multiplying every $w_i$ by a constant without rescaling
+  the positions changes the output, and `test_rms_distance_scale_contracts`
+  asserts that it does. Under the default RMS-pairwise-distance unit the
+  weights are normalized before they are used, and the same rescale leaves
+  the output unchanged.
 - **Reflection covariance of vectors** (see idea 6).
 - **The magnitude of a global vector input**: discarded by design.
 - **Query independence in ISLA.** Every surface
@@ -845,7 +879,7 @@ training cases, two seeds, which was run on the legacy centered variant
 | flag (default) | what it changes |
 |---|---|
 | `frame_mode` (`"relative"`) | the reference; `"centered"` selects the gauge variants. Checkpoints store their constructor arguments and load in the configuration that trained them |
-| `scale_mode` (`"total_measure"`) | `"reference_length"` uses the constant `reference_length` (the legacy centered variant); `"global"` reads a supplied `frame_scale` (a diagnostic) |
+| `scale_mode` (`"rms_distance"`) | the measure-weighted RMS pairwise distance of the sample; `"total_measure"` uses the square root of the total measure (the unit the evidence before 2026-09-18 evening was trained with, within 1.3% of the default, @sec-nb-lenrms-verdict); `"reference_length"` uses the constant `reference_length` (the legacy centered variant) |
 | `similarity_gauge` (off) | the similarity-gauge variant; requires `frame_mode="centered"` |
 | `use_measure_weights` (on) | the log-measure routing bias; off is the ablation |
 | `use_relational_geo` (on) | the relational invariants in routing and read-back |

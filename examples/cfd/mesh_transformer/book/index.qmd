@@ -107,8 +107,8 @@ for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
 print(": The thesis in six rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML rungs, where the gaps are larger, are not shown (@sec-data-efficiency). Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
-      "above one favors ISLA. ISLA is the shipped configuration throughout (relative frame, total-measure "
-      "scale). Data: results/refprops_reduction_2026-09-18.json (ISLA in random poses), "
+      "above one favors ISLA. ISLA is the shipped configuration throughout (relative frame; these lanes carry the total-measure length unit, "
+      "within 1.3% of the RMS-pairwise-distance default, @sec-nb-lenrms-verdict). Data: results/refprops_reduction_2026-09-18.json (ISLA in random poses), "
       "results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json, results/relframe_reduction_2026-09-11.json, "
       "results/quadvar_reduction_2026-09-17.json, results/accuracy_consistency_matrix_2026-09-10.json, "
       "results/corner_wlr_reduction_2026-09-15.json, "
@@ -186,7 +186,7 @@ The names below are canonical; their definitions are in the chapters cited.
 
 | Name | What it is | Where defined |
 |---|---|---|
-| **ISLA** | the model as shipped, named without qualifier: relative frame, total-measure length unit, the class defaults | @sec-mt2 |
+| **ISLA** | the model as shipped, named without qualifier: relative frame, RMS-pairwise-distance length unit, the class defaults | @sec-mt2 |
 | **legacy centered variant** (diagnostic) | the constant-gauge frame the program used before the relative frame: plain-mean center, fixed length unit. It reads a sample statistic that is not physical knowledge, so it appears only in collapsed diagnostic notes, never in a main result | @sec-mt2-variants |
 | **similarity-gauge variant** (diagnostic) | ISLA centered on the measure-weighted centroid with the RMS radius as length unit. It estimates a center from the sample and presumes one closed body, so it appears only in collapsed diagnostic notes, never in a main result; measured within noise of ISLA (@sec-nb-sgref-verdict) | @sec-mt2-variants |
 | **ablation**, **diagnostic** | a configuration measured only to price a design choice (weights-off, raw coordinates); never adopted | @sec-principled-decisions |
@@ -194,7 +194,7 @@ The names below are canonical; their definitions are in the chapters cited.
 | **unit-direction protocol** | every model receives the freestream as a unit vector; the fair-comparison rule that decides the surface ranking | @sec-fair-comparison |
 | **global vector / scalar inputs** | the problem's global conditions ($K$ directions, $S$ scalars); here $K = 1$, the freestream direction, and $S = 0$ | @sec-mt2-inputs |
 | **measure weight** $w_i$ | the surface area a sampled cell stands for; the quadrature weight of every sum in the model | @sec-mt2-quadrature |
-| **relative frame** | ISLA's construction of position: no center, positions used only as differences to anchors, the total measure as length unit | @sec-mt2-frame |
+| **relative frame** | ISLA's construction of position: no center, positions used only as differences to anchors, the measure-weighted RMS pairwise distance of the sample as length unit | @sec-mt2-frame |
 | **slice**, **anchor** | a soft group of tokens, and its measure-weighted mean position and normal | @sec-mt2-slices |
 | **relational invariants** | the scalars that describe a token relative to an anchor | @sec-mt2-relational |
 | **area-weighted relative L2**, **float32 instrument** | the metric and the precision every reported number is scored at | @sec-metrics |

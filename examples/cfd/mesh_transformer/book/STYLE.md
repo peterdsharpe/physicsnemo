@@ -55,7 +55,7 @@ was retracted) lives in the notebook and the status chapter only.
 
 | Say | Never say | Meaning |
 |---|---|---|
-| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MeshTransformer2 | the definitive model as shipped (`frame_mode="relative"`, `scale_mode="total_measure"`, the class defaults); its configuration is described once in 02 and 09 and never used as a name. A variant is named by its variant name |
+| ISLA | "ISLA, reference configuration", "the reference configuration", MT2, MeshTransformer2 | the definitive model as shipped (`frame_mode="relative"`, `scale_mode="rms_distance"`, the class defaults); its configuration is described once in 02 and 09 and never used as a name. A variant is named by its variant name |
 | the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | the reference configuration's construction of position: `frame_mode="relative"` |
 | the legacy centered variant (diagnostic) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | `frame_mode="centered"`, `scale_mode="reference_length"`; cut from every main figure and table on 2026-09-18; appears only in collapsed diagnostic notes, labeled |
 | form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
@@ -73,7 +73,7 @@ was retracted) lives in the notebook and the status chapter only.
 | slice, anchor | "cluster", "centroid" for slices | a soft group of tokens; its measure-weighted mean position and normal |
 | relational invariants | "geo features" | the scalars describing a token relative to an anchor |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
-| length scale $L$ | "gauge" in prose | the square root of the total measure |
+| length unit $L$ | "gauge" in prose; "the total measure" in the present tense | the measure-weighted RMS pairwise distance of the sample (`scale_mode="rms_distance"`, default since 2026-09-18 evening). "The total-measure unit" names the pre-2026-09-18 option (`scale_mode="total_measure"`, the square root of the total measure); lanes trained before then carry it and are labeled so where quoted |
 | DrivAerML (cars), HiLiftAeroML (wings) | | the two datasets; "HiLift" allowed after first use in a chapter |
 | the $n$-case rung | | a training-set size on the data-efficiency ladder |
 | area-weighted relative L2, float32 instrument | "rel-L2" in prose | the metric and its reporting precision |
