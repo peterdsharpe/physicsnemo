@@ -233,39 +233,153 @@ def test_load_model_weights(
     assert torch.allclose(ref_output, loaded_output, rtol=rtol, atol=atol)
 
 
-def test_load_checkpoint_refuses_uninitialized_model(tmp_path):
-    """A training checkpoint whose model weights file is missing must raise, not
-    silently restore epoch and optimizer around an untrained model.
-
-    Reproduces the failure seen when a model class was renamed after its
-    checkpoint was written: the weights file name is derived from the class
-    name, the loader could not find it, skipped the model, and two different
-    checkpoints then evaluated to the identical error of the seeded
-    initialization. A directory without a training checkpoint keeps the
-    skip-and-warn behaviour (fresh start).
-    """
+@pytest.mark.parametrize("epoch", [None, 3])
+@pytest.mark.parametrize("missing_weights", ["deleted", "renamed"])
+def test_load_checkpoint_refuses_missing_model_weights(
+    tmp_path, model_generator, epoch, missing_weights
+):
+    """Missing weights cannot restore training state around a fresh model."""
     from physicsnemo.utils import load_checkpoint, save_checkpoint
 
-    if not DistributedManager.is_initialized():
-        DistributedManager.initialize()
+    model = model_generator(8)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    save_checkpoint(tmp_path, models=model, optimizer=optimizer, epoch=3)
+    weights = next(
+        p for p in tmp_path.iterdir() if not p.name.startswith("checkpoint.")
+    )
+    if missing_weights == "deleted":
+        weights.unlink()
+    else:
+        weights.rename(weights.with_name("FormerName.0.3" + weights.suffix))
 
-    model = FullyConnected(in_features=8, out_features=8, num_layers=2, layer_size=8)
-    optimizer = torch.optim.Adam(model.parameters())
-    ckpt_dir = tmp_path / "run"
-    save_checkpoint(str(ckpt_dir), models=model, optimizer=optimizer, epoch=3)
-    weights = list(ckpt_dir.glob("FullyConnected.0.3.mdlus"))
-    assert len(weights) == 1
-    # Simulate the class rename: the weights file carries the old class name.
-    weights[0].rename(ckpt_dir / "LegacyName.0.3.mdlus")
+    fresh = model_generator(8)
+    fresh_optimizer = torch.optim.Adam(fresh.parameters(), lr=0.5)
+    metadata = {}
+    with pytest.raises(FileNotFoundError, match="uninitialized") as exc:
+        load_checkpoint(
+            tmp_path,
+            models=fresh,
+            optimizer=fresh_optimizer,
+            epoch=epoch,
+            metadata_dict=metadata,
+        )
+    assert type(fresh).__name__ in str(exc.value)
+    assert "checkpoint.0.3.pt" in str(exc.value)
+    assert fresh_optimizer.param_groups[0]["lr"] == 0.5
+    assert metadata == {}
 
-    fresh = FullyConnected(in_features=8, out_features=8, num_layers=2, layer_size=8)
-    with pytest.raises(FileNotFoundError, match="uninitialized"):
-        load_checkpoint(str(ckpt_dir), models=fresh)
 
-    # Fresh directory: no training checkpoint, nothing to refuse -> epoch 0 as before.
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    assert load_checkpoint(str(empty), models=fresh) == 0
+def test_load_checkpoint_without_training_state(tmp_path, model_generator):
+    """Fresh runs, absent epochs, and weights-only exports remain loadable."""
+    from physicsnemo.utils import load_checkpoint, save_checkpoint
+
+    fresh = model_generator(8)
+    assert load_checkpoint(tmp_path / "nonexistent", models=fresh) == 0
+    assert load_checkpoint(tmp_path, models=fresh) == 0
+
+    source = model_generator(8)
+    save_checkpoint(tmp_path, models=source, epoch=3)
+    assert load_checkpoint(tmp_path, models=fresh, epoch=4) == 0
+    (tmp_path / "checkpoint.0.3.pt").unlink()
+    assert load_checkpoint(tmp_path, models=fresh) == 0
+    for name, value in source.state_dict().items():
+        torch.testing.assert_close(fresh.state_dict()[name], value)
+
+
+@pytest.mark.parametrize("automatic_index", [False, True])
+@pytest.mark.parametrize("latest_weights", ["complete", "deleted", "newer"])
+def test_load_checkpoint_uses_training_checkpoint_index(
+    tmp_path, model_generator, automatic_index, latest_weights
+):
+    """All weights come from the selected training checkpoint's filename index."""
+    from physicsnemo.utils import load_checkpoint, save_checkpoint
+
+    source = model_generator(8)
+    optimizer = torch.optim.Adam(source.parameters(), lr=0.01)
+    for epoch in (1, 2):
+        with torch.no_grad():
+            for parameter in source.parameters():
+                parameter.fill_(epoch)
+        optimizer.param_groups[0]["lr"] = epoch * 0.01
+        save_checkpoint(
+            tmp_path,
+            models=source,
+            optimizer=optimizer,
+            epoch=None if automatic_index else epoch,
+            metadata={"generation": epoch},
+        )
+    index = 1 if automatic_index else 2
+    if latest_weights == "deleted":
+        next(
+            p
+            for p in tmp_path.glob(f"*.0.{index}.*")
+            if not p.name.startswith("checkpoint.")
+        ).unlink()
+    elif latest_weights == "newer":
+        with torch.no_grad():
+            for parameter in source.parameters():
+                parameter.fill_(3)
+        # Simulate a newer weights file without a matching training-state file.
+        save_checkpoint(tmp_path, models=source)
+
+    fresh = model_generator(8)
+    before = {name: value.clone() for name, value in fresh.state_dict().items()}
+    fresh_optimizer = torch.optim.Adam(fresh.parameters(), lr=0.5)
+    metadata = {}
+    if latest_weights == "deleted":
+        with pytest.raises(FileNotFoundError, match=rf"checkpoint\.0\.{index}\.pt"):
+            load_checkpoint(
+                tmp_path,
+                models=fresh,
+                optimizer=fresh_optimizer,
+                metadata_dict=metadata,
+            )
+        for name, value in fresh.state_dict().items():
+            torch.testing.assert_close(value, before[name])
+        assert fresh_optimizer.param_groups[0]["lr"] == 0.5
+        assert metadata == {}
+    else:
+        restored_epoch = load_checkpoint(
+            tmp_path, models=fresh, optimizer=fresh_optimizer, metadata_dict=metadata
+        )
+        assert restored_epoch == (0 if automatic_index else 2)
+        for parameter in fresh.parameters():
+            torch.testing.assert_close(parameter, torch.full_like(parameter, 2))
+        assert fresh_optimizer.param_groups[0]["lr"] == 0.02
+        assert metadata == {"generation": 2}
+
+
+@pytest.mark.parametrize("epoch", [None, 3])
+def test_load_checkpoint_checks_all_models_before_restoring(
+    tmp_path, model_generator, epoch
+):
+    """A missing second model cannot leave the first model partially restored."""
+    from physicsnemo.utils import load_checkpoint, save_checkpoint
+
+    sources = [model_generator(8), model_generator(8)]
+    save_checkpoint(tmp_path, models=sources, epoch=3)
+    next(tmp_path.glob(f"{type(sources[1]).__name__}1.0.3.*")).unlink()
+    fresh = [model_generator(8), model_generator(8)]
+    before = [{k: v.clone() for k, v in m.state_dict().items()} for m in fresh]
+    optimizer = torch.optim.Adam(fresh[0].parameters(), lr=0.5)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
+    scheduler_before = scheduler.state_dict().copy()
+    metadata = {}
+    with pytest.raises(FileNotFoundError):
+        load_checkpoint(
+            tmp_path,
+            models=fresh,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            epoch=epoch,
+            metadata_dict=metadata,
+        )
+    for model, original in zip(fresh, before):
+        for name, value in model.state_dict().items():
+            torch.testing.assert_close(value, original[name])
+    assert optimizer.param_groups[0]["lr"] == 0.5
+    assert scheduler.state_dict() == scheduler_before
+    assert metadata == {}
 
 
 @pytest.mark.parametrize("device", ["cpu", "cuda:0"])
@@ -327,7 +441,12 @@ def test_load_checkpoint_finds_legacy_class_name(tmp_path):
 
     model = FullyConnected(in_features=8, out_features=8, num_layers=2, layer_size=8)
     ckpt_dir = tmp_path / "run"
-    save_checkpoint(str(ckpt_dir), models=model, optimizer=torch.optim.Adam(model.parameters()), epoch=3)
+    save_checkpoint(
+        str(ckpt_dir),
+        models=model,
+        optimizer=torch.optim.Adam(model.parameters()),
+        epoch=3,
+    )
     assert len(list(ckpt_dir.glob("FullyConnected.0.3.mdlus"))) == 1
 
     renamed = RenamedFC(in_features=8, out_features=8, num_layers=2, layer_size=8)
@@ -337,7 +456,9 @@ def test_load_checkpoint_finds_legacy_class_name(tmp_path):
         assert torch.equal(renamed(x), model(x))
 
     # Without the declaration the same directory is still refused (not silently skipped).
-    fresh = type("UnrelatedFC", (FullyConnected,), {})(in_features=8, out_features=8, num_layers=2, layer_size=8)
+    fresh = type("UnrelatedFC", (FullyConnected,), {})(
+        in_features=8, out_features=8, num_layers=2, layer_size=8
+    )
     with pytest.raises(FileNotFoundError, match="uninitialized"):
         load_checkpoint(str(ckpt_dir), models=fresh)
 
@@ -360,10 +481,59 @@ def test_isla_declares_its_legacy_name(tmp_path):
     torch.manual_seed(1)
     fresh = ISLA(hidden=16, n_layers=1, n_slices=4)
     assert load_checkpoint(str(ckpt_dir), models=fresh) == 1
-    pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
+    pts = torch.randn(1, 20, 3)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, 20) + 0.5
     with torch.no_grad():
-        assert torch.allclose(fresh(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w), atol=1e-6)
+        assert torch.allclose(
+            fresh(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+            model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+            atol=1e-6,
+        )
+
+
+@pytest.mark.parametrize("older_name", ["ISLA", "MeshTransformer2"])
+@pytest.mark.parametrize("missing_latest", [False, True])
+def test_isla_legacy_checkpoint_uses_training_index(
+    tmp_path, older_name, missing_latest
+):
+    """Legacy names obey the selected epoch even with stale weights present."""
+    from physicsnemo.experimental.nn.isla import ISLA
+    from physicsnemo.utils import load_checkpoint, save_checkpoint
+
+    if not DistributedManager.is_initialized():
+        DistributedManager.initialize()
+    model = ISLA(hidden=16, n_layers=1, n_slices=4)
+    optimizer = torch.optim.Adam(model.parameters())
+    for epoch in (1, 2):
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.fill_(epoch)
+        optimizer.param_groups[0]["lr"] = 0.01 * epoch
+        save_checkpoint(tmp_path, models=model, optimizer=optimizer, epoch=epoch)
+        saved_name = older_name if epoch == 1 else "MeshTransformer2"
+        if saved_name != "ISLA":
+            (tmp_path / f"ISLA.0.{epoch}.mdlus").rename(
+                tmp_path / f"{saved_name}.0.{epoch}.mdlus"
+            )
+    if missing_latest:
+        (tmp_path / "MeshTransformer2.0.2.mdlus").unlink()
+
+    fresh = ISLA(hidden=16, n_layers=1, n_slices=4)
+    fresh_optimizer = torch.optim.Adam(fresh.parameters(), lr=0.5)
+    before = {k: v.clone() for k, v in fresh.state_dict().items()}
+    if missing_latest:
+        with pytest.raises(FileNotFoundError, match=r"checkpoint\.0\.2\.pt"):
+            load_checkpoint(tmp_path, models=fresh, optimizer=fresh_optimizer)
+        for name, value in fresh.state_dict().items():
+            torch.testing.assert_close(value, before[name])
+        assert fresh_optimizer.param_groups[0]["lr"] == 0.5
+    else:
+        assert load_checkpoint(tmp_path, models=fresh, optimizer=fresh_optimizer) == 2
+        for name, value in fresh.state_dict().items():
+            torch.testing.assert_close(value, model.state_dict()[name])
+        assert fresh_optimizer.param_groups[0]["lr"] == 0.02
 
 
 def test_isla_reference_checkpoint_round_trip(tmp_path):
@@ -379,11 +549,15 @@ def test_isla_reference_checkpoint_round_trip(tmp_path):
     loaded = Module.from_checkpoint(path).eval()
     assert type(loaded) is ISLA
     assert loaded._args["__args__"] == model._args["__args__"]
-    pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
+    pts = torch.randn(1, 20, 3)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, 20) + 0.5
     with torch.no_grad():
-        assert torch.equal(loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
-                           model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w))
+        assert torch.equal(
+            loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+            model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+        )
 
 
 def test_isla_research_checkpoint_args_load_when_at_former_defaults(tmp_path):
@@ -398,16 +572,24 @@ def test_isla_research_checkpoint_args_load_when_at_former_defaults(tmp_path):
     torch.manual_seed(0)
     model = ISLA(hidden=16, n_layers=1, n_slices=4).eval()
     ### Simulate the research class's recorded arguments (JSON turns tuples into lists).
-    model._args["__args__"].update(center_mode="plain", odd_head=False, anchor_topk=0, local_radii=[0.01, 0.03])
+    model._args["__args__"].update(
+        center_mode="plain", odd_head=False, anchor_topk=0, local_radii=[0.01, 0.03]
+    )
     path = str(tmp_path / "isla_research_defaults.mdlus")
     model.save(path)
     loaded = Module.from_checkpoint(path).eval()
-    assert not {"center_mode", "odd_head", "anchor_topk", "local_radii"} & set(loaded._args["__args__"])
-    pts = torch.randn(1, 20, 3); nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
-    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1); w = torch.rand(1, 20) + 0.5
+    assert not {"center_mode", "odd_head", "anchor_topk", "local_radii"} & set(
+        loaded._args["__args__"]
+    )
+    pts = torch.randn(1, 20, 3)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 20, 3), dim=-1)
+    drv = torch.nn.functional.normalize(torch.randn(1, 3), dim=-1)
+    w = torch.rand(1, 20) + 0.5
     with torch.no_grad():
-        assert torch.equal(loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
-                           model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w))
+        assert torch.equal(
+            loaded(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+            model(points=pts, normals=nrm, global_vectors=drv, measure_weights=w),
+        )
 
     model._args["__args__"]["odd_head"] = True
     bad = str(tmp_path / "isla_research_odd_head.mdlus")
