@@ -262,22 +262,25 @@ at 200,000 cells against 0.72 at 10,000 (@tbl-scoreboard-200k-wings).
 
 **ISLA trains at its protocol rate of 1e-3 on a new dataset without a
 sweep, but its safe rate window is narrower than the legacy centered
-variant's and than GeoTransolver's: at width 192 it collapses at 3e-3 and
-diverges at 1e-2.** At 3e-3 both seeds settle within five epochs on a
+variant's and than GeoTransolver's: at width 192 its loss rises to the
+mean-field plateau at 3e-3 and diverges to NaN at 1e-2.** At 3e-3 both seeds settle within five epochs on a
 mean-field plateau (validation loss 0.06 against 0.0008 at 1e-3; float32
 pressure error 0.77 against 0.055) and never leave it; at 1e-2 the loss is
 NaN by epoch 21 and 32 (@sec-nb-lrref-verdict). The mechanism is the one
 the width study found (@sec-nb-relframe-divergence-mechanism): under too
 high an effective rate the relative frame's routing hardens to one slice
-per token and the anchors collapse, after which the model sees no geometry.
+per token and the anchors coincide, after which the model sees no geometry;
+that mechanism was measured at width 512 and is inferred here from the
+matching loss signature, not measured on these runs.
 GeoTransolver degrades 9x by seed mean one grid step above its best rate
-but does not collapse. The operating rule is therefore a ceiling, not a
+and its error stays an order of magnitude below the mean-field value (a
+graded degradation, not a plateau). The operating rule is therefore a ceiling, not a
 robustness: 1e-3 at width 192, the width rule above it (@sec-using-lr),
 never the recipe's GeoTransolver default of 3e-3. The window was bracketed
 (@sec-nb-ratewindow-verdict): 3e-4 scores 1.08x the 1e-3 error (the same
-curve, undertrained in 500 epochs) and 2e-3 already collapses, so the safe
-window at width 192 is 3e-4 to 1e-3 and the protocol rate sits within a
-factor of two of the collapse. The
+curve, undertrained in 500 epochs) and 2e-3 already rises to the plateau
+by epoch 22, so the safe window at width 192 is 3e-4 to 1e-3 and the
+protocol rate sits within a factor of two of the plateau's onset. The
 decade-wide stability the book quoted before 2026-09-18 was measured on
 the legacy centered variant, whose center and length unit are fixed before
 any routing happens; it does not transfer, and its grid stays in the
@@ -449,8 +452,8 @@ dataset; the benchmark below varies the sampling law and the count.
 #| label: para-density-legacy
 #| output: asis
 print(f"The legacy centered variant, which centers on the plain mean of the sampled points, degrades "
-      f"{MR['isla_reference_constant_gauge']['density_factor']:.1f}x under the same probe, the same collapse as the baselines, and "
-      f"the collapse is the center and nothing else: the same checkpoint evaluated with a measure-weighted center reads "
+      f"{MR['isla_reference_constant_gauge']['density_factor']:.1f}x under the same probe, the same degradation as the baselines, and "
+      f"the degradation is the center's and nothing else: the same checkpoint evaluated with a measure-weighted center reads "
       f"{MR['isla_constant_gauge_mcenter']['density_factor']:.2f}x, and handed the exact frame of the full geometry it reads "
       f"{MR['isla_frame_full_frame']['density_factor']:.2f}x, so the frame estimate accounts for about "
       f"{MR['isla_relative_frame_meas']['density_factor'] - MR['isla_frame_full_frame']['density_factor']:.2f} of the reference's "
@@ -566,7 +569,7 @@ def table_rows(rows):
         out += f"| {ds} | {label} | {u40:.4f} | {D(arm,'area'):+.0%} | {D(arm,'biased'):+.1%} | {conv(arm,'area'):.2f}x |\n"
     return out
 print(table_rows(rows))
-print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. ISLA passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centered on the drawn sample their frame collapses, and holds only when the center is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for ISLA). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf companions. {#tbl-consistency-40k}")
+print(": Consistency at the benchmark's largest count. The preregistered bars are a sampler dependence of at most 3% for consistent and at least 10% for reading the sampling distribution. ISLA passes both samplers on the wings at 35 cases and converges to within 3 to 4% on the cars; GeoTransolver and Transolver read the sampling distribution by 90% or more. The measure-weighted baselines' area and bias columns are pool-frame values: with the frame held, measure weighting makes their aggregation consistent; centered on the drawn sample their frame degrades by the same factors, and holds only when the center is the Horvitz–Thompson estimate of the geometric centroid (@tbl-density). The last column is the factor by which each arm's area-sampler error fell over the counts it was run at (2,500 to 40,000 cells; 10,000 to 40,000 for ISLA). Float32, two-seed means. Data: results/consistency_bench/consistency_bench_2026-09-10.json and its _mw and _rf companions. {#tbl-consistency-40k}")
 ```
 
 ::: {.callout-note collapse="true" title="The similarity-gauge variant in the consistency benchmark (diagnostic)"}

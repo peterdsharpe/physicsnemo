@@ -30,8 +30,8 @@ section; this chapter adds only the limits.
 | On HiLiftAeroML surface pressure, GeoTransolver and Transolver fed the unit freestream direction lead ISLA at every rung where it is measured: 35 and 210 random training cases, 4 and 21 training geometries, and the fixed angle; on the 35-case rung the deficit is not count noise (0.73 at the reporting protocol of 200,000 cells against 0.72 at the exploration budget). | @sec-data-efficiency, @sec-scoreboard-200k |
 | On DrivAerML at the reporting protocol ISLA and GeoTransolver are at parity at full data (0.998) and ISLA leads Transolver by 6%; below full data GeoTransolver is the more data-efficient model, by a deficit that narrows from 17% at 27 cars to zero at 435. At the exploration budget the baselines led by a few percent; that gap's anatomy is known and the denser budget closed it. | @sec-scoreboard-200k, @sec-full-data, @sec-deficit-anatomy |
 | Rotation and translation covariance are exact by construction; with every case in a random pose ISLA scores 1.015x its native-frame error and leads the augmented baselines by 12% and 21% at the reporting protocol (7% and 17% at the exploration budget; @sec-nb-p200k-pose-verdict, @sec-nb-poseref-verdict). | @sec-pose, @sec-mt2-contracts |
-| The relative frame is consistent under a change of surface sampling where every sample-centered configuration collapses, and the measure-weighted ISLA arms are the only ones that converge under refinement. | @sec-consistency-bench, @sec-scoreboard-consistency |
-| Training needs no rate sweep at the protocol rate 1e-3, but the safe window is narrower than the baselines' (at width 192, 3e-3 collapses and 1e-2 diverges; @sec-nb-lrref-verdict); the step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-mt2-cost |
+| The relative frame is consistent under a change of surface sampling where every sample-centered configuration degrades 10 to 16x, and the measure-weighted ISLA arms are the only ones that converge under refinement. | @sec-consistency-bench, @sec-scoreboard-consistency |
+| Training needs no rate sweep at the protocol rate 1e-3, but the safe window is narrower than the baselines' (at width 192, 3e-3 settles on the mean-field loss plateau and 1e-2 diverges to NaN; @sec-nb-lrref-verdict); the step cost is at parity with GeoTransolver at 10,000 tokens in half the memory. | @sec-robustness-lr, @sec-mt2-cost |
 | On the interior task ISLA leads GeoTransolver-volume on velocity at a third of the parameters, trails on pressure and eddy viscosity, and leads on two of three fields at matched parameters. | @sec-interior |
 | Nothing tested generalizes across a flow-regime boundary. | @sec-regime-extrapolation |
 | Cross-family transfer is a property of the training data for every architecture tested. | @sec-limits-transfer |
@@ -193,7 +193,7 @@ removed without breaking a contract.** The decomposition itself is
   variance part shrinks.** On the cars the weights-off ÷ weights-on ratio
   rises toward one with cell count; on the wings it is flat across a
   sixteen-fold range, which variance cannot produce, and the weights-off
-  checkpoints collapse under an area-proportional draw to errors worse than
+  checkpoints lose consistency under an area-proportional draw, with errors worse than
   predicting zero (@sec-consistency-bench). Weights off is an ablation that
   prices the measure semantics, never a configuration (@sec-principle).
 - **The interior standings sort into capacity and generalization** on the
@@ -338,8 +338,8 @@ sampling may differ from the training sampling, where geometries arrive in
 arbitrary poses, on the interior at matched parameters, or where memory at
 scale binds.** The recommendation splits on consistency, and consistency is
 a property of the frame, not of the architecture: every configuration that
-centers its coordinates on a statistic of the sampled points collapses
-under a sampling-density bias when the frame is taken from the biased
+centers its coordinates on a statistic of the sampled points degrades
+several-fold under a sampling-density bias when the frame is taken from the biased
 sample, the baselines included, and only frames that do not read
 the sample hold, the relative frame among them and the ablations
 of the baselines given a Horvitz–Thompson center (@sec-scoreboard-consistency).

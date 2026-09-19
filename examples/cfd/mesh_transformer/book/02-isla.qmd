@@ -227,7 +227,7 @@ much when the surface is resampled. That noise falls as $1/\sqrt{N}$ and is
 nearly gone at 40,000 cells on DrivAerML; the stratified inference draw of
 @sec-using-sampler removes most of it at 10,000. The part of the ablation's
 advantage that does not shrink, on the wings, is mesh-pattern content
-learned from the mesher, and it collapses under an area-proportional draw to
+learned from the mesher, and it loses consistency under an area-proportional draw, with
 errors worse than predicting zero (@sec-consistency-bench).
 :::
 
@@ -310,7 +310,7 @@ from the relational invariants of idea 4.
 #|   samplings to quadrature error. How to read this: ISLA
 #|    uses no center at all and only the length unit; the
 #|   legacy centered variant (a diagnostic, @sec-mt2-variants) used the gray
-#|   center and collapsed under a sampling-density bias.
+#|   center and degraded 12x under a sampling-density bias.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
 clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
@@ -731,7 +731,7 @@ fraction of the body length, every downstream invariant leaves its trained
 range, and the error grows 12x where the reference grows 1.2x. It reads a
 sample statistic that is not physical knowledge, so it is cut from every
 main result of this book and appears only in collapsed notes like this one,
-where it is the diagnostic that locates a mechanism (the plain-mean collapse;
+where it is the diagnostic that locates a mechanism (the plain-mean center's density degradation;
 the single-factor ablation of @sec-mechanism, which was run on it). Its
 recipe configuration `isla_surface_constant_gauge` is kept to reproduce
 those measurements.
@@ -872,7 +872,7 @@ training cases, two seeds, which was run on the legacy centered variant
 |---|---|---|---|
 | relational invariants in routing and read-back (idea 4) | the largest single accuracy contribution | removing them: 1.16x | @sec-mechanism |
 | exact equivariance (ideas 2, 6) | no canonical frame or augmentation at inference; a 7% and 17% lead in random poses | adding raw coordinates does not help at 35 wing cases (1.04x with the channel, 0.99x with raw seeds; every ablation keeps an invariant path through the relational invariants, so these do not show invariants are dispensable); at 435 cars the contracts deny about 2.5 points of positional information against the baselines | @sec-pose, @sec-deficit-anatomy |
-| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centered configurations degrade 10 to 16x; that collapse is the plain-mean center alone (the legacy centered checkpoint with a measure-weighted center swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the baselines stay at 3 to 7x | against the legacy centered variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
+| the relative frame (idea 2) | consistency: 1.2x under a 10:1 density bias where sample-centered configurations degrade 10 to 16x; that degradation is the plain-mean center alone (the legacy centered checkpoint with a measure-weighted center swapped in goes from 12.1x to 1.12x), and under refinement the measure-weighted convention-swap penalty converges 2.9x → 1.45x → 1.05x from 2,500 to 40,000 cells while the baselines stay at 3 to 7x | against the legacy centered variant (diagnostic): 0% on DrivAerML; 1 to 5% on never-seen-geometry rungs; 11% where validation geometries recur in training; 14.5% at a fixed angle; on the wings that price is the plain mean's mesher pattern (its centroid sits 0.131 body lengths off the geometric one, 0.034 on the cars), not positional information | @sec-scoreboard-consistency, @sec-full-data, @sec-consistency-bench |
 | measure weights (idea 1) | correctness: a slice aggregates an integral, not a mesher's point pattern | 0.88x at 35 cases as an ablation; the price is estimator variance and shrinks with cells; retraining under an area-proportional draw, which makes the weights constant, does not buy the ablation's advantage back | @sec-principle, @sec-deficit-anatomy |
 | passive decoder (exact query independence) | prediction at a point depends on the surface and that point alone | 3.0 to 3.7x on DrivAerML surface pressure (0.203 to 0.211 against 0.0577 for the interacting legacy centered variant; a 6,500-token interacting control gives the 3.0x end and is a token-count, not a matched-memory, control); 3.1x on interior pressure | @sec-query-independence |
 | single routing per layer (idea 3) | simplicity, the fused kernel | nothing measurable at full data: four routings recover 2.5% at 435 cars, eight are 1.7% worse; not adopted | @sec-nb-heads435-verdict |

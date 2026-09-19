@@ -19531,7 +19531,7 @@ GeoTransolver rows of this ladder are provisional until its 3e-3 controls
 report (@sec-nb-rategt-prereg): the 27-car control moved GeoTransolver by
 31%, so the 54-car ratio in particular is expected to move.
 
-## 2026-09-18 — Verdict, LR-REF: falsified; ISLA collapses at learning rate 3e-3 (validation loss 0.06 against 0.0008 at 1e-3, float32 pressure error 0.77) and diverges at 1e-2, so the decade-wide rate robustness measured on the legacy centered variant does not transfer {#sec-nb-lrref-verdict}
+## 2026-09-18 — Verdict, LR-REF: falsified; ISLA's validation loss rises to the mean-field plateau at learning rate 3e-3 (0.06 against 0.0008 at 1e-3, float32 pressure error 0.77) and diverges at 1e-2, so the decade-wide rate robustness measured on the legacy centered variant does not transfer {#sec-nb-lrref-verdict}
 
 **Setting.** The book has quoted a learning-rate robustness result: across
 the grid {1e-3, 3e-3, 1e-2} at 435 DrivAerML cars the worst point was
@@ -19562,8 +19562,10 @@ or 1e-2) is met at both rates by a wide margin, so **LR-REF is falsified**.
 512 (@sec-nb-relframe-divergence-mechanism), now at width 192 and 3e-3:
 under too high an effective rate the relative frame's measure-weighted
 routing hardens to one slice per token within the first epochs and the
-anchors collapse; the model then sees no geometry and settles on the mean
-field. At 1e-2 the collapse continues into non-finite invariants. The
+anchors coincide (measured at width 512, @sec-nb-relframe-divergence-mechanism,
+and inferred here from the matching loss signature, not measured on these
+runs); the model then sees no geometry and settles on the mean field. At
+1e-2 the loss diverges to NaN. The
 legacy centered variant survives both rates because its center and length
 unit are fixed before any routing happens. The effective rate scales with
 width, which is why the width rule (learning rate 1e-3 × 192 / hidden)
@@ -19576,11 +19578,11 @@ rather than the middle of a safe decade.
   main text everywhere (@sec-robustness-lr, the pros table of the limits
   chapter, the operating manual); the legacy variant's grid stays in its
   collapsed diagnostic note. ISLA's rate statement now reads: trains at the
-  protocol rate 1e-3 without a sweep; collapses at 3e-3; diverges at 1e-2;
+  protocol rate 1e-3 without a sweep; rises to the mean-field plateau at 3e-3; diverges to NaN at 1e-2;
   use the width rule above width 192.
 - The unified recipe's default learning rate is 3e-3 (GeoTransolver's).
   ISLA's model configurations did not pin their own rate, so a user who
-  runs `model=isla_surface` with the defaults gets a collapsed model. The
+  runs `model=isla_surface` with the defaults gets a model on the mean-field plateau. The
   README already passes 1e-3 on every ISLA line; the configuration now
   pins it as well (see the recipe commit of this date), and the config
   test asserts it.
@@ -19596,7 +19598,7 @@ bracketing the safe window at 3e-4 and 2e-3.
 ## 2026-09-18 — Preregistration, RATE-WINDOW: where does ISLA's safe learning-rate window begin and end at width 192? {#sec-nb-ratewindow-prereg}
 
 **Question.** LR-REF established that ISLA at width 192 trains at 1e-3 and
-collapses at 3e-3. A user needs the window, not two points: how far below
+settles on the mean-field plateau at 3e-3. A user needs the window, not two points: how far below
 1e-3 does training stay near its best, and does the ceiling lie above 2e-3?
 
 **Instrument.** Four lanes of ISLA at 435 DrivAerML cars on the 10,000-cell
@@ -19605,7 +19607,7 @@ exploration budget, 500 epochs, bf16, lean class, same recipe copy as the
 790772): learning rates 3e-4 and 2e-3, seeds 42 and 43. Readout: float32
 surface-pressure error on the sample-frame probe against the 1e-3 seeds
 (0.0552), plus each lane's loss trajectory over the first ten epochs (the
-collapse signature is a rise to the 0.06 plateau within five epochs).
+plateau signature is a rise to the 0.06 plateau within five epochs).
 
 **Bars, written before the runs.**
 
@@ -19614,15 +19616,15 @@ collapse signature is a rise to the 0.06 plateau within five epochs).
   Above 1.1x: the window below is narrow too and the manual states 1e-3
   as a point recommendation with the width rule.
 - **2e-3 trains within 1.2x of 1e-3**: the ceiling lies between 2e-3 and
-  3e-3. **2e-3 collapses** (plateau signature, error above 2x): the
+  3e-3. **2e-3 rises to the plateau** (the signature above, error above 2x): the
   ceiling lies between 1e-3 and 2e-3, and the protocol rate is within a
-  factor two of the collapse, which the manual states as a warning.
+  factor two of the plateau's onset, which the manual states as a warning.
 - Either outcome at 2e-3 leaves the mechanism question (why the routing
   hardens at a rate the centered variant tolerates) to a separate study;
   this one only draws the map.
 
 **Prediction.** 3e-4 within 1.1x (about 1.05x, slightly undertrained in
-500 epochs); 2e-3 collapses on at least one seed (the hardening is an
+500 epochs); 2e-3 rises to the plateau on at least one seed (the hardening is an
 early-epoch event and 2e-3 is close to 3e-3), probability about 0.5.
 
 ## 2026-09-18 — Verdict, POSE-REF: supported; with every case in its own random pose ISLA scores 0.0560 against 0.0552 in the native frame (1.015x), 7% below the rotation-augmented GeoTransolver and 17% below the augmented Transolver {#sec-nb-poseref-verdict}
@@ -19664,7 +19666,7 @@ a property of the trained function; it held. Together with LR-REF
 geometric property (covariance) transferred exactly, the optimization
 property (rate robustness) did not.
 
-## 2026-09-18 — Interim, RATE-WINDOW: 2e-3 collapses on both seeds within twenty epochs (the 3e-3 signature), so ISLA's ceiling at width 192 lies between 1e-3 and 2e-3; 3e-4 is learning normally; the 2e-3 lanes are stopped {#sec-nb-ratewindow-interim}
+## 2026-09-18 — Interim, RATE-WINDOW: 2e-3 rises to the mean-field plateau on both seeds within twenty epochs (the 3e-3 signature), so ISLA's ceiling at width 192 lies between 1e-3 and 2e-3; 3e-4 is learning normally; the 2e-3 lanes are stopped {#sec-nb-ratewindow-interim}
 
 **What we saw.** Twenty-two epochs into the four RATE-WINDOW lanes
 (@sec-nb-ratewindow-prereg): both 2e-3 seeds sit on the mean-field plateau
@@ -19672,18 +19674,18 @@ property (rate robustness) did not.
 @sec-nb-lrref-verdict), and the 3e-4 seed 42 lane is at 0.0040, in step
 with the 1e-3 reference's trajectory at that epoch (0.0037). The
 preregistration named the plateau signature within five epochs as the
-collapse readout, so the 2e-3 pair was canceled at epoch about 22 and
+plateau readout, so the 2e-3 pair was canceled at epoch about 22 and
 marked blocked with the reason, as the 1e-2 pair was earlier, rather than
-training a collapsed model for 480 more epochs on two nodes.
+training a plateaued model for 480 more epochs on two nodes.
 
 **Reading, provisional.** The ceiling lies between 1e-3 and 2e-3: the
-protocol rate is within a factor of two of the collapse. The operating
+protocol rate is within a factor of two of the plateau's onset. The operating
 manual will state 1e-3 as the rate for width 192 with that warning, and
 the width rule above it. The lower edge of the window waits on the 3e-4
 pair's final float32 error (bar: within 1.1x of 1e-3).
 
 **A mechanism question this sharpens.** The legacy centered variant
-tolerates 1e-2 and the relative frame collapses at 2e-3, with the same
+tolerates 1e-2 and the relative frame rises to the plateau at 2e-3, with the same
 routing, the same layers and the same head; the frame is the only
 difference. The relative frame's slice anchors are measure-weighted means
 of the tokens each slice routes, and every geometric invariant the network
@@ -19758,7 +19760,7 @@ rate control at 3e-3 was launched for both GeoTransolver and ISLA.
 
 **What we saw.** GeoTransolver at 3e-3: **0.1244** (seeds 0.1260 / 0.1227),
 below both its 1e-3 lane (0.1813) and its 10,000-cell value (0.1536).
-ISLA at 3e-3: 0.7716 and 0.7706, the same mean-field collapse LR-REF
+ISLA at 3e-3: 0.7716 and 0.7706, the same mean-field plateau LR-REF
 found at 435 cars (@sec-nb-lrref-verdict), so ISLA's better rate stays
 1e-3 (0.1506). The preregistered reading applies: the flag was the rate,
 and the 27-car row is written with each model at its better of the two
@@ -19774,7 +19776,7 @@ grid. The 54-, 109- and 218-car rows and the 435-car trio were all run at
 1e-3, so each may understate GeoTransolver. The book's protocol is that
 each architecture runs at its own best rate (@sec-lr-protocol), so the
 comparison is not written until GeoTransolver has had 3e-3 on every rung.
-ISLA has no such control to run: it collapses above 1e-3 and its 3e-4
+ISLA has no such control to run: its loss rises to the plateau above 1e-3 and its 3e-4
 lanes are already in RATE-WINDOW.
 
 **Instrument (RATE-GT).** GeoTransolver at 3e-3, seeds 42 and 43, at
@@ -19901,11 +19903,11 @@ thesis's in-distribution clause is written after it.
 ## 2026-09-19 — Verdict, RATE-WINDOW: ISLA's safe learning-rate window at width 192 is 3e-4 to 1e-3 (3e-4 scores 1.08x the 1e-3 error), 1e-3 is best, and the ceiling lies between 1e-3 and 2e-3 {#sec-nb-ratewindow-verdict}
 
 **Setting.** LR-REF (@sec-nb-lrref-verdict) showed ISLA at width 192
-collapsing at 3e-3 and diverging at 1e-2; RATE-WINDOW
+rising to the mean-field plateau at 3e-3 and diverging to NaN at 1e-2; RATE-WINDOW
 (@sec-nb-ratewindow-prereg) bracketed the safe window with two seeds each
 at 3e-4 and 2e-3 on the 10,000-cell exploration budget, 435 DrivAerML cars,
 500 epochs, bf16, scored in float32 on the sample-frame probe against the
-1e-3 seeds. The 2e-3 pair collapsed by epoch 22 and was stopped
+1e-3 seeds. The 2e-3 pair rose to the plateau by epoch 22 and was stopped
 (@sec-nb-ratewindow-interim).
 
 **What we saw.** At 3e-4 the surface-pressure error is **0.0597** (seeds
@@ -19917,11 +19919,11 @@ undertraining within the fixed 500-epoch budget rather than a different
 optimum. Artifact: results/ratewindow_reduction_2026-09-19.json.
 
 **Verdict.** The window extends half a decade downward and not at all
-upward: **3e-4 to 1e-3 at width 192, 1e-3 best, collapse between 1e-3 and
-2e-3.** The prediction (3e-4 within 1.1x; 2e-3 collapses with probability
+upward: **3e-4 to 1e-3 at width 192, 1e-3 best, plateau onset between 1e-3 and
+2e-3.** The prediction (3e-4 within 1.1x; 2e-3 rises to the plateau with probability
 about 0.5) held on both points. The operating manual states the window and
 the warning that the protocol rate sits within a factor of two of the
-collapse; above width 192 the width rule applies. The mechanism question
+plateau's onset; above width 192 the width rule applies. The mechanism question
 (why the relative frame's routing hardens at a rate the centered variant
 tolerates) stays open as a separate node.
 
@@ -20449,9 +20451,9 @@ of them against GeoTransolver's 0.0445.
   five; width wins if the 512 × 200k or 768 × 100k lane is; balanced if a
   middle point is. This is reported as the recommendation for spending a
   budget on ISLA.
-- **Width rule**: every lane trains without the routing collapse of
+- **Width rule**: every lane trains without the rise to the mean-field plateau of
   @sec-nb-relframe-divergence-mechanism (validation loss not on the
-  mean-field plateau); a collapse at 768 would mark the rule's edge.
+  mean-field plateau); a plateau at 768 would mark the rule's edge.
 
 **Prediction.** Iso-budget lead of 4 to 7% on both axes; the optimal split
 is balanced (288 × 400k or 384 × 400k) rather than either extreme, because
@@ -20500,7 +20502,7 @@ rule rates). The iso-budget comparison will take, on each axis, the lanes
 within 15% of GeoTransolver's cost; with these additions the set is
 expected to be 192 × 600k, 384 × 400k, 512 × 300k and 768 × 200k.
 
-## 2026-09-19 — Interim and preregistration, PROTO-200K-FLEET interior: ISLA's interior configuration collapses at 200,000 cells and learning rate 1e-3 on both seeds while every surface lane trains; GeoTransolver-volume improves to 0.0477; RATE-VOL runs the interior at 5e-4 and 3e-4 {#sec-nb-ratevol-prereg}
+## 2026-09-19 — Interim and preregistration, PROTO-200K-FLEET interior: ISLA's interior configuration rises to the mean-field loss plateau at 200,000 cells and learning rate 1e-3 on both seeds while every surface lane trains; GeoTransolver-volume improves to 0.0477; RATE-VOL runs the interior at 5e-4 and 3e-4 {#sec-nb-ratevol-prereg}
 
 **What we saw.** The interior lanes (`p200k_dr_*_vol_seed42/43`: boundary
 cells and interior query points both at 200,000 per case) finished.
@@ -20508,16 +20510,18 @@ GeoTransolver-volume scores 0.0477 / 0.101 / 0.084 (pressure, velocity,
 eddy viscosity; 0.0513 / 0.107 / 0.088 at 10,000 queries), a clean
 improvement. ISLA's pair is on the mean-field plateau: float32 0.73 / 0.73 /
 0.97, validation loss 0.069 and 0.073 against 0.0010 for the 10,000-query
-lane. The loss curves show the collapse LR-REF identified
+lane. The loss curves show the signature LR-REF identified
 (@sec-nb-lrref-verdict), not a configuration error: seed 42 trains normally
 to epoch 70 (validation loss 0.0041, on the 10,000-query lane's trajectory)
-and collapses between epochs 70 and 80; seed 43 collapses before epoch 20.
+and its validation loss rises from 0.0041 to 0.080 between epochs 70 and 80; seed 43's rises before epoch 20.
 Every surface lane at 1e-3, including the ISO-COST and ISO-MATCH lanes at
 600,000 cells and width 768 (checked at epochs 60 to 117, all on normal
 trajectories), is healthy, so the ceiling that moved is the interior
 configuration's: with 200,000 query tokens interacting alongside 200,000
-boundary tokens its routing hardens at a rate the surface configuration
-tolerates. This is the preregistration's defect clause
+boundary tokens its loss rises to the plateau at a rate the surface
+configuration tolerates; the routing-saturation mechanism RFDIV measured at
+width 512 is inferred here from the matching signature, not measured on
+these runs. This is the preregistration's defect clause
 (@sec-nb-proto200k-fleet-prereg): the row is not written; the defect is
 investigated.
 
@@ -20533,8 +20537,9 @@ interior row is written with ISLA at the higher clean rate. Bars on that
 row against GeoTransolver-volume: pressure and velocity ratios within 5% of
 their 10,000-query values (0.93 and 1.37) mean the interior standing
 survives the protocol; a swing of more than 5% is reported as the budget's
-effect. If both rates collapse, the interior configuration's rate ceiling
-at 200,000 cells is below 3e-4 and the collapse mechanism study is promoted
+effect. If both rates rise to the plateau, the interior configuration's rate ceiling
+at 200,000 cells is below 3e-4 and the mechanism study (routing entropy and
+anchor spread measured on these runs) is promoted
 ahead of the interior row.
 
 **Prediction.** 5e-4 trains cleanly on both seeds (the width rule's factor
