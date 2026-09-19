@@ -20136,3 +20136,47 @@ to 53): GeoTransolver at 3e-3 on the 105-case, 510-case, 1,260-case,
 4-geometry, geometry-scarce and single-angle rungs, two seeds each; the
 larger rungs take days. Each wing row will take GeoTransolver's better rate
 and say so, as the DrivAerML rows do.
+
+## 2026-09-19 — Preregistration, WING-BENCH-200K: is the 27% wing deficit at the reporting protocol draw variance, and does GeoTransolver's wing lead survive a change of sampling pattern? {#sec-nb-wingbench-prereg}
+
+**Setting.** Two wing rungs at 200,000 cells (@sec-nb-p200k-wings-35,
+@sec-nb-p200k-wings-geo4) left GeoTransolver ÷ ISLA at 0.73 and 0.76,
+unchanged from the exploration budget, so count noise is not the wing
+deficit; the 4-geometry rung rules out recurring validation geometries as
+its source, and the 10,000-cell ablations ruled out positional information
+(raw coordinates bought 4%, @sec-nb-a35-verdict) and the draw (the
+stratified sampler moved the ratio one point, @sec-nb-quadvar-hl-verdict).
+Two questions remain that the existing 200,000-cell checkpoints can answer
+without training: whether the draw-variance term is any larger at the
+reporting protocol, and whether GeoTransolver's wing lead is portable
+across a change of sampling pattern or bound to the pattern it was trained
+on, as on DrivAerML (10 to 16x degradation under a 10:1 density bias
+against 1.2x for ISLA).
+
+**Instrument.** The six 35-case checkpoints (`p200k_hl_*_super_scarce_seed42/43`,
+ISLA, GeoTransolver at 3e-3, Transolver) scored in float32 on the
+consistency benchmark's HiLift datasets at 200,000 cells: the independent
+draw, the stratified draw and the 10:1-biased draw
+(`bench/bench_lanes_wing200k.tsv`, 18 lanes). Readouts: GeoTransolver ÷
+ISLA and Transolver ÷ ISLA under each draw; each model's density factor
+(biased ÷ independent).
+
+**Bars, written before the run.**
+
+- **Draw variance is not the wing deficit** if the stratified ratio is
+  within 0.03 of the independent one; **part of it** if it moves by 0.03 or
+  more (then the wing anatomy needs the count-and-draw decomposition
+  repeated at 200,000 cells).
+- **The lead is pattern-bound** if the baselines' density factors exceed 3
+  while ISLA's stays below 1.5, so that under the biased draw ISLA's error
+  is below the baselines'; **the lead is portable** if the baselines'
+  factors stay below 1.5 as well.
+
+**Prediction.** Draw variance is not the deficit (ratio moves under 0.02,
+as at 10,000 cells) and the lead is pattern-bound (baseline factors 5 to
+15x, ISLA under 1.3x, as on DrivAerML at 10,000 cells). Probability about
+0.8 on both. If both hold, the wing standing reads: on the sampling the
+baselines were trained on they lead by 27%; under any other sampling of
+the same wings ISLA leads, and the remaining mechanism of the in-pattern
+deficit is the trained function's use of the wing meshes' cell-size
+structure, which the measure-weighted routing deliberately does not read.
