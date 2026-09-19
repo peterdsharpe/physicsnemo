@@ -19818,3 +19818,36 @@ the count-noise term from ISLA's error and GeoTransolver's, and
 GeoTransolver keeps its data-efficiency lead. The 109- and 218-car controls
 (where GeoTransolver at 1e-3 already stood at 1.02 and 1.01) and the
 435-car pair decide whether the lead persists at full data.
+
+## 2026-09-19 — Fleet operations: eight wing lanes blocked by a stale failure fingerprint, not by training; the rank kills behind them are NCCL all-reduce timeouts; guard and timeout fixed {#sec-nb-proto200k-fleet-ops-2026-09-19}
+
+**Symptom.** At 02:15 PDT the watcher reported eight ISLA wing lanes
+(deflection, scarce, geometry-scarce and geometry-super-scarce rungs, both
+seeds) blocked with the same reason, "identical failure on consecutive
+segments: train step failed at epoch 0, step 0", although every one of them
+had trained for tens to hundreds of epochs.
+
+**Cause, two layers.** The blocking text was the lanes' *first-ever*
+failure, from the launch afternoon (the missing head-shape override,
+@sec-nb-proto200k-fleet-launch). The two-strike guard took its fingerprint
+from the last matching line of the whole log, so any later link that died
+without writing an error line inherited that stale text, matched the
+stored fingerprint, and blocked the lane. Underneath, the links were dying
+because one rank was killed with SIGABRT after an NCCL all-reduce watchdog
+timeout at the 900-second collective timeout: 72 such timeouts across 23
+of the 42 wing lanes, on all three architectures (60 on ISLA lanes, 46 on
+GeoTransolver's, 34 on Transolver's), so it is a data-path stall (one rank
+waiting on a large case at 200,000 cells, most plausibly during the
+distributed validation pass) and not a model defect. One lane also took
+two SIGBUS kills on the same node, which was excluded.
+
+**Fixes.** Every chain launcher now records the log length before
+`torchrun` and fingerprints only the current link's lines
+(`kernel/patch_guard_fingerprint.py`); the wing, deflection and interior
+launchers raise the collective timeout to 3,600 seconds; the eight lanes
+were unblocked, preflighted and resumed from their newest intact
+checkpoints (epochs 17 to 299). Pending links carry the old script text, so
+the fixes reach a lane at its next self-submitted link. Wall-clock cost so
+far: each timeout costs a link restart and a queue wait, not epochs (the
+checkpoint interval is two epochs), which is why the wing rungs are
+running behind the DrivAerML lanes.
