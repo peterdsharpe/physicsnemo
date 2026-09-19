@@ -45,7 +45,7 @@ in view:
    geometries arrive in arbitrary poses ISLA leads baselines that learned
    pose from augmentation. Its relative frame reads nothing from the sample,
    so its prediction is consistent under a change of surface sampling where
-   every configuration that centers on the sampled points collapses.
+   every configuration that centers on the sampled points degrades 10 to 16x.
 3. **The gap had an anatomy, and the budget closed it.** At the exploration
    budget GeoTransolver led ISLA by 8% on DrivAerML; more than half of that
    was finite-sample noise that a stratified inference draw or more cells
@@ -116,7 +116,7 @@ rows = [
     ("Exploration budget: DrivAerML 435 cars, independent 10,000-cell draw", f"{gt10:.4f} / {t10:.4f}", f"{isla10:.4f}", f"{gt10/isla10:.2f} / {t10/isla10:.2f}", f"at 10,000 cells the baselines led by {pct(gt10/isla10)} and {pct(t10/isla10)}; the stratified draw halves that gap ({gt_st/isla_st:.2f} / {t_st/isla_st:.2f}) and the reporting protocol removes it"),
     ("Scale study: width 512, 80,000 cells", f"{gt_c:.4f} / {t_c:.4f}", f"{isla_c:.4f}", f"{gt_c/isla_c:.2f} / {t_c/isla_c:.2f}", f"gap {pct(gt_c/isla_c)} and {pct(t_c/isla_c)} at the width-scaling corner"),
     ("Every case in a random pose at 200,000 cells (baselines trained with rotation augmentation, ISLA without)", f"{PP['arms']['gt_unit']['posed_mean']:.4f} / {PP['arms']['transolver_unit']['posed_mean']:.4f}", f"{PP['arms']['isla']['posed_mean']:.4f}", f"{pose200_lead['gt']:.2f} / {pose200_lead['t']:.2f}", f"ISLA leads by {(pose200_lead['gt']-1)*100:.0f}% and {(pose200_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose200['isla']:.3f}x, the baselines' {pose200['gt']:.2f}x and {pose200['t']:.2f}x"),
-    ("Sampling consistency at the exploration budget: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "ISLA is consistent; every sample-centered configuration collapses"),
+    ("Sampling consistency at the exploration budget: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "ISLA is consistent; every sample-centered configuration degrades 10 to 16x"),
     ("Interior fields from the surface, DrivAerML: pressure / velocity / eddy viscosity", "GeoTransolver-volume", "ISLA with query tokens", f"{inter['pressure_l2']:.2f} / {inter['velocity_l2']:.2f} / {inter['nut_l2']:.2f}", "ISLA leads on velocity, trails on pressure and eddy viscosity, at a third of the parameters"),
 ]
 out = "| Setting | GeoTransolver / Transolver | ISLA | baseline ÷ ISLA | Reading |\n|---|---:|---:|---:|---|\n"

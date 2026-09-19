@@ -96,7 +96,7 @@ Three of these need a word.
   again internally and discards the magnitude. This is also the
   fair-comparison rule for every architecture in the book
   (@sec-fair-comparison): fed the physical velocity, GeoTransolver's global
-  context collapses to one slice and loses 3.4 to 3.8x.
+  context routes to a single slice and loses 3.4 to 3.8x.
 - **A speed or other magnitude that matters is a global scalar.** Set
   `n_global_scalars` and pass `global_scalars` of shape (B, S). No fixed power
   of the freestream speed is a physical law for every output (a pressure
@@ -145,14 +145,15 @@ dataset's native frame predicts a car in any pose (@sec-pose).
 **Above width 192, set the learning rate to $10^{-3} \times 192 /
 \mathrm{hidden}$.** At width 512 that is $3.75 \times 10^{-4}$. At the
 protocol rate of $10^{-3}$ the relative frame diverges at width 512: the
-routing hardens to one slice per token and the anchors collapse. Under the
+routing hardens to one slice per token and the anchors coincide (measured
+at that width, @sec-nb-relframe-divergence-mechanism). Under the
 rule it trains cleanly, and the rule costs a centered control at the same
 corner nothing (its error at $3.75 \times 10^{-4}$ equals its error at
 $10^{-3}$), so the rule is a property of the relative frame, not a
 retuning of the comparison (@sec-nb-corner-wlr-verdict,
 @sec-nb-cg-wlr-verdict). At width 192 the safe window is 3e-4 to 1e-3, with 1e-3 best (3e-4 costs
-8% in 500 epochs) and a collapse to a mean-field plateau between 1e-3 and
-2e-3; 1e-2 diverges (@sec-robustness-lr, @sec-nb-ratewindow-verdict). Never
+8% in 500 epochs) and a rise of the validation loss to the mean-field
+plateau between 1e-3 and 2e-3; 1e-2 diverges to NaN (@sec-robustness-lr, @sec-nb-ratewindow-verdict). Never
 run ISLA at the recipe's GeoTransolver default of 3e-3; the ISLA
 configurations pin 1e-3 for that reason.
 

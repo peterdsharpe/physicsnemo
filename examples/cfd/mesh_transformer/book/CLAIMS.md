@@ -1830,12 +1830,12 @@ interior control @sec-nb-udrv-int-prereg.
 
 ## LR-REF (2026-09-18; falsified)
 - ISLA (relative frame, width 192, 435 cars, 10k budget): 1e-3 trains (0.0552); 3e-3
-  collapses within 5 epochs to a mean-field plateau (val loss 0.059/0.062 vs 0.0008;
+  rises within 5 epochs to the mean-field loss plateau (val loss 0.059/0.062 vs 0.0008;
   fp32 pressure 0.766 / 0.761); 1e-2 NaN at epochs 21/32.
-- Rule: never write "stable across a decade of learning rate" for ISLA; that grid
+- Rule (terminology, 2026-09-19): write the measured signature ("validation loss rises to the mean-field plateau", "diverges to NaN"), never "collapses"; attribute routing saturation only where measured. Never write "stable across a decade of learning rate" for ISLA; that grid
   (1.55x worst/best) is the legacy centered variant's, diagnostic only. Write
-  "trains at 1e-3 without a sweep; collapses at 3e-3; diverges at 1e-2; width rule
-  above 192". The recipe default 3e-3 collapses ISLA: the ISLA configs pin 1e-3.
+  "trains at 1e-3 without a sweep; rises to the mean-field plateau at 3e-3; diverges to NaN at 1e-2; width rule
+  above 192". The recipe default 3e-3 puts ISLA on the mean-field plateau: the ISLA configs pin 1e-3.
 - Lesson: a finite but flat loss is not "training cleanly"; compare to the sibling lane.
 
 ## POSE-REF (2026-09-18; results/refprops_reduction_2026-09-18.json)
@@ -1855,7 +1855,7 @@ interior control @sec-nb-udrv-int-prereg.
 
 ## RATE-GT (2026-09-19; results/p200k_ladder_interim_2026-09-18.json rate_control_lr3e3)
 - 27 cars, 200k: GeoTransolver 3e-3 = 0.1244 (0.1260/0.1227) vs 1e-3 = 0.1813 vs 10k = 0.1536;
-  ISLA 3e-3 collapses (0.771). Row at better rates: GT / ISLA = 0.83 (GeoTransolver leads 17%).
+  ISLA 3e-3 sits on the mean-field plateau (0.771). Row at better rates: GT / ISLA = 0.83 (GeoTransolver leads 17%).
 - Rule: never quote the 200k ladder or trio ratios with GeoTransolver at 1e-3 alone; every row
   takes GeoTransolver's better of {1e-3, 3e-3} once RATE-GT reports, and says so. The interim
   1.20 / 1.14 / 1.02 ratios are superseded at 27 cars and provisional at 54 / 109 / 218.
@@ -1868,7 +1868,7 @@ interior control @sec-nb-udrv-int-prereg.
 
 ## RATE-WINDOW (2026-09-19; results/ratewindow_reduction_2026-09-19.json)
 - ISLA width 192, 435 cars, 10k budget: 3e-4 = 0.0597 (1.08x of 1e-3's 0.0552); 1e-3 best; 2e-3 and 3e-3
-  collapse; 1e-2 diverges. Write: "safe window 3e-4 to 1e-3 at width 192, 1e-3 best, ceiling between 1e-3
+  rise to the mean-field plateau; 1e-2 diverges to NaN. Write: "safe window 3e-4 to 1e-3 at width 192, 1e-3 best, ceiling between 1e-3
   and 2e-3; width rule above 192". Never write a rate above 1e-3 as usable for ISLA at width 192.
 
 ## PROTO-200K-FLEET pose + RATE-GT 218 (2026-09-19)

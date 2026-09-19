@@ -130,7 +130,7 @@ projector applies linear maps and a slice softmax to the vector directly, so
 its conditioning depends on the magnitude: @tbl-projector shows how many
 slices each head of the untrained projector occupies as the magnitude
 grows. At unit magnitude a head spreads over most of the 256 slices; at the
-HiLiftAeroML magnitude it collapses onto one. Transolver concatenates the raw
+HiLiftAeroML magnitude it routes almost all of its weight to one. Transolver concatenates the raw
 vector into every point's features, with the same hazard in a different
 place. Training can in principle rescale either path, so these numbers are
 the initialization signature; the trained measurement is what counts.
@@ -199,7 +199,7 @@ fixed by rule rather than by control: learning-rate, training-length and
 seed controls vary the optimizer and cannot detect an input-scale defect.
 
 ::: {.callout-note collapse="true" title="Where the hazard is small: DrivAerML and the interior task"}
-At the DrivAerML magnitude the projector's collapse at initialization is
+At the DrivAerML magnitude the projector's concentration onto few slices at initialization is
 partial (@tbl-projector), and the trained effect is nil: GeoTransolver
 trained on the physical velocity and on the unit direction score within a
 percent of each other at 435 cars (@sec-full-data). GeoTransolver's volume
@@ -442,7 +442,7 @@ instead of architecture.** One grid step above its best rate,
 GeoTransolver's seed-mean error grows 9.0x on DrivAerML and 6.5x on
 HiLiftAeroML; the table in the note below computes each factor from its
 artifact. ISLA's side of the grid in the note is the legacy centered variant's
-(1.1x and 1.14x); ISLA itself collapses at 3e-3 (@sec-robustness-lr), so it
+(1.1x and 1.14x); ISLA itself settles on the mean-field loss plateau at 3e-3 (@sec-robustness-lr), so it
 runs at 1e-3 throughout, and the point here is procedural: each
 architecture runs at its own best rate. GeoTransolver's best rate also
 depends on how much data it sees: at the reporting protocol of 200,000
