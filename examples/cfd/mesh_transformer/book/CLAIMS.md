@@ -1852,3 +1852,10 @@ interior control @sec-nb-udrv-int-prereg.
   (scale_mode="rms_distance", the class and recipe default from 2026-09-18 evening). The
   total-measure unit is an option; lanes trained before that carry it, state "total-measure
   unit" when quoting them. Never write that the total measure is ISLA's unit in present tense.
+
+## RATE-GT (2026-09-19; results/p200k_ladder_interim_2026-09-18.json rate_control_lr3e3)
+- 27 cars, 200k: GeoTransolver 3e-3 = 0.1244 (0.1260/0.1227) vs 1e-3 = 0.1813 vs 10k = 0.1536;
+  ISLA 3e-3 collapses (0.771). Row at better rates: GT / ISLA = 0.83 (GeoTransolver leads 17%).
+- Rule: never quote the 200k ladder or trio ratios with GeoTransolver at 1e-3 alone; every row
+  takes GeoTransolver's better of {1e-3, 3e-3} once RATE-GT reports, and says so. The interim
+  1.20 / 1.14 / 1.02 ratios are superseded at 27 cars and provisional at 54 / 109 / 218.

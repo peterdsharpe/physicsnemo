@@ -19738,3 +19738,54 @@ the 200k standings are stated with the unit named. LEN-RMS closes the frame
 deliberation of 2026-09-18: ISLA's frame is relative and center-free, and
 its length unit is now also finite on every boundary with a finite second
 moment.
+
+## 2026-09-19 — Verdict on the 27-car rate control and preregistration, RATE-GT: the flag was the rate; GeoTransolver at 3e-3 scores 0.124 at 27 cars and 200,000 cells (0.83x ISLA's 0.151), so GeoTransolver gets 3e-3 controls on every 200k rung {#sec-nb-rategt-prereg}
+
+**Setting.** The 200,000-cell ladder (@sec-nb-proto200k-fleet-ladder-interim)
+ran GeoTransolver at 1e-3, the rate that won its 435-car grid on the
+10,000-cell budget, and its 27-car pair scored 0.181, above its
+10,000-cell predecessor's 0.154 (trained at 3e-3). The preregistration
+flagged that as a defect to investigate before the row is written, and a
+rate control at 3e-3 was launched for both GeoTransolver and ISLA.
+
+**What we saw.** GeoTransolver at 3e-3: **0.1244** (seeds 0.1260 / 0.1227),
+below both its 1e-3 lane (0.1813) and its 10,000-cell value (0.1536).
+ISLA at 3e-3: 0.7716 and 0.7706, the same mean-field collapse LR-REF
+found at 435 cars (@sec-nb-lrref-verdict), so ISLA's better rate stays
+1e-3 (0.1506). The preregistered reading applies: the flag was the rate,
+and the 27-car row is written with each model at its better of the two
+rates, **GeoTransolver ÷ ISLA = 0.83** at 27 cars. GeoTransolver leads by
+17% on the scarcest rung; the ordering the 1e-3 rows suggested (ISLA ahead
+by 20%) was an artifact of GeoTransolver's rate.
+Artifact: results/p200k_ladder_interim_2026-09-18.json (`rate_control_lr3e3`).
+
+**Why the other rungs are now in question.** GeoTransolver's best rate
+depends on how much it trains on: at 27 cars and 200,000 cells the higher
+rate is worth 31%; at 435 cars and 10,000 cells the lower rate won its
+grid. The 54-, 109- and 218-car rows and the 435-car trio were all run at
+1e-3, so each may understate GeoTransolver. The book's protocol is that
+each architecture runs at its own best rate (@sec-lr-protocol), so the
+comparison is not written until GeoTransolver has had 3e-3 on every rung.
+ISLA has no such control to run: it collapses above 1e-3 and its 3e-4
+lanes are already in RATE-WINDOW.
+
+**Instrument (RATE-GT).** GeoTransolver at 3e-3, seeds 42 and 43, at
+200,000 cells on 54, 109 and 218 cars (`kernel/p200k_fleet/p200k_lad_aga.sbatch`, lanes 28 to 33) and on the full 435 cars
+(`kernel/proto200k_aga.sbatch`, lanes 6 and 7), otherwise identical to the
+1e-3 lanes; float32 evaluation on the 48 validation cars through the
+fleet pump.
+
+**Bars, written before the runs.** Each rung's row is written with
+GeoTransolver at whichever of 1e-3 and 3e-3 scores lower by seed mean;
+the ladder chapter states that GeoTransolver's rate was chosen per rung
+and ISLA's was not (it has one usable rate). Fleet-level reading, restated:
+"the budget was the gap" holds only if GeoTransolver ÷ ISLA at 435 cars,
+each at its better rate, is at or above 0.97; the 435-car pair at 3e-3 is
+therefore load-bearing for the thesis's in-distribution clause.
+
+**Prediction.** The rate advantage shrinks with data: 3e-3 wins by 10 to
+20% at 54 cars, by under 5% at 109 and 218, and the two rates are within
+3% at 435 cars, where the 10,000-cell grid found 1e-3 best. Probability
+that 3e-3 still wins by more than 5% at 435 cars: 0.3. The ladder's
+ordering at 54 cars (ISLA ahead by 14% at GeoTransolver's 1e-3) likely
+reverses or closes.
