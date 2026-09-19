@@ -20180,3 +20180,58 @@ baselines were trained on they lead by 27%; under any other sampling of
 the same wings ISLA leads, and the remaining mechanism of the in-pattern
 deficit is the trained function's use of the wing meshes' cell-size
 structure, which the measure-weighted routing deliberately does not read.
+
+## 2026-09-19 — Verdict, WING-BENCH-200K: draw variance is not the wing deficit (stratified ratio 0.734 against 0.732); under a 10:1 density bias ISLA's wing error is unchanged (factor 1.00) while GeoTransolver's and Transolver's rise 2.5x and 2.8x, so ISLA leads them 1.8x and 2.1x under a changed sampling pattern; the preregistered factor-3 clause is not met {#sec-nb-wingbench-verdict}
+
+**What was run.** The six 35-case checkpoints at 200,000 cells scored in
+float32 on the 180 HiLift validation cases under the independent,
+stratified and 10:1-biased draws at 200,000 cells
+(@sec-nb-wingbench-prereg; job 794668;
+results/wingbench_200k_reduction_2026-09-19.json).
+
+**What we saw** (surface-pressure error, two-seed means):
+
+| model | independent | stratified | 10:1 biased | density factor (biased ÷ independent) |
+|---|---|---|---|---|
+| ISLA | 0.1502 | 0.1497 | 0.1498 | **1.00** |
+| GeoTransolver (3e-3) | 0.1098 | 0.1098 | 0.2716 | 2.47 |
+| Transolver (3e-3) | 0.1102 | 0.1101 | 0.3080 | 2.80 |
+
+GeoTransolver ÷ ISLA: 0.732 independent, 0.734 stratified, **1.81**
+biased. Transolver ÷ ISLA: 0.734, 0.736, **2.06**.
+
+**Against the bars.** *Draw variance is not the wing deficit*: the
+stratified ratio moves by 0.002, far inside the 0.03 clause, and no model
+moves by more than 0.4% between the two unbiased draws; the third candidate
+mechanism for the wing deficit is closed. *The lead's portability*: the
+preregistered "pattern-bound" clause asked for baseline density factors
+above 3 with ISLA's below 1.5. ISLA's is 1.00 (its error under the biased
+draw is within 0.3% of its independent-draw error, the consistency
+contract holding to the noise floor at this cell count) and the baselines'
+are 2.5 and 2.8, below 3, so by the letter of the preregistration the
+verdict on this clause is **between**. In substance the reading the clause
+was written to capture holds: on the sampling pattern they were trained
+on the baselines lead by 27%; under a different pattern of the same wings
+ISLA leads GeoTransolver by 81% and Transolver by 106%. The baselines'
+degradation is milder than at 10,000 cells (10 to 16x on DrivAerML,
+@sec-nb-quadvar-verdict) because a 10:1 bias at 200,000 cells still leaves
+the sparse region tens of thousands of points, and the bar was calibrated
+on the 10,000-cell numbers; that miscalibration is recorded
+(the threshold should have been stated relative to the count, per
+the program's threshold-calibration rule).
+
+**What the wing standing now says.** The 27% in-pattern deficit at 35
+wings is not count noise (@sec-nb-p200k-wings-35), not recurring
+validation geometries (@sec-nb-p200k-wings-geo4), not draw variance, and,
+at the exploration budget, not positional information
+(@sec-nb-a35-verdict). It is a property of the trained functions on the
+sampling pattern they were trained on, and it inverts under any other
+pattern. The remaining candidate for the in-pattern mechanism is the one
+the 10,000-cell ablations pointed at: on wing meshes whose cell sizes vary
+by a factor of hundreds (coefficient of variation 3.3), the
+measure-weighted routing's gradient variance costs accuracy (weights off
+bought 12% at 35 cases, @sec-nb-a35-verdict) while it buys the consistency
+in the table above. A principled study of that trade, one that keeps the
+weighted estimator (and so the consistency) while lowering its variance, is
+the next node to preregister; a stratified or area-balanced *training*
+draw is the candidate.

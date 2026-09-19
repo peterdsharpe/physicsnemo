@@ -1899,3 +1899,10 @@ interior control @sec-nb-udrv-int-prereg.
 - 200k: ISLA 0.2659, GT (1e-3) 0.2021, T 0.1929 -> GT/ISLA 0.76 (10k 0.75), T/ISLA 0.73 (0.77). ISLA and GT
   6-7% ABOVE their 10k errors (inside 9-10% seed spread; Transolver unchanged): state the increase, do not
   explain it away. Wing GT rows are provisional until the 3e-3 controls (hl lanes 42-53) report.
+
+## WING-BENCH-200K (2026-09-19; results/wingbench_200k_reduction_2026-09-19.json)
+- 35 wings, 200k: independent GT/ISLA 0.732, stratified 0.734 (draw variance not the deficit); biased draw
+  ISLA 0.1498 (factor 1.00), GT 0.2716 (2.47), T 0.3080 (2.80) -> ISLA leads 1.81x / 2.06x under the bias.
+- Rule: write "on the trained sampling pattern the baselines lead by 27%; under a 10:1 density bias ISLA
+  leads them 1.8x and 2.1x". The factor-3 clause was NOT met: say "between" on that clause; never write
+  "pattern-bound" as a met bar. Calibrate future density thresholds to the cell count.
