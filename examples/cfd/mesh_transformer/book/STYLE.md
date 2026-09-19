@@ -78,6 +78,11 @@ was retracted) lives in the notebook and the status chapter only.
 | the $n$-case rung | | a training-set size on the data-efficiency ladder |
 | area-weighted relative L2, float32 instrument | "rel-L2" in prose | the metric and its reporting precision |
 | the deficit anatomy | | the decomposition of the in-distribution gap into named parts |
+| the reporting protocol (200,000 cells per case) | "the 200k runs" in prose; an unlabeled 10,000-cell number | every reported standing trains and scores at the recipe default of 200,000 sampled cells per case, each architecture at its own best learning rate (GeoTransolver's is 3e-3 at that budget on every DrivAerML rung, 1e-3 at 10,000 cells; ISLA's is 1e-3). Adopted 2026-09-18 |
+| the exploration budget (10,000 cells per case) | "the reference resolution"; "the protocol" for a 10,000-cell number | the count the program explored at before 2026-09-18; every 10,000-cell figure, table and number carries this label |
+| parity (GeoTransolver and ISLA, DrivAerML, full data) | "ISLA leads at full data"; "the baselines lead by a few percent" | GeoTransolver ÷ ISLA = 0.998 at 435 cars and 200,000 cells, each at its better rate (results/p200k_trio_reduction_2026-09-19.json) |
+| a data-efficiency deficit that narrows from 17% at 27 cars to zero at 435 | "ISLA wins on data efficiency"; "ISLA is more data-efficient" | GeoTransolver ÷ ISLA 0.83, 0.86, 0.92, 0.97, 1.00 at 27, 54, 109, 218, 435 DrivAerML cars at 200,000 cells, GeoTransolver at 3e-3 |
+| the wing deficit is not count noise | "the wing gap is a budget artifact" | on the 35-case HiLiftAeroML rung the ratio is 0.73 at 200,000 cells and 0.72 at 10,000 (results/p200k_fleet_reduction_2026-09-19.json) |
 
 Symbols: $x_i, n_i, w_i$ inputs; $\hat g_k$ global unit vectors; $\sigma$
 global scalars; $L$ length scale; $r_i = x_i / L$; $h_i$ token state;

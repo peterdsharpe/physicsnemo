@@ -1,11 +1,17 @@
 # Data efficiency on HiLiftAeroML {#sec-data-efficiency}
 
 **On the wings, GeoTransolver and Transolver are more accurate than ISLA
-at every training-set size measured, by 12 to 32%.** The ladder below trains every architecture on nested
-subsets of HiLiftAeroML, from 35 to 510 cases, and on two further ladders
-that vary what the training set contains rather than how large it is, and
-scores them all on the same validation cases with the same instrument. The
-ordering never changes. What the chapter adds beyond the ordering is
+at every training-set size measured, by 12 to 32%, and the sampling budget
+does not change that: on the 35-case rung the ratio is 0.73 at the reporting
+protocol of 200,000 cells and 0.72 at the exploration budget of 10,000.**
+The ladder below trains every architecture on nested subsets of
+HiLiftAeroML, from 35 to 510 cases, and on two further ladders that vary
+what the training set contains rather than how large it is, and scores them
+all on the same validation cases with the same instrument. The ordering
+never changes. The ladder itself was run at the exploration budget and is
+labeled so; the 35-case rung repeated at 200,000 cells is in
+@tbl-scoreboard-200k-wings, and the other rungs follow as they finish
+(@sec-program-status). What the chapter adds beyond the ordering is
 *where* ISLA's error comes from on this dataset: it is paid in distinct
 geometries rather than cases, it concentrates in the slat and flap gaps,
 and it is representational rather than a data limit. The single-factor
@@ -45,12 +51,14 @@ ladders are used here.
 - **The fixed-angle split.** 126 geometries at 12°, validated on 18 held-out
   geometries at the same angle.
 
-Every architecture trains under the frozen protocol (@sec-protocol): 10,000
-sampled surface points per case, 500 epochs, bfloat16, no augmentation, two
-or three seeds, the freestream as a unit direction, and the learning rate
-each architecture prefers on the full split (ISLA 1e-3, Transolver 3e-3,
-GeoTransolver 1e-3 except at 35 cases, where its 3e-3 lane is better and is
-the one reported). Every number is a float32 evaluation of the final-epoch
+Every architecture trains under the frozen protocol (@sec-protocol) at the
+exploration budget: 10,000 sampled surface points per case, 500 epochs,
+bfloat16, no augmentation, two or three seeds, the freestream as a unit
+direction, and the learning rate each architecture prefers on the full
+split (ISLA 1e-3, Transolver 3e-3, GeoTransolver 1e-3 except at 35 cases,
+where its 3e-3 lane is better and is the one reported). The reporting
+protocol is 200,000 cells per case; on the one wing rung measured at both
+budgets the ratios agree within 0.02 (@tbl-scoreboard-200k-wings). Every number is a float32 evaluation of the final-epoch
 checkpoint; no checkpoint is selected on validation error. Parameters are
 matched (ISLA 8.9M, GeoTransolver 9.0M, Transolver 6.0M) and so are tokens
 per case; the step cost is in @sec-cost.
@@ -370,14 +378,21 @@ results/udrv_reduction_2026-09-09d.json.
 
 ## The same protocol on DrivAerML {#sec-de-drivaerml}
 
-**There is no ISLA advantage on DrivAerML at any training-set size
-either.** The DrivAerML ladder was run on the legacy centered variant; the
-ISLA is trained on DrivAerML only at 435 cars, where the
-float32 standing is in @sec-full-data-accuracy. From 27 cars up
-GeoTransolver is 1.2 to 1.3x more accurate than that variant, and the
-deficit is uniform in every way measured.
+**On DrivAerML, GeoTransolver is the more data-efficient model by a
+deficit that narrows monotonically from 17% at 27 cars to zero at 435.** At
+the reporting protocol of 200,000 cells, with each architecture at its own
+best rate (GeoTransolver's is 3e-3 on every rung at this budget,
+@sec-lr-protocol), GeoTransolver ÷ ISLA is 0.83, 0.86, 0.92, 0.97 and 1.00
+at 27, 54, 109, 218 and 435 training cars, and Transolver ÷ ISLA is 1.06,
+1.00, 0.99, 1.03 and 1.06 (@tbl-scoreboard-200k, computed from
+results/p200k_ladder_interim_2026-09-18.json and
+results/p200k_trio_reduction_2026-09-19.json). This is not an ISLA
+advantage: it is a deficit that closes at the full training set, and the
+ordering is the one the exploration-budget ladder found with a smaller gap
+at every rung. That earlier ladder, run on the legacy centered variant at
+10,000 cells, is in the note below.
 
-::: {.callout-note collapse="true" title="The DrivAerML ladder (diagnostic, legacy centered variant)"}
+::: {.callout-note collapse="true" title="The DrivAerML ladder at the exploration budget (10,000 cells; diagnostic, legacy centered variant)"}
 The ladder trains on nested subsets of the 435-car training split at
 learning rate 3e-3 for both architectures, 500 epochs, 10,000 tokens, two
 seeds, scored on the 48 validation cars in bfloat16 on identical points.
@@ -430,7 +445,14 @@ the surface and the volume
   of @sec-de-controls are the uncertainty to read, and they exist only at 35
   and 210 cases.
 - **No mechanism of an ISLA accuracy advantage is established, because no
-  such advantage is established.** What ISLA buys is stated elsewhere: exact
-  pose covariance (@sec-pose-contract), a frame that converges under
-  refinement (@sec-consistency-bench), and the interior velocity lead
-  (@sec-interior).
+  such advantage is established.** At the reporting protocol ISLA reaches
+  parity with GeoTransolver at full DrivAerML data and trails it below
+  (@sec-de-drivaerml); on the wings it trails at every rung. What ISLA buys
+  is stated elsewhere: exact pose covariance (@sec-pose-contract), a frame
+  that converges under refinement (@sec-consistency-bench), and the
+  interior velocity lead (@sec-interior).
+- **The wing deficit is not count noise.** On the 35-case rung twenty times
+  the sampled cells moved neither ISLA nor the baselines by more than 4%
+  (@tbl-scoreboard-200k-wings); the deficit is a property of the trained
+  functions, and its mechanism, the mesher pattern where validation
+  geometries recur in training, is the open study (@sec-open-questions).

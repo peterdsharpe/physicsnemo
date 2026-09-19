@@ -22,9 +22,17 @@ the protocol behind a particular row.
   error on interior pressure, velocity and eddy viscosity.
 - **The inputs are matched.** Every model receives the freestream as a unit
   direction (the unit-direction protocol, @sec-fair-comparison); tokens per
-  case (10,000 cells unless a row says otherwise), epochs (500), split and
-  validation cases are identical across architectures in every row, and each
-  architecture runs at its own best learning rate.
+  case, epochs (500), split and validation cases are identical across
+  architectures in every row, and each architecture runs at its own best
+  learning rate. GeoTransolver's best rate depends on how much data it sees
+  (3e-3 at 200,000 cells on every DrivAerML rung, 1e-3 at 10,000 cells at
+  full data); the rows name the rate used.
+- **Two budgets, one protocol.** The reporting protocol is the recipe's
+  default of 200,000 sampled cells per case (@sec-scoreboard-200k). The
+  program explored at 10,000 cells, and every figure and table measured at
+  that count carries the label *exploration budget*; on DrivAerML the
+  budget changes the standing (parity at 200,000 against an 8% deficit at
+  10,000), on the 35-case wing rung it does not.
 - **A ratio is baseline error divided by ISLA error**, so a value above one
   favors ISLA. Where a rung was run on several random training draws, the
   ratio carries the 90% interval over draws, which is the uncertainty to read.
@@ -186,9 +194,13 @@ lad = J("ladder_reduction.json")                      # DrivAerML data-efficienc
 
 ## Surface pressure: every rung on one axis {#sec-scoreboard-surface}
 
-**On every surface rung the unit-direction baselines match or beat ISLA;
-the margin runs from 2% at the corner to 28% at 35 wing cases and does not
-close as the training set grows.** @fig-scoreboard-forest places every
+**At the exploration budget of 10,000 cells the unit-direction baselines
+match or beat ISLA on every surface rung; the margin runs from 2% at the
+corner to 28% at 35 wing cases and does not close as the training set
+grows.** This section is the exploration-budget standing; the reporting
+protocol's standing on DrivAerML, where the full-data gap closes to parity,
+is @sec-scoreboard-200k, and the 35-case wing rung does not move between
+the two budgets (@sec-scoreboard-200k). @fig-scoreboard-forest places every
 setting on one axis of baseline error divided by ISLA error; the rows below
 the surface rungs are the pose test and the interior task, where ISLA leads.
 
@@ -524,16 +536,34 @@ print(": Interior error of the similarity-gauge variant (relative L2 over the 48
 
 **When every training and validation case arrives in its own random
 orientation, ISLA's error moves by 1.5% and the augmented baselines' rises
-by 20% and 31%, which makes ISLA 7% and 17% more accurate than
-GeoTransolver and Transolver on the same posed cars.** This is ISLA's one
-measured in-distribution accuracy lead over input-matched baselines on the
-surface, and it is conditional on the setting: in a canonical frame the same
-baselines lead (@sec-scoreboard-surface), and GeoTransolver trained in a
-canonicalized frame is pose-invariant at a 1% cost (@sec-pose). ISLA's
-rotation and translation covariance is exact by construction
-(@sec-mt2-contracts) and needs no augmentation; the same two checkpoints
-scored in the native frame land within 0.5% of their posed numbers
-(@sec-nb-poseref-verdict).
+by 12% and 16%, which makes ISLA 12% and 21% more accurate than
+GeoTransolver and Transolver on the same posed cars at the reporting
+protocol.** This is ISLA's one measured in-distribution accuracy lead over
+input-matched baselines on the surface, and it is conditional on the
+setting: in a canonical frame GeoTransolver is at parity
+(@sec-scoreboard-200k), and GeoTransolver trained in a canonicalized frame
+is pose-invariant at a 1% cost (@sec-pose). ISLA's rotation and translation
+covariance is exact by construction (@sec-mt2-contracts) and needs no
+augmentation; the same checkpoints scored in the native frame land within
+0.5% of their posed numbers (@sec-nb-poseref-verdict). At the exploration
+budget the lead was 7% and 17% (the second table below).
+
+```{python}
+#| label: tbl-scoreboard-pose-200k
+#| output: asis
+PP = J("p200k_pose_reduction_2026-09-19.json"); NAT = PP["native_frame_reference"]
+def seeds2(a): return " / ".join(f"{v['pressure_l2']:.4f}" for v in a["per_seed"].values())
+out = "| architecture | native frame | every case in a random pose | posed ÷ native | baseline ÷ ISLA, posed |\n|---|---:|---:|---:|---:|\n"
+for label, key in (("GeoTransolver, trained with rotation augmentation (native at 1e-3)", "gt_unit"), ("Transolver, trained with rotation augmentation", "transolver_unit"), ("ISLA, no augmentation", "isla")):
+    a = PP["arms"][key]
+    out += f"| {label} | {NAT[key]:.4f} | {a['posed_mean']:.4f} ({seeds2(a)}) | {a['posed_over_native']:.3f} | {a['posed_mean']/PP['arms']['isla']['posed_mean']:.2f} |\n"
+print(out)
+print(": The pose test at the reporting protocol: DrivAerML surface pressure, 435 training cars, 48 validation cars, 200,000 cells, float32, two seeds each. "
+      "The native column is each architecture's error in the dataset's frame from @tbl-scoreboard-200k (GeoTransolver's posed lanes ran at 1e-3, so its native reference here is the 1e-3 pair); the posed column trains and validates with every case rotated by its own random rotation. "
+      "Data: results/p200k_pose_reduction_2026-09-19.json; results/p200k_trio_reduction_2026-09-19.json. {#tbl-scoreboard-pose-200k}")
+```
+
+::: {.callout-note collapse="true" title="The pose test at the exploration budget (10,000 cells)"}
 
 ```{python}
 #| label: tbl-scoreboard-pose
@@ -557,6 +587,7 @@ print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, floa
       "results/refprops_reduction_2026-09-18.json (ISLA); research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json. "
       "{#tbl-scoreboard-pose}")
 ```
+:::
 
 ## Consistency under a change of surface sampling {#sec-scoreboard-consistency}
 
@@ -875,18 +906,18 @@ plt.show()
 
 ## The standing against the token budget {#sec-scoreboard-tokens}
 
-**The in-distribution gap is mostly a property of the 10,000-cell budget.**
-The protocol behind every row above trains and scores at 10,000 sampled
-cells per case, the program's exploration count; the recipe's default is
-200,000. Trained and scored at 40,000 and 80,000 cells at the same width,
-the baselines improve by 8% and ISLA by 16%, and the ratio moves from 0.90
-to 0.985 against GeoTransolver and past parity against Transolver
-(@tbl-scoreboard-tokens). The ISLA in these rows is the legacy centered
-variant, the only ISLA trained at those counts; its 10,000-cell value is
-within 1% of ISLA's on this dataset, so the ratios read across, and the
-book's reporting protocol is moving to the recipe default of 200,000 cells,
-where ISLA and both baselines are training now (@sec-program-status). The
-rows above stay as the exploration-count standing until those lanes report.
+**The DrivAerML in-distribution gap was a property of the 10,000-cell
+budget: it closes to parity at the recipe default.** The rows of
+@sec-scoreboard-surface train and score at 10,000 sampled cells per case,
+the program's exploration count. Trained and scored at 40,000 and 80,000
+cells at the same width, the baselines improve by 8% and ISLA by 16%, and
+the ratio moves from 0.90 to 0.985 against GeoTransolver and past parity
+against Transolver (@tbl-scoreboard-tokens); at the reporting protocol of
+200,000 cells, each architecture at its own best rate, GeoTransolver ÷ ISLA
+is 0.998 (@sec-scoreboard-200k). The ISLA in the 40,000- and 80,000-cell
+rows is the legacy centered variant, the only ISLA trained at those counts;
+its 10,000-cell value is within 1% of ISLA's on this dataset, so the ratios
+read across.
 
 ```{python}
 #| label: tbl-scoreboard-tokens
@@ -910,16 +941,20 @@ print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerM
 
 ## The standing at the reporting protocol: 200,000 cells {#sec-scoreboard-200k}
 
-**At the recipe's default of 200,000 sampled cells per case, ISLA and the
-baselines are within a few percent of one another at full data, and
-GeoTransolver keeps a data-efficiency lead on the scarce rungs once it is
-run at its own best rate.** The table below is computed from the
-200,000-cell artifacts and labels itself: a row is *provisional* while
-GeoTransolver's learning-rate control for that rung is still training,
-because GeoTransolver's best rate depends on how much data it sees (3e-3
-wins by 31% at 27 cars and by 10% at 109 cars; 1e-3 won its 435-car grid at
-10,000 cells; @sec-nb-rategt-prereg). ISLA has one usable rate (1e-3 at
-width 192; @sec-robustness-lr) and Transolver runs at 3e-3 throughout.
+**At the reporting protocol, the recipe's default of 200,000 sampled cells
+per case, ISLA and GeoTransolver are at parity on DrivAerML at full data
+(0.998), ISLA leads Transolver by 6%, and below full data GeoTransolver
+holds a data-efficiency lead that narrows from 17% at 27 cars to zero at
+435.** This is the book's primary standing on DrivAerML; the 10,000-cell
+rows of @sec-scoreboard-surface are the exploration budget. The table is
+computed from the 200,000-cell artifacts and names GeoTransolver's rate on
+every row, because GeoTransolver's best rate depends on how much data it
+sees: 3e-3 beats 1e-3 by 31%, 24%, 10%, 4% and 2% at 27, 54, 109, 218 and
+435 cars at this budget, where 1e-3 had won its 435-car grid at 10,000
+cells (@sec-nb-rategt-prereg, @sec-nb-proto200k-verdict). ISLA has one
+usable rate (1e-3 at width 192; @sec-robustness-lr) and Transolver runs at
+3e-3 throughout. A row would mark itself *provisional* if a rate control
+were still training; none is.
 
 ```{python}
 #| label: tbl-scoreboard-200k
@@ -958,14 +993,37 @@ print(": Surface-pressure error (area-weighted relative L2, float32, 48 DrivAerM
 #| output: asis
 gt_final = "gt_unit_lr3e3" in gts
 r435 = gts[best] / isla; t435 = A["transolver_unit_lr3e3"]["pressure_mean"] / isla
-lead = "leads" if r435 > 1 else "trails"
-print(f"At 435 cars ISLA {lead} GeoTransolver by {abs(r435-1)*100:.0f}% and leads Transolver by {(t435-1)*100:.0f}% "
-      f"({'final' if gt_final else 'on the 1e-3 reading; GeoTransolver’s 3e-3 pair is still training and the row is provisional'}). "
+standing = "at parity with" if abs(r435 - 1) < 0.01 else ("ahead of" if r435 > 1 else "behind")
+lads = [L2["rungs"][n]["gt_over_isla_at_better_rates"] for n in ("n27", "n54", "n109", "n218")]
+print(f"At 435 cars ISLA is {standing} GeoTransolver (GeoTransolver ÷ ISLA {r435:.3f}, GeoTransolver at {glab}) and leads Transolver by {(t435-1)*100:.0f}%"
+      f"{'' if gt_final else '; GeoTransolver’s 3e-3 pair is still training and the row is provisional'}. "
       f"Against the 10,000-cell standings (@sec-scoreboard-surface) every model improved, ISLA by the most "
-      f"({(1-P2['verdict']['isla_200k_over_10k'])*100:.0f}%), which is the count-noise term of the deficit anatomy "
-      f"(@sec-deficit-anatomy) going to zero at the denser sampling. On the scarce rungs GeoTransolver at its better rate "
-      f"leads ISLA by 17%, 14% and 8% at 27, 54 and 109 cars: the data-efficiency ordering of the 10,000-cell ladder survives "
-      f"the change of budget, and narrows toward parity by 218 cars.")
+      f"({(1-P2['verdict']['isla_200k_over_10k'])*100:.0f}% against {(1-gts[best]/0.0503)*100:.0f}% for GeoTransolver and "
+      f"{(1-A['transolver_unit_lr3e3']['pressure_mean']/0.0517)*100:.0f}% for Transolver), which is the count-noise term of the deficit anatomy "
+      f"(@sec-deficit-anatomy) going to zero at the denser sampling. Below full data GeoTransolver at its better rate "
+      f"leads ISLA by {', '.join(f'{(1-r)*100:.0f}%' for r in lads)} at 27, 54, 109 and 218 cars: the data-efficiency ordering of the "
+      f"10,000-cell ladder survives the change of budget with a smaller gap at every rung, and closes at the full training set. "
+      f"On the wings the budget changes nothing: on the 35-case rung GeoTransolver ÷ ISLA is 0.73 at 200,000 cells against 0.72 at 10,000 "
+      f"(@tbl-scoreboard-200k-wings), so that deficit is a property of the trained functions, not of the sampling count.")
+```
+
+```{python}
+#| label: tbl-scoreboard-200k-wings
+#| output: asis
+F2 = J("p200k_fleet_reduction_2026-09-19.json")["datasets"]
+out = "| HiLiftAeroML rung | budget | ISLA | GeoTransolver (3e-3) | Transolver (3e-3) | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |\n|---|---|---:|---:|---:|---:|---:|\n"
+w = F2["highlift_surface_super_scarce"]; tk = w["tenk_reference"]
+out += (f"| 35 training cases | exploration budget, 10,000 cells | {mean(tk['isla']):.4f} | {mean(tk['gt_lr3e3']):.4f} | {mean(tk['transolver_lr3e3']):.4f} "
+        f"| {tk['gt_over_isla']:.2f} | {tk['t_over_isla']:.2f} |\n")
+a = w["arms"]
+out += (f"| 35 training cases | reporting protocol, 200,000 cells | {a['isla']['pressure_l2_mean']:.4f} | {a['gt_unit']['pressure_l2_mean']:.4f} | {a['transolver_unit']['pressure_l2_mean']:.4f} "
+        f"| {w['ratios_over_isla']['gt_unit']['pressure_l2']:.2f} | {w['ratios_over_isla']['transolver_unit']['pressure_l2']:.2f} |\n")
+pending = [k for k, v in F2.items() if k.startswith("highlift") and v["status"] != "complete"]
+print(out)
+print(": The 35-case HiLiftAeroML rung at both budgets (surface-pressure error, float32, 180 validation cases, seed means; GeoTransolver at 3e-3 in both protocols, its better rate on this rung). "
+      "How to read this: twenty times the sampled cells moved neither model by more than 4%, so the wing deficit is not count noise; the mechanism the program points at is the mesher pattern where validation geometries recur in training (@sec-data-efficiency). "
+      f"The other wing rungs ({len(pending)} of them) are training at 200,000 cells and will join this table as they report (@sec-program-status). Data: results/p200k_fleet_reduction_2026-09-19.json; "
+      "results/fp32_reeval/fp32_shift_35_2026-09-09.json; results/relframe_reduction_2026-09-11.json. {#tbl-scoreboard-200k-wings}")
 ```
 
 ## What is not yet on the board {#sec-scoreboard-pending}
@@ -978,14 +1036,14 @@ live status of each is in @sec-program-status.
   results/udrvl_510_reduction_2026-09-12.json,
   results/udrv_1260_reduction_2026-09-15.json and
   results/udrv_1260_transolver_2026-09-16.json.
-- **ISLA in random poses and across the
-  learning-rate grid.** Both properties were first measured on the legacy
-  centered variant; the re-measurement on ISLA is
-  running (@sec-nb-refprops-prereg).
-- **ISLA below full data on DrivAerML**, on the
-  surface ladder and the interior ladder; both were measured on ISLA
-  variants that this chapter reports only in diagnostic notes
-  (@tbl-scoreboard-legacy-rungs, @tbl-scoreboard-interior-sg).
+- **The remaining wing rungs at the reporting protocol.** The 35-case rung
+  is measured at 200,000 cells (@tbl-scoreboard-200k-wings); the 105-,
+  510- and 1,260-case rungs, the geometry ladders and the fixed angle are
+  training at that budget (@sec-program-status).
+- **ISLA below full data on the DrivAerML interior ladder**, measured only
+  on a variant that this chapter reports in a diagnostic note
+  (@tbl-scoreboard-interior-sg); the surface ladder is measured on ISLA at
+  the reporting protocol (@tbl-scoreboard-200k).
 - **The baselines' consistency with a Horvitz–Thompson centroid on the
   wings.** It is measured on DrivAerML only, and only as a ablation.
 - **Multi-head slice routing at 435 cars.** On a one-car instrument eight

@@ -1,18 +1,22 @@
 # Accuracy at full data, and robustness {#sec-full-data}
 
-**At full DrivAerML data the baselines are a few percent more
-accurate than ISLA; off the tuned operating point, ISLA is the
-configuration that survives.** With every model fed the same inputs and
-scored in float32, GeoTransolver and Transolver lead ISLA on surface pressure by 7 to 10% on a 10,000-cell draw, a gap
-whose measured parts are laid out in @sec-deficit-anatomy. What separates
-the architectures is what happens when the evaluation departs from the
-training conditions. Under a 10:1 sampling-density bias ISLA's relative
+**At full DrivAerML data and the reporting protocol, ISLA and GeoTransolver
+are at parity and ISLA leads Transolver by 6%; off the tuned operating
+point, ISLA is the configuration that survives.** With every model fed the
+same inputs, each at its own best learning rate, and scored in float32 at
+200,000 cells per case, GeoTransolver ÷ ISLA is 0.998 and Transolver ÷ ISLA
+1.06 (@sec-scoreboard-200k). At the exploration budget of 10,000 cells the
+baselines led by 7 to 10%, a gap whose measured parts are laid out in
+@sec-deficit-anatomy and which the denser budget closed. What separates the
+architectures is what happens when the evaluation departs from the training
+conditions. Under a 10:1 sampling-density bias ISLA's relative
 frame degrades 1.2x where every configuration that centers on the sampled
 points degrades 10 to 16x; under refinement it converges toward one answer
 while the baselines do not; in arbitrary poses ISLA's exact
-covariance is worth 7% and 17% against rotation-augmented baselines; and it
-trains at its protocol learning rate without a sweep, though inside a
-narrower safe window than the baselines' (@sec-robustness-lr). Across a
+covariance is worth 12% and 21% against rotation-augmented baselines at
+the reporting protocol; and it trains at its protocol learning rate without
+a sweep, though inside a narrower safe window than the baselines'
+(@sec-robustness-lr). Across a
 flow-regime boundary nothing tested generalizes.
 
 The metric everywhere is the area-weighted relative L2 of surface pressure
@@ -239,11 +243,20 @@ plt.show()
 ```
 
 The consequence for deployment is the recommendation of @sec-using-sampler:
-use the stratified draw, or more cells. The consequence for the
-architecture is stated in the thesis: a couple of points bought with the
-contracts, and under a point that no tested mechanism explains.
-The 25 to 28% at 35 HiLift cases is a different mechanism, the mesher
-pattern where geometries recur (@sec-data-efficiency), and is priced there.
+use the stratified draw, or more cells. The anatomy above is the
+exploration-budget decomposition (10,000 cells, the instrument every part
+was measured on). **At the reporting protocol the whole gap closed**: at
+200,000 cells, each architecture at its own best rate, GeoTransolver ÷ ISLA
+is 0.998 (@sec-scoreboard-200k, @sec-nb-proto200k-verdict). That is more
+than the three count-noise points the anatomy attributed to the budget, so
+the other terms, the draw variance and the two and a half points read as
+the positional price of the contracts, were also partly properties of the
+10,000-cell instrument rather than of the architecture; what the contracts
+cost in distribution at the recipe's default budget on DrivAerML is, within
+seed noise, nothing. The 25 to 28% at 35 HiLift cases is a different
+mechanism, the mesher pattern where geometries recur
+(@sec-data-efficiency), and the budget does not touch it: the ratio is 0.73
+at 200,000 cells against 0.72 at 10,000 (@tbl-scoreboard-200k-wings).
 
 ## Learning-rate robustness {#sec-robustness-lr}
 

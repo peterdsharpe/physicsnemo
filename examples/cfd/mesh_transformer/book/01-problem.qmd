@@ -212,10 +212,11 @@ model implementation runs on all of them.
 Every comparison feeds the models the vehicle surface only, the information
 diet of every published baseline on the dataset. The recipe assigns 435
 variants to training and 48 to validation; the remaining variant is in
-neither. Every experiment in the evidence chapters samples 10,000 surface
-cells per case per step, the program's exploration budget; the recipe's
-default is 200,000, and the reporting comparison at that count is training
-(@sec-scoreboard-tokens states what the budget does to the standing).
+neither. The reporting protocol samples the recipe's default of 200,000
+surface cells per case per step; the program explored at 10,000 cells, and
+every number measured at that exploration budget is labeled as such
+(@sec-scoreboard-200k has the standing at the reporting protocol,
+@sec-scoreboard-tokens what the budget does to it).
 The surface task predicts pressure and wall shear at those cells
 (@sec-full-data); the interior task predicts pressure, velocity and
 turbulent viscosity at 10,000 interior query points from the surface alone
@@ -547,11 +548,11 @@ a comparison that departs from it says so in the same sentence.**
 
 | item | setting |
 |---|---|
-| tokens per case | 10,000 sampled surface cells per case per step, every architecture (the exploration budget; the reporting protocol is the recipe default of 200,000, @sec-scoreboard-tokens) |
+| tokens per case | 200,000 sampled surface cells per case per step, the recipe default and the reporting protocol, every architecture; the program's exploration budget of 10,000 cells is labeled wherever a number was measured at it (@sec-scoreboard-200k, @sec-scoreboard-tokens) |
 | epochs and schedule | 500 epochs, one case per step; the learning rate is divided by ten every 100 epochs, so the effective budget is about 300 epochs at a useful rate |
 | arithmetic | bfloat16 autocast in training; float32 at evaluation (@sec-metrics) |
 | augmentation | none |
-| learning rate | each architecture at its declared rate, chosen by validation on the dataset's full split before any smaller-split experiment ran: ISLA $10^{-3}$; GeoTransolver $10^{-3}$; Transolver $3 \times 10^{-3}$. One stated exception: on the 35-case HiLiftAeroML rung GeoTransolver was run at both $10^{-3}$ and $3 \times 10^{-3}$ and is reported at the better, $3 \times 10^{-3}$ (@sec-fair-comparison). Above width 192, ISLA uses the width rule of @sec-using-lr |
+| learning rate | each architecture at its own best rate: ISLA $10^{-3}$ (its one usable rate at width 192, @sec-robustness-lr); Transolver $3 \times 10^{-3}$; GeoTransolver $3 \times 10^{-3}$ at the reporting protocol on every DrivAerML rung and on the 35-case wing rung, $10^{-3}$ at the exploration budget at full data, because its best rate depends on how much data it sees (@sec-lr-protocol). Every row names the rate it used. Above width 192, ISLA uses the width rule of @sec-using-lr |
 | global vector input | the freestream as a unit direction, for every architecture (@sec-part-baseline) |
 | seeds | two or more (42 and 43 unless stated), reported individually beside the mean |
 | checkpoint | the final epoch; no selection on validation error |

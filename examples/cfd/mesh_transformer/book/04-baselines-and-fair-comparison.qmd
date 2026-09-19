@@ -392,7 +392,12 @@ HiLiftAeroML; the table in the note below computes each factor from its
 artifact. ISLA's side of the grid in the note is the legacy centered variant's
 (1.1x and 1.14x); ISLA itself collapses at 3e-3 (@sec-robustness-lr), so it
 runs at 1e-3 throughout, and the point here is procedural: each
-architecture runs at its own best rate. The grids are plotted as a
+architecture runs at its own best rate. GeoTransolver's best rate also
+depends on how much data it sees: at the reporting protocol of 200,000
+cells, 3e-3 beats its 1e-3 lanes by 31%, 24%, 10%, 4% and 2% at 27, 54,
+109, 218 and 435 DrivAerML cars, where 1e-3 had won its full-data grid at
+10,000 cells; every 200,000-cell row therefore uses GeoTransolver at 3e-3
+and names it (@sec-scoreboard-200k, @sec-nb-rategt-prereg). The grids are plotted as a
 robustness result in @sec-robustness-lr (@fig-lr-robustness).
 
 ::: {.callout-note collapse="true" title="The learning-rate grids behind the rule (ISLA rows: legacy centered variant, diagnostic)"}
@@ -439,13 +444,18 @@ print(": Learning-rate sensitivity on the full splits: area-weighted relative L2
 :::
 
 Two consequences are built into the protocol. Because GeoTransolver's best
-rate differs between datasets, "best rate per architecture, chosen on the
-full split" is the only rule under which the baseline is the strongest
-version of itself on both; the rate choice moves GeoTransolver's DrivAerML
-error by a few percent and does not decide the comparison (@sec-full-data).
-And the rate is chosen once and frozen for every smaller split: retuning at
-35 or 210 training cases would hand the baseline a search that ISLA did not
-get. Rate, training-length and seed controls at the small splits move
+rate differs between datasets and between budgets, "best rate per
+architecture" is the only rule under which the baseline is the strongest
+version of itself; at the exploration budget the rate choice moves
+GeoTransolver's DrivAerML error by a few percent and does not decide the
+comparison (@sec-full-data), while at the reporting protocol it moves the
+27-car row by 31% and does (@sec-scoreboard-200k). At the exploration budget
+the rate was chosen once on the full split and frozen for every smaller
+split, so that retuning at 35 or 210 training cases would not hand the
+baseline a search that ISLA did not get; at the reporting protocol
+GeoTransolver received a two-rate control on every DrivAerML rung and the
+better rate is reported, a search ISLA cannot use because it has one usable
+rate (@sec-robustness-lr). Rate, training-length and seed controls at the small splits move
 GeoTransolver's error by far less than its input-scale sensitivity
 (@tbl-unit-vs-physical), which is why the input scale is fixed by rule and
 not tested by control.
