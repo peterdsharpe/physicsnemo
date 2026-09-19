@@ -1140,6 +1140,7 @@ def test_default_is_relative_rms_distance():
         and m.scale_mode == "rms_distance"
         and m.relative_frame
     )
+    assert m.geo_kernel == "auto"  # 2026-09-19 ruling: fused wherever it can run, eager otherwise
     assert m.embed[0].in_features == 1
     assert m.blocks[0].geo_logit.in_features == 6
     m_c = ISLA(**_CENTERED, hidden=32, n_layers=2, n_slices=8)
@@ -1316,3 +1317,32 @@ def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
     assert all(r < 1e-3 for r in rel[4:]), rel
     assert rel[-1] < 1e-4, rel
     assert rms[-1] > 0.3  # a finite length of the order of the base
+
+
+
+def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices():
+    """geo_kernel=None (auto) picks the fused Triton region only where it can run: on CUDA with one global
+    vector and at most 1024 slices. On CPU it must resolve to eager at the first forward pass, cache the
+    decision, and leave the outputs identical to an explicit eager model with the same weights."""
+    torch.manual_seed(0)
+    pts = torch.randn(1, 64, 3, dtype=torch.float64)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 64, 3, dtype=torch.float64), dim=-1)
+    drv = torch.tensor([[[1.0, 0.0, 0.0]]], dtype=torch.float64)
+    w = torch.rand(1, 64, dtype=torch.float64) + 0.1
+    auto = ISLA(hidden=32, n_layers=2, n_slices=8).double().eval()
+    assert auto.geo_kernel == "auto" and auto.resolve_geo_kernel(pts) == "eager"
+    eager = ISLA(hidden=32, n_layers=2, n_slices=8, geo_kernel="eager").double().eval()
+    eager.load_state_dict(auto.state_dict())
+    with torch.no_grad():
+        ya = auto(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
+        ye = eager(points=pts, normals=nrm, global_vectors=drv, measure_weights=w)
+    assert torch.equal(ya, ye)
+    assert all(b.geo_kernel == "eager" for b in auto.blocks)
+    assert auto._geo_kernel_cache[1] == "eager"
+    # two global vectors: auto silently stays eager; an explicit fused request is refused at construction
+    two = ISLA(hidden=32, n_layers=2, n_slices=8, n_global_vectors=2).double().eval()
+    assert two.resolve_geo_kernel(pts) == "eager"
+    with pytest.raises(ValueError, match="one global vector"):
+        ISLA(hidden=32, n_layers=2, n_slices=8, n_global_vectors=2, geo_kernel="fused")
+    with pytest.raises(ValueError, match="geo_kernel must be"):
+        ISLA(hidden=32, n_layers=2, n_slices=8, geo_kernel="turbo")

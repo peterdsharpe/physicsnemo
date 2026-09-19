@@ -80,6 +80,8 @@ model:
   # storing them: forward and gradients bitwise identical, lower peak training
   # memory for a modest step-time cost. Set false to trade memory for speed.
   geo_checkpoint: true
-  # Geometry kernel: eager (reference implementation, default) or fused (exact Triton kernel,
-  # CUDA only, one global vector; accuracy-neutral, 0.17x the step time at 200,000 cells).
-  geo_kernel: eager
+  # Geometry kernel: null = automatic (2026-09-19 ruling): the exact fused Triton kernel
+  # wherever it can run (CUDA, one global vector, <= 1024 slices; about a third of the eager
+  # step time and memory at 200,000 cells), the eager PyTorch region otherwise. Force with
+  # `eager` or `fused`.
+  geo_kernel: null

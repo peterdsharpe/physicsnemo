@@ -67,10 +67,17 @@ meaningful magnitude belongs among the global scalar inputs. With one
 global vector and no global scalars (the defaults) the network is
 parameter-for-parameter the former single-vector model.
 
-**Kernels.** ``geo_kernel="fused"`` evaluates the per-layer geometry region
-in a Triton kernel (CUDA, one global vector); ``geo_checkpoint`` rebuilds the
-eager region's intermediates in backward instead of storing them. Both are
-exact opt-ins that leave the arithmetic unchanged.
+**Kernels.** The per-layer geometry region has two exact implementations
+of the same arithmetic: ``geo_kernel="eager"`` (PyTorch; ``geo_checkpoint``
+rebuilds its intermediates in backward instead of storing them) and
+``geo_kernel="fused"`` (one Triton kernel per direction that never
+materializes the (B, N, S, .) tensor; CUDA, float32/float64 geometry, one
+global vector, at most 1024 slices). The default ``geo_kernel=None`` means
+*auto*: at the first forward pass the model picks the fused kernel when the
+inputs are on CUDA, Triton is importable and the constraints hold, and the
+eager region otherwise, logging the choice once; at 200,000 cells the fused
+kernel runs the training step in about a third of the eager time and
+memory (cost sweep, 2026-09-18).
 
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
@@ -89,6 +96,7 @@ Checkpoint files written under the class's pre-2026-09-07 name
 (``MeshTransformer2.*.mdlus``) still load through ``_legacy_class_names``.
 """
 
+import logging
 import math
 
 import torch
@@ -99,6 +107,8 @@ from torch.utils.checkpoint import checkpoint
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
 from physicsnemo.nn.functional.equivariant_ops import spherical_basis
+
+logger = logging.getLogger(__name__)
 
 #: Git tag at which the full research class (every ablation option) is preserved.
 RESEARCH_TAG = "isla-research-full"
@@ -673,9 +683,13 @@ class ISLA(Module):
             the geometry, equivalent to the default within 1.3% of
             surface-pressure error on DrivAerML (LEN-RMS);
             ``"reference_length"``: divide by ``reference_length``.
-        geo_kernel: ``"eager"`` (default, the reference implementation) or
-            ``"fused"`` (exact Triton kernel for the per-layer geometry region,
-            CUDA only, opt-in; one global vector only).
+        geo_kernel: ``None`` (default) selects automatically at the first
+            forward pass: ``"fused"`` (exact Triton kernel for the per-layer
+            geometry region) when the inputs are on CUDA, Triton is available,
+            there is exactly one global vector and at most 1024 slices, else
+            ``"eager"`` (the PyTorch reference region). Pass ``"eager"`` or
+            ``"fused"`` to force one; ``"fused"`` raises when its constraints
+            cannot be met.
         eps: Numerical floor for norms and logarithms.
         **legacy_options: Research options removed from the mainline on
             2026-09-15 (see ``_REMOVED_OPTIONS``). A checkpoint that recorded one
@@ -734,7 +748,7 @@ class ISLA(Module):
         support_tokens: bool = False,
         frame_mode: str = "relative",
         scale_mode: str = "rms_distance",
-        geo_kernel: str = "eager",
+        geo_kernel: str | None = None,
         eps: float = 1e-12,
         **legacy_options,
     ) -> None:
@@ -752,11 +766,18 @@ class ISLA(Module):
         ### are stored or rebuilt in backward); "fused" is the Triton kernel of
         ### geo_kernel.py, which reads the pre-logits once and writes the bias and
         ### mix once per direction, with the recompute built in (CUDA only).
-        if geo_kernel not in ("eager", "fused"):
+        ### AUTO (2026-09-19, ruling): geo_kernel=None resolves at the first forward
+        ### pass to "fused" wherever the fused kernel can run (CUDA, Triton, one
+        ### global vector, <= 1024 slices) and to "eager" otherwise; the blocks
+        ### read the resolved name. An explicit "eager" or "fused" is honored.
+        if geo_kernel is None:
+            geo_kernel = "auto"
+        if geo_kernel not in ("auto", "eager", "fused"):
             raise ValueError(
-                f"geo_kernel must be 'eager' or 'fused', got {geo_kernel!r}"
+                f"geo_kernel must be None (auto), 'eager' or 'fused', got {geo_kernel!r}"
             )
         self.geo_kernel = geo_kernel
+        self._geo_kernel_resolved: str | None = None if geo_kernel == "auto" else geo_kernel
         ### GLOBAL INPUTS (2026-09-14, ruling: the architecture targets steady
         ### boundary-value problems in general, so the problem's global data
         ### are zero or more global VECTOR inputs (each enters as a unit
@@ -778,6 +799,7 @@ class ISLA(Module):
                 f"geo_kernel='fused' is written for exactly one global vector input; "
                 f"got n_global_vectors={self.n_global_vectors}"
             )
+        self.n_slices = int(n_slices)
         ### RELFRAME (2026-09-10, ruling: no sample statistic may enter the
         ### flagship's frame; 2026-09-11: frame_mode="relative" and
         ### scale_mode="total_measure" became the class defaults, the
@@ -1077,6 +1099,48 @@ class ISLA(Module):
             )
         return qs
 
+    def resolve_geo_kernel(self, points: torch.Tensor) -> str:
+        """The geometry-kernel implementation this forward pass will use.
+
+        ``"eager"`` or ``"fused"`` when the constructor fixed it; under the
+        default (auto) the fused kernel when ``points`` is on CUDA, Triton is
+        importable, the model has one global vector and at most 1024 slices,
+        else the eager region. The decision is cached per device and logged
+        once.
+        """
+        if self.geo_kernel != "auto":
+            return self.geo_kernel
+        key = (points.device.type, points.device.index)
+        cached = getattr(self, "_geo_kernel_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            from .geo_kernel import HAS_TRITON, MAX_SLICES
+        except Exception:  # pragma: no cover - a broken triton install falls back
+            HAS_TRITON, MAX_SLICES = False, 0
+        ok = (
+            points.is_cuda
+            and HAS_TRITON
+            and self.n_global_vectors == 1
+            and self.n_slices <= MAX_SLICES
+        )
+        chosen = "fused" if ok else "eager"
+        self._geo_kernel_cache = (key, chosen)
+        self._geo_kernel_resolved = chosen
+        logger.info(
+            "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d)",
+            chosen, points.device, points.is_cuda, HAS_TRITON, self.n_global_vectors, self.n_slices,
+        )
+        return chosen
+
+    def _apply_geo_kernel(self, points: torch.Tensor) -> None:
+        kernel = self.resolve_geo_kernel(points)
+        for block in self.blocks:
+            block.geo_kernel = kernel
+        if self.query_independent:
+            for rb in self.read_blocks:
+                rb.geo_kernel = kernel
+
     def forward(
         self,
         *,
@@ -1097,6 +1161,7 @@ class ISLA(Module):
             points = points[None]
             normals = normals[None]
         b, n, _ = points.shape
+        self._apply_geo_kernel(points)
         ### Global vector inputs: (B, K, 3), or any layout with B*K*3 or K*3
         ### elements ((K, 3), and for K = 1 (B, 3), (B, 1, 3) or (3,)); a
         ### single set is shared across the batch. Each is normalized to a unit
