@@ -1859,3 +1859,9 @@ interior control @sec-nb-udrv-int-prereg.
 - Rule: never quote the 200k ladder or trio ratios with GeoTransolver at 1e-3 alone; every row
   takes GeoTransolver's better of {1e-3, 3e-3} once RATE-GT reports, and says so. The interim
   1.20 / 1.14 / 1.02 ratios are superseded at 27 cars and provisional at 54 / 109 / 218.
+
+## PROTO-200K interim (2026-09-19; results/p200k_trio_reduction_2026-09-19.json)
+- 435 cars, 200k train + fp32 eval at 200k: ISLA 0.0446 (0.0442/0.0449); GeoTransolver 1e-3 0.0455
+  (1.02x); Transolver 0.0473 (1.06x). 200k/10k: ISLA 0.81, GT 0.90, T 0.91.
+- Rule: the 435-car 200k row is PROVISIONAL until GeoTransolver's 3e-3 pair is scored; never write
+  "ISLA leads at full data" before then. RATE-GT at 109 cars: GT 3e-3 0.0565 vs ISLA 0.0614 (0.92).

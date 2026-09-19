@@ -19851,3 +19851,49 @@ the fixes reach a lane at its next self-submitted link. Wall-clock cost so
 far: each timeout costs a link restart and a queue wait, not epochs (the
 checkpoint interval is two epochs), which is why the wing rungs are
 running behind the DrivAerML lanes.
+
+## 2026-09-19 — Interim verdict, PROTO-200K: at 435 cars and 200,000 cells ISLA scores 0.0446, GeoTransolver at 1e-3 0.0455 (1.02x) and Transolver 0.0473 (1.06x); parity bar met on the 1e-3 reading, final standing waits for GeoTransolver's 3e-3 pair; at 109 cars GeoTransolver at 3e-3 leads ISLA by 8% {#sec-nb-proto200k-interim}
+
+**Setting.** PROTO-200K (@sec-nb-proto200k-prereg) trains ISLA,
+GeoTransolver and Transolver at 435 DrivAerML cars with the recipe's
+default of 200,000 sampled cells per case, in place of the 10,000-cell
+exploration budget behind the earlier standings, and scores them in
+float32 at 200,000 cells on the 48 validation cars. The preregistered bars
+were parity (GeoTransolver ÷ ISLA at or above 0.99 and Transolver ÷ ISLA
+at or above 1.00), anatomy holds (0.96 to 0.99) and gap persists (below
+0.96), with the prediction "anatomy holds at the upper edge, 0.98 to 0.99".
+
+**What we saw** (surface-pressure error, seed mean with seeds 42 / 43;
+results/p200k_trio_reduction_2026-09-19.json):
+
+| model (learning rate) | 200,000 cells | 10,000 cells (earlier standing) | 200k ÷ 10k |
+|---|---|---|---|
+| ISLA (1e-3) | **0.0446** (0.0442 / 0.0449) | 0.0552 | 0.81 |
+| GeoTransolver (1e-3) | 0.0455 (0.0455 / 0.0455) | 0.0503 | 0.90 |
+| Transolver (3e-3) | 0.0473 (0.0470 / 0.0475) | 0.0517 | 0.91 |
+
+GeoTransolver ÷ ISLA **1.02**, Transolver ÷ ISLA **1.06**. Every model
+improves on its 10,000-cell value (no lane is flagged), ISLA by the most:
+the deficit anatomy assigned about three of its eight points at 10,000
+cells to count noise in the measure-weighted routing and this is where
+that term went. On the 1e-3 reading the **parity** bar is met and
+exceeded; the prediction (anatomy holds at 0.98 to 0.99) was too
+pessimistic for ISLA by about three points.
+
+**Why this is interim.** GeoTransolver's best rate depends on the data
+size (@sec-nb-rategt-prereg): at 200,000 cells its 3e-3 lanes beat its
+1e-3 lanes by 31% at 27 cars, 24% at 54 and, now scored, **10% at 109 cars**
+(0.0565 against 0.0627; GeoTransolver ÷ ISLA at its better rate **0.92**,
+so GeoTransolver leads ISLA by 8% on that rung as well). The advantage is
+shrinking with data, and at 435 cars the 10,000-cell grid found 1e-3 best,
+but the protocol is each architecture at its own best rate, so the 435-car
+row is written only when the 3e-3 pair (epoch about 240 of 500) is scored.
+The standing at 218 cars likewise waits for its control.
+
+**The picture that is forming.** At the reporting protocol GeoTransolver
+keeps a data-efficiency lead on the scarce rungs (17%, 14%, 8% at 27, 54
+and 109 cars, each at its better rate) that narrows toward zero by 218 to
+435 cars, where ISLA is at parity or slightly ahead on the 1e-3 reading.
+Transolver trails ISLA by 6% at full data. Whether ISLA's 2% lead at 435
+cars survives GeoTransolver's 3e-3 control is the one open number; the
+thesis's in-distribution clause is written after it.
