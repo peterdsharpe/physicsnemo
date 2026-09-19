@@ -20018,3 +20018,66 @@ their 10,000-cell ordering at the reporting protocol. ISLA's case on the
 wings rests, as before, on the contracts (consistency under a change of
 sampling, exact covariance), not on in-distribution accuracy, and the book
 states the deficit at the reporting protocol.
+
+## 2026-09-19 — Verdict, PROTO-200K and RATE-GT: parity at the reporting protocol; at 435 cars and 200,000 cells GeoTransolver at its better rate scores 0.0445 against ISLA's 0.0446 (0.998) and Transolver 0.0473 (1.06); GeoTransolver's 3e-3 wins every rung with a shrinking margin {#sec-nb-proto200k-verdict}
+
+**Setting.** PROTO-200K (@sec-nb-proto200k-prereg) is the in-distribution
+standing at the recipe's default of 200,000 sampled cells per case, the
+protocol Peter set on 2026-09-18 for every reported number. RATE-GT
+(@sec-nb-rategt-prereg) made the comparison fair by giving GeoTransolver
+its better of two learning rates on every rung, after the 27-car control
+showed that its best rate depends on how much data it trains on. The
+preregistered bars were parity (GeoTransolver ÷ ISLA at or above 0.99 and
+Transolver ÷ ISLA at or above 1.00), anatomy holds (0.96 to 0.99) and gap
+persists (below 0.96); the prediction was "anatomy holds at the upper
+edge, 0.98 to 0.99".
+
+**What we saw at 435 cars** (surface-pressure error, float32 at 200,000
+cells, 48 validation cars, seeds 42 / 43;
+results/p200k_trio_reduction_2026-09-19.json):
+
+| model (learning rate) | 200,000 cells | 10,000 cells | 200k ÷ 10k |
+|---|---|---|---|
+| ISLA (1e-3) | **0.0446** (0.0442 / 0.0449) | 0.0552 | 0.81 |
+| GeoTransolver (3e-3, its better rate) | **0.0445** (0.0441 / 0.0449) | 0.0503 (at 1e-3, its better rate there) | 0.88 |
+| GeoTransolver (1e-3) | 0.0455 (0.0455 / 0.0455) | | |
+| Transolver (3e-3) | 0.0473 (0.0470 / 0.0475) | 0.0517 | 0.91 |
+
+GeoTransolver ÷ ISLA **0.998** with seed ranges that coincide to the
+fourth decimal; Transolver ÷ ISLA **1.06**. **Verdict: parity.** The
+in-distribution gap the book carried for weeks (0.90 against GeoTransolver
+at 10,000 cells) was the exploration budget's: the deficit anatomy
+assigned three of its eight points to count noise in the measure-weighted
+routing, and at the reporting protocol the whole gap has gone, not three
+points of it. The prediction (0.98 to 0.99) undershot ISLA by about two
+points.
+
+**RATE-GT, complete.** GeoTransolver at 3e-3 beats its own 1e-3 on every
+rung at 200,000 cells, by 31%, 24%, 10%, 4% and 2% at 27, 54, 109, 218 and
+435 cars; the margin shrinks with data as predicted, and at 435 cars the
+two rates are within 2% so the 10,000-cell grid's choice of 1e-3 was not
+wrong there, only not best. Every 200,000-cell row of the book now takes
+GeoTransolver at 3e-3 and says so. The complete DrivAerML ladder at each
+model's better rate: GeoTransolver ÷ ISLA **0.83, 0.86, 0.92, 0.97, 1.00**
+at 27, 54, 109, 218 and 435 cars; Transolver ÷ ISLA 1.06, 1.00, 0.99, 1.03,
+1.06.
+
+**What the thesis now says, in-distribution.** On DrivAerML at the
+reporting protocol ISLA matches GeoTransolver at full data and trails it
+below full data by a deficit that narrows monotonically from 17% at 27
+cars to zero at 435; it leads Transolver by 6% at full data. On the wings
+the 35-case rung keeps its 27% deficit at 200,000 cells
+(@sec-nb-p200k-wings-35), so the in-distribution clause reads: parity on
+DrivAerML, a data-efficiency deficit on the scarce rungs of both datasets
+that closes with data on DrivAerML and is not count noise on the wings.
+What ISLA offers over the baselines at equal in-distribution accuracy is
+the contracts: consistency under a change of sampling (1.2x against 10 to
+16x under a 10:1 density bias), exact covariance worth 12% and 21% in
+random poses at this protocol (@sec-nb-p200k-pose-verdict), and half the
+memory at 10,000 tokens. The chapters are restated on these numbers.
+
+**What's next.** The RMS-pairwise-distance pair at 435 cars
+(`p200k_dr_isla_rms`, epoch about 440) records the unit equivalence at the
+reporting protocol; the interior, deflection and larger wing rungs follow
+over the coming days through the pump; the wing deficit's mechanism is the
+next study to preregister.

@@ -1883,3 +1883,12 @@ interior control @sec-nb-udrv-int-prereg.
 - 200k: ISLA 0.1500, GT (3e-3) 0.1098, T 0.1101 -> GT/ISLA 0.73, T/ISLA 0.73; 10k was 0.72 / 0.75.
 - Rule: on the wings the budget was NOT the gap (ratio moved < 0.03); write the 27% deficit at 35 wings as
   a property of the trained functions, not count noise; the mesher-pattern mechanism is the next study.
+
+## PROTO-200K final (2026-09-19; results/p200k_trio_reduction_2026-09-19.json)
+- 435 cars, 200k: ISLA 0.0446 (0.0442/0.0449); GeoTransolver 3e-3 0.0445 (0.0441/0.0449) -> 0.998 PARITY;
+  GeoTransolver 1e-3 0.0455; Transolver 0.0473 (1.06). Ladder at better rates: 0.83, 0.86, 0.92, 0.97, 1.00.
+- Rule: the in-distribution clause is "parity with GeoTransolver at full data on DrivAerML (0.998), 6% ahead
+  of Transolver; a data-efficiency deficit below full data that narrows 17% -> 0 from 27 to 435 cars; 27%
+  deficit on the 35-wing rung unchanged by the budget". Never write "ISLA leads GeoTransolver at full data"
+  (0.2% is noise) and never write the 10k gap (0.90) as the current standing. GeoTransolver's 200k rows
+  are at 3e-3, say so.
