@@ -19,14 +19,18 @@
 # ISLA (Invariant Slice Attention) -- SURFACE recipe (reference configuration).
 # ---------------------------------------------------------------------------
 # The ISLA reference configuration (decided 2026-09-11): the relative frame
-# with the total-measure scale. Positions enter only through point-to-anchor
-# differences (frame_mode=relative: no centroid and no per-sample frame
-# anywhere in the forward pass), and the length unit is the square root of
-# the total quadrature measure of the sampled surface (scale_mode=total_measure),
-# so no per-dataset reference length is needed. Translation invariance is
-# exact without centering; the frame carries no information about where the
-# mesher put its cells. Both settings are also the class defaults and are
-# stated here explicitly. Checkpoints store their constructor arguments, so
+# with the RMS-pairwise-distance length unit. Positions enter only through
+# point-to-anchor differences (frame_mode=relative: no centroid and no
+# per-sample frame anywhere in the forward pass), and the length unit is the
+# measure-weighted root-mean-square pairwise distance of the sampled surface
+# (scale_mode=rms_distance: normalized, center-free, finite on any boundary
+# with a finite second moment; validated against the total-measure unit on
+# 2026-09-18, LEN-RMS, within 1.3%), so no per-dataset reference length is
+# needed. scale_mode=total_measure (the square root of the total quadrature
+# measure) remains an option and is the unit of runs trained before then.
+# Translation invariance is exact without centering; the frame carries no
+# information about where the mesher put its cells. Both settings are also the
+# class defaults and are stated here explicitly. Checkpoints store their constructor arguments, so
 # models saved under other settings load unchanged.
 #
 # Consumes the same DomainMesh paths as the GeoTransolver template plus the
@@ -71,7 +75,7 @@ model:
   n_slices: 256
   mlp_ratio: 4
   frame_mode: relative
-  scale_mode: total_measure
+  scale_mode: rms_distance
   # Rebuild the per-slice geometric invariants inside backward instead of
   # storing them: forward and gradients bitwise identical, lower peak training
   # memory for a modest step-time cost. Set false to trade memory for speed.

@@ -940,9 +940,10 @@ class ComposeQuadratureMeasure(MeshTransform):
     ``cell_areas * _measure_weights`` is an unbiased estimate of the full-mesh
     measure whose sum is the surface area. ISLA's routing softmax and the
     similarity gauge are invariant to the per-sample factor and never noticed
-    the difference; the total-measure length scale of the reference
-    configuration (``scale_mode="total_measure"``, ``L = sqrt(sum w)``) is not,
-    and needs the corrected measure (notebook #sec-nb-relint-void, 2026-09-13).
+    the difference; the reference configuration's measure-weighted length unit
+    (``scale_mode="rms_distance"``, the weighted RMS pairwise distance; and
+    the optional ``"total_measure"``, ``L = sqrt(sum w)``) is not, and needs
+    the corrected measure (notebook #sec-nb-relint-void, 2026-09-13).
 
     Writes ``cell_data[output_field]`` on every mesh that has cells; meshes
     without cells (point-cloud interiors) are returned unchanged. Point

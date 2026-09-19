@@ -24,9 +24,10 @@ from physicsnemo.experimental.nn.isla.model import _REMOVED_OPTIONS, RESEARCH_TA
 
 # The contract tests below were written for the centered construction (plain-mean
 # centre, constant reference_length), which was the class default until 2026-09-11.
-# The class default is now the relative frame with the total-measure scale (the
-# reference configuration); these tests pin the centered construction explicitly so
-# they keep verifying it, and test_default_is_relative_total_measure covers the default.
+# The class default is now the relative frame with the RMS-pairwise-distance length
+# unit (the reference configuration; the total-measure unit was the default from
+# 2026-09-11 to 2026-09-18); these tests pin the centered construction explicitly so
+# they keep verifying it, and test_default_is_relative_rms_distance covers the default.
 _CENTERED = dict(frame_mode="centered", scale_mode="reference_length")
 
 
@@ -1124,17 +1125,19 @@ def test_relative_frame_is_sampling_consistent(kw):
     assert ratio < 4.0 < ratio_plain, (ratio, ratio_plain)
 
 
-def test_default_is_relative_total_measure():
-    """The class default is the reference configuration decided on 2026-09-11:
-    the relative frame (no centroid anywhere; one seed invariant n.d and six
-    relational invariants) with the total-measure scale (positions divided by
-    the square root of the total quadrature measure). Checkpoints store their
-    constructor arguments, so models saved under the earlier defaults are
-    unaffected; this test pins the default itself."""
+def test_default_is_relative_rms_distance():
+    """The class default is the reference configuration: the relative frame
+    (no centroid anywhere; one seed invariant n.d and six relational
+    invariants, decided 2026-09-11) with the RMS-pairwise-distance length unit
+    (positions divided by the measure-weighted root-mean-square pairwise
+    distance of the sample; validated and adopted 2026-09-18, LEN-RMS).
+    Checkpoints store their constructor arguments, so models saved under the
+    earlier defaults (centered frame; total-measure unit) are unaffected; this
+    test pins the default itself."""
     m = ISLA(hidden=32, n_layers=2, n_slices=8)
     assert (
         m.frame_mode == "relative"
-        and m.scale_mode == "total_measure"
+        and m.scale_mode == "rms_distance"
         and m.relative_frame
     )
     assert m.embed[0].in_features == 1

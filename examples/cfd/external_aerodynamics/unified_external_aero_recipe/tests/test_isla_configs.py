@@ -44,7 +44,7 @@ def test_plain_surface_name_is_the_reference_configuration():
     cfg = _compose("isla_surface", "drivaer_ml_surface")
     m = cfg.model
     assert m._target_ == ISLA_TARGET
-    assert m.frame_mode == "relative" and m.scale_mode == "total_measure"
+    assert m.frame_mode == "relative" and m.scale_mode == "rms_distance"
     assert "reference_length" not in m
     assert m.geo_checkpoint is True
     assert cfg.forward_kwargs.global_vectors == "global_data.U_inf_dir"
@@ -82,7 +82,7 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference")
     m = cfg.model
-    assert m.frame_mode == "relative" and m.scale_mode == "total_measure"
+    assert m.frame_mode == "relative" and m.scale_mode == "rms_distance"
     assert m.query_tokens is True and m.n_query_scalars == 1
     assert (
         cfg.forward_kwargs.measure_weights
@@ -99,7 +99,8 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
 
 def test_total_measure_scale_sees_the_surface_area_through_the_corrected_field():
     """End to end on a toy surface: raw areas of a 1-in-5 subsample sum to a fifth of the
-    body; the corrected field sums to the body, so the total-measure length unit is the
+    body; the corrected field sums to the body, so a measure-weighted length unit (the
+    RMS pairwise distance, or the optional total-measure unit checked here directly) is the
     body's and not the subsample's."""
     g = torch.Generator().manual_seed(0)
     pts = torch.rand(3000, 3, generator=g)

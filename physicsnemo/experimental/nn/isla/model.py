@@ -32,11 +32,17 @@ translation covariance is paid once at the network's edges instead of in
 every layer.
 
 **Reference configuration** (the defaults): ``frame_mode="relative"`` with
-``scale_mode="total_measure"``. Positions enter only as point-to-anchor
-differences and the length scale is the square root of the total quadrature
-measure of the sample, so no centroid, no sample statistic and no
-per-dataset reference length appears anywhere in the forward pass and the
-frame carries no information about where the mesher placed its cells.
+``scale_mode="rms_distance"``. Positions enter only as point-to-anchor
+differences and the length scale is the measure-weighted root-mean-square
+pairwise distance of the sample (a normalized two-point statistic that is
+invariant to the weights' overall scale and converges under refinement of
+any boundary with a finite second moment, fractal ones included), so no
+centroid, no per-dataset reference length and no external frame appears
+anywhere in the forward pass and the frame carries no information about
+where the mesher placed its cells. ``scale_mode="total_measure"`` (the
+square root of the total quadrature measure, the default until 2026-09-18)
+remains available; the two agree within 1.3% of surface-pressure error on
+DrivAerML.
 
 **Frame variants.** ``frame_mode="centered"`` centers by the plain mean of
 the sampled points and scales by the constant ``reference_length``
@@ -601,7 +607,7 @@ class ISLA(Module):
         mlp_ratio: Expansion ratio of the per-token and per-slice MLPs.
         reference_length: Constant length unit of the centered frame when
             ``scale_mode="reference_length"``; unused by the reference
-            configuration (``scale_mode="total_measure"``).
+            configuration (``scale_mode="rms_distance"``).
         use_measure_weights: Route with the quadrature measure as a log-space
             bias so slice states are measure-weighted (quadrature) means. ``False``
             is the "weights-off" ablation, which reads the sampling density.
@@ -655,15 +661,17 @@ class ISLA(Module):
             point-to-anchor differences, no centroid anywhere; ``"centered"``:
             centre on the plain mean of the sampled points (the constant-gauge
             and similarity-gauge variants).
-        scale_mode: ``"total_measure"`` (reference): divide positions by the
-            square root of the total quadrature measure, an integral of the
-            geometry; ``"rms_distance"`` (candidate reference, under
-            validation): divide by the measure-weighted RMS pairwise distance
-            of the sample, ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the
+        scale_mode: ``"rms_distance"`` (reference, the default): divide
+            positions by the measure-weighted RMS pairwise distance of the
+            sample, ``sqrt(sum_ij w_i w_j |x_i - x_j|^2)`` with the
             weights normalized to one, a *normalized* two-point statistic
             that converges under refinement of a boundary whose total measure
-            does not (a fractal boundary) and that names no centre; it is
+            does not (a fractal boundary) and that names no center; it is
             also invariant to a uniform rescale of the weights alone;
+            ``"total_measure"`` (option; the default until 2026-09-18): divide
+            by the square root of the total quadrature measure, an integral of
+            the geometry, equivalent to the default within 1.3% of
+            surface-pressure error on DrivAerML (LEN-RMS);
             ``"reference_length"``: divide by ``reference_length``.
         geo_kernel: ``"eager"`` (default, the reference implementation) or
             ``"fused"`` (exact Triton kernel for the per-layer geometry region,
@@ -677,7 +685,7 @@ class ISLA(Module):
 
     Forward inputs (all keyword-only): ``points`` and ``normals`` of shape
     ``(B, N, 3)``; ``measure_weights`` ``(B, N)`` (required by
-    ``scale_mode="total_measure"``; Horvitz-Thompson corrected so they sum to
+    ``scale_mode="rms_distance"`` and ``"total_measure"``; Horvitz-Thompson corrected so they sum to
     the boundary measure); ``global_vectors`` ``(B, K, 3)``; ``global_scalars``
     ``(B, S)``; ``boundary_scalars`` ``(B, N, n_boundary_scalars)``;
     ``query_points`` / ``query_normals`` ``(B, Q, 3)`` and ``query_scalars``
@@ -725,7 +733,7 @@ class ISLA(Module):
         query_mass: str = "geometric_mean",
         support_tokens: bool = False,
         frame_mode: str = "relative",
-        scale_mode: str = "total_measure",
+        scale_mode: str = "rms_distance",
         geo_kernel: str = "eager",
         eps: float = 1e-12,
         **legacy_options,
@@ -775,6 +783,11 @@ class ISLA(Module):
         ### scale_mode="total_measure" became the class defaults, the
         ### reference configuration; checkpoints store their constructor
         ### arguments, so models saved under the old defaults load unchanged).
+        ### LEN-RMS (2026-09-18): scale_mode="rms_distance" became the default
+        ### after validation against the total-measure unit at 435 DrivAerML
+        ### cars (0.0526 vs 0.0533 under the stratified draw, seed ranges
+        ### overlapping); the RMS pairwise distance is normalized, center-free
+        ### and finite on fractal boundaries where the total measure diverges.
         ### frame_mode="relative" removes the frame origin
         ### altogether: r = points / L with no centering. The six scalars that
         ### referred to the centroid are gone -- the four seed features |r|,

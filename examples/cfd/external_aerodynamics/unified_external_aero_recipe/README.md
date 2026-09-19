@@ -349,10 +349,12 @@ the `forward_kwargs:` mapping does.
 
 **Reference configuration** (`conf/model/isla_surface.yaml`):
 relative frame (`frame_mode: relative`; positions enter only as
-point-to-anchor differences, no centroid anywhere) with the total-measure
-scale (`scale_mode: total_measure`; the length unit is the square root of
-the sample's total quadrature measure, so no per-dataset reference length is
-needed); `hidden: 192`, `n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`;
+point-to-anchor differences, no centroid anywhere) with the
+RMS-pairwise-distance length unit (`scale_mode: rms_distance`; the length
+unit is the measure-weighted root-mean-square pairwise distance of the
+sample, normalized and center-free, so no per-dataset reference length is
+needed; `scale_mode: total_measure`, the square root of the total quadrature
+measure, remains an option and was the default until 2026-09-18); `hidden: 192`, `n_layers: 12`, `n_slices: 256`, `mlp_ratio: 4`;
 `geo_checkpoint: true` (rebuilds the per-slice geometric invariants in
 backward instead of storing them: same forward and gradients bitwise, lower
 peak memory; set `false` to trade memory for speed). The geometry region

@@ -23,10 +23,13 @@
 # interacting tokens that carry the signed distance to the wall and its
 # gradient, on the same frame-free construction as the surface configuration
 # (isla_surface.yaml): frame_mode=relative (no centroid anywhere; positions
-# enter only as point-to-anchor differences) and scale_mode=total_measure
-# (length unit = square root of the total boundary quadrature measure).
+# enter only as point-to-anchor differences) and scale_mode=rms_distance
+# (length unit = measure-weighted RMS pairwise distance of the boundary
+# sample; scale_mode=total_measure, the square root of the total boundary
+# quadrature measure, remains an option and is the unit of runs before
+# 2026-09-18).
 #
-# The total-measure scale needs measure weights whose sum is the surface
+# Both units need measure weights whose sum is the surface
 # area. A subsampled boundary's raw cell_areas sum to the kept fraction of
 # it, so this config reads the Horvitz-Thompson-corrected measure written by
 # the ComposeQuadratureMeasure transform of datasets/drivaer_ml_volume_reference.yaml
@@ -67,7 +70,7 @@ model:
   n_slices: 256
   mlp_ratio: 4
   frame_mode: relative
-  scale_mode: total_measure
+  scale_mode: rms_distance
   query_tokens: true
   n_query_scalars: 1
   geo_checkpoint: true
