@@ -1892,3 +1892,5 @@ interior control @sec-nb-udrv-int-prereg.
   deficit on the 35-wing rung unchanged by the budget". Never write "ISLA leads GeoTransolver at full data"
   (0.2% is noise) and never write the 10k gap (0.90) as the current standing. GeoTransolver's 200k rows
   are at 3e-3, say so.
+
+- LEN-RMS at 200k (2026-09-19): rms_distance 0.0444/0.0444 vs total_measure 0.0446 at 435 cars = 0.996; either may be quoted for ISLA at 435 cars, name the unit.
