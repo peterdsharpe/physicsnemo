@@ -19797,3 +19797,24 @@ therefore load-bearing for the thesis's in-distribution clause.
 that 3e-3 still wins by more than 5% at 435 cars: 0.3. The ladder's
 ordering at 54 cars (ISLA ahead by 14% at GeoTransolver's 1e-3) likely
 reverses or closes.
+
+## 2026-09-19 — Interim, RATE-GT: at 54 cars GeoTransolver at 3e-3 scores 0.0743 against 0.0978 at 1e-3, so at its better rate it leads ISLA (0.0859) by 14%; the 109-, 218- and 435-car controls follow {#sec-nb-rategt-interim-54}
+
+**What we saw.** The 54-car GeoTransolver pair at learning rate 3e-3
+(@sec-nb-rategt-prereg) scores **0.0743** (seeds 0.0752 / 0.0734) in
+float32 at 200,000 cells, against 0.0978 at 1e-3 and ISLA's 0.0859 at its
+one usable rate. Written at each model's better rate, **GeoTransolver ÷
+ISLA = 0.86** at 54 cars; the 1e-3 reading (1.14) is superseded. The rate
+advantage at 54 cars is 24%, against 31% at 27 cars, consistent with the
+prediction that it shrinks with data. Artifact:
+results/p200k_ladder_interim_2026-09-18.json (`rate_control_lr3e3` under
+`n54`).
+
+**Reading so far.** On the two scarcest rungs GeoTransolver at its better
+rate leads ISLA by 17% and 14%, the same direction as the 10,000-cell
+ladder (16% and 22% there against the legacy centered variant). The
+200,000-cell budget did not reverse the small-data ordering; it removed
+the count-noise term from ISLA's error and GeoTransolver's, and
+GeoTransolver keeps its data-efficiency lead. The 109- and 218-car controls
+(where GeoTransolver at 1e-3 already stood at 1.02 and 1.01) and the
+435-car pair decide whether the lead persists at full data.
