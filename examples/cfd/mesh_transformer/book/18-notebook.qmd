@@ -20359,3 +20359,21 @@ two-seed means, against ISLA's 0.1502 and GeoTransolver's 0.1098).
 weights-off ablation's 12% is the ceiling), GeoTransolver within 2%; the
 deficit narrows from 27% to about 20%. Probability about 0.5; the null is
 the other half.
+
+**Addendum, ISO-COST launch (2026-09-19, 14:10 PDT).** The twenty-two
+GeoTransolver and Transolver lanes were accepted (alive, no traceback,
+epochs 11 to 24 at the check). The fourteen ISLA lanes crash-looped: the
+recipe's ISLA configuration does not list `geo_kernel`, so the override
+`model.geo_kernel=fused` fails Hydra's struct check ("Key 'geo_kernel' is
+not in struct") and the chain resubmitted itself thirteen times in twenty
+minutes because that error line matched none of the two-strike guard's
+fingerprints. Fixed: the override is `+model.geo_kernel=fused`, the failed
+run directories (no checkpoints) were removed and the lanes resubmitted,
+and every chain launcher's fingerprint now includes Hydra override errors
+so a typo blocks after two links. Early cost readings from the accepted
+lanes, before any ISLA number: GeoTransolver at width 512 trains at 51,
+100 and 199 GB of peak memory at 100k, 200k and 400k cells (0.23, 0.44 and
+0.85 s per step); at width 256, 40, 80 and 158 GB. The 400k-cell lanes fit
+on a GB300; the recipe's configurations do not carry `geo_kernel`
+explicitly and gain the key in the repository so the fused kernel can be
+selected without the append syntax.
