@@ -20487,3 +20487,15 @@ explicit fused request is refused. The recipe's ISLA configurations set
 `geo_kernel: null`. The ISO-COST and ISO-MATCH lanes already run fused by
 explicit override; earlier ISLA lanes (all eager) stand, the kernel being
 exact.
+
+**Addendum, ISO-MATCH acceptance (2026-09-19, 15:05 PDT).** All eight
+lanes are alive with clean logs at epochs 15 to 18. Measured first-link
+costs: 192 × 600k trains at 77.5 GB and 0.38 s per step, which is
+GeoTransolver's default budget on both axes (80 GB, 0.40 s); 288 × 400k at
+69 GB and 0.28 s; 512 × 200k at 53 GB and 0.19 to 0.27 s; 768 × 100k at 40
+GB and 0.15 to 0.18 s. The wide end of the line therefore under-spends the
+budget by a third to a half, so two further splits are added to spend it
+there: 512 × 300k and 768 × 200k (lanes 44 to 47, seeds 42 and 43, width
+rule rates). The iso-budget comparison will take, on each axis, the lanes
+within 15% of GeoTransolver's cost; with these additions the set is
+expected to be 192 × 600k, 384 × 400k, 512 × 300k and 768 × 200k.
