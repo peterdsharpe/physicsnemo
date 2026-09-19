@@ -10,10 +10,10 @@ training conditions. Under a 10:1 sampling-density bias ISLA's relative
 frame degrades 1.2x where every configuration that centers on the sampled
 points degrades 10 to 16x; under refinement it converges toward one answer
 while the baselines do not; in arbitrary poses ISLA's exact
-covariance is worth 6% and 19% against rotation-augmented baselines; and it
-holds its accuracy across a decade of learning rate where GeoTransolver
-loses several-fold (@sec-robustness-lr). Across a flow-regime boundary
-nothing tested generalizes.
+covariance is worth 7% and 17% against rotation-augmented baselines; and it
+trains at its protocol learning rate without a sweep, though inside a
+narrower safe window than the baselines' (@sec-robustness-lr). Across a
+flow-regime boundary nothing tested generalizes.
 
 The metric everywhere is the area-weighted relative L2 of surface pressure
 in float32 (@sec-metrics), and a ratio is baseline ÷ ISLA, above one
@@ -247,14 +247,27 @@ pattern where geometries recur (@sec-data-efficiency), and is priced there.
 
 ## Learning-rate robustness {#sec-robustness-lr}
 
-**ISLA trains at the protocol rate on a new dataset without a sweep; on the
-configuration it was measured on, its error across a decade of learning
-rate stays close to its best where GeoTransolver's grows several-fold one
-grid step above its best rate.** The measurement was made on the legacy
-centered variant and is being re-measured on ISLA
-(@sec-nb-refprops-prereg); its grid, figure and numbers are in the collapsed
-note. Robustness to learning rate is not robustness to seed: ISLA has the
-larger seed-to-seed prediction spread on both datasets (@sec-shared-floor).
+**ISLA trains at its protocol rate of 1e-3 on a new dataset without a
+sweep, but its safe rate window is narrower than the legacy centered
+variant's and than GeoTransolver's: at width 192 it collapses at 3e-3 and
+diverges at 1e-2.** At 3e-3 both seeds settle within five epochs on a
+mean-field plateau (validation loss 0.06 against 0.0008 at 1e-3; float32
+pressure error 0.77 against 0.055) and never leave it; at 1e-2 the loss is
+NaN by epoch 21 and 32 (@sec-nb-lrref-verdict). The mechanism is the one
+the width study found (@sec-nb-relframe-divergence-mechanism): under too
+high an effective rate the relative frame's routing hardens to one slice
+per token and the anchors collapse, after which the model sees no geometry.
+GeoTransolver degrades 9x by seed mean one grid step above its best rate
+but does not collapse. The operating rule is therefore a ceiling, not a
+robustness: 1e-3 at width 192, the width rule above it (@sec-using-lr),
+never the recipe's GeoTransolver default of 3e-3. Lanes bracketing the
+window at 3e-4 and 2e-3 are running (@sec-nb-ratewindow-prereg). The
+decade-wide stability the book quoted before 2026-09-18 was measured on
+the legacy centered variant, whose center and length unit are fixed before
+any routing happens; it does not transfer, and its grid stays in the
+collapsed note as a diagnostic. Robustness to learning rate is not
+robustness to seed either: ISLA has the larger seed-to-seed prediction
+spread on both datasets (@sec-shared-floor).
 
 ::: {.callout-note collapse="true" title="The learning-rate grid (diagnostic, legacy centered variant)"}
 ```{python}
@@ -606,19 +619,18 @@ limit. Data: results/consistency_bench/consistency_bench_mixarea_2026-09-11.json
 ## Pose: a contract, not an accuracy edge {#sec-pose-contract}
 
 **ISLA is exactly covariant to rotations and translations. When
-geometries arrive in arbitrary poses that exactness is worth 6% against
-GeoTransolver and 19% against Transolver trained with rotation
+geometries arrive in arbitrary poses that exactness is worth 7% against
+GeoTransolver and 17% against Transolver trained with rotation
 augmentation; when every case is in a native pose, or a canonical frame can
-be computed, it is a contract and not an accuracy edge.** The pose
-measurement was made on the legacy centered variant, whose covariance
-contract is the same as the reference's; the reference's re-measurement is
-running (@sec-nb-refprops-prereg). With every DrivAerML case in its own
-random pose, that ISLA, trained without augmentation, scores 0.0566 (1.01x
-its native-pose error);
-GeoTransolver trained with rotation augmentation scores 0.0602 (1.20x its
-native-pose 0.0503) and Transolver with augmentation 0.0676 (1.31x its
-0.0517). GeoTransolver without augmentation scores 0.0631 and ISLA with
-augmentation 0.0578. Data:
+be computed, it is a contract and not an accuracy edge.** With every
+DrivAerML case in its own random pose, ISLA trained without augmentation
+scores 0.0560 (seeds 0.0553 and 0.0568), 1.015x its native-frame 0.0552,
+and the same two checkpoints scored in the native frame land within 0.5% of
+their posed numbers (@sec-nb-poseref-verdict). GeoTransolver trained with
+rotation augmentation scores 0.0602 (1.20x its native-pose 0.0503) and
+Transolver with augmentation 0.0676 (1.31x its 0.0517). GeoTransolver
+without augmentation scores 0.0631, and the legacy centered variant of ISLA
+with augmentation 0.0578. Data: results/refprops_reduction_2026-09-18.json;
 research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json.
 
 GeoTransolver trained in a canonical frame (freestream to +x, roll fixed

@@ -19513,3 +19513,169 @@ Transolver rows are not flagged (ISLA has no same-configuration
 for DrivAerML trivially (GeoTransolver ÷ ISLA is above 0.97, indeed above
 1). Transolver ties ISLA at 54 cars (1.00) and trails by 6% at 27. The
 109- and 218-car rungs are at epoch about 300 and follow.
+
+## 2026-09-18 — Verdict, LR-REF: falsified; ISLA collapses at learning rate 3e-3 (validation loss 0.06 against 0.0008 at 1e-3, float32 pressure error 0.77) and diverges at 1e-2, so the decade-wide rate robustness measured on the legacy centered variant does not transfer {#sec-nb-lrref-verdict}
+
+**Setting.** The book has quoted a learning-rate robustness result: across
+the grid {1e-3, 3e-3, 1e-2} at 435 DrivAerML cars the worst point was
+within 1.55x of the best, where GeoTransolver degrades 9x one grid step
+above its best rate. That measurement was made on the legacy centered
+variant (a centered frame with a fixed length unit). LR-REF
+(@sec-nb-refprops-prereg) re-measured the grid on ISLA itself, whose frame
+is relative and center-free: two seeds each at 3e-3 and 1e-2, 10,000-cell
+exploration budget, 500 epochs, bf16, against the 1e-3 seeds already
+trained. The interim entry (@sec-nb-lrref-interim) reported the 1e-2 pair
+diverging to NaN at epochs 21 and 32 and the 3e-3 pair "training cleanly"
+with finite losses.
+
+**What we saw.** Finite was not learning. Both 3e-3 seeds start their
+first epoch at a loss comparable to the 1e-3 run's (0.036 and 0.044
+against 0.032), rise over the next four epochs to about 0.06, and stay on
+that plateau for the remaining 495 epochs (seed 42 ends at a validation
+loss of 0.0587, seed 43 at 0.0624; the 1e-3 reference ends at 0.00077,
+eighty times lower). Scored in float32 on the sample-frame probe, seed 43
+has a surface-pressure error of **0.766** on the independent draw and 0.767
+on the biased draw, and seed 42 **0.761** and 0.761 (density factors 1.00: a
+model that predicts a mean field is trivially consistent), against ISLA's
+0.0552 at 1e-3. The
+preregistered falsification clause (error above 2x the 1e-3 value at 3e-3
+or 1e-2) is met at both rates by a wide margin, so **LR-REF is falsified**.
+
+**Mechanism.** This is the failure the width study found at 1e-3 and width
+512 (@sec-nb-relframe-divergence-mechanism), now at width 192 and 3e-3:
+under too high an effective rate the relative frame's measure-weighted
+routing hardens to one slice per token within the first epochs and the
+anchors collapse; the model then sees no geometry and settles on the mean
+field. At 1e-2 the collapse continues into non-finite invariants. The
+legacy centered variant survives both rates because its center and length
+unit are fixed before any routing happens. The effective rate scales with
+width, which is why the width rule (learning rate 1e-3 × 192 / hidden)
+cured the width-512 corner and why, at width 192, 1e-3 is also the ceiling
+rather than the middle of a safe decade.
+
+**Consequences for the book and the recipe.**
+
+- The claim "stable across a decade of learning rate" is withdrawn from the
+  main text everywhere (@sec-robustness-lr, the pros table of the limits
+  chapter, the operating manual); the legacy variant's grid stays in its
+  collapsed diagnostic note. ISLA's rate statement now reads: trains at the
+  protocol rate 1e-3 without a sweep; collapses at 3e-3; diverges at 1e-2;
+  use the width rule above width 192.
+- The unified recipe's default learning rate is 3e-3 (GeoTransolver's).
+  ISLA's model configurations did not pin their own rate, so a user who
+  runs `model=isla_surface` with the defaults gets a collapsed model. The
+  README already passes 1e-3 on every ISLA line; the configuration now
+  pins it as well (see the recipe commit of this date), and the config
+  test asserts it.
+- A methodological lesson for the notebook's own instruments: the interim
+  entry accepted "finite loss" as "training cleanly". A flat loss eighty
+  times above a sibling lane's is an out-of-band health value and should
+  have woken the watcher; the fleet watcher now reports the last validation
+  loss beside the epoch counter.
+
+**What's next: RATE-WINDOW** (@sec-nb-ratewindow-prereg), four lanes
+bracketing the safe window at 3e-4 and 2e-3.
+
+## 2026-09-18 — Preregistration, RATE-WINDOW: where does ISLA's safe learning-rate window begin and end at width 192? {#sec-nb-ratewindow-prereg}
+
+**Question.** LR-REF established that ISLA at width 192 trains at 1e-3 and
+collapses at 3e-3. A user needs the window, not two points: how far below
+1e-3 does training stay near its best, and does the ceiling lie above 2e-3?
+
+**Instrument.** Four lanes of ISLA at 435 DrivAerML cars on the 10,000-cell
+exploration budget, 500 epochs, bf16, lean class, same recipe copy as the
+1e-3 seeds (`kernel/refprops_aga.sbatch`, lanes 6 to 9; jobs 790769 to
+790772): learning rates 3e-4 and 2e-3, seeds 42 and 43. Readout: float32
+surface-pressure error on the sample-frame probe against the 1e-3 seeds
+(0.0552), plus each lane's loss trajectory over the first ten epochs (the
+collapse signature is a rise to the 0.06 plateau within five epochs).
+
+**Bars, written before the runs.**
+
+- **3e-4 within 1.1x of 1e-3**: the window extends at least half a decade
+  downward; the operating manual states "3e-4 to 1e-3 at width 192".
+  Above 1.1x: the window below is narrow too and the manual states 1e-3
+  as a point recommendation with the width rule.
+- **2e-3 trains within 1.2x of 1e-3**: the ceiling lies between 2e-3 and
+  3e-3. **2e-3 collapses** (plateau signature, error above 2x): the
+  ceiling lies between 1e-3 and 2e-3, and the protocol rate is within a
+  factor two of the collapse, which the manual states as a warning.
+- Either outcome at 2e-3 leaves the mechanism question (why the routing
+  hardens at a rate the centered variant tolerates) to a separate study;
+  this one only draws the map.
+
+**Prediction.** 3e-4 within 1.1x (about 1.05x, slightly undertrained in
+500 epochs); 2e-3 collapses on at least one seed (the hardening is an
+early-epoch event and 2e-3 is close to 3e-3), probability about 0.5.
+
+## 2026-09-18 — Verdict, POSE-REF: supported; with every case in its own random pose ISLA scores 0.0560 against 0.0552 in the native frame (1.015x), 7% below the rotation-augmented GeoTransolver and 17% below the augmented Transolver {#sec-nb-poseref-verdict}
+
+**Setting.** The pose test trains and validates every DrivAerML car in its
+own random SO(3) pose, applied deterministically per case, so no
+architecture can learn a canonical orientation. ISLA's covariance is exact
+by construction, so its posed error should equal its native-frame error up
+to the bf16 training residual; GeoTransolver and Transolver rely on
+rotation augmentation. Until today the ISLA side of this test had been
+measured only on the legacy centered variant (1.01x its in-pose error, 6%
+and 19% ahead of the augmented baselines). POSE-REF
+(@sec-nb-refprops-prereg) re-measured it on ISLA: two seeds at 435 cars,
+10,000-cell exploration budget, learning rate 1e-3, 500 epochs, bf16
+(`kernel/refprops_aga.sbatch`, lanes 0 and 1), scored in float32 on the 48
+posed validation cars and, as a second reading of the same checkpoints, on
+the native-frame sample-frame probe. Reduction:
+results/refprops_reduction_2026-09-18.json.
+
+**What we saw.** Posed surface-pressure error **0.0560** (seeds 0.0553 and
+0.0568) against ISLA's native-frame 0.0552 (0.0549 and 0.0558): **1.015x**,
+inside the 3% clause. The same two checkpoints scored on the native-frame
+probe give 0.0550 and 0.0567, within 0.5% of their posed numbers, which is
+the covariance contract at work on the trained function (the residual is
+the bf16 training path, @sec-nb-precres-verdict). Against the augmented
+baselines' posed errors, 0.0602 (GeoTransolver) and 0.0676 (Transolver),
+ISLA is 7% and 17% ahead; both clear the 5% clause. Wall-shear error in
+pose is 0.0802 and 0.0829.
+
+**Verdict: supports.** The pose row of the standing table and the headline
+figure now read on ISLA, and the label "measured on the legacy centered
+variant" is removed everywhere. The prediction (posed within 2%) held.
+
+**Why it matters.** This closes the last headline property that rested on
+the retired variant. The transfer was expected for the *degradation*
+(identical contracts) but not guaranteed for the in-pose accuracy, which is
+a property of the trained function; it held. Together with LR-REF
+(@sec-nb-lrref-verdict) the two re-measurements split cleanly: the
+geometric property (covariance) transferred exactly, the optimization
+property (rate robustness) did not.
+
+## 2026-09-18 — Interim, RATE-WINDOW: 2e-3 collapses on both seeds within twenty epochs (the 3e-3 signature), so ISLA's ceiling at width 192 lies between 1e-3 and 2e-3; 3e-4 is learning normally; the 2e-3 lanes are stopped {#sec-nb-ratewindow-interim}
+
+**What we saw.** Twenty-two epochs into the four RATE-WINDOW lanes
+(@sec-nb-ratewindow-prereg): both 2e-3 seeds sit on the mean-field plateau
+(validation loss 0.063 and 0.058, the same 0.06 the 3e-3 lanes never left,
+@sec-nb-lrref-verdict), and the 3e-4 seed 42 lane is at 0.0040, in step
+with the 1e-3 reference's trajectory at that epoch (0.0037). The
+preregistration named the plateau signature within five epochs as the
+collapse readout, so the 2e-3 pair was canceled at epoch about 22 and
+marked blocked with the reason, as the 1e-2 pair was earlier, rather than
+training a collapsed model for 480 more epochs on two nodes.
+
+**Reading, provisional.** The ceiling lies between 1e-3 and 2e-3: the
+protocol rate is within a factor of two of the collapse. The operating
+manual will state 1e-3 as the rate for width 192 with that warning, and
+the width rule above it. The lower edge of the window waits on the 3e-4
+pair's final float32 error (bar: within 1.1x of 1e-3).
+
+**A mechanism question this sharpens.** The legacy centered variant
+tolerates 1e-2 and the relative frame collapses at 2e-3, with the same
+routing, the same layers and the same head; the frame is the only
+difference. The relative frame's slice anchors are measure-weighted means
+of the tokens each slice routes, and every geometric invariant the network
+sees is a function of token-to-anchor differences; when the routing
+saturates early, the anchors coincide and the invariants degenerate, which
+is the "sees no geometry" plateau. A centered frame supplies a fixed
+center and length unit that do not depend on the routing, so a saturated
+routing still leaves the network with usable coordinates. A cure that keeps
+the relative frame's principle (no external center) would act on the
+routing's early sharpness, for example a warm-up of the learning rate or of
+the routing temperature; that is a separate study, preregistered before it
+is run.

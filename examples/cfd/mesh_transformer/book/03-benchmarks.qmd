@@ -78,6 +78,7 @@ ud = J("udrv_reduction_2026-09-09d.json")
 campA35 = json.load(open(RP / "campaign_a_draws" / "campaign_a_n35_fp32_2026-09-10.json"))["ratios"]
 campA210 = json.load(open(RP / "campaign_a_draws" / "campaign_a_n210_fp32_2026-09-10.json"))["ratios"]
 poseB = json.load(open(RP / "campaign_b_pose" / "campaign_b_fp32_2026-09-10.json"))
+poseRR = J("refprops_reduction_2026-09-18.json"); poseR = poseRR["pose"]   # POSE-REF: ISLA in random poses, two seeds
 campD = json.load(open(RP / "computational_support" / "campaign_d_verdict_2026-09-10.json"))["per_arm"]
 cost = J("isla_vs_baselines_cost_fastkernel_2026-09-09.json")
 fw = J("farwake_reduction_2026-09-11.json")
@@ -197,14 +198,10 @@ the surface rungs are the pose test and the interior task, where ISLA leads.
 #|   marker is a baseline's surface-pressure error divided by ISLA's on the
 #|   same validation cases (GeoTransolver red circles, Transolver amber
 #|   triangles), so markers left of the line at 1 favor the baseline and
-#|   markers right of it favor ISLA. Filled markers divide by ISLA;
-#|   the one open-marker row divides by a variant, named in the row label,
-#|   where ISLA is not yet measured. Every
-#|   row carries the seed-mean ratio. The bottom rows are the pose test
+#|   markers right of it favor ISLA. Every row divides by ISLA and
+#|   carries the seed-mean ratio. The bottom rows are the pose test
 #|   (baselines trained with rotation augmentation, ISLA without, every case
-#|   in a random pose; ISLA measured on the legacy centered variant, its own
-#|   posed run is in progress,
-#|   @sec-nb-refprops-prereg) and the interior task (GeoTransolver-volume
+#|   in a random pose, @sec-nb-poseref-verdict) and the interior task (GeoTransolver-volume
 #|   divided by ISLA with query tokens and the signed distance). How to read
 #|   this: it shows ratios, not absolute accuracy, and says nothing about
 #|   consistency under a change of sampling (@fig-scoreboard-density).
@@ -228,8 +225,8 @@ add("DrivAerML, 435 cars, stratified inference draw", "dr435_strat")
 add("DrivAerML, 512 wide × 80k cells (width learning rate)", "corner")
 n_surface = len(rows)
 pB = poseB["arms"]
-rows.append(("DrivAerML, every case in a random pose — ISLA measured on the legacy centered variant", pB["gt_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"],
-             pB["transolver_aug"]["pressure_mean"] / pB["isla"]["pressure_mean"], False))
+rows.append(("DrivAerML, every case in a random pose (baselines rotation-augmented)", pB["gt_aug"]["pressure_mean"] / poseR["posed_mean"],
+             pB["transolver_aug"]["pressure_mean"] / poseR["posed_mean"], True))
 def intf(keys, f): return mean(fp(fpint, keys, f))
 gtv = [f"udrv_gt_vol_seed{s}" for s in (42, 43)]; isq = [f"v0_isla_qtsdfval_seed{s}" for s in (42, 43)]  # isq: similarity-gauge interior variant, diagnostic note only
 for f, lab in (("pressure_l2", "interior pressure"), ("velocity_l2", "interior velocity"), ("nut_l2", "interior eddy viscosity")):
@@ -257,8 +254,6 @@ ax.set_ylim(-0.7, y[0] + 0.7)
 from matplotlib.lines import Line2D
 ax.legend(handles=[Line2D([], [], **{k: v for k, v in series_kwargs("gt", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="GeoTransolver ÷ ISLA"),
                    Line2D([], [], **{k: v for k, v in series_kwargs("t", ls="none").items() if k in ("color", "marker", "mfc", "mec", "mew", "ms", "ls")}, label="Transolver ÷ ISLA"),
-                   Line2D([], [], marker="s", ls="none", mfc=INK2, mec=INK2, ms=7, label="filled: ÷ ISLA"),
-                   Line2D([], [], marker="s", ls="none", mfc="white", mec=INK2, mew=1.6, ms=7, label="open: ÷ the variant named in the row"),
                    mpl.patches.Patch(facecolor=GRID, label="parity within 5%")],
           loc="upper right", fontsize=8, ncol=1)
 fig.tight_layout()
@@ -527,18 +522,17 @@ print(": Interior error of the similarity-gauge variant (relative L2 over the 48
 ## Arbitrary poses: where the contract earns accuracy {#sec-scoreboard-pose}
 
 **When every training and validation case arrives in its own random
-orientation, ISLA's error is unchanged and the augmented baselines' rises by
-20% and 31%, which makes ISLA 6% and 19% more accurate than GeoTransolver
-and Transolver on the same posed cars.** This is ISLA's one measured
-in-distribution accuracy lead over input-matched baselines on the surface,
-and it is conditional on the setting: in a canonical frame the same
+orientation, ISLA's error moves by 1.5% and the augmented baselines' rises
+by 20% and 31%, which makes ISLA 7% and 17% more accurate than
+GeoTransolver and Transolver on the same posed cars.** This is ISLA's one
+measured in-distribution accuracy lead over input-matched baselines on the
+surface, and it is conditional on the setting: in a canonical frame the same
 baselines lead (@sec-scoreboard-surface), and GeoTransolver trained in a
 canonicalized frame is pose-invariant at a 1% cost (@sec-pose). ISLA's
 rotation and translation covariance is exact by construction
-(@sec-mt2-contracts) and needs no augmentation. The ISLA in this test is the
-legacy centered variant; ISLA holds the same contracts
-exactly and its re-measurement in random poses is running
-(@sec-nb-refprops-prereg).
+(@sec-mt2-contracts) and needs no augmentation; the same two checkpoints
+scored in the native frame land within 0.5% of their posed numbers
+(@sec-nb-poseref-verdict).
 
 ```{python}
 #| label: tbl-scoreboard-pose
@@ -547,18 +541,19 @@ C = poseB["canonical"]; A = poseB["arms"]
 def seeds(d): return " / ".join(f"{v['pressure_l2']:.4f}" for v in d["runs"].values())
 rows = [("GeoTransolver, trained with rotation augmentation", C["gt"], A["gt_aug"]),
         ("Transolver, trained with rotation augmentation", C["transolver_lr3e3"], A["transolver_aug"]),
-        ("ISLA, no augmentation (legacy centered variant; ISLA's own posed run in progress)", C["isla"], A["isla"])]
+        ("ISLA, no augmentation", {"pressure_mean": poseRR["in_pose_reference"]["mean"]},
+         {"pressure_mean": poseR["posed_mean"], "runs": {k: {"pressure_l2": v["posed_pressure"]} for k, v in poseR["per_run"].items()}})]
 out = "| architecture | canonical pose | every case in a random pose | posed ÷ canonical | baseline ÷ ISLA, posed |\n|---|---|---|---:|---:|\n"
 for label, c, a in rows:
     out += (f"| {label} | {c['pressure_mean']:.4f} | {a['pressure_mean']:.4f} ({seeds(a)}) | {a['pressure_mean']/c['pressure_mean']:.2f} "
-            f"| {a['pressure_mean']/A['isla']['pressure_mean']:.2f} |\n")
+            f"| {a['pressure_mean']/poseR['posed_mean']:.2f} |\n")
 print(out)
 print(": DrivAerML surface pressure, 435 training cars, 48 validation cars, float32. The canonical "
       "column is each architecture's unit-direction reference in the dataset's native frame (three seeds "
-      "for GeoTransolver and ISLA, two for Transolver); the posed column trains and validates with "
-      "every case rotated by its own random rotation (two seeds each). In the artifact, GeoTransolver "
-      "without augmentation and ISLA with augmentation are also scored in random poses (one seed each). Data: "
-      "research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json. "
+      "for GeoTransolver, two for ISLA and Transolver); the posed column trains and validates with "
+      "every case rotated by its own random rotation (two seeds each). In the campaign artifact, GeoTransolver "
+      "without augmentation and the legacy centered variant of ISLA with augmentation are also scored in random poses (one seed each). Data: "
+      "results/refprops_reduction_2026-09-18.json (ISLA); research/transfer_program/studies/campaign_b_pose/campaign_b_fp32_2026-09-10.json. "
       "{#tbl-scoreboard-pose}")
 ```
 

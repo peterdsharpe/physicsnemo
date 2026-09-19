@@ -81,11 +81,12 @@ gt_c = sc["geotransolver_unit_512x80k"]["in_family"]; t_c = sc["transolver_unit_
 isla_c = mean(cw["in_family_80k_seeds"])
 R = MAT["rows"]
 dens = {k: R[k]["density_factor"] for k in ("isla_relative_frame_meas", "isla_reference_constant_gauge", "geotransolver_unit", "transolver_unit")}
-pose = {"isla": poseB["arms"]["isla"]["pressure_mean"] / poseB["canonical"]["isla"]["pressure_mean"],
+poseR = json.load(open(RES / "refprops_reduction_2026-09-18.json"))["pose"]   # POSE-REF: ISLA in random poses (two seeds)
+pose = {"isla": poseR["posed_over_in_pose"],
         "gt": poseB["arms"]["gt_aug"]["pressure_mean"] / poseB["canonical"]["gt"]["pressure_mean"],
         "t": poseB["arms"]["transolver_aug"]["pressure_mean"] / poseB["canonical"]["transolver_lr3e3"]["pressure_mean"]}
-pose_lead = {"gt": poseB["arms"]["gt_aug"]["pressure_mean"] / poseB["arms"]["isla"]["pressure_mean"],
-             "t": poseB["arms"]["transolver_aug"]["pressure_mean"] / poseB["arms"]["isla"]["pressure_mean"]}
+pose_lead = {"gt": poseB["arms"]["gt_aug"]["pressure_mean"] / poseR["posed_mean"],
+             "t": poseB["arms"]["transolver_aug"]["pressure_mean"] / poseR["posed_mean"]}
 inter = ri2["ratios_gt_over_relint2"]
 pct = lambda r: f"{(1 - r) * 100:.0f}%"
 ```
@@ -97,7 +98,7 @@ rows = [
     ("Surface accuracy, DrivAerML 435 cars, independent 10,000-cell draw", f"{gt10:.4f} / {t10:.4f}", f"{isla10:.4f}", f"{gt10/isla10:.2f} / {t10/isla10:.2f}", f"baselines lead by {pct(gt10/isla10)} and {pct(t10/isla10)}"),
     ("Same checkpoints, stratified 10,000-cell draw", f"{gt_st:.4f} / {t_st:.4f}", f"{isla_st:.4f}", f"{gt_st/isla_st:.2f} / {t_st/isla_st:.2f}", f"gap {pct(gt_st/isla_st)} and {pct(t_st/isla_st)}: half the headline gap was draw noise"),
     ("Scale corner: width 512, 80,000 cells", f"{gt_c:.4f} / {t_c:.4f}", f"{isla_c:.4f}", f"{gt_c/isla_c:.2f} / {t_c/isla_c:.2f}", f"gap {pct(gt_c/isla_c)} and {pct(t_c/isla_c)} at deployment resolution"),
-    ("Every case in a random pose (baselines trained with rotation augmentation; ISLA measured on the legacy centered variant, re-measurement on the reference running)", "—", "—", f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}", f"ISLA leads by {(pose_lead['gt']-1)*100:.0f}% and {(pose_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose['isla']:.2f}x, the baselines' {pose['gt']:.2f}x and {pose['t']:.2f}x"),
+    ("Every case in a random pose (baselines trained with rotation augmentation, ISLA without)", f"{poseB['arms']['gt_aug']['pressure_mean']:.4f} / {poseB['arms']['transolver_aug']['pressure_mean']:.4f}", f"{poseR['posed_mean']:.4f}", f"{pose_lead['gt']:.2f} / {pose_lead['t']:.2f}", f"ISLA leads by {(pose_lead['gt']-1)*100:.0f}% and {(pose_lead['t']-1)*100:.0f}%; ISLA's own error moves {pose['isla']:.2f}x, the baselines' {pose['gt']:.2f}x and {pose['t']:.2f}x"),
     ("Sampling consistency: error under a 10:1 density bias ÷ error under uniform sampling", f"{dens['geotransolver_unit']:.1f}x / {dens['transolver_unit']:.1f}x", f"{dens['isla_relative_frame_meas']:.2f}x", "—", "ISLA is consistent; every sample-centered configuration collapses"),
     ("Interior fields from the surface, DrivAerML: pressure / velocity / eddy viscosity", "GeoTransolver-volume", "ISLA with query tokens", f"{inter['pressure_l2']:.2f} / {inter['velocity_l2']:.2f} / {inter['nut_l2']:.2f}", "ISLA leads on velocity, trails on pressure and eddy viscosity, at a third of the parameters"),
 ]
@@ -107,7 +108,7 @@ print(out)
 print(": The thesis in six rows. How to read this: each row is one setting and one instrument, so rows are not comparable with one another, and the HiLiftAeroML rungs, where the gaps are larger, are not shown (@sec-data-efficiency). Errors are the area-weighted relative L2 of surface pressure "
       "(@sec-metrics) in float32, seed means; a ratio is baseline error divided by ISLA error, so a value "
       "above one favors ISLA. ISLA is the shipped configuration throughout (relative frame, total-measure "
-      "scale) except the pose row, whose ISLA is the legacy centered variant, the only ISLA measured in random poses so far (@sec-nb-refprops-prereg). Data: "
+      "scale). Data: results/refprops_reduction_2026-09-18.json (ISLA in random poses), "
       "results/fp32_reeval/fp32_shift_drivaer_2026-09-09.json, results/relframe_reduction_2026-09-11.json, "
       "results/quadvar_reduction_2026-09-17.json, results/accuracy_consistency_matrix_2026-09-10.json, "
       "results/corner_wlr_reduction_2026-09-15.json, "
@@ -133,10 +134,7 @@ at the smallest training sets; @sec-data-efficiency has them.
 #|   bars: the surface is sampled with a 10:1 front-to-back density bias and
 #|   each model's input frame is taken from the biased sample. Hatched bars:
 #|   every training and validation case is placed in its own random pose;
-#|   the baselines were trained with rotation augmentation, ISLA without
-#|   (ISLA's pose factor was measured on the legacy centered variant, whose
-#|   covariance contracts are identical to the reference's; the reference's
-#|   own posed run is in progress).
+#|   the baselines were trained with rotation augmentation, ISLA without.
 #|   Colors and marks follow the book's key (@fig-key). How to read this:
 #|   the top panel is the accuracy ISLA gives up; the bottom panel is what it
 #|   buys. It does not show the HiLiftAeroML rungs, the interior task, or the
@@ -158,14 +156,13 @@ ax0.set_title("in distribution: lower is better")
 ax0.grid(axis="x", visible=False)
 
 dvals = [dens["isla_relative_frame_meas"], dens["geotransolver_unit"], dens["transolver_unit"]]
-pvals = [pose["isla"], pose["gt"], pose["t"]]   # ISLA pose factor: legacy centered variant (same contracts); reference re-measurement running
+pvals = [pose["isla"], pose["gt"], pose["t"]]
 w = 0.3
 for x, k, d, p in zip(xs, keys, dvals, pvals):
     ax1.bar(x - w / 2, d, width=w, **bar_kwargs(k))
     ax1.text(x - w / 2, d * 1.12, f"{d:.2f}x", ha="center", va="bottom", fontsize=8.5, color=INK2)
     ax1.bar(x + w / 2, p, width=w, color=STYLE[k]["color"], hatch="///", edgecolor="white", linewidth=0.8)
-    if k != "isla_ref":
-        ax1.text(x + w / 2, p * 1.12, f"{p:.2f}x", ha="center", va="bottom", fontsize=8.5, color=INK2)
+    ax1.text(x + w / 2, p * 1.12, f"{p:.2f}x", ha="center", va="bottom", fontsize=8.5, color=INK2)
 ax1.axhline(1.0, color=INK2, lw=1.0, zorder=1)
 ax1.set_yscale("log"); ax1.set_ylim(0.8, 30)
 ax1.set_yticks([1, 2, 5, 10, 20]); ax1.set_yticklabels(["1", "2", "5", "10", "20"])
@@ -175,8 +172,6 @@ ax1.set_title("out of the training conditions: 1 means unaffected")
 ax1.set_xticks(xs); ax1.set_xticklabels(names, fontsize=9)
 ax1.grid(axis="x", visible=False)
 ax1.text(2.55, 1.0, " 1 = unaffected", va="center", fontsize=8, color=INK2)
-ax1.text(0 + w / 2, pose["isla"] * 1.12, f"{pose['isla']:.2f}x*", ha="center", va="bottom", fontsize=8.5, color=INK2)
-ax1.text(0.5, 0.02, "* pose factor measured on the legacy centered variant, whose contracts are identical; the reference's re-measurement is running", transform=ax1.transAxes, ha="center", va="bottom", fontsize=7.5, color=MUTED)
 from matplotlib.patches import Patch
 ax1.legend(handles=[Patch(facecolor=MUTED, label="10:1 sampling-density bias, sample frame"),
                     Patch(facecolor=MUTED, hatch="///", edgecolor="white", label="every case in a random pose")],

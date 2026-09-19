@@ -1827,3 +1827,19 @@ interior control @sec-nb-udrv-int-prereg.
   10k predecessor (0.1536); the row is held until the lr 3e-3 rate control
   (p200k_dr_{gt_unit,isla}_n27_lr3e3_seed4{2,3}) reports. Do not write the 27-car
   200k row before then.
+
+## LR-REF (2026-09-18; falsified)
+- ISLA (relative frame, width 192, 435 cars, 10k budget): 1e-3 trains (0.0552); 3e-3
+  collapses within 5 epochs to a mean-field plateau (val loss 0.059/0.062 vs 0.0008;
+  fp32 pressure 0.766 / 0.761); 1e-2 NaN at epochs 21/32.
+- Rule: never write "stable across a decade of learning rate" for ISLA; that grid
+  (1.55x worst/best) is the legacy centered variant's, diagnostic only. Write
+  "trains at 1e-3 without a sweep; collapses at 3e-3; diverges at 1e-2; width rule
+  above 192". The recipe default 3e-3 collapses ISLA: the ISLA configs pin 1e-3.
+- Lesson: a finite but flat loss is not "training cleanly"; compare to the sibling lane.
+
+## POSE-REF (2026-09-18; results/refprops_reduction_2026-09-18.json)
+- ISLA posed 0.0560 (0.0553/0.0568) vs native 0.0552 = 1.015x; vs augmented GeoTransolver
+  0.0602 (0.93x) and Transolver 0.0676 (0.83x); same checkpoints native-frame 0.0550/0.0567.
+- Rule: the pose row and headline pose factor read on ISLA; drop every "measured on the
+  legacy centered variant" label for the pose test; write "7% and 17% ahead" (not 6%/19%).
