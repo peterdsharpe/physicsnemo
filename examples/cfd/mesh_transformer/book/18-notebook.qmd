@@ -20559,3 +20559,19 @@ lanes validate every ten epochs); the train-step losses at that moment were
 0.009 to 0.018 and the lanes were learning normally. The acceptance script
 now reports the last train step beside the last validation so an epoch-0
 value cannot be read as a plateau again.
+
+**Addendum, RATE-VOL second reading (2026-09-19, 20:45 PDT).** Past
+epoch 100, all four interior lanes are still descending. At epochs 107 to
+110 the validation loss reads 0.00104 and 0.00097 at 5e-4 and 0.00112 and
+0.00107 at 3e-4, with train steps between 0.00067 and 0.00082; no lane has
+visited the plateau and no traceback has appeared. Both 1e-3 lanes had
+already risen to the mean-field plateau by this point (seed 42 between
+epochs 70 and 80, seed 43 before epoch 20), so the reading now covers the
+window in which the 1e-3 signature appeared. **Both candidate rates pass
+the clean-run clause so far** (validation loss below 0.01 after epoch 20 on
+both seeds). Under the preregistration the interior row is written with
+ISLA at the higher clean rate, 5e-4, once the lanes complete their 500
+epochs and the fp32 evaluation on the 200,000-query interior draw runs;
+3e-4 becomes the rate control. The remaining risk to the clause is a late
+plateau visit, which the hourly watcher would report as a validation loss
+above 0.01.
