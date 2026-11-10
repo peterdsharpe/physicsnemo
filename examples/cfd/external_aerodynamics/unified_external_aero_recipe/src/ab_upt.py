@@ -27,8 +27,10 @@ from dataclasses import replace
 
 import numpy as np
 import torch
+from jaxtyping import Float
 from output_normalize import split_concat_by_target
 from tensordict import TensorDict
+from torch import Tensor
 
 from physicsnemo import Module
 from physicsnemo.datapipes.keys import as_nested_key
@@ -53,23 +55,74 @@ def _modes(mode: str) -> tuple[bool, bool]:
 
 
 class ABUPTRecipe(Module):
-    """Map the independent AB-UPT operator to named recipe targets.
+    r"""Map the independent AB-UPT operator to named recipe targets.
 
-    A context is built once per forward. Decoder chunks share it, including
-    during training; chunking does not detach gradients or resample anchors.
-    Smaller chunks bound individual attention operations, not the full
-    training autograd graph. This DrivAerML adapter predicts velocity,
-    pressure, and eddy viscosity in the volume, rather than the paper's
-    velocity/pressure/vorticity channel layout.
+    Parameters
+    ----------
+    mode : {"surface", "volume", "joint"}, optional, default="joint"
+        Enabled prediction branches; inactive branches require no inputs.
+    query_chunk_size : int, optional, default=4096
+        Maximum queries decoded per call using the same anchor context.
+    coordinate_scale : float, optional, default=1000.0
+        Multiplier for input coordinates and ``pooling_radius``.
+    hidden_dim : int, optional, default=192
+        Token width, divisible by ``num_heads``.
+    num_heads : int, optional, default=3
+        Attention heads, each with at least six channels for 3D RoPE.
+    num_interaction_blocks : int, optional, default=2
+        Pairs of within-branch and cross-branch attention blocks.
+    num_shared_layers : int, optional, default=1
+        Shared within-branch blocks after the interactions.
+    num_decoder_layers : int, optional, default=6
+        Decoder blocks per enabled branch.
+    pooling_radius : float, optional, default=0.25
+        Geometry neighborhood radius in input coordinate units.
+    pooling_chunk_size : int, optional, default=4096
+        Maximum geometry messages embedded at once.
+    radius_search_backend : {None, "torch", "warp"}, optional, default=None
+        Neighbor search backend; ``None`` uses the operator's automatic choice.
+    train_on_anchors : bool, optional, default=False
+        Supervise anchor predictions during training. Queries must equal their
+        branch's anchors in shape, coordinates, and order. Evaluation always
+        decodes the supplied queries independently.
+    parameter_scale : float, optional, default=1.0
+        Divisor for freestream conditioning; physical metadata is unchanged.
+    pooling_message_fp32 : bool, optional, default=False
+        Compute geometry messages outside autocast with FP32 weights; attention
+        follows the recipe precision. Explicit FP64 models retain FP64.
 
-    ``train_on_anchors`` uses the paper's anchor-supervised training path.
-    Training queries must then equal the anchors, in the same order, so the
-    returned predictions remain aligned with recipe targets. Evaluation
-    always supports independent queries. ``parameter_scale`` divides the
-    freestream velocity supplied to the operator without changing metadata
-    used for nondimensionalization or force calculations.
-    ``pooling_message_fp32`` computes geometry messages with FP32 model weights
-    outside autocast; attention continues to follow the recipe precision.
+    Forward
+    -------
+    geometry : torch.Tensor
+        Geometry coordinates of shape :math:`(B,N_g,3)`.
+    supernodes : torch.Tensor
+        Selected geometry coordinates of shape :math:`(B,S,3)`.
+    surface_anchors : torch.Tensor or None, optional, default=None
+        Surface anchors of shape :math:`(B,M_s,3)`; required for surface/joint mode.
+    volume_anchors : torch.Tensor or None, optional, default=None
+        Volume anchors of shape :math:`(B,M_v,3)`; required for volume/joint mode.
+    parameters : torch.Tensor or None, optional, default=None
+        Required freestream velocity of shape :math:`(B,3)` or :math:`(B,1,3)`.
+    surface_queries : torch.Tensor or None, optional, default=None
+        Query coordinates of shape :math:`(B,Q_s,3)`; required for surface/joint mode.
+    volume_queries : torch.Tensor or None, optional, default=None
+        Query coordinates of shape :math:`(B,Q_v,3)`; required for volume/joint mode.
+
+    Outputs
+    -------
+    tensordict.TensorDict
+        Named fields with batch size :math:`(B,)`. Surface outputs are
+        ``surface.pressure`` :math:`(B,Q_s)` and ``surface.wss`` :math:`(B,Q_s,3)`.
+        Volume outputs are ``volume.velocity`` :math:`(B,Q_v,3)`,
+        ``volume.pressure`` :math:`(B,Q_v)`, and ``volume.nut`` :math:`(B,Q_v)`.
+        Inactive fields are omitted; surface and volume query counts may differ.
+
+    Notes
+    -----
+    One context is shared across decoder chunks, including during training.
+    Chunking bounds individual attention operations, not the full autograd graph.
+    This DrivAerML adapter predicts volume velocity, pressure, and eddy viscosity;
+    it does not use the paper's velocity/pressure/vorticity channel layout.
     """
 
     def __init__(
@@ -154,15 +207,15 @@ class ABUPTRecipe(Module):
 
     def forward(
         self,
-        geometry,
-        supernodes,
-        surface_anchors=None,
-        volume_anchors=None,
-        parameters=None,
-        surface_queries=None,
-        volume_queries=None,
-    ):
-        """Return named batched fields; surface and volume lengths may differ."""
+        geometry: Float[Tensor, "B Ng 3"],
+        supernodes: Float[Tensor, "B S 3"],
+        surface_anchors: Float[Tensor, "B Ms 3"] | None = None,
+        volume_anchors: Float[Tensor, "B Mv 3"] | None = None,
+        parameters: Float[Tensor, "B 3"] | Float[Tensor, "B 1 3"] | None = None,
+        surface_queries: Float[Tensor, "B Qs 3"] | None = None,
+        volume_queries: Float[Tensor, "B Qv 3"] | None = None,
+    ) -> TensorDict:
+        r"""Return named batched fields; surface and volume lengths may differ."""
         branches = (
             (
                 "surface",
@@ -172,26 +225,29 @@ class ABUPTRecipe(Module):
             ),
             ("volume", self.operator.volume_channels, volume_queries, VOLUME_TARGETS),
         )
-        # Reject invalid branch contracts before building the geometry graph.
-        anchors = {"surface": surface_anchors, "volume": volume_anchors}
-        for field, enabled, queries, _ in branches:
-            if enabled and queries is None:
-                raise ValueError(f"Explicit {field}_queries are required by the recipe")
-            if not enabled and queries is not None:
-                raise ValueError(f"Queries supplied for disabled {field} head")
-            if enabled and self.training and self.train_on_anchors:
-                positions = anchors[field]
-                if (
-                    positions is None
-                    or queries.shape != positions.shape
-                    or not torch.equal(queries, positions)
-                ):
+        if not torch.compiler.is_compiling():
+            # Reject invalid branch contracts before building the geometry graph.
+            anchors = {"surface": surface_anchors, "volume": volume_anchors}
+            for field, enabled, queries, _ in branches:
+                if enabled and queries is None:
                     raise ValueError(
-                        f"Anchor-supervised training requires {field}_queries to "
-                        f"equal {field}_anchors in shape, coordinates, and order"
+                        f"Explicit {field}_queries are required by the recipe"
                     )
-        if parameters is None:
-            raise ValueError("Freestream parameters are required by the recipe")
+                if not enabled and queries is not None:
+                    raise ValueError(f"Queries supplied for disabled {field} head")
+                if enabled and self.training and self.train_on_anchors:
+                    positions = anchors[field]
+                    if (
+                        positions is None
+                        or queries.shape != positions.shape
+                        or not torch.equal(queries, positions)
+                    ):
+                        raise ValueError(
+                            f"Anchor-supervised training requires {field}_queries to "
+                            f"equal {field}_anchors in shape, coordinates, and order"
+                        )
+            if parameters is None:
+                raise ValueError("Freestream parameters are required by the recipe")
         if parameters.ndim == 3 and parameters.shape[1] == 1:
             parameters = parameters[:, 0]
         # Native mesh coordinates and metadata can use different floating

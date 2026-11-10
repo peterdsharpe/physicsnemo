@@ -681,3 +681,50 @@ def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     result = restored(**args, parameters=parameters.detach())
     for key, value in actual.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(result[key], value)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA is not available"
+            ),
+        ),
+    ],
+)
+def test_anchor_training_compiles_without_validation_graph_breaks(monkeypatch, device):
+    """Compile the adapter and attention blocks; compare both branches' gradients."""
+    torch.manual_seed(42)
+    model = ABUPTRecipe(**SMALL, coordinate_scale=1, train_on_anchors=True).to(device)
+    args = {
+        name: torch.rand(1, count, 3, device=device)
+        for name, count in (
+            ("geometry", 19),
+            ("supernodes", 5),
+            ("surface_anchors", 7),
+            ("volume_anchors", 9),
+        )
+    }
+    args.update(
+        parameters=torch.ones(1, 3, device=device),
+        surface_queries=args["surface_anchors"].clone(),
+        volume_queries=args["volume_anchors"].clone(),
+    )
+    # Radius search has separate dynamic-shape graph breaks. Freeze only its
+    # pooled output so fullgraph detects validation breaks in the real adapter.
+    pooled = model.operator._pool(args["geometry"], args["supernodes"]).detach()
+    monkeypatch.setattr(model.operator, "_pool", lambda geometry, supernodes: pooled)
+    expected = model(**args)
+    actual = torch.compile(model, backend="aot_eager", fullgraph=True)(**args)
+    for key, value in expected.items(include_nested=True, leaves_only=True):
+        torch.testing.assert_close(actual[key], value)
+    weights = (model.operator.surface_head.weight, model.operator.volume_head.weight)
+    expected_loss = sum(t.square().mean() for t in expected.values(True, True))
+    actual_loss = sum(t.square().mean() for t in actual.values(True, True))
+    expected_grads = torch.autograd.grad(expected_loss, weights)
+    actual_grads = torch.autograd.grad(actual_loss, weights)
+    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
+        torch.testing.assert_close(actual_grad, expected_grad)
