@@ -109,11 +109,7 @@ def _apply_dataset_reader_overrides(
 
 
 def _validation_dataset_config(dataset_cfg: DictConfig) -> DictConfig:
-    """Apply split-specific reader settings after shared recipe overrides.
-
-    Only the named settings change; query counts and other reader options
-    supplied by the recipe retain their configured values.
-    """
+    """Apply validation reader settings after shared recipe overrides."""
     reader_overrides = dataset_cfg.get("validation_reader_overrides", None)
     if not reader_overrides:
         return dataset_cfg
@@ -655,11 +651,22 @@ def _build_manifest_val_dataset(
 ) -> MeshDataset | None:
     """Build a dedicated un-augmented validation dataset for manifest mode.
 
-    A separate reader is required for training augmentation, independent
-    sampling state, or validation-specific reader settings. It globs the
-    same sorted paths, so indices resolved against the training reader
-    address the same samples here. Otherwise validation can share the
-    training dataset and this returns ``None``.
+    Manifest mode shares a single reader across the train / val splits
+    (the :class:`ManifestSampler` pair carves out per-split indices). That
+    means validation would otherwise run through the *augmented* transform
+    chain whenever ``augment`` is enabled -- unlike directory mode, which
+    always builds its val dataset with ``augment=False``.
+
+    To restore parity, when *augment* is ``True`` this returns a separate
+    dataset built with ``augment=False`` over the same ``train_datadir``.
+    Its reader globs the same sorted paths, so manifest indices resolved
+    against the train reader address the same samples here. When *augment*
+    is ``False`` and neither validation option below is set, the train and
+    val transform chains are identical, so this returns ``None`` and the caller
+    lets validation share the train dataset (avoiding a redundant second reader).
+
+    ``independent_validation`` or ``validation_reader_overrides`` also requests
+    a separate reader, isolating sampling state and applying validation settings.
     """
     # Stochastic anchor readers require separate epoch state even without
     # augmentation; their validation reader stays at epoch zero.
@@ -838,9 +845,9 @@ def build_dataloaders(
     :class:`ManifestSampler` restricts each loader to the matching
     indices. Augmentations are training-only: when ``cfg.augment`` is set,
     validation uses a separate un-augmented dataset over the same
-    directory (mirroring directory mode). Independent validation sampling
-    or ``validation_reader_overrides`` also creates a separate reader;
-    otherwise validation shares the train dataset.
+    directory (mirroring directory mode); otherwise it shares the train
+    dataset, unless ``independent_validation`` or ``validation_reader_overrides``
+    is set.
 
     Multiple datasets may use either split strategy. Each dataset's local
     train and validation indices are shifted by its cumulative offset in
@@ -1015,8 +1022,11 @@ def build_dataloaders(
                 )
                 local_val_indices = local_train_indices
 
-            ### Preserve the same local index space while isolating validation
-            ### transforms, sampling state, and reader overrides when needed.
+            ### Augmentations are training-only: when enabled, give
+            ### validation its own un-augmented dataset over the same
+            ### directory so eval is never augmented. Otherwise, unless validation
+            ### options are set, this entry shares its training dataset, preserving
+            ### the same local index space without constructing another reader.
             manifest_val_dataset = _build_manifest_val_dataset(
                 ds_yaml,
                 augment=augment,
