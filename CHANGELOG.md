@@ -14,9 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   configurations with independent anchor/query sampling and mapped targets
   for unequal surface/volume point counts.
 
-- Adds an experimental, independently implemented AB-UPT operator with
-  interacting surface/volume anchors, reusable query contexts, and a
-  physically scaled finite-difference vorticity helper.
+- Adds `physicsnemo.experimental.models.ab_upt.ABUPT`, an independent
+  implementation with interacting surface/volume anchors, reusable query
+  contexts, and a finite-difference vorticity helper that undoes coordinate
+  and velocity scaling.
 
 - `physicsnemo.mesh.sampling.sample_cells_systematic` draws a fixed number of
   a mesh's cells with probability proportional to their measure, with
