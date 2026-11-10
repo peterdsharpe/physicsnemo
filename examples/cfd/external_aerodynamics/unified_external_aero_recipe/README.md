@@ -65,7 +65,7 @@ python src/infer.py model=geotransolver_surface dataset=highlift_surface \
 ```
 
 For the canonical CLI invocations of every named recipe (FA variants,
-GLOBE, multi-dataset Transolver, HiLift, DoMINO), see the
+AB-UPT, GLOBE, multi-dataset Transolver, HiLift, DoMINO), see the
 [Recipe Gallery](#recipe-gallery) section below.
 
 ## Pipeline architecture
@@ -462,12 +462,14 @@ unified_external_aero_recipe/
       geotransolver_{surface,volume,volume_highlift}.yaml
       transolver_{surface,volume}.yaml
       flare_{surface,volume}.yaml
+      ab_upt_{surface,volume,joint}.yaml
       globe_{surface,volume}.yaml
       domino_{surface,volume}.yaml
   datasets/                    # one file per dataset (loaded at runtime
                                #  by load_dataset_config, NOT by Hydra)
     dataset_paths.yaml         # local disk paths (edit me)
     drivaer_ml_{surface,volume}.yaml
+    drivaer_ml_ab_upt_{surface,volume,joint}.yaml
     highlift_{surface,volume}.yaml
     shift_suv_{estate,fastback}_surface.yaml
   src/
@@ -486,15 +488,15 @@ unified_external_aero_recipe/
 | Metrics list | `train.yaml` (`metrics`) |
 | Multi-dataset orchestration | `train.yaml` (`extra_datasets`) + Python in `datasets.build_dataloaders` |
 | Model + forward_kwargs | `conf/model/<name>.yaml` |
-| Training schedule (lr, scheduler, num_epochs, compile) | `train.yaml` |
+| Training schedule (lr, scheduler, num_epochs, compile) | `train.yaml` defaults, with model-template and CLI overrides |
 
 ### `conf/train.yaml`
 
 ```yaml
 defaults:
   - base
-  - model: geotransolver_volume
   - _self_
+  - model: geotransolver_volume
 
 # Dataset selection (a string naming a file in datasets/, no `.yaml`)
 dataset: drivaer_ml_volume
@@ -525,6 +527,13 @@ training:
     gamma: 0.1
 ```
 
+Muon/AdamW remains the default optimizer. Set `+training.optimizer._target_`
+for another optimizer (including `optimization.Lion`), removing incompatible
+inherited arguments with Hydra's `~` overrides. Optional
+`+training.grad_clip_norm=1.0` and `+training.ema_decay=0.9999` enable gradient
+clipping and EMA. Checkpoints retain optimizer, scheduler, and EMA state for
+resume; use `checkpoint_path=runs/<run_id>/checkpoints/ema` for EMA inference.
+
 ### How the pieces compose
 
 ```mermaid
@@ -549,9 +558,9 @@ Notes on the composition:
   its contents merge at the global root rather than under the group
   name. This lets one model file declare `model:` AND
   `input_type` / `output_type` / `forward_kwargs:` together.
-- `_self_` is the LAST entry in `train.yaml`'s `defaults:` so any inline
-  `model:` / `training:` / `dataloader:` overrides win over the model
-  template values.
+- `train.yaml` merges `base`, then `_self_`, then the model template.
+  Model-template settings override the training defaults. CLI overrides
+  take precedence over both.
 - Forward kwargs live alongside the model in the same template because
   they are a property of the model class's forward signature, not an
   independent dimension.
@@ -564,10 +573,10 @@ Notes on the composition:
   computes from the chosen dataset's `targets:` block (sum of channel
   counts via `field_dim()`). GLOBE templates declare per-target
   `output_schema` instead and don't touch `out_dim`.
-- `conf/infer.yaml` follows the same shape:
-  `defaults: - base, - model: ???, - _self_` with checkpoint /
-  output-path knobs in place of the training schedule. `base.yaml` is
-  intentionally training-agnostic so both entry points can share it.
+- `conf/infer.yaml` merges `base`, then the model template, then `_self_`.
+  Its inference settings override the model template, and CLI overrides
+  take precedence. It supplies checkpoint and output paths instead of the
+  training schedule. Both entry points share `base.yaml`.
 
 ### Recipe Gallery
 
@@ -652,26 +661,31 @@ attention is opt-in, not the default).
 
 #### AB-UPT options
 
-Set `dataset_paths.drivaer_ml` to native `run_*/domain_*.pdmsh` files with a
-triangulated `vehicle` boundary and freestream metadata. Surface-only mode
-accepts an empty interior; volume and joint modes require interior fields.
-Surface targets are pressure and wall shear stress; volume targets are velocity,
-pressure, and eddy viscosity. Joint mode couples both branches; separate modes
-omit the inactive branch. This independent implementation does not reproduce
-the paper's seven-channel volume/vorticity benchmark.
+Use the AB-UPT dataset templates shown in the gallery and set `drivaer_ml` in
+`datasets/dataset_paths.yaml` to the directory containing native
+`run_*/domain_*.pdmsh` files with a triangulated `vehicle` boundary and freestream metadata. Surface-only mode
+accepts an empty interior. Joint mode couples both branches; separate modes
+omit the inactive branch. Surface targets are pressure and wall shear stress;
+volume targets are velocity, pressure, and eddy viscosity.
 
-The YAML calls the library `ABUPT` model directly and uses `DomainMeshReader`
-with independent `point_sets` selections. Set counts through
-`dataset_reader_overrides.point_sets.<name>.count`, where `<name>` is `geometry`,
-`supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, or `interior`. Validation sampling stays fixed while training varies by epoch.
-`model.query_chunk_size` controls query decoding, and `model.pooling_chunk_size`
-controls message batches. `model.pooling_message_fp32=true` keeps the message MLP
-in FP32 under autocast; use it with FP32 model weights.
+- `dataset_reader_overrides.point_sets.<name>.count` controls `geometry`,
+  `supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, and
+  `interior` independently. Validation samples stay fixed while training varies
+  by epoch.
+- `model.query_chunk_size` controls decoding chunks; `model.pooling_chunk_size`
+  controls geometry-message batches. `model.pooling_message_fp32=true` keeps the
+  message MLP in FP32 under autocast with FP32 model weights.
+- Coordinates and pooling radius use `L_ref` units before `model.coordinate_scale`
+  (default 1000). `+model.parameter_scale` divides conditioning values (default 1).
+  Reuse the training run's model settings from `resolved_config.yaml` at inference.
 
-Coordinates and pooling radius use `L_ref` units before the model applies
-`model.coordinate_scale` (default 1000). `+model.parameter_scale` optionally
-divides freestream conditioning (default 1). Replay these and architecture
-settings from `resolved_config.yaml` at inference; query counts can change:
+For anchor supervision, set `+model.train_on_anchors=true` and
+`+dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors`
+for the surface branch, and
+`+dataset_reader_overrides.point_sets.interior.indices_from=volume_anchors`
+for the volume branch. Validation and inference still decode independent queries.
+
+Use `null` query counts for full fields with the configured anchor budgets:
 
 ```bash
 python src/infer.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
@@ -679,44 +693,6 @@ python src/infer.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
     dataset_reader_overrides.point_sets.surface_queries.count=null \
     dataset_reader_overrides.point_sets.interior.count=null rescale_geometry=true
 ```
-
-`null` queries all locations with the configured anchor budgets. Physical
-surface fields are exported to `boundaries.surface_queries.point_data` and volume
-fields to `interior.point_data`; surface forces use the aligned vehicle triangles.
-
-For anchor supervision, set `+model.train_on_anchors=true` and
-`+dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors`
-for the surface branch, and
-`+dataset_reader_overrides.point_sets.interior.indices_from=volume_anchors`
-for the volume branch. Validation and inference
-still decode independent queries at their configured counts. Keep
-`model.train_on_anchors` set when loading that run's checkpoint.
-
-The default optimizer remains Muon/AdamW. To select Lion, MSE, EMA, gradient
-clipping, and warmup/cosine scheduling, use the following overrides. This example
-assumes **435 training cases, one GPU, batch size 1, and 500 epochs**; adjust the
-step counts for your dataset and number of processes.
-
-```bash
-python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface \
-    run_id=anchor_surface precision=float16 training.num_epochs=500 \
-    training.loss_type=mse +model.train_on_anchors=true \
-    +dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors \
-    +training.optimizer._target_=optimization.Lion \
-    '~training.optimizer.eps' 'training.optimizer.betas=[0.9,0.99]' \
-    training.optimizer.lr=5e-5 training.optimizer.weight_decay=0.05 \
-    +training.grad_clip_norm=1.0 +training.ema_decay=0.9999 \
-    training.scheduler_update_mode=step \
-    training.scheduler._target_=optimization.WarmupCosine \
-    '~training.scheduler.step_size' '~training.scheduler.gamma' \
-    +training.scheduler.total_steps=217500 \
-    +training.scheduler.warmup_steps=10875 +training.scheduler.min_lr=1e-6
-```
-
-The `~` overrides remove inherited arguments that Lion and `WarmupCosine` do not
-accept. Standard checkpoints retain optimizer, scheduler, and EMA state for
-resume. Use `checkpoint_path=runs/anchor_surface/checkpoints/ema` to evaluate EMA
-weights; raw and EMA validation metrics are logged separately.
 
 ### Dataset config anatomy
 
