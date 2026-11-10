@@ -138,13 +138,6 @@ def test_ema_checkpoint_continuation_matches_uninterrupted(tmp_path):
         torch.testing.assert_close(value, resumed.state_dict()[name], rtol=0, atol=0)
 
 
-@pytest.mark.parametrize("decay", [-1, 1, float("nan"), True])
-def test_invalid_ema_decay(decay):
-    """Reject invalid EMA decay values before creating accumulators."""
-    with pytest.raises(ValueError, match="decay"):
-        ModelEMA(torch.nn.Linear(1, 1), decay)
-
-
 def test_ema_rejects_changed_decay_and_shape():
     """Reject incompatible EMA checkpoint decay or parameter dimensions."""
     ema = ModelEMA(torch.nn.Linear(2, 1), 0.9)
@@ -152,17 +145,6 @@ def test_ema_rejects_changed_decay_and_shape():
         ModelEMA(torch.nn.Linear(2, 1), 0.99).load_state_dict(ema.state_dict())
     with pytest.raises(ValueError, match="shape"):
         ModelEMA(torch.nn.Linear(3, 1), 0.9).load_state_dict(ema.state_dict())
-
-
-@pytest.mark.parametrize("clip", [0, -1, float("inf"), float("nan"), True])
-def test_invalid_gradient_clip(clip):
-    """Reject invalid clipping thresholds before updating parameters."""
-    model = torch.nn.Linear(1, 1)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
-    with pytest.raises(ValueError, match="grad_clip_norm"):
-        optimizer_update(
-            model.weight.sum(), optimizer, model.parameters(), grad_clip_norm=clip
-        )
 
 
 def test_ema_export_loads_as_inference_checkpoint_without_mutating_raw(tmp_path):

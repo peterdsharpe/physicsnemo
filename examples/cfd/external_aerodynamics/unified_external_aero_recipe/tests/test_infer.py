@@ -43,7 +43,7 @@ _RECIPE = Path(__file__).resolve().parent.parent
 _DATASETS = _RECIPE / "datasets"
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda:0", "cuda:1"])
+@pytest.mark.parametrize("device", ["cpu", "cuda:0"])
 def test_norm_stats_match_across_devices(device):
     """Checkpoint statistics compare by value regardless of their saved device."""
     if device.startswith("cuda") and torch.cuda.device_count() <= int(device[-1]):

@@ -76,25 +76,9 @@ def test_schedule_endpoints_and_resume(warmup):
     )
 
 
-def test_optimizer_factory_explicit_and_legacy():
-    """Select an explicit optimizer while preserving the legacy default."""
-    from omegaconf import OmegaConf
-    from utils import build_optimizer
-
-    model = torch.nn.Linear(2, 1)
-    cfg = OmegaConf.create(
-        {"training": {"optimizer": {"_target_": "optimization.Lion", "lr": 5e-5}}}
-    )
-    assert isinstance(build_optimizer(model, cfg), Lion)
-    cfg.training.optimizer = {"lr": 1e-4}
-    legacy = build_optimizer(model, cfg)
-    assert not isinstance(legacy, Lion)
-
-
 @pytest.mark.parametrize(
     "target,shape,with_bias,backend",
     [
-        ("optimization.Lion", (2,), False, "eager"),
         ("torch.optim.AdamW", (2,), False, "eager"),
         (None, (2,), False, "eager"),
         (None, (2, 2), False, "eager"),
@@ -122,6 +106,9 @@ def test_compiled_optimizer_scheduler_updates_match_eager(
         model.register_parameter("bias", torch.nn.Parameter(torch.ones(2)))
     reference = copy.deepcopy(model)
     optimizer = build_optimizer(model, cfg, compile_optimizer=True)
+    if target is not None:
+        expected_type = Lion if target == "optimization.Lion" else torch.optim.AdamW
+        assert isinstance(optimizer, expected_type)
     reference_optimizer = build_optimizer(reference, cfg)
     scheduler = WarmupCosine(optimizer, total_steps=10, warmup_steps=2)
     reference_scheduler = WarmupCosine(

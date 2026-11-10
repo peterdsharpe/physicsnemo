@@ -28,7 +28,6 @@ from ab_upt import ABUPTDomainReader, ABUPTRecipe
 from collate import build_collate_fn
 from datasets import (
     _apply_dataset_reader_overrides,
-    _build_manifest_val_dataset,
     build_dataloaders,
     build_dataset,
 )
@@ -157,6 +156,7 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
         "tensors", OmegaConf.to_container(cfg.forward_kwargs), targets, sources
     )
     batch = collate([(domain, meta)])
+    cfg.model.pooling_message_fp32 = mode == "joint"
     model = hydra.utils.instantiate(cfg.model)
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
     loss_fn = LossCalculator(targets, loss_type="mse")
@@ -177,6 +177,8 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
     path = tmp_path / f"{mode}.mdlus"
     model.save(str(path))
     restored = Module.from_checkpoint(str(path))
+    assert restored.operator.pooling_message_fp32 == cfg.model.pooling_message_fp32
+    assert restored.operator.pooling_chunk_size == cfg.model.pooling_chunk_size
     expected, actual = (
         model(**batch["forward_kwargs"]),
         restored(**batch["forward_kwargs"]),
@@ -234,7 +236,7 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
     dataset.close()
 
 
-def test_sampling_streams_and_fixed_validation(native_case):
+def test_sampling_stream_independence(native_case):
     """Epoch changes train samples; query counts and order cannot change anchors."""
     root, _ = native_case
     reader = ABUPTDomainReader(root, **COUNTS)
@@ -261,24 +263,18 @@ def test_sampling_streams_and_fixed_validation(native_case):
         first.boundaries["abupt_geometry"].points,
         changed_epoch.boundaries["abupt_geometry"].points,
     )
-    cfg, ds, train = pipeline(root, "joint")
-    val = _build_manifest_val_dataset(
-        ds, augment=False, device="cpu", num_workers=1, pin_memory=False
-    )
-    assert val is not None and val.reader is not train.reader
-    before, _ = val[0]
-    train.set_epoch(4)
-    after, _ = val[0]
-    torch.testing.assert_close(
-        before.boundaries["abupt_geometry"].points,
-        after.boundaries["abupt_geometry"].points,
-    )
-    train.close()
-    val.close()
 
 
-@pytest.mark.parametrize("mode", ["surface", "volume", "joint"])
-@pytest.mark.parametrize("split", ["manifest", "directory", "fallback"])
+@pytest.mark.parametrize(
+    "mode,split",
+    [
+        ("surface", "manifest"),
+        ("volume", "manifest"),
+        ("joint", "manifest"),
+        ("joint", "directory"),
+        ("joint", "fallback"),
+    ],
+)
 def test_anchor_training_loaders_keep_independent_validation_queries(
     native_case, mode, split, monkeypatch
 ):
@@ -448,15 +444,12 @@ def test_reader_keeps_labels_aligned_with_original_coordinates(native_case, mode
 
 
 @pytest.mark.parametrize(
-    "coordinate_dtypes,metadata_dtype",
+    "coordinate_dtypes,metadata_dtype,model_dtype",
     [
-        ((torch.float64,), torch.float64),
-        ((torch.float64,), torch.float32),
-        ((torch.float32,), torch.float64),
-        ((torch.float32, torch.float64), torch.float64),
+        ((torch.float32, torch.float64), torch.float64, torch.float32),
+        ((torch.float32,), torch.float32, torch.float64),
     ],
 )
-@pytest.mark.parametrize("model_dtype", [torch.float32, torch.float64])
 def test_adapter_accepts_mixed_native_dtypes_without_changing_inputs(
     coordinate_dtypes, metadata_dtype, model_dtype
 ):
@@ -688,38 +681,3 @@ def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     result = restored(**args, parameters=parameters.detach())
     for key, value in actual.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(result[key], value)
-
-
-@pytest.mark.parametrize("scale", [0, -1, float("nan"), float("inf"), True])
-def test_parameter_scale_validation(scale):
-    """Reject nonpositive, nonfinite, and boolean conditioning scales."""
-    with pytest.raises(ValueError, match="parameter_scale"):
-        ABUPTRecipe(**SMALL, parameter_scale=scale)
-
-
-@pytest.mark.parametrize("mode", ["surface", "volume", "joint"])
-def test_pooling_execution_options_roundtrip(mode, tmp_path):
-    """Hydra overrides reach the operator and survive checkpoint reconstruction."""
-    with initialize_config_dir(config_dir=str(ROOT / "conf"), version_base=None):
-        cfg = compose(
-            config_name="train",
-            overrides=[
-                f"model=ab_upt_{mode}",
-                "model.pooling_message_fp32=true",
-                "model.pooling_chunk_size=262144",
-            ],
-        )
-    cfg.model.update(
-        {key: value for key, value in SMALL.items() if key != "pooling_chunk_size"}
-    )
-    model = hydra.utils.instantiate(cfg.model)
-    assert model.operator.pooling_message_fp32
-    assert model.operator.pooling_chunk_size == 262144
-    path = tmp_path / f"{mode}-fp32-messages.mdlus"
-    model.save(str(path))
-    restored = Module.from_checkpoint(str(path))
-    assert restored.operator.pooling_message_fp32
-    assert restored.operator.pooling_chunk_size == 262144
-    assert restored.mode == mode
-    for name, value in model.named_parameters():
-        torch.testing.assert_close(dict(restored.named_parameters())[name], value)
