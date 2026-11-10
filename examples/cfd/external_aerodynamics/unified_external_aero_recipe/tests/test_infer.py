@@ -332,7 +332,7 @@ def test_attach_and_save_preserves_physical_point_measures(tmp_path, rescale_geo
     torch.testing.assert_close(point_measures(reloaded.interior), measures * factor)
     torch.testing.assert_close(
         reloaded.interior.integrate_samples("pred_pressure"),
-        (phys["pressure"] * measures * factor).sum(),
+        (phys["pressure"] * (measures * factor)).sum(),
     )
     torch.testing.assert_close(
         point_measures(reloaded.interior.scale(2.0)), measures * factor * 4
