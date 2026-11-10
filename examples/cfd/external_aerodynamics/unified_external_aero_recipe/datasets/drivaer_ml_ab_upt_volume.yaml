@@ -18,16 +18,36 @@
 train_datadir: ${dataset_paths.drivaer_ml}
 independent_validation: true
 validation_reader_overrides:
-  # Anchor supervision applies only to training; evaluate independent queries.
-  queries_at_anchors: false
+  point_sets:
+    interior: {indices_from: null}
 
 pipeline:
   reader:
-    _target_: ab_upt.ABUPTDomainReader
+    _target_: ${dp:DomainMeshReader}
     path: ${train_datadir}
     pattern: "run_*/domain_*.pdmsh"
-    mode: volume
-    volume_queries: ${sampling_resolution}
+    point_sets:
+      geometry:
+        source: vehicle
+        count: 65536
+        stream: 0
+      supernodes:
+        source: geometry
+        count: 16384
+        stream: 1
+      volume_anchors:
+        source: interior
+        count: 16384
+        stream: 3
+      interior:
+        source: interior
+        count: ${sampling_resolution}
+        stream: 5
+        indices_from: null
+        fields:
+          UMeanTrim: volume.velocity
+          pMeanTrim: volume.pressure
+          nutMeanTrim: volume.nut
   transforms:
     - _target_: ${dp:NonDimensionalizeByMetadata}
       association: point_data

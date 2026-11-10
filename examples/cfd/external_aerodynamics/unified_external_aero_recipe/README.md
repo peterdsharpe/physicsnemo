@@ -321,8 +321,9 @@ keyed by the field names declared in the dataset YAML's `targets:` block.
 The collate produces the targets `TensorDict` (`batch_size=[N]` in
 mesh-input mode, `[1, N]` in tensor-input mode); the predictions
 `TensorDict` is built from the model output with matching `batch_size`.
-AB-UPT uses `TensorDict` batch size `[1]` so its surface and volume fields
-can have different point counts. For each field, the loss type is applied per the field's type (`scalar`
+Joint tensor models declare `output_groups` to map each output tensor to its
+target fields. The normalizer uses batch size `[1]` for these fields so the
+point counts can differ. For each field, the loss type is applied per the field's type (`scalar`
 or `vector`); per-field losses are then weighted by the optional
 `training.field_weights` block in the model YAML and summed.
 
@@ -618,8 +619,8 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
 python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface
 python src/train.py model=ab_upt_volume dataset=drivaer_ml_ab_upt_volume
 python src/train.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
-    dataset_reader_overrides.surface_queries=8192 \
-    dataset_reader_overrides.volume_queries=16384
+    dataset_reader_overrides.point_sets.surface_queries.count=8192 \
+    dataset_reader_overrides.point_sets.interior.count=16384
 
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
@@ -659,14 +660,15 @@ pressure, and eddy viscosity. Joint mode couples both branches; separate modes
 omit the inactive branch. This independent implementation does not reproduce
 the paper's seven-channel volume/vorticity benchmark.
 
-Sampling counts are configured through `dataset_reader_overrides`; reduce
-`geometry_points`, `num_supernodes`, and the enabled anchor counts for smaller
-GPU budgets. Validation sampling stays fixed while training varies by epoch.
+The YAML calls the library `ABUPT` model directly and uses `DomainMeshReader`
+with independent `point_sets` selections. Set counts through
+`dataset_reader_overrides.point_sets.<name>.count`, where `<name>` is `geometry`,
+`supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, or `interior`. Validation sampling stays fixed while training varies by epoch.
 `model.query_chunk_size` controls query decoding, and `model.pooling_chunk_size`
 controls message batches. `model.pooling_message_fp32=true` keeps the message MLP
 in FP32 under autocast; use it with FP32 model weights.
 
-Coordinates and pooling radius use `L_ref` units before the adapter applies
+Coordinates and pooling radius use `L_ref` units before the model applies
 `model.coordinate_scale` (default 1000). `+model.parameter_scale` optionally
 divides freestream conditioning (default 1). Replay these and architecture
 settings from `resolved_config.yaml` at inference; query counts can change:
@@ -674,16 +676,19 @@ settings from `resolved_config.yaml` at inference; query counts can change:
 ```bash
 python src/infer.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
     checkpoint_path=/path/to/checkpoints run_id=YOUR_RUN_ID \
-    dataset_reader_overrides.surface_queries=null \
-    dataset_reader_overrides.volume_queries=null rescale_geometry=true
+    dataset_reader_overrides.point_sets.surface_queries.count=null \
+    dataset_reader_overrides.point_sets.interior.count=null rescale_geometry=true
 ```
 
 `null` queries all locations with the configured anchor budgets. Physical
-surface fields are exported to `boundaries.abupt_surface.point_data` and volume
+surface fields are exported to `boundaries.surface_queries.point_data` and volume
 fields to `interior.point_data`; surface forces use the aligned vehicle triangles.
 
 For anchor supervision, set `+model.train_on_anchors=true` and
-`+dataset_reader_overrides.queries_at_anchors=true`. Validation and inference
+`+dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors`
+for the surface branch, and
+`+dataset_reader_overrides.point_sets.interior.indices_from=volume_anchors`
+for the volume branch. Validation and inference
 still decode independent queries at their configured counts. Keep
 `model.train_on_anchors` set when loading that run's checkpoint.
 
@@ -696,7 +701,7 @@ step counts for your dataset and number of processes.
 python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface \
     run_id=anchor_surface precision=float16 training.num_epochs=500 \
     training.loss_type=mse +model.train_on_anchors=true \
-    +dataset_reader_overrides.queries_at_anchors=true \
+    +dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors \
     +training.optimizer._target_=optimization.Lion \
     '~training.optimizer.eps' 'training.optimizer.betas=[0.9,0.99]' \
     training.optimizer.lr=5e-5 training.optimizer.weight_decay=0.05 \
@@ -893,7 +898,6 @@ TensorBoard / JSONL files; no external tracker required.
 | `src/output_normalize.py` | `normalize_output_to_tensordict` (Mesh -> `point_data.select`, tensor -> per-target slicing via `split_concat_by_target`) and `require_output_type(cfg)`. Tensorboard-free so the unit tests can import it directly. |
 | `src/forces.py` | Integrated aerodynamic force/moment coefficients from surface predictions. `force_moment_coefficients` integrates the traction `-Cp*n + Cf` over the vehicle via `Mesh.integrate`, projected onto drag/lift/side + roll/pitch/yaw axes; `ForceContext` / `ForceAccumulator` wrap the per-run config + accumulation. |
 | `src/utils.py` | Shared helpers: `build_optimizer` (explicit Hydra optimizer or Muon/AdamW via `build_muon_optimizer`), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
-| `src/ab_upt.py` | AB-UPT adapter and native-domain reader for surface, volume, and joint fields. |
 | `src/optimization.py` | Lion optimizer and per-update warmup/cosine schedule. |
 | `src/training_state.py` | EMA weights, AMP-aware optimizer updates, and gradient clipping. |
 | `src/train.py` | Training loop with DDP, mixed precision, checkpointing, TensorBoard + JSONL logging, I/O benchmarking (`benchmark_io=true`), and profiling. (Dataloader assembly now lives in `datasets.build_dataloaders`.) |

@@ -324,15 +324,15 @@ class ForceContext:
         ### centroids, so predictions align 1:1 with cells. A mismatch
         ### means this is not a surface case (e.g. a volume interior).
         if target_sources is not None:
-            # Explicit AB-UPT surface queries are aligned with sampled vehicle
-            # cells by the reader, independently of the volume interior size.
-            prefix = "boundaries.abupt_surface.point_data."
-            if not all(
-                target_sources.get(n, "").startswith(prefix)
+            # Named targets can live on a query boundary independently of the
+            # volume interior. Both force fields must use the same point set.
+            paths = [
+                target_sources.get(n, "").split(".point_data.")[0]
                 for n in (self.pressure_field, self.shear_field)
-            ):
+            ]
+            if paths[0] != paths[1] or not paths[0].startswith("boundaries."):
                 return None
-            surface = domain.boundaries["abupt_surface"]
+            surface = domain.boundaries[paths[0].removeprefix("boundaries.")]
             if surface.n_points != vehicle.n_cells or not torch.allclose(
                 surface.points, vehicle.cell_centroids
             ):

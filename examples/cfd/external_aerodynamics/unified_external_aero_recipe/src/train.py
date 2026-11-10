@@ -237,6 +237,7 @@ def forward_pass(
     *,
     output_type: IOType,
     target_config: dict[str, FieldType],
+    output_groups: list[list[str]] | None = None,
 ) -> tuple[Float[torch.Tensor, ""], TensorDict, TensorDict]:
     """Run a forward pass + loss + metrics on one collated batch.
 
@@ -257,6 +258,7 @@ def forward_pass(
             output is unpacked into a TensorDict.
         target_config: ``{name: "scalar"|"vector"}``; used to split tensor
             outputs and validate Mesh outputs.
+        output_groups: Optional ordered target-name lists for multiple tensors.
 
     Returns:
         ``(loss, loss_td, metric_td)``. The two TensorDicts are kept
@@ -274,7 +276,9 @@ def forward_pass(
     with get_autocast_context(precision):
         output = model(**forward_kwargs)
 
-    pred_td = normalize_output_to_tensordict(output, target_config, output_type)
+    pred_td = normalize_output_to_tensordict(
+        output, target_config, output_type, output_groups=output_groups
+    )
 
     ### Loss runs in float32 to avoid bf16 precision loss in the reduction.
     pred_f32 = pred_td.float()
@@ -381,6 +385,7 @@ def _run_epoch(
                 metric_calculator,
                 output_type=output_type,
                 target_config=target_config,
+                output_groups=cfg.get("output_groups"),
             )
 
             if is_train:

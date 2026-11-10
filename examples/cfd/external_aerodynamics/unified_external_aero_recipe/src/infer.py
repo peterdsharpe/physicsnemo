@@ -242,7 +242,7 @@ def _to_pointwise(td: TensorDict, output_type: IOType) -> TensorDict:
     (batch_size ``[1, N]``); mesh-output models produce per-point leaves
     already (batch_size ``[N]``).
     """
-    return td[0] if output_type in ("tensors", "tensordict") else td
+    return td[0] if output_type == "tensors" else td
 
 
 def _sample_id(metadata: dict[str, Any], idx: int) -> str:
@@ -607,7 +607,9 @@ def main(cfg: DictConfig) -> None:
 
         with torch.no_grad(), get_autocast_context(cfg.precision):
             output = model(**batch["forward_kwargs"])
-        pred_td = normalize_output_to_tensordict(output, target_config, output_type)
+        pred_td = normalize_output_to_tensordict(
+            output, target_config, output_type, output_groups=cfg.get("output_groups")
+        )
 
         ### Metrics in training space (matches the validation numbers); pull the
         ### whole TensorDict host-side once so each .item() is a free CPU index.

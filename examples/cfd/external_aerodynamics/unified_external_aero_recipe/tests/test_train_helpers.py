@@ -244,3 +244,30 @@ class TestReduceAndAverage:
         )
         assert loss == pytest.approx(7.0)
         assert losses == {} and metrics == {}
+
+
+def test_output_groups_keep_unequal_point_sets_and_require_exact_coverage():
+    """Joint outputs must preserve both branches and reject ambiguous mapping."""
+    tensors = (torch.randn(2, 7, 1), torch.randn(2, 11, 3))
+    targets = {"boundary.p": "scalar", "flow.u": "vector"}
+    groups = [["boundary.p"], ["flow.u"]]
+    out = normalize_output_to_tensordict(
+        tensors, targets, "tensors", output_groups=groups
+    )
+    assert out.batch_size == torch.Size([2])
+    torch.testing.assert_close(out["boundary", "p"], tensors[0][..., 0])
+    torch.testing.assert_close(out["flow", "u"], tensors[1])
+    for invalid in (
+        None,
+        [["boundary.p"]],
+        [["boundary.p"], ["boundary.p", "flow.u"]],
+        [],
+    ):
+        with pytest.raises(ValueError):
+            normalize_output_to_tensordict(
+                tensors, targets, "tensors", output_groups=invalid
+            )
+    with pytest.raises(ValueError):
+        normalize_output_to_tensordict(
+            (tensors[0], None), targets, "tensors", output_groups=groups
+        )

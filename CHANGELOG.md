@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Unified external aero recipe: adds AB-UPT surface, volume, and joint
-  configurations with independent anchor/query sampling and mapped targets
-  for unequal surface/volume point counts.
+  configurations calling the library model directly, configurable independent
+  point-set sampling in `DomainMeshReader`, and grouped tensor outputs for
+  unequal surface/volume point counts.
 
 - Adds `physicsnemo.experimental.models.ab_upt.ABUPT`, an independent
   implementation with interacting surface/volume anchors, reusable query

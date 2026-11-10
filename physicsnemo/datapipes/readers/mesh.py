@@ -1055,6 +1055,7 @@ class DomainMeshReader(_MeshReaderBase):
         drop_interior_cells: bool = False,
         drop_in_file_boundaries: bool = False,
         interior_n_points_range: tuple[int, int] | None = None,
+        point_sets: dict[str, dict] | None = None,
         domain_parallel: dict | None = None,
         device_mesh: "torch.distributed.device_mesh.DeviceMesh | None" = None,
     ) -> None:
@@ -1159,6 +1160,25 @@ class DomainMeshReader(_MeshReaderBase):
             otherwise be subsampled (an expensive ``slice_points`` remap,
             GIL-held, that blocks worker-thread overlap) and pinned every
             sample for nothing.
+        point_sets : dict[str, dict], optional
+            Construct independently sampled point clouds before pinning or device
+            transfer. Each key names an output boundary (``interior`` is reserved
+            for the interior). Each specification contains ``source`` (an input
+            boundary, ``interior``, or a previously constructed point set),
+            ``association`` (``points`` or ``cell_centroids``), ``count`` (positive
+            integer or None for all), and an integer ``stream``. Optional
+            ``fields`` maps source field names to output point-data names.
+            ``indices_from`` reuses a preceding selection from the same source
+            and association, e.g. to supervise anchors. ``retain_cells_as`` keeps
+            the selected cells as an additional boundary, with inverse-inclusion
+            integration measures. Other input meshes and fields are discarded.
+
+            Sampling is uniform without replacement and deterministic per
+            reader seed, epoch, sample index, and stream, independent of access
+            order and other point-set sizes. Memory-mapped stores gather only
+            selected rows; Zarr uses the full-domain load. Cannot be combined
+            with the other subsampling, drop, extra-boundary, or domain-parallel
+            options. An omitted interior becomes an empty point cloud.
         domain_parallel : dict, optional
             Optional dict to configure domain-parallel (rank-local)
             reading; see :class:`MeshReader`. Every sub-mesh's two batch
@@ -1172,6 +1192,20 @@ class DomainMeshReader(_MeshReaderBase):
             1-D device mesh for domain-parallel reading; required with
             ``domain_parallel``. Constructed and injected at runtime.
         """
+        if point_sets is not None and (
+            not point_sets
+            or subsample_n_points is not None
+            or subsample_n_cells is not None
+            or interior_n_points_range is not None
+            or extra_boundaries
+            or drop_interior_cells
+            or drop_in_file_boundaries
+            or domain_parallel is not None
+        ):
+            raise ValueError(
+                "point_sets must be nonempty and cannot be combined with other reader selections"
+            )
+        self.point_sets = point_sets
         self._root = Path(path)
         self._pattern = pattern
         self.pin_memory = pin_memory
@@ -1412,6 +1446,17 @@ class DomainMeshReader(_MeshReaderBase):
         generator = self._index_generator(index) if subsample else None
         interior_n_points = self._interior_n_points(generator) if subsample else None
         dm = self._load_sample(index, generator, interior_n_points)
+
+        if self.point_sets is not None:
+            from physicsnemo.datapipes.readers.point_sets import sample_point_sets
+
+            dm = sample_point_sets(
+                dm,
+                self.point_sets,
+                seed=self._seed_base or 0,
+                epoch=self._epoch,
+                index=index,
+            )
 
         # Trim unused data before subsample/pin. Both references are lazy (no
         # memmap materialization here):

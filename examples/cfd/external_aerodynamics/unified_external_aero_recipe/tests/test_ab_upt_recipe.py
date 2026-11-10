@@ -24,7 +24,6 @@ import datasets as datasets_module
 import hydra
 import pytest
 import torch
-from ab_upt import ABUPTDomainReader, ABUPTRecipe
 from collate import build_collate_fn
 from datasets import (
     _apply_dataset_reader_overrides,
@@ -46,6 +45,8 @@ from omegaconf import OmegaConf
 from output_normalize import normalize_output_to_tensordict
 
 from physicsnemo import Module
+from physicsnemo.experimental.models.ab_upt import ABUPT
+from physicsnemo.datapipes.readers import DomainMeshReader
 from physicsnemo.datapipes.keys import as_nested_key
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
@@ -60,6 +61,7 @@ SMALL = dict(
     pooling_radius=2.0,
     pooling_chunk_size=31,
     radius_search_backend="torch",
+    coordinate_scale=1000.0,
 )
 COUNTS = dict(
     geometry_points=17,
@@ -69,6 +71,79 @@ COUNTS = dict(
     surface_queries=11,
     volume_queries=13,
 )
+
+
+COUNT_KEYS = {
+    "geometry": "geometry_points",
+    "supernodes": "num_supernodes",
+    "surface_anchors": "num_surface_anchors",
+    "volume_anchors": "num_volume_anchors",
+    "surface_queries": "surface_queries",
+    "interior": "volume_queries",
+}
+
+
+def make_model(mode="joint", **kwargs):
+    """Construct the library model with the dataset channel layout."""
+    return ABUPT(
+        surface_channels=4 if mode != "volume" else 0,
+        volume_channels=5 if mode != "surface" else 0,
+        parameter_channels=3,
+        **kwargs,
+    )
+
+
+def make_reader(root, mode="joint", **counts):
+    """Use the actual dataset selection schema with small test counts."""
+    cfg = OmegaConf.load(ROOT / "datasets" / f"drivaer_ml_ab_upt_{mode}.yaml")
+    cfg.train_datadir = str(root)
+    cfg.sampling_resolution = 13
+    specs = OmegaConf.to_container(cfg.pipeline.reader.point_sets, resolve=True)
+    for name, spec in specs.items():
+        spec["count"] = counts[COUNT_KEYS[name]]
+    return DomainMeshReader(root, pattern="run_*/domain_*.pdmsh", point_sets=specs)
+
+
+def anchor_queries(specs, enabled):
+    """Select shared training indices or independent validation queries."""
+    for name, anchors in (
+        ("surface_queries", "surface_anchors"),
+        ("interior", "volume_anchors"),
+    ):
+        if name in specs:
+            if OmegaConf.is_config(specs):
+                OmegaConf.update(
+                    specs,
+                    f"{name}.indices_from",
+                    anchors if enabled else None,
+                    force_add=True,
+                )
+            else:
+                specs[name]["indices_from"] = anchors if enabled else None
+
+
+def predict(model, **kwargs):
+    """Normalize native tensor outputs through the shared recipe path."""
+    groups = []
+    targets = {}
+    if model.surface_channels:
+        targets.update({"surface.pressure": "scalar", "surface.wss": "vector"})
+        groups.append(["surface.pressure", "surface.wss"])
+    if model.volume_channels:
+        targets.update(
+            {
+                "volume.velocity": "vector",
+                "volume.pressure": "scalar",
+                "volume.nut": "scalar",
+            }
+        )
+        groups.append(["volume.velocity", "volume.pressure", "volume.nut"])
+    return normalize_output_to_tensordict(
+        model(**kwargs),
+        targets,
+        "tensors",
+        output_groups=groups if len(groups) == 2 else None,
+    )
 
 
 @pytest.fixture
@@ -117,9 +192,8 @@ def pipeline(root, mode):
     ds = OmegaConf.load(ROOT / "datasets" / f"drivaer_ml_ab_upt_{mode}.yaml")
     ds.train_datadir = str(root)
     ds.sampling_resolution = 13
-    cfg.dataset_reader_overrides.update(
-        {k: v for k, v in COUNTS.items() if k in cfg.dataset_reader_overrides}
-    )
+    for name, spec in cfg.dataset_reader_overrides.point_sets.items():
+        spec.count = COUNTS[COUNT_KEYS[name]]
     cfg.model.update(SMALL)
     ds = _apply_dataset_reader_overrides(ds, cfg)
     dataset = build_dataset(ds, device="cpu", num_workers=1)
@@ -143,8 +217,8 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
         ).save(str(path))
     cfg, ds, dataset = pipeline(root, mode)
     domain, meta = dataset[0]
-    assert ("abupt_surface_anchors" in domain.boundary_names) == (mode != "volume")
-    assert ("abupt_volume_anchors" in domain.boundary_names) == (mode != "surface")
+    assert ("surface_anchors" in domain.boundary_names) == (mode != "volume")
+    assert ("volume_anchors" in domain.boundary_names) == (mode != "surface")
     if mode == "surface":
         assert domain.interior.n_points == 0
         assert "volume_anchors" not in cfg.forward_kwargs
@@ -161,7 +235,10 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
     opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
     loss_fn = LossCalculator(targets, loss_type="mse")
     pred = normalize_output_to_tensordict(
-        model(**batch["forward_kwargs"]), targets, "tensordict"
+        model(**batch["forward_kwargs"]),
+        targets,
+        "tensors",
+        output_groups=cfg.get("output_groups"),
     )
     loss, _ = loss_fn(pred, batch["targets"])
     assert torch.isfinite(loss)
@@ -177,11 +254,11 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
     path = tmp_path / f"{mode}.mdlus"
     model.save(str(path))
     restored = Module.from_checkpoint(str(path))
-    assert restored.operator.pooling_message_fp32 == cfg.model.pooling_message_fp32
-    assert restored.operator.pooling_chunk_size == cfg.model.pooling_chunk_size
+    assert restored.pooling_message_fp32 == cfg.model.pooling_message_fp32
+    assert restored.pooling_chunk_size == cfg.model.pooling_chunk_size
     expected, actual = (
-        model(**batch["forward_kwargs"]),
-        restored(**batch["forward_kwargs"]),
+        predict(model, **batch["forward_kwargs"]),
+        predict(restored, **batch["forward_kwargs"]),
     )
     for name in targets:
         key = as_nested_key(name)
@@ -194,7 +271,7 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
     )
     nondim = next(t for t in dataset.transforms if hasattr(t, "_fields"))
     field_types = build_redim_field_types(ds)
-    true_pts = _to_pointwise(batch["targets"], "tensordict")
+    true_pts = _to_pointwise(batch["targets"], "tensors")
     physical = redimensionalize(
         true_pts,
         normalizer=normalizer,
@@ -239,17 +316,18 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
 def test_sampling_stream_independence(native_case):
     """Epoch changes train samples; query counts and order cannot change anchors."""
     root, _ = native_case
-    reader = ABUPTDomainReader(root, **COUNTS)
+    reader = make_reader(root, **COUNTS)
     reader.set_generator(torch.Generator().manual_seed(37))
     first, _ = reader[0]
     again, _ = reader[0]
-    reader.surface_queries, reader.volume_queries = 19, 23
+    reader.point_sets["surface_queries"]["count"] = 19
+    reader.point_sets["interior"]["count"] = 23
     changed_queries, _ = reader[0]
     for name in (
-        "abupt_geometry",
-        "abupt_supernodes",
-        "abupt_surface_anchors",
-        "abupt_volume_anchors",
+        "geometry",
+        "supernodes",
+        "surface_anchors",
+        "volume_anchors",
     ):
         torch.testing.assert_close(
             first.boundaries[name].points, again.boundaries[name].points
@@ -260,8 +338,8 @@ def test_sampling_stream_independence(native_case):
     reader.set_epoch(1)
     changed_epoch, _ = reader[0]
     assert not torch.equal(
-        first.boundaries["abupt_geometry"].points,
-        changed_epoch.boundaries["abupt_geometry"].points,
+        first.boundaries["geometry"].points,
+        changed_epoch.boundaries["geometry"].points,
     )
 
 
@@ -283,9 +361,7 @@ def test_anchor_training_loaders_keep_independent_validation_queries(
     cfg, ds, initial_dataset = pipeline(root, mode)
     initial_dataset.close()
     cfg.dataset = f"drivaer_ml_ab_upt_{mode}"
-    OmegaConf.update(
-        cfg, "dataset_reader_overrides.queries_at_anchors", True, force_add=True
-    )
+    anchor_queries(cfg.dataset_reader_overrides.point_sets, True)
     cfg.dataloader.prefetch_factor = 0
     cfg.dataloader.num_workers = 1
     cfg.dataloader.use_streams = False
@@ -313,8 +389,6 @@ def test_anchor_training_loaders_keep_independent_validation_queries(
     )
     train_loader, val_loader, _, _ = build_dataloaders(cfg)
     try:
-        assert train_loader.dataset.reader.queries_at_anchors
-        assert not val_loader.dataset.reader.queries_at_anchors
         train = next(iter(train_loader))["forward_kwargs"]
         val = next(iter(val_loader))["forward_kwargs"]
         branches = ["surface", "volume"] if mode == "joint" else [mode]
@@ -334,7 +408,7 @@ def test_anchor_training_loaders_keep_independent_validation_queries(
 
 
 def test_query_chunk_values_and_gradients(native_case):
-    """The adapter reuses one differentiable context across all chunks."""
+    """The model reuses one differentiable context across all chunks."""
     root, _ = native_case
     cfg, ds, dataset = pipeline(root, "joint")
     collate = build_collate_fn(
@@ -344,15 +418,15 @@ def test_query_chunk_values_and_gradients(native_case):
         OmegaConf.to_container(ds.target_sources),
     )
     batch = collate([dataset[0]])
-    model = ABUPTRecipe(**SMALL, query_chunk_size=100)
-    whole = model(**batch["forward_kwargs"])
+    model = make_model(**SMALL, query_chunk_size=100)
+    whole = predict(model, **batch["forward_kwargs"])
     sum(
         v.square().mean() for v in whole.values(include_nested=True, leaves_only=True)
     ).backward()
     gradients = {n: p.grad.clone() for n, p in model.named_parameters()}
     model.zero_grad(set_to_none=True)
     model.query_chunk_size = 3
-    chunks = model(**batch["forward_kwargs"])
+    chunks = predict(model, **batch["forward_kwargs"])
     for key, value in whole.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(value, chunks[key], atol=2e-6, rtol=2e-5)
     sum(
@@ -366,7 +440,7 @@ def test_query_chunk_values_and_gradients(native_case):
 def test_surface_integration_measures(native_case):
     """Equal-area sampling recovers the complete surface integration measure."""
     root, original = native_case
-    reader = ABUPTDomainReader(root, **COUNTS)
+    reader = make_reader(root, **COUNTS)
     sampled, _ = reader[0]
     torch.testing.assert_close(
         cell_measures(sampled.boundaries["vehicle"]).sum(),
@@ -384,9 +458,9 @@ def test_target_contract_rejects_wrong_mode(native_case):
         OmegaConf.to_container(ds.targets),
         OmegaConf.to_container(ds.target_sources),
     )([dataset[0]])
-    model = ABUPTRecipe(mode="surface", **SMALL)
-    with pytest.raises(ValueError, match="disabled volume"):
-        model(**batch["forward_kwargs"])
+    model = make_model(mode="surface", **SMALL)
+    with pytest.raises(ValueError, match="disabled output head"):
+        predict(model, **batch["forward_kwargs"])
     with pytest.raises(ValueError, match="exactly match"):
         extract_targets(dataset[0][0], {"surface.pressure": "scalar"}, {})
     dataset.close()
@@ -396,10 +470,10 @@ def test_target_contract_rejects_wrong_mode(native_case):
 def test_reader_keeps_labels_aligned_with_original_coordinates(native_case, mode):
     """Match sampled coordinates to the original mesh, independently of the reader."""
     root, original = native_case
-    reader = ABUPTDomainReader(root, mode=mode, **COUNTS)
+    reader = make_reader(root, mode=mode, **COUNTS)
     reader.set_generator(torch.Generator().manual_seed(654))
     sampled, _ = reader[0]
-    surface = sampled.boundaries.get("abupt_surface")
+    surface = sampled.boundaries.get("surface_queries")
     if mode != "volume":
         torch.testing.assert_close(
             surface.points, sampled.boundaries["vehicle"].cell_centroids
@@ -450,12 +524,12 @@ def test_reader_keeps_labels_aligned_with_original_coordinates(native_case, mode
         ((torch.float32,), torch.float32, torch.float64),
     ],
 )
-def test_adapter_accepts_mixed_native_dtypes_without_changing_inputs(
+def test_model_accepts_mixed_native_dtypes_without_changing_inputs(
     coordinate_dtypes, metadata_dtype, model_dtype
 ):
     """Native dtypes match model-precision execution and retain input gradients."""
     torch.manual_seed(81)
-    model = ABUPTRecipe(**SMALL, query_chunk_size=4).to(dtype=model_dtype)
+    model = make_model(**SMALL, query_chunk_size=4).to(dtype=model_dtype)
     coordinates = {
         name: torch.rand(1, count, 3)
         for name, count in (
@@ -481,14 +555,14 @@ def test_adapter_accepts_mixed_native_dtypes_without_changing_inputs(
         baseline["parameters"].detach().to(metadata_dtype).clone().requires_grad_()
     )
     original = {name: value.detach().clone() for name, value in native.items()}
-    expected = model(**baseline)
+    expected = predict(model, **baseline)
     sum(
         v.square().mean()
         for v in expected.values(include_nested=True, leaves_only=True)
     ).backward()
     parameter_gradients = {name: p.grad.clone() for name, p in model.named_parameters()}
     model.zero_grad(set_to_none=True)
-    actual = model(**native)
+    actual = predict(model, **native)
     sum(
         v.square().mean() for v in actual.values(include_nested=True, leaves_only=True)
     ).backward()
@@ -518,9 +592,9 @@ def test_adapter_accepts_mixed_native_dtypes_without_changing_inputs(
 def test_production_checkpoint_load_rejects_changed_numerics(tmp_path, override):
     """Weight-compatible settings must not silently change the restored field."""
     path = tmp_path / "semantics.mdlus"
-    source = ABUPTRecipe(**SMALL)
+    source = make_model(**SMALL)
     source.save(str(path))
-    destination = ABUPTRecipe(**(SMALL | override))
+    destination = make_model(**(SMALL | override))
     with pytest.raises(ValueError, match="checkpoint settings"):
         destination.load(str(path))
 
@@ -528,9 +602,9 @@ def test_production_checkpoint_load_rejects_changed_numerics(tmp_path, override)
 def test_production_checkpoint_load_allows_decode_tuning(tmp_path):
     """Operational chunk sizes/backend/precision can change on continuation."""
     path = tmp_path / "decode-tuning.mdlus"
-    source = ABUPTRecipe(**SMALL, query_chunk_size=17)
+    source = make_model(**SMALL, query_chunk_size=17)
     source.save(str(path))
-    destination = ABUPTRecipe(
+    destination = make_model(
         **(
             SMALL
             | {
@@ -542,8 +616,8 @@ def test_production_checkpoint_load_allows_decode_tuning(tmp_path):
         query_chunk_size=3,
     )
     destination.load(str(path))
-    assert destination.operator.pooling_message_fp32
-    assert not source.operator.pooling_message_fp32
+    assert destination.pooling_message_fp32
+    assert not source.pooling_message_fp32
     args = {
         name: torch.rand(1, count, 3)
         for name, count in (
@@ -556,7 +630,7 @@ def test_production_checkpoint_load_allows_decode_tuning(tmp_path):
         )
     }
     args["parameters"] = torch.tensor([[30.0, 0.0, 0.0]])
-    expected, actual = source(**args), destination(**args)
+    expected, actual = predict(source, **args), predict(destination, **args)
     for key, value in expected.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(actual[key], value, rtol=2e-5, atol=2e-6)
 
@@ -568,13 +642,13 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
     """Anchor training gathers matching labels; eval accepts arbitrary queries."""
     root, original = native_case
     cfg, ds, dataset = pipeline(root, mode)
-    dataset.reader.queries_at_anchors = True
+    anchor_queries(dataset.reader.point_sets, True)
     raw, _ = dataset.reader[0]
     for field, enabled, query_mesh, original_mesh in (
         (
             "surface",
             mode != "volume",
-            raw.boundaries.get("abupt_surface"),
+            raw.boundaries.get("surface_queries"),
             original.boundaries["vehicle"],
         ),
         ("volume", mode != "surface", raw.interior, original.interior),
@@ -582,7 +656,7 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
         if not enabled:
             continue
         torch.testing.assert_close(
-            query_mesh.points, raw.boundaries[f"abupt_{field}_anchors"].points
+            query_mesh.points, raw.boundaries[f"{field}_anchors"].points
         )
         source_points = (
             original_mesh.cell_centroids if field == "surface" else original_mesh.points
@@ -602,14 +676,14 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
         OmegaConf.to_container(ds.target_sources),
     )
     batch = collate([dataset[0]])
-    model = ABUPTRecipe(mode=mode, train_on_anchors=True, **SMALL)
-    decode_queries = model.operator.decode_queries
+    model = make_model(mode=mode, train_on_anchors=True, **SMALL)
+    decode_queries = model.decode_queries
 
     def unexpected_query_decode(*args, **kwargs):
         pytest.fail("Anchor training must not evaluate a separate query stream")
 
-    monkeypatch.setattr(model.operator, "decode_queries", unexpected_query_decode)
-    prediction = model(**batch["forward_kwargs"])
+    monkeypatch.setattr(model, "decode_queries", unexpected_query_decode)
+    prediction = predict(model, **batch["forward_kwargs"])
     loss, _ = LossCalculator(OmegaConf.to_container(ds.targets), loss_type="mse")(
         prediction, batch["targets"]
     )
@@ -622,25 +696,25 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
     bad = dict(batch["forward_kwargs"])
     bad[f"{field}_queries"] = bad[f"{field}_queries"].flip(1)
     with pytest.raises(ValueError, match="coordinates, and order"):
-        model(**bad)
+        predict(model, **bad)
     bad[f"{field}_queries"] = bad[f"{field}_queries"][:, :-1]
     with pytest.raises(ValueError, match="coordinates, and order"):
-        model(**bad)
-    monkeypatch.setattr(model.operator, "decode_queries", decode_queries)
+        predict(model, **bad)
+    monkeypatch.setattr(model, "decode_queries", decode_queries)
     model.eval()
-    dataset.reader.queries_at_anchors = False
+    anchor_queries(dataset.reader.point_sets, False)
     independent = collate([dataset[0]])
     with torch.no_grad():
-        actual = model(**independent["forward_kwargs"])
+        actual = predict(model, **independent["forward_kwargs"])
     for key, value in actual.items(include_nested=True, leaves_only=True):
         assert value.shape == independent["targets"][key].shape
         assert value.shape[1] == (11 if key[0] == "surface" else 13)
     # Full-surface evaluation is not constrained by the training anchor count.
     if mode != "volume":
-        dataset.reader.surface_queries = None
+        dataset.reader.point_sets["surface_queries"]["count"] = None
         full = collate([dataset[0]])
         with torch.no_grad():
-            actual = model(**full["forward_kwargs"])
+            actual = predict(model, **full["forward_kwargs"])
         assert (
             actual["surface", "pressure"].shape[1]
             == original.boundaries["vehicle"].n_cells
@@ -651,9 +725,11 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
 def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     """Only operator conditioning changes; metadata and query outputs stay intact."""
     torch.manual_seed(701)
-    scaled = ABUPTRecipe(**SMALL, parameter_scale=40.0, train_on_anchors=True).eval()
-    unit = ABUPTRecipe(**SMALL).eval()
-    unit.operator.load_state_dict(scaled.operator.state_dict())
+    scaled = make_model(**SMALL, parameter_scale=40.0, train_on_anchors=True).eval()
+    unit = make_model(**SMALL).eval()
+    unit.load_state_dict(
+        {**scaled.state_dict(), "_extra_state": unit.get_extra_state()}
+    )
     args = {
         name: torch.rand(1, count, 3)
         for name, count in (
@@ -667,8 +743,8 @@ def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     }
     parameters = torch.tensor([[[40.0, 2.0, 0.0]]], requires_grad=True)
     original = parameters.detach().clone()
-    actual = scaled(**args, parameters=parameters)
-    expected = unit(**args, parameters=parameters / 40.0)
+    actual = predict(scaled, **args, parameters=parameters)
+    expected = predict(unit, **args, parameters=parameters / 40.0)
     for key, value in actual.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(value, expected[key])
     sum(v.square().mean() for v in actual.values(True, True)).backward()
@@ -678,7 +754,7 @@ def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     scaled.save(str(path))
     restored = Module.from_checkpoint(str(path)).eval()
     assert restored.parameter_scale == 40.0 and restored.train_on_anchors
-    result = restored(**args, parameters=parameters.detach())
+    result = predict(restored, **args, parameters=parameters.detach())
     for key, value in actual.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(result[key], value)
 
@@ -696,9 +772,11 @@ def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
     ],
 )
 def test_anchor_training_compiles_without_validation_graph_breaks(monkeypatch, device):
-    """Compile the adapter and attention blocks; compare both branches' gradients."""
+    """Compile the model and attention blocks; compare both branches' gradients."""
     torch.manual_seed(42)
-    model = ABUPTRecipe(**SMALL, coordinate_scale=1, train_on_anchors=True).to(device)
+    model = make_model(**(SMALL | {"coordinate_scale": 1}), train_on_anchors=True).to(
+        device
+    )
     args = {
         name: torch.rand(1, count, 3, device=device)
         for name, count in (
@@ -714,14 +792,14 @@ def test_anchor_training_compiles_without_validation_graph_breaks(monkeypatch, d
         volume_queries=args["volume_anchors"].clone(),
     )
     # Radius search has separate dynamic-shape graph breaks. Freeze only its
-    # pooled output so fullgraph detects validation breaks in the real adapter.
-    pooled = model.operator._pool(args["geometry"], args["supernodes"]).detach()
-    monkeypatch.setattr(model.operator, "_pool", lambda geometry, supernodes: pooled)
-    expected = model(**args)
-    actual = torch.compile(model, backend="aot_eager", fullgraph=True)(**args)
+    # pooled output so fullgraph detects validation breaks in the real model.
+    pooled = model._pool(args["geometry"], args["supernodes"]).detach()
+    monkeypatch.setattr(model, "_pool", lambda geometry, supernodes: pooled)
+    expected = predict(model, **args)
+    actual = predict(torch.compile(model, backend="aot_eager", fullgraph=True), **args)
     for key, value in expected.items(include_nested=True, leaves_only=True):
         torch.testing.assert_close(actual[key], value)
-    weights = (model.operator.surface_head.weight, model.operator.volume_head.weight)
+    weights = (model.surface_head.weight, model.volume_head.weight)
     expected_loss = sum(t.square().mean() for t in expected.values(True, True))
     actual_loss = sum(t.square().mean() for t in actual.values(True, True))
     expected_grads = torch.autograd.grad(expected_loss, weights)
