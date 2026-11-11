@@ -55,6 +55,7 @@ from hydra import compose, initialize_config_dir
 from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
 
+from physicsnemo.datapipes.keys import as_nested_key
 from physicsnemo.mesh import DomainMesh, Mesh
 
 from collate import build_collate_fn
@@ -157,6 +158,35 @@ def _volume_domain_mesh(target_config: dict[str, str], n_pts: int = 200) -> Doma
     return make_volume_domain_mesh(target_config, n_pts=n_pts)
 
 
+def _ab_upt_domain_mesh(mode: str) -> DomainMesh:
+    """Post-pipeline point sets with unequal surface and volume query counts."""
+    surface = make_surface_domain_mesh(n_cells=11)
+    geometry = surface.boundaries["vehicle"].points
+    boundaries = {
+        "geometry": Mesh(points=geometry),
+        "supernodes": Mesh(points=geometry[:5]),
+    }
+    interior = Mesh(points=torch.empty(0, 3))
+    if mode != "volume":
+        boundaries["surface_anchors"] = Mesh(points=surface.interior.points[:7])
+        boundaries["surface_queries"] = Mesh(
+            points=surface.interior.points,
+            point_data={"surface": surface.interior.point_data},
+        )
+    if mode != "surface":
+        volume = make_volume_domain_mesh(n_pts=13).interior
+        boundaries["volume_anchors"] = Mesh(points=volume.points[:9])
+        interior = Mesh(
+            points=volume.points,
+            point_data={
+                "volume": volume.point_data.select("velocity", "pressure", "nut")
+            },
+        )
+    return DomainMesh(
+        interior=interior, boundaries=boundaries, global_data=surface.global_data
+    )
+
+
 ### ---------------------------------------------------------------------------
 ### Model-shrinking overrides
 ### ---------------------------------------------------------------------------
@@ -167,6 +197,16 @@ def _volume_domain_mesh(target_config: dict[str, str], n_pts: int = 200) -> Doma
 ### run on CPU. Per-class because each model exposes a different set of
 ### shrinkable knobs.
 _MODEL_SHRINK_OVERRIDES: dict[str, dict] = {
+    "ABUPT": {
+        "hidden_dim": 24,
+        "num_heads": 3,
+        "num_interaction_blocks": 1,
+        "num_shared_layers": 1,
+        "num_decoder_layers": 1,
+        "pooling_chunk_size": 31,
+        "query_chunk_size": 4,
+        "radius_search_backend": "torch",
+    },
     "GeoTransolver": {
         "n_layers": 2,
         "n_hidden": 32,
@@ -220,6 +260,23 @@ class _RecipeSpec(NamedTuple):
 
 
 _TENSOR_INPUT_RECIPES: list[_RecipeSpec] = [
+    _RecipeSpec(
+        "ab_upt_surface",
+        "ab_upt_surface",
+        "drivaer_ml_ab_upt_surface",
+        "ab_upt_surface",
+        [],
+    ),
+    _RecipeSpec(
+        "ab_upt_volume",
+        "ab_upt_volume",
+        "drivaer_ml_ab_upt_volume",
+        "ab_upt_volume",
+        [],
+    ),
+    _RecipeSpec(
+        "ab_upt_joint", "ab_upt_joint", "drivaer_ml_ab_upt_joint", "ab_upt_joint", []
+    ),
     _RecipeSpec(
         "geotransolver_surface",
         "geotransolver_surface",
@@ -286,7 +343,11 @@ _TENSOR_INPUT_RECIPES: list[_RecipeSpec] = [
 
 
 def _output_to_tensordict(
-    output, target_config: dict[str, str], n_spatial_dims: int = 3
+    output,
+    target_config: dict[str, str],
+    n_spatial_dims: int = 3,
+    *,
+    output_groups=None,
 ) -> TensorDict:
     """Mirror the output-normalization step in ``train.forward_pass``.
 
@@ -300,7 +361,7 @@ def _output_to_tensordict(
     """
     output_type = "mesh" if isinstance(output, Mesh) else "tensors"
     return normalize_output_to_tensordict(
-        output, target_config, output_type, n_spatial_dims
+        output, target_config, output_type, n_spatial_dims, output_groups=output_groups
     )
 
 
@@ -332,7 +393,9 @@ def test_tensor_input_config_synthetic_e2e(
     target_config = _load_dataset_targets(dataset)
 
     ### Build a synthetic post-pipeline DomainMesh.
-    if domain == "surface":
+    if domain.startswith("ab_upt_"):
+        ds = _ab_upt_domain_mesh(domain.removeprefix("ab_upt_"))
+    elif domain == "surface":
         ds = _surface_domain_mesh(target_config)
     elif domain == "volume":
         ds = _volume_domain_mesh(target_config)
@@ -341,10 +404,17 @@ def test_tensor_input_config_synthetic_e2e(
 
     ### Build the recipe collate the same way `build_dataloaders` would.
     forward_kwargs_spec = OmegaConf.to_container(train_cfg.forward_kwargs, resolve=True)
+    dataset_cfg = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    target_sources = (
+        OmegaConf.to_container(dataset_cfg.target_sources, resolve=True)
+        if "target_sources" in dataset_cfg
+        else None
+    )
     collate = build_collate_fn(
         input_type="tensors",
         forward_kwargs_spec=forward_kwargs_spec,
         target_config=target_config,
+        target_sources=target_sources,
     )
     batch = collate([(ds, {})])
 
@@ -359,12 +429,17 @@ def test_tensor_input_config_synthetic_e2e(
     ### Forward and verify output shape matches the target channel count.
     with torch.no_grad():
         output = model_inst(**batch["forward_kwargs"])
-    pred_td = _output_to_tensordict(output, target_config)
+    pred_td = _output_to_tensordict(
+        output, target_config, output_groups=train_cfg.get("output_groups")
+    )
 
-    for name, ftype in target_config.items():
-        assert name in pred_td.keys(), f"{name} missing from pred"
-        pred_t = pred_td[name]
-        target_t = batch["targets"][name]
+    for name in target_config:
+        key = as_nested_key(name)
+        assert key in pred_td.keys(include_nested=True, leaves_only=True), (
+            f"{name} missing from pred"
+        )
+        pred_t = pred_td[key]
+        target_t = batch["targets"][key]
         assert pred_t.shape == target_t.shape, (
             f"shape mismatch for {name}: pred={tuple(pred_t.shape)} "
             f"vs target={tuple(target_t.shape)}"

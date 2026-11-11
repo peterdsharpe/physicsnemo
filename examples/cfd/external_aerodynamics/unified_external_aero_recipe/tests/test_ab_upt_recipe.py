@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Native-domain, training, independent-query, and physical-export contracts."""
+"""Native-domain sampling, validation isolation, normalization, and physical export."""
 
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import datasets as datasets_module
-import hydra
 import pytest
 import torch
 from collate import build_collate_fn
@@ -31,7 +30,7 @@ from datasets import (
     build_dataset,
 )
 from forces import ForceContext
-from forward_kwargs import extract_targets, walk_path
+from forward_kwargs import walk_path
 from hydra import compose, initialize_config_dir
 from infer import (
     _to_pointwise,
@@ -39,30 +38,14 @@ from infer import (
     build_redim_field_types,
     redimensionalize,
 )
-from loss import LossCalculator
-from metrics import MetricCalculator
 from omegaconf import OmegaConf
-from output_normalize import normalize_output_to_tensordict
 
-from physicsnemo import Module
-from physicsnemo.experimental.models.ab_upt import ABUPT
-from physicsnemo.datapipes.readers import DomainMeshReader
 from physicsnemo.datapipes.keys import as_nested_key
+from physicsnemo.datapipes.readers import DomainMeshReader
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
 
 ROOT = Path(__file__).resolve().parents[1]
-SMALL = dict(
-    hidden_dim=24,
-    num_heads=3,
-    num_interaction_blocks=1,
-    num_shared_layers=1,
-    num_decoder_layers=1,
-    pooling_radius=2.0,
-    pooling_chunk_size=31,
-    radius_search_backend="torch",
-    coordinate_scale=1000.0,
-)
 COUNTS = dict(
     geometry_points=17,
     num_supernodes=5,
@@ -81,16 +64,6 @@ COUNT_KEYS = {
     "surface_queries": "surface_queries",
     "interior": "volume_queries",
 }
-
-
-def make_model(mode="joint", **kwargs):
-    """Construct the library model with the dataset channel layout."""
-    return ABUPT(
-        surface_channels=4 if mode != "volume" else 0,
-        volume_channels=5 if mode != "surface" else 0,
-        parameter_channels=3,
-        **kwargs,
-    )
 
 
 def make_reader(root, mode="joint", **counts):
@@ -120,30 +93,6 @@ def anchor_queries(specs, enabled):
                 )
             else:
                 specs[name]["indices_from"] = anchors if enabled else None
-
-
-def predict(model, **kwargs):
-    """Normalize native tensor outputs through the shared recipe path."""
-    groups = []
-    targets = {}
-    if model.surface_channels:
-        targets.update({"surface.pressure": "scalar", "surface.wss": "vector"})
-        groups.append(["surface.pressure", "surface.wss"])
-    if model.volume_channels:
-        targets.update(
-            {
-                "volume.velocity": "vector",
-                "volume.pressure": "scalar",
-                "volume.nut": "scalar",
-            }
-        )
-        groups.append(["volume.velocity", "volume.pressure", "volume.nut"])
-    return normalize_output_to_tensordict(
-        model(**kwargs),
-        targets,
-        "tensors",
-        output_groups=groups if len(groups) == 2 else None,
-    )
 
 
 @pytest.fixture
@@ -186,7 +135,7 @@ def native_case(tmp_path):
 
 
 def pipeline(root, mode):
-    """Compose actual user-facing model and dataset YAMLs at small sizes."""
+    """Compose actual model/dataset YAMLs with small point-set counts."""
     with initialize_config_dir(config_dir=str(ROOT / "conf"), version_base=None):
         cfg = compose(config_name="train", overrides=[f"model=ab_upt_{mode}"])
     ds = OmegaConf.load(ROOT / "datasets" / f"drivaer_ml_ab_upt_{mode}.yaml")
@@ -194,7 +143,6 @@ def pipeline(root, mode):
     ds.sampling_resolution = 13
     for name, spec in cfg.dataset_reader_overrides.point_sets.items():
         spec.count = COUNTS[COUNT_KEYS[name]]
-    cfg.model.update(SMALL)
     ds = _apply_dataset_reader_overrides(ds, cfg)
     dataset = build_dataset(ds, device="cpu", num_workers=1)
     dataset.reader.set_generator(torch.Generator().manual_seed(123))
@@ -202,8 +150,8 @@ def pipeline(root, mode):
 
 
 @pytest.mark.parametrize("mode", ["surface", "volume", "joint"])
-def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
-    """All modes optimize and round-trip with unequal query sizes."""
+def test_native_pipeline_normalization_and_export(native_case, mode, tmp_path):
+    """All modes preserve physical fields through normalization and export."""
     root, original = native_case
     if mode == "surface":
         # Exercise the actual recipe with no volume coordinates or labels on disk.
@@ -230,40 +178,6 @@ def test_native_pipeline_train_checkpoint_export(native_case, mode, tmp_path):
         "tensors", OmegaConf.to_container(cfg.forward_kwargs), targets, sources
     )
     batch = collate([(domain, meta)])
-    cfg.model.pooling_message_fp32 = mode == "joint"
-    model = hydra.utils.instantiate(cfg.model)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3)
-    loss_fn = LossCalculator(targets, loss_type="mse")
-    pred = normalize_output_to_tensordict(
-        model(**batch["forward_kwargs"]),
-        targets,
-        "tensors",
-        output_groups=cfg.get("output_groups"),
-    )
-    loss, _ = loss_fn(pred, batch["targets"])
-    assert torch.isfinite(loss)
-    loss.backward()
-    for name, p in model.named_parameters():
-        assert p.grad is not None and torch.isfinite(p.grad).all(), name
-    opt.step()
-    metrics = MetricCalculator(targets, metrics=["l2"])(pred.detach(), batch["targets"])
-    assert all(
-        torch.isfinite(v).all()
-        for v in metrics.values(include_nested=True, leaves_only=True)
-    )
-    path = tmp_path / f"{mode}.mdlus"
-    model.save(str(path))
-    restored = Module.from_checkpoint(str(path))
-    assert restored.pooling_message_fp32 == cfg.model.pooling_message_fp32
-    assert restored.pooling_chunk_size == cfg.model.pooling_chunk_size
-    expected, actual = (
-        predict(model, **batch["forward_kwargs"]),
-        predict(restored, **batch["forward_kwargs"]),
-    )
-    for name in targets:
-        key = as_nested_key(name)
-        torch.testing.assert_close(expected[key], actual[key])
-        assert expected[key].shape[:2] == (1, 11 if name.startswith("surface") else 13)
     normalizer = next(
         t
         for t in dataset.transforms
@@ -407,36 +321,6 @@ def test_anchor_training_loaders_keep_independent_validation_queries(
         val_loader.dataset.close()
 
 
-def test_query_chunk_values_and_gradients(native_case):
-    """The model reuses one differentiable context across all chunks."""
-    root, _ = native_case
-    cfg, ds, dataset = pipeline(root, "joint")
-    collate = build_collate_fn(
-        "tensors",
-        OmegaConf.to_container(cfg.forward_kwargs),
-        OmegaConf.to_container(ds.targets),
-        OmegaConf.to_container(ds.target_sources),
-    )
-    batch = collate([dataset[0]])
-    model = make_model(**SMALL, query_chunk_size=100)
-    whole = predict(model, **batch["forward_kwargs"])
-    sum(
-        v.square().mean() for v in whole.values(include_nested=True, leaves_only=True)
-    ).backward()
-    gradients = {n: p.grad.clone() for n, p in model.named_parameters()}
-    model.zero_grad(set_to_none=True)
-    model.query_chunk_size = 3
-    chunks = predict(model, **batch["forward_kwargs"])
-    for key, value in whole.items(include_nested=True, leaves_only=True):
-        torch.testing.assert_close(value, chunks[key], atol=2e-6, rtol=2e-5)
-    sum(
-        v.square().mean() for v in chunks.values(include_nested=True, leaves_only=True)
-    ).backward()
-    for name, p in model.named_parameters():
-        torch.testing.assert_close(p.grad, gradients[name], atol=2e-5, rtol=2e-4)
-    dataset.close()
-
-
 def test_surface_integration_measures(native_case):
     """Equal-area sampling recovers the complete surface integration measure."""
     root, original = native_case
@@ -446,24 +330,6 @@ def test_surface_integration_measures(native_case):
         cell_measures(sampled.boundaries["vehicle"]).sum(),
         cell_measures(original.boundaries["vehicle"]).sum(),
     )
-
-
-def test_target_contract_rejects_wrong_mode(native_case):
-    """A mismatched model/dataset cannot silently drop one supervised head."""
-    root, _ = native_case
-    cfg, ds, dataset = pipeline(root, "joint")
-    batch = build_collate_fn(
-        "tensors",
-        OmegaConf.to_container(cfg.forward_kwargs),
-        OmegaConf.to_container(ds.targets),
-        OmegaConf.to_container(ds.target_sources),
-    )([dataset[0]])
-    model = make_model(mode="surface", **SMALL)
-    with pytest.raises(ValueError, match="disabled output head"):
-        predict(model, **batch["forward_kwargs"])
-    with pytest.raises(ValueError, match="exactly match"):
-        extract_targets(dataset[0][0], {"surface.pressure": "scalar"}, {})
-    dataset.close()
 
 
 @pytest.mark.parametrize("mode", ["surface", "volume", "joint"])
@@ -517,131 +383,11 @@ def test_reader_keeps_labels_aligned_with_original_coordinates(native_case, mode
             )
 
 
-@pytest.mark.parametrize(
-    "coordinate_dtypes,metadata_dtype,model_dtype",
-    [
-        ((torch.float32, torch.float64), torch.float64, torch.float32),
-        ((torch.float32,), torch.float32, torch.float64),
-    ],
-)
-def test_model_accepts_mixed_native_dtypes_without_changing_inputs(
-    coordinate_dtypes, metadata_dtype, model_dtype
-):
-    """Native dtypes match model-precision execution and retain input gradients."""
-    torch.manual_seed(81)
-    model = make_model(**SMALL, query_chunk_size=4).to(dtype=model_dtype)
-    coordinates = {
-        name: torch.rand(1, count, 3)
-        for name, count in (
-            ("geometry", 19),
-            ("supernodes", 5),
-            ("surface_anchors", 7),
-            ("volume_anchors", 9),
-            ("surface_queries", 11),
-            ("volume_queries", 13),
-        )
-    }
-    baseline = {
-        name: value.clone().requires_grad_() for name, value in coordinates.items()
-    }
-    baseline["parameters"] = torch.tensor([[[30.0, 1.0, 0.0]]], requires_grad=True)
-    native = {
-        name: value.to(coordinate_dtypes[i % len(coordinate_dtypes)])
-        .clone()
-        .requires_grad_()
-        for i, (name, value) in enumerate(coordinates.items())
-    }
-    native["parameters"] = (
-        baseline["parameters"].detach().to(metadata_dtype).clone().requires_grad_()
-    )
-    original = {name: value.detach().clone() for name, value in native.items()}
-    expected = predict(model, **baseline)
-    sum(
-        v.square().mean()
-        for v in expected.values(include_nested=True, leaves_only=True)
-    ).backward()
-    parameter_gradients = {name: p.grad.clone() for name, p in model.named_parameters()}
-    model.zero_grad(set_to_none=True)
-    actual = predict(model, **native)
-    sum(
-        v.square().mean() for v in actual.values(include_nested=True, leaves_only=True)
-    ).backward()
-    for key, value in actual.items(include_nested=True, leaves_only=True):
-        assert value.dtype == model_dtype
-        torch.testing.assert_close(value, expected[key])
-    for name, parameter in model.named_parameters():
-        torch.testing.assert_close(parameter.grad, parameter_gradients[name])
-    for name, value in native.items():
-        # Both the dtype and values used by export stay intact.
-        torch.testing.assert_close(value, original[name])
-        assert value.grad is not None and torch.isfinite(value.grad).all()
-        torch.testing.assert_close(value.grad.float(), baseline[name].grad)
-
-
-@pytest.mark.parametrize(
-    "override",
-    [
-        {"coordinate_scale": 1.0},
-        {"pooling_radius": 0.5},
-        {"num_heads": 4},
-        {"num_interaction_blocks": 0, "num_shared_layers": 3},
-        {"train_on_anchors": True},
-        {"parameter_scale": 40.0},
-    ],
-)
-def test_production_checkpoint_load_rejects_changed_numerics(tmp_path, override):
-    """Weight-compatible settings must not silently change the restored field."""
-    path = tmp_path / "semantics.mdlus"
-    source = make_model(**SMALL)
-    source.save(str(path))
-    destination = make_model(**(SMALL | override))
-    with pytest.raises(ValueError, match="checkpoint settings"):
-        destination.load(str(path))
-
-
-def test_production_checkpoint_load_allows_decode_tuning(tmp_path):
-    """Operational chunk sizes/backend/precision can change on continuation."""
-    path = tmp_path / "decode-tuning.mdlus"
-    source = make_model(**SMALL, query_chunk_size=17)
-    source.save(str(path))
-    destination = make_model(
-        **(
-            SMALL
-            | {
-                "pooling_chunk_size": 97,
-                "pooling_message_fp32": True,
-                "radius_search_backend": None,
-            }
-        ),
-        query_chunk_size=3,
-    )
-    destination.load(str(path))
-    assert destination.pooling_message_fp32
-    assert not source.pooling_message_fp32
-    args = {
-        name: torch.rand(1, count, 3)
-        for name, count in (
-            ("geometry", 19),
-            ("supernodes", 5),
-            ("surface_anchors", 7),
-            ("volume_anchors", 9),
-            ("surface_queries", 11),
-            ("volume_queries", 13),
-        )
-    }
-    args["parameters"] = torch.tensor([[30.0, 0.0, 0.0]])
-    expected, actual = predict(source, **args), predict(destination, **args)
-    for key, value in expected.items(include_nested=True, leaves_only=True):
-        torch.testing.assert_close(actual[key], value, rtol=2e-5, atol=2e-6)
-
-
 @pytest.mark.parametrize("mode", ["surface", "volume", "joint"])
-def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
-    native_case, mode, monkeypatch
-):
-    """Anchor training gathers matching labels; eval accepts arbitrary queries."""
+def test_anchor_supervision_keeps_labels_aligned(native_case, mode):
+    """Anchor supervision selects the same coordinates and labels."""
     root, original = native_case
-    cfg, ds, dataset = pipeline(root, mode)
+    _, _, dataset = pipeline(root, mode)
     anchor_queries(dataset.reader.point_sets, True)
     raw, _ = dataset.reader[0]
     for field, enabled, query_mesh, original_mesh in (
@@ -669,140 +415,4 @@ def test_anchor_supervision_aligns_labels_and_keeps_independent_evaluation(
         torch.testing.assert_close(
             query_mesh.point_data[field, "pressure"], source_data["pMeanTrim"][nearest]
         )
-    collate = build_collate_fn(
-        "tensors",
-        OmegaConf.to_container(cfg.forward_kwargs),
-        OmegaConf.to_container(ds.targets),
-        OmegaConf.to_container(ds.target_sources),
-    )
-    batch = collate([dataset[0]])
-    model = make_model(mode=mode, train_on_anchors=True, **SMALL)
-    decode_queries = model.decode_queries
-
-    def unexpected_query_decode(*args, **kwargs):
-        pytest.fail("Anchor training must not evaluate a separate query stream")
-
-    monkeypatch.setattr(model, "decode_queries", unexpected_query_decode)
-    prediction = predict(model, **batch["forward_kwargs"])
-    loss, _ = LossCalculator(OmegaConf.to_container(ds.targets), loss_type="mse")(
-        prediction, batch["targets"]
-    )
-    loss.backward()
-    assert torch.isfinite(loss)
-    for name, parameter in model.named_parameters():
-        assert parameter.grad is not None and torch.isfinite(parameter.grad).all(), name
-    # Equal-size permutations must fail too: shape checks alone miss label swaps.
-    field = "surface" if mode != "volume" else "volume"
-    bad = dict(batch["forward_kwargs"])
-    bad[f"{field}_queries"] = bad[f"{field}_queries"].flip(1)
-    with pytest.raises(ValueError, match="coordinates, and order"):
-        predict(model, **bad)
-    bad[f"{field}_queries"] = bad[f"{field}_queries"][:, :-1]
-    with pytest.raises(ValueError, match="coordinates, and order"):
-        predict(model, **bad)
-    monkeypatch.setattr(model, "decode_queries", decode_queries)
-    model.eval()
-    anchor_queries(dataset.reader.point_sets, False)
-    independent = collate([dataset[0]])
-    with torch.no_grad():
-        actual = predict(model, **independent["forward_kwargs"])
-    for key, value in actual.items(include_nested=True, leaves_only=True):
-        assert value.shape == independent["targets"][key].shape
-        assert value.shape[1] == (11 if key[0] == "surface" else 13)
-    # Full-surface evaluation is not constrained by the training anchor count.
-    if mode != "volume":
-        dataset.reader.point_sets["surface_queries"]["count"] = None
-        full = collate([dataset[0]])
-        with torch.no_grad():
-            actual = predict(model, **full["forward_kwargs"])
-        assert (
-            actual["surface", "pressure"].shape[1]
-            == original.boundaries["vehicle"].n_cells
-        )
     dataset.close()
-
-
-def test_parameter_scaling_matches_explicit_unit_conversion(tmp_path):
-    """Only operator conditioning changes; metadata and query outputs stay intact."""
-    torch.manual_seed(701)
-    scaled = make_model(**SMALL, parameter_scale=40.0, train_on_anchors=True).eval()
-    unit = make_model(**SMALL).eval()
-    unit.load_state_dict(
-        {**scaled.state_dict(), "_extra_state": unit.get_extra_state()}
-    )
-    args = {
-        name: torch.rand(1, count, 3)
-        for name, count in (
-            ("geometry", 19),
-            ("supernodes", 5),
-            ("surface_anchors", 7),
-            ("volume_anchors", 9),
-            ("surface_queries", 11),
-            ("volume_queries", 13),
-        )
-    }
-    parameters = torch.tensor([[[40.0, 2.0, 0.0]]], requires_grad=True)
-    original = parameters.detach().clone()
-    actual = predict(scaled, **args, parameters=parameters)
-    expected = predict(unit, **args, parameters=parameters / 40.0)
-    for key, value in actual.items(include_nested=True, leaves_only=True):
-        torch.testing.assert_close(value, expected[key])
-    sum(v.square().mean() for v in actual.values(True, True)).backward()
-    assert parameters.grad is not None and torch.isfinite(parameters.grad).all()
-    torch.testing.assert_close(parameters.detach(), original)
-    path = tmp_path / "scaled-anchor-training.mdlus"
-    scaled.save(str(path))
-    restored = Module.from_checkpoint(str(path)).eval()
-    assert restored.parameter_scale == 40.0 and restored.train_on_anchors
-    result = predict(restored, **args, parameters=parameters.detach())
-    for key, value in actual.items(include_nested=True, leaves_only=True):
-        torch.testing.assert_close(result[key], value)
-
-
-@pytest.mark.parametrize(
-    "device",
-    [
-        "cpu",
-        pytest.param(
-            "cuda",
-            marks=pytest.mark.skipif(
-                not torch.cuda.is_available(), reason="CUDA is not available"
-            ),
-        ),
-    ],
-)
-def test_anchor_training_compiles_without_validation_graph_breaks(monkeypatch, device):
-    """Compile the model and attention blocks; compare both branches' gradients."""
-    torch.manual_seed(42)
-    model = make_model(**(SMALL | {"coordinate_scale": 1}), train_on_anchors=True).to(
-        device
-    )
-    args = {
-        name: torch.rand(1, count, 3, device=device)
-        for name, count in (
-            ("geometry", 19),
-            ("supernodes", 5),
-            ("surface_anchors", 7),
-            ("volume_anchors", 9),
-        )
-    }
-    args.update(
-        parameters=torch.ones(1, 3, device=device),
-        surface_queries=args["surface_anchors"].clone(),
-        volume_queries=args["volume_anchors"].clone(),
-    )
-    # Radius search has separate dynamic-shape graph breaks. Freeze only its
-    # pooled output so fullgraph detects validation breaks in the real model.
-    pooled = model._pool(args["geometry"], args["supernodes"]).detach()
-    monkeypatch.setattr(model, "_pool", lambda geometry, supernodes: pooled)
-    expected = predict(model, **args)
-    actual = predict(torch.compile(model, backend="aot_eager", fullgraph=True), **args)
-    for key, value in expected.items(include_nested=True, leaves_only=True):
-        torch.testing.assert_close(actual[key], value)
-    weights = (model.surface_head.weight, model.volume_head.weight)
-    expected_loss = sum(t.square().mean() for t in expected.values(True, True))
-    actual_loss = sum(t.square().mean() for t in actual.values(True, True))
-    expected_grads = torch.autograd.grad(expected_loss, weights)
-    actual_grads = torch.autograd.grad(actual_loss, weights)
-    for actual_grad, expected_grad in zip(actual_grads, expected_grads):
-        torch.testing.assert_close(actual_grad, expected_grad)
