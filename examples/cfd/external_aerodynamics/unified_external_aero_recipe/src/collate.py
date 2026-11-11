@@ -109,7 +109,6 @@ def build_collate_fn(
     input_type: IOType,
     forward_kwargs_spec: dict[str, Any],
     target_config: dict[str, FieldType],
-    target_sources: dict[str, str] | None = None,
 ) -> Callable[[list[tuple[Any, Any]]], dict[str, Any]]:
     """Build a collate function for a given model contract.
 
@@ -123,8 +122,6 @@ def build_collate_fn(
         target_config: ``{name: scalar|vector}`` mapping. Only the keys
             are used here -- types are validated downstream by the loss
             and metric calculators.
-        target_sources: Optional per-target paths into the domain. These
-            permit unequal spatial sizes; batched targets have root size [1].
 
     Returns:
         A collate function suitable for ``DataLoader(collate_fn=...)``.
@@ -150,7 +147,7 @@ def build_collate_fn(
         domain, _metadata = samples[0]
 
         forward_kwargs = resolve_forward_kwargs(forward_kwargs_spec, domain)
-        targets = extract_targets(domain, target_config, target_sources)
+        targets = extract_targets(domain, target_config)
 
         if add_batch_dim:
             ### forward_kwargs values get padded up to ndim>=2 first (so 1-D

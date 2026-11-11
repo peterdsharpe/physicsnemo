@@ -108,14 +108,6 @@ def _apply_dataset_reader_overrides(
     return OmegaConf.merge(dataset_cfg, {"pipeline": {"reader": reader_overrides}})
 
 
-def _validation_dataset_config(dataset_cfg: DictConfig) -> DictConfig:
-    """Apply validation reader settings after shared recipe overrides."""
-    reader_overrides = dataset_cfg.get("validation_reader_overrides", None)
-    if not reader_overrides:
-        return dataset_cfg
-    return OmegaConf.merge(dataset_cfg, {"pipeline": {"reader": reader_overrides}})
-
-
 ### Transform-config kwargs whose values are file paths and should be
 ### resolved against the recipe root before Hydra instantiates the
 ### transform. Add new entries here when introducing transforms with
@@ -661,23 +653,14 @@ def _build_manifest_val_dataset(
     dataset built with ``augment=False`` over the same ``train_datadir``.
     Its reader globs the same sorted paths, so manifest indices resolved
     against the train reader address the same samples here. When *augment*
-    is ``False`` and neither validation option below is set, the train and
-    val transform chains are identical, so this returns ``None`` and the caller
-    lets validation share the train dataset (avoiding a redundant second reader).
-
-    ``independent_validation`` or ``validation_reader_overrides`` also requests
-    a separate reader, isolating sampling state and applying validation settings.
+    is ``False`` the train and val transform chains are identical, so this
+    returns ``None`` and the caller lets validation share the train dataset
+    (avoiding a redundant second reader).
     """
-    # Stochastic anchor readers require separate epoch state even without
-    # augmentation; their validation reader stays at epoch zero.
-    if (
-        not augment
-        and not ds_yaml.get("independent_validation", False)
-        and not ds_yaml.get("validation_reader_overrides", None)
-    ):
+    if not augment:
         return None
     return build_dataset(
-        _validation_dataset_config(ds_yaml),
+        ds_yaml,
         augment=False,
         device=device,
         num_workers=num_workers,
@@ -688,9 +671,7 @@ def _build_manifest_val_dataset(
 
 
 def _build_collate(
-    cfg: DictConfig,
-    target_config: dict[str, FieldType],
-    target_sources: dict[str, str] | None = None,
+    cfg: DictConfig, target_config: dict[str, FieldType]
 ) -> Callable[[list[tuple[Any, Any]]], dict[str, Any]]:
     """Build the per-sample collate from the model YAML's I/O contract."""
     if not target_config:
@@ -711,7 +692,6 @@ def _build_collate(
         input_type=input_type,
         forward_kwargs_spec=forward_kwargs_spec,
         target_config=target_config,
-        target_sources=target_sources,
     )
 
 
@@ -846,8 +826,7 @@ def build_dataloaders(
     indices. Augmentations are training-only: when ``cfg.augment`` is set,
     validation uses a separate un-augmented dataset over the same
     directory (mirroring directory mode); otherwise it shares the train
-    dataset, unless ``independent_validation`` or ``validation_reader_overrides``
-    is set.
+    dataset.
 
     Multiple datasets may use either split strategy. Each dataset's local
     train and validation indices are shifted by its cumulative offset in
@@ -903,7 +882,6 @@ def build_dataloaders(
     train_offset = 0
     val_offset = 0
     using_manifests = False
-    first_target_sources = None
     first_targets: dict[str, str] | None = None
     first_metrics: list[str] | None = None
 
@@ -950,17 +928,9 @@ def build_dataloaders(
             OmegaConf.select(ds_yaml, "metrics", default=OmegaConf.create([])),
             resolve=True,
         )
-        ds_sources = (
-            OmegaConf.to_container(ds_yaml.target_sources, resolve=True)
-            if "target_sources" in ds_yaml
-            else None
-        )
         if first_targets is None:
-            first_target_sources = ds_sources
             first_targets, first_metrics = ds_targets, ds_metrics
         else:
-            if ds_sources != first_target_sources:
-                raise ValueError("All datasets must use the same target_sources")
             validate_dataset_consistency(
                 ds_name,
                 ds_targets,
@@ -1024,9 +994,9 @@ def build_dataloaders(
 
             ### Augmentations are training-only: when enabled, give
             ### validation its own un-augmented dataset over the same
-            ### directory so eval is never augmented. Otherwise, unless validation
-            ### options are set, this entry shares its training dataset, preserving
-            ### the same local index space without constructing another reader.
+            ### directory so eval is never augmented. Otherwise this entry
+            ### shares its training dataset, preserving the same local index
+            ### space without constructing another reader.
             manifest_val_dataset = _build_manifest_val_dataset(
                 ds_yaml,
                 augment=augment,
@@ -1050,18 +1020,10 @@ def build_dataloaders(
         combined_train_indices.extend(range(train_offset, train_offset + len(dataset)))
         train_offset += len(dataset)
         val_datadir = OmegaConf.select(ds_yaml, "val_datadir", default=None)
-        val_yaml = None
         if val_datadir and Path(val_datadir).exists():
             val_yaml = OmegaConf.merge(ds_yaml, {"train_datadir": val_datadir})
-        elif ds_yaml.get("independent_validation", False) or ds_yaml.get(
-            "validation_reader_overrides", None
-        ):
-            # The no-holdout fallback may reuse training cases, but stochastic
-            # readers still need separate epoch state for fixed validation.
-            val_yaml = ds_yaml
-        if val_yaml is not None:
             val_dataset = build_dataset(
-                _validation_dataset_config(val_yaml),
+                val_yaml,
                 augment=False,
                 device=device,
                 num_workers=num_workers,
@@ -1093,7 +1055,7 @@ def build_dataloaders(
     OmegaConf.update(cfg, "out_dim", out_dim_total, force_add=True)
 
     normalizer = find_normalizer(train_datasets)
-    collate_fn = _build_collate(cfg, first_targets or {}, first_target_sources)
+    collate_fn = _build_collate(cfg, first_targets or {})
     train_dataset = _combine_datasets(train_datasets)
 
     if using_manifests:
@@ -1151,6 +1113,5 @@ def build_dataloaders(
     ### contract.
     dataset_info = {
         "targets": first_targets or {},
-        "target_sources": first_target_sources,
     }
     return train_loader, val_loader, normalizer, dataset_info

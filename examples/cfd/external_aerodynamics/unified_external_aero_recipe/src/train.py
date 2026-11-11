@@ -57,10 +57,9 @@ from utils import (
     Phase,
     Precision,
     build_distributed_meshes,
-    build_optimizer,
+    build_muon_optimizer,
     get_autocast_context,
     make_jsonl_logger,
-    optimizer_update,
     recursive_to_device,
     resolve_dict,
     set_seed,
@@ -71,7 +70,6 @@ from physicsnemo.datapipes import DataLoader
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.domain_parallel import sync_module_over_mesh
 from physicsnemo.mesh import MESH_FIELD_ASSOCIATIONS, DomainMesh, Mesh
-from physicsnemo.optim import ModelEMA
 from physicsnemo.utils import load_checkpoint, save_checkpoint
 from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 from physicsnemo.utils.profiling import Profiler, profile
@@ -238,7 +236,6 @@ def forward_pass(
     *,
     output_type: IOType,
     target_config: dict[str, FieldType],
-    output_groups: list[list[str]] | None = None,
 ) -> tuple[Float[torch.Tensor, ""], TensorDict, TensorDict]:
     """Run a forward pass + loss + metrics on one collated batch.
 
@@ -259,7 +256,6 @@ def forward_pass(
             output is unpacked into a TensorDict.
         target_config: ``{name: "scalar"|"vector"}``; used to split tensor
             outputs and validate Mesh outputs.
-        output_groups: Optional ordered target-name lists for multiple tensors.
 
     Returns:
         ``(loss, loss_td, metric_td)``. The two TensorDicts are kept
@@ -277,9 +273,7 @@ def forward_pass(
     with get_autocast_context(precision):
         output = model(**forward_kwargs)
 
-    pred_td = normalize_output_to_tensordict(
-        output, target_config, output_type, output_groups=output_groups
-    )
+    pred_td = normalize_output_to_tensordict(output, target_config, output_type)
 
     ### Loss runs in float32 to avoid bf16 precision loss in the reduction.
     pred_f32 = pred_td.float()
@@ -323,7 +317,6 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None = None,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     scaler: GradScaler | None = None,
-    ema: ModelEMA | None = None,
     writer: SummaryWriter | None = None,
     log_jsonl: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[float, dict[str, float]]:
@@ -386,22 +379,18 @@ def _run_epoch(
                 metric_calculator,
                 output_type=output_type,
                 target_config=target_config,
-                output_groups=cfg.get("output_groups"),
             )
 
             if is_train:
-                updated = optimizer_update(
-                    loss,
-                    optimizer,
-                    model.parameters(),
-                    scaler=scaler if precision == "float16" else None,
-                    grad_clip_norm=cfg.training.get("grad_clip_norm"),
-                    ema=ema,
-                )
-                if (
-                    updated
-                    and cfg.training.get("scheduler_update_mode", "epoch") == "step"
-                ):
+                optimizer.zero_grad()
+                if precision == "float16" and scaler is not None:
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    optimizer.step()
+                if cfg.training.get("scheduler_update_mode", "epoch") == "step":
                     scheduler.step()
 
             ### Accumulate on-device with no sync. First iteration clones
@@ -577,7 +566,6 @@ def train_epoch(
     output_type: IOType,
     target_config: dict[str, FieldType],
     train_writer: SummaryWriter | None = None,
-    ema: ModelEMA | None = None,
     log_jsonl: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Run one training epoch (delegates to :func:`_run_epoch` in train mode)."""
@@ -596,7 +584,6 @@ def train_epoch(
         optimizer=optimizer,
         scheduler=scheduler,
         scaler=scaler,
-        ema=ema,
         writer=train_writer,
         log_jsonl=log_jsonl,
     )
@@ -887,7 +874,6 @@ def main(cfg: DictConfig) -> None:
     logger.info(f"Parameters: {num_params:,}")
 
     model.to(device)
-    ema_model = model  # Keep stable parameter names before DDP / compile wrappers.
 
     if domain_parallel_mesh is not None:
         # All ranks in a domain group process the same sample and must hold
@@ -908,7 +894,7 @@ def main(cfg: DictConfig) -> None:
         )
         logger.info(f"Normalization: {norm_summary}")
 
-    optimizer = build_optimizer(model, cfg, compile_optimizer=cfg.compile)
+    optimizer = build_muon_optimizer(model, cfg, compile_optimizer=cfg.compile)
     logger.info(f"Optimizer: {optimizer}")
     scheduler = hydra.utils.instantiate(cfg.training.scheduler, optimizer=optimizer)
 
@@ -967,22 +953,7 @@ def main(cfg: DictConfig) -> None:
         "scaler": scaler,
         "models": model,
     }
-    checkpoint_metadata: dict[str, Any] = {}
-    loaded_epoch = load_checkpoint(
-        device=device, metadata_dict=checkpoint_metadata, **ckpt_args
-    )
-    ema_decay = cfg.training.get("ema_decay")
-    ema = ModelEMA(ema_model, ema_decay) if ema_decay is not None else None
-    if loaded_epoch and ema is not None:
-        if "training_ema" not in checkpoint_metadata:
-            raise ValueError(
-                "Cannot resume EMA training from a checkpoint without EMA state"
-            )
-        ema.load_state_dict(checkpoint_metadata["training_ema"])
-    elif loaded_epoch and "training_ema" in checkpoint_metadata:
-        raise ValueError(
-            "Checkpoint contains EMA state; restore training.ema_decay to resume"
-        )
+    loaded_epoch = load_checkpoint(device=device, **ckpt_args)
 
     if cfg.compile:
         if domain_parallel_mesh is not None:
@@ -1017,7 +988,6 @@ def main(cfg: DictConfig) -> None:
                 output_type=output_type,
                 target_config=target_config,
                 train_writer=train_writer,
-                ema=ema,
                 log_jsonl=log_jsonl,
             )
 
@@ -1035,30 +1005,6 @@ def main(cfg: DictConfig) -> None:
                 val_writer=val_writer,
                 log_jsonl=log_jsonl,
             )
-
-            if ema is not None:
-                logger.info(
-                    "Evaluating EMA weights (raw validation remains separately logged)"
-                )
-
-                def log_ema(record):
-                    if log_jsonl is not None:
-                        log_jsonl({**record, "phase": "ema_" + record["phase"]})
-
-                with ema.average_parameters():
-                    val_epoch(
-                        val_loader,
-                        model,
-                        loss_calculator,
-                        metric_calculator,
-                        logger,
-                        epoch,
-                        cfg,
-                        dist_manager,
-                        output_type=output_type,
-                        target_config=target_config,
-                        log_jsonl=log_ema,
-                    )
 
             if is_rank0:
                 all_keys = list(dict.fromkeys(list(train_metrics) + list(val_metrics)))
@@ -1087,20 +1033,7 @@ def main(cfg: DictConfig) -> None:
 
             is_last_epoch = epoch + 1 == num_epochs
             if (epoch % cfg.training.save_interval == 0 or is_last_epoch) and is_rank0:
-                metadata = (
-                    {"training_ema": ema.state_dict()} if ema is not None else None
-                )
-                save_checkpoint(**ckpt_args, epoch=epoch + 1, metadata=metadata)
-                if ema is not None:
-                    ema_path = os.path.join(ckpt_args["path"], "ema")
-                    with ema.average_parameters():
-                        save_checkpoint(
-                            path=ema_path, models=ema_model, epoch=epoch + 1
-                        )
-                    if normalizer is not None:
-                        torch.save(
-                            normalizer.stats, os.path.join(ema_path, "norm_stats.pt")
-                        )
+                save_checkpoint(**ckpt_args, epoch=epoch + 1)
                 if normalizer is not None:
                     norm_path = os.path.join(ckpt_args["path"], "norm_stats.pt")
                     torch.save(normalizer.stats, norm_path)

@@ -305,7 +305,6 @@ class ForceContext:
         pred_pts: TensorDict,
         true_pts: TensorDict,
         normalizer: Any | None,
-        target_sources: dict[str, str] | None = None,
     ) -> tuple[dict[str, float], dict[str, float]] | None:
         """Integrate predicted + reference coefficients for one surface sample.
 
@@ -323,21 +322,7 @@ class ForceContext:
         ### Surface contract: interior points are the vehicle cell
         ### centroids, so predictions align 1:1 with cells. A mismatch
         ### means this is not a surface case (e.g. a volume interior).
-        if target_sources is not None:
-            # Named targets can live on a query boundary independently of the
-            # volume interior. Both force fields must use the same point set.
-            paths = [
-                target_sources.get(n, "").split(".point_data.")[0]
-                for n in (self.pressure_field, self.shear_field)
-            ]
-            if paths[0] != paths[1] or not paths[0].startswith("boundaries."):
-                return None
-            surface = domain.boundaries[paths[0].removeprefix("boundaries.")]
-            if surface.n_points != vehicle.n_cells or not torch.allclose(
-                surface.points, vehicle.cell_centroids
-            ):
-                raise ValueError("Surface targets are not aligned with vehicle cells")
-        elif domain.interior.points.shape[0] != vehicle.n_cells:
+        if domain.interior.points.shape[0] != vehicle.n_cells:
             return None
 
         unnorm = normalizer.inverse_td if normalizer is not None else (lambda td: td)

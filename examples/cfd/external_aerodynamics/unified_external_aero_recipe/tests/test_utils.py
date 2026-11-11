@@ -41,13 +41,9 @@ from tensordict import TensorDict
 from utils import (
     get_autocast_context,
     make_jsonl_logger,
-    optimizer_update,
     recursive_to_device,
     resolve_dict,
 )
-
-from physicsnemo.optim import ModelEMA
-from physicsnemo.utils import load_checkpoint, save_checkpoint
 
 ### ---------------------------------------------------------------------------
 ### recursive_to_device
@@ -226,109 +222,3 @@ def test_resolve_dict():
     assert resolve_dict(cfg, "a") == {"b": 1}
     assert resolve_dict(cfg, "empty") is None  # empty -> None
     assert resolve_dict(cfg, "missing") is None
-
-
-@pytest.mark.parametrize(
-    "device",
-    [
-        "cpu",
-        pytest.param(
-            "cuda",
-            marks=pytest.mark.skipif(
-                not torch.cuda.is_available(), reason="CUDA unavailable"
-            ),
-        ),
-    ],
-)
-def test_amp_clips_unscaled_gradient_and_skips_ema_on_overflow(device):
-    """Clip unscaled gradients and leave weights and EMA unchanged on overflow."""
-    model = torch.nn.Linear(1, 1, bias=False, device=device)
-    with torch.no_grad():
-        model.weight.fill_(2)
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.5)
-    scaler = torch.amp.GradScaler(device, init_scale=8, growth_interval=10)
-    ema = ModelEMA(model, 0.5)
-    updated = optimizer_update(
-        model.weight.sum() * 4,
-        optimizer,
-        model.parameters(),
-        scaler=scaler,
-        grad_clip_norm=1,
-        ema=ema,
-    )
-    assert updated
-    torch.testing.assert_close(model.weight, torch.tensor([[1.5]], device=device))
-    torch.testing.assert_close(
-        ema.parameters["weight"], torch.tensor([[1.75]], device=device)
-    )
-    previous = model.weight.detach().clone()
-    scale = scaler.get_scale()
-    updated = optimizer_update(
-        model.weight.sum() * float("inf"),
-        optimizer,
-        model.parameters(),
-        scaler=scaler,
-        grad_clip_norm=1,
-        ema=ema,
-    )
-    assert not updated
-    assert scaler.get_scale() < scale
-    assert ema.updates == 1
-    torch.testing.assert_close(model.weight, previous)
-    torch.testing.assert_close(
-        ema.parameters["weight"], torch.tensor([[1.75]], device=device)
-    )
-
-
-@pytest.mark.parametrize(
-    "device",
-    [
-        "cpu",
-        pytest.param(
-            "cuda",
-            marks=pytest.mark.skipif(
-                not torch.cuda.is_available(), reason="CUDA unavailable"
-            ),
-        ),
-    ],
-)
-def test_ema_checkpoint_continuation_matches_uninterrupted(tmp_path, device):
-    """Resume raw parameters, optimizer momentum, and EMA exactly."""
-    original = torch.nn.Linear(2, 1, device=device)
-    optimizer = torch.optim.SGD(original.parameters(), lr=0.1, momentum=0.9)
-    ema = ModelEMA(original, 0.9)
-    x = torch.tensor([[1.0, -2.0]], device=device)
-    for _ in range(3):
-        optimizer_update(
-            original(x).square().sum(), optimizer, original.parameters(), ema=ema
-        )
-    save_checkpoint(
-        tmp_path,
-        models=original,
-        optimizer=optimizer,
-        epoch=3,
-        metadata={"training_ema": ema.state_dict()},
-    )
-    resumed = torch.nn.Linear(2, 1, device=device)
-    resumed_optimizer = torch.optim.SGD(resumed.parameters(), lr=0.1, momentum=0.9)
-    metadata = {}
-    epoch = load_checkpoint(
-        tmp_path,
-        models=resumed,
-        optimizer=resumed_optimizer,
-        device=device,
-        metadata_dict=metadata,
-    )
-    assert epoch == 3
-    resumed_ema = ModelEMA(resumed, 0.9)
-    resumed_ema.load_state_dict(metadata["training_ema"])
-    for model, opt, average in (
-        (original, optimizer, ema),
-        (resumed, resumed_optimizer, resumed_ema),
-    ):
-        optimizer_update(model(x).square().sum(), opt, model.parameters(), ema=average)
-    assert ema.updates == resumed_ema.updates == 4
-    for name, value in ema.parameters.items():
-        torch.testing.assert_close(value, resumed_ema.parameters[name], rtol=0, atol=0)
-    for name, value in original.state_dict().items():
-        torch.testing.assert_close(value, resumed.state_dict()[name], rtol=0, atol=0)

@@ -19,16 +19,13 @@
 from __future__ import annotations
 
 import json
-import math
 import random
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
-from types import MethodType
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
-import hydra.utils
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -38,7 +35,7 @@ from torch.amp import autocast
 from physicsnemo.datapipes.keys import as_nested_key
 from physicsnemo.distributed import DistributedManager
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.optim import CombinedOptimizer, ModelEMA, Muon
+from physicsnemo.optim import CombinedOptimizer, Muon
 
 if TYPE_CHECKING:
     from torch.distributed.device_mesh import DeviceMesh
@@ -88,75 +85,6 @@ def set_seed(seed: int | None, rank: int = 0) -> None:
     np.random.seed(seed % (1 << 31))
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-
-
-def build_optimizer(
-    model: torch.nn.Module, cfg: DictConfig, *, compile_optimizer: bool = False
-) -> torch.optim.Optimizer:
-    """Build an explicit Hydra optimizer, or retain the existing Muon default.
-
-    Explicit optimizers receive all model parameters. Their configuration must
-    contain only arguments accepted by that optimizer, including any parameter
-    group choices; the recipe does not silently reinterpret optimizer options.
-    """
-    if "_target_" not in cfg.training.optimizer:
-        return build_muon_optimizer(model, cfg, compile_optimizer=compile_optimizer)
-    optimizer = hydra.utils.instantiate(
-        cfg.training.optimizer, params=model.parameters()
-    )
-    if not isinstance(optimizer, torch.optim.Optimizer):
-        raise TypeError("training.optimizer must instantiate a torch optimizer")
-    if compile_optimizer:
-        _compile_optimizer_step(optimizer)
-    return optimizer
-
-
-def optimizer_update(
-    loss: torch.Tensor,
-    optimizer: torch.optim.Optimizer,
-    parameters: Iterable[torch.nn.Parameter],
-    *,
-    scaler: Any | None = None,
-    grad_clip_norm: float | None = None,
-    ema: ModelEMA | None = None,
-) -> bool:
-    """Backpropagate, optionally clip unscaled gradients, and report updates.
-
-    AMP overflow skips both EMA and per-update scheduler advancement. The
-    caller advances the scheduler only when this function returns True.
-    """
-    if grad_clip_norm is not None and (
-        isinstance(grad_clip_norm, bool)
-        or not math.isfinite(grad_clip_norm)
-        or grad_clip_norm <= 0
-    ):
-        raise ValueError("grad_clip_norm must be finite and positive")
-    optimizer.zero_grad()
-    if scaler is not None:
-        previous_scale = scaler.get_scale()
-        scaler.scale(loss).backward()
-        if grad_clip_norm is not None:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(parameters, grad_clip_norm)
-        scaler.step(optimizer)
-        scaler.update()
-        updated = scaler.get_scale() >= previous_scale
-    else:
-        loss.backward()
-        if grad_clip_norm is not None:
-            torch.nn.utils.clip_grad_norm_(
-                parameters, grad_clip_norm, error_if_nonfinite=True
-            )
-        optimizer.step()
-        updated = True
-    if updated and ema is not None:
-        ema.update()
-    return updated
-
-
-def _compile_optimizer_step(optimizer: torch.optim.Optimizer) -> None:
-    """Keep the compiled step bound so learning-rate schedulers can wrap it."""
-    optimizer.step = MethodType(torch.compile(optimizer.step.__func__), optimizer)
 
 
 def build_distributed_meshes(
@@ -240,14 +168,14 @@ def build_muon_optimizer(
             adjust_lr_fn="match_rms_adamw",
         )
         if compile_optimizer:
-            _compile_optimizer_step(opt)
+            opt.step = torch.compile(opt.step)
         return opt
     else:
         opt = torch.optim.AdamW(
             other_params, lr=lr, weight_decay=weight_decay, betas=betas, eps=eps
         )
         if compile_optimizer:
-            _compile_optimizer_step(opt)
+            opt.step = torch.compile(opt.step)
         return opt
 
 

@@ -122,7 +122,6 @@ def normalize_output_to_tensordict(
     target_config: dict[str, FieldType],
     output_type: IOType,
     n_spatial_dims: int = 3,
-    output_groups: list[list[str]] | None = None,
 ) -> TensorDict:
     """Adapt a model output into a `TensorDict` keyed by target name.
 
@@ -138,9 +137,6 @@ def normalize_output_to_tensordict(
     returns a ``(vol, surf)`` tuple; we take the non-None element
     automatically.
 
-    ``output_groups`` assigns ordered target names to each tensor in a tuple,
-    allowing outputs on different point sets. Groups must partition the targets.
-
     Args:
         output: Raw model output. ``Mesh`` for ``output_type='mesh'``;
             ``Tensor`` (or DoMINO ``(vol, surf)`` tuple) for
@@ -148,7 +144,6 @@ def normalize_output_to_tensordict(
         target_config: Ordered ``{name: "scalar" | "vector"}`` mapping.
         output_type: ``"mesh"`` or ``"tensors"``.
         n_spatial_dims: Vector-field dimensionality. Default 3.
-        output_groups: Ordered target-name lists, one per output tensor.
 
     Returns:
         Per-field TensorDict ready to feed into the loss / metric calculators.
@@ -172,34 +167,6 @@ def normalize_output_to_tensordict(
         return output.point_data.select(*keys)
 
     if output_type == "tensors":
-        if output_groups is not None:
-            names = [name for group in output_groups for name in group]
-            if (
-                not output_groups
-                or len(names) != len(set(names))
-                or set(names) != set(target_config)
-                or any(not group for group in output_groups)
-            ):
-                raise ValueError(
-                    "output_groups must partition the targets exactly once"
-                )
-            if not isinstance(output, tuple) or len(output) != len(output_groups):
-                raise ValueError("output_groups requires one output tensor per group")
-            result = None
-            for tensor, names in zip(output, output_groups):
-                if not isinstance(tensor, torch.Tensor) or tensor.ndim != 3:
-                    raise ValueError("Each output group requires a (B, N, C) tensor")
-                if result is None:
-                    result = TensorDict(
-                        {}, batch_size=[tensor.shape[0]], device=tensor.device
-                    )
-                branch = split_concat_by_target(
-                    tensor, {n: target_config[n] for n in names}, n_spatial_dims
-                )
-                for name in names:
-                    key = as_nested_key(name)
-                    result.set(key, branch[key])
-            return result
         if isinstance(output, tuple):
             ### DoMINO returns ``(vol, surf)`` with the unused branch as
             ### ``None``; pick the first non-None entry. A tuple of all
@@ -214,8 +181,6 @@ def normalize_output_to_tensordict(
                     f"expected at least one non-None tensor in the tuple. "
                     f"Got {output!r}."
                 )
-            if len(non_none) != 1:
-                raise ValueError("Multiple output tensors require output_groups")
             output = non_none[0]
         if not isinstance(output, torch.Tensor):
             raise TypeError(
