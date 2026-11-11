@@ -16,6 +16,7 @@ Here, you're able to train (and run inference with) the following models:
 - [Transolver](https://arxiv.org/abs/2402.02366)
 - [GeoTransolver](https://arxiv.org/abs/2512.20399), optionally using the [FLARE](https://arxiv.org/abs/2508.12594) attention mechanism backend
 - [GLOBE](https://arxiv.org/abs/2511.15856)
+- [AB-UPT](https://arxiv.org/abs/2502.09692) (experimental; surface or volume)
 
 We currently support the following datasets:
 - DrivaerML
@@ -299,8 +300,8 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `domino_{surface,volume}` |
-| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `domino_{surface,volume}`, `ab_upt_{surface,volume}` |
+| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface`, `drivaer_ml_ab_upt_{surface,volume}` |
 
 Pick one of each on the CLI:
 
@@ -459,10 +460,12 @@ unified_external_aero_recipe/
       flare_{surface,volume}.yaml
       globe_{surface,volume}.yaml
       domino_{surface,volume}.yaml
+      ab_upt_{surface,volume}.yaml
   datasets/                    # one file per dataset (loaded at runtime
                                #  by load_dataset_config, NOT by Hydra)
     dataset_paths.yaml         # local disk paths (edit me)
     drivaer_ml_{surface,volume}.yaml
+    drivaer_ml_ab_upt_{surface,volume}.yaml
     highlift_{surface,volume}.yaml
     shift_suv_{estate,fastback}_surface.yaml
   src/
@@ -618,6 +621,10 @@ python src/train.py model=globe_surface dataset=drivaer_ml_surface \
 python src/train.py model=globe_volume dataset=drivaer_ml_volume \
     training.num_epochs=10000 sampling_resolution=50000
 
+# AB-UPT (experimental), DrivAerML surface or volume
+python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface
+python src/train.py model=ab_upt_volume dataset=drivaer_ml_ab_upt_volume
+
 # HiLift surface (vanilla GeoTransolver)
 python src/train.py model=geotransolver_surface dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000 \
@@ -637,6 +644,25 @@ python src/train.py model=domino_volume dataset=drivaer_ml_volume \
 Note the `+` prefix on `+model.attention_type=...` — Hydra requires `+`
 when the override key isn't already present in the model template (FA
 attention is opt-in, not the default).
+
+#### AB-UPT options
+
+The AB-UPT dataset templates read DrivAerML's `run_*/domain_*.pdmsh` files
+with `DomainMeshReader(point_sets=...)`, which draws the geometry, supernode,
+anchor and query point sets independently. The query set is named
+`interior`, so targets, force coefficients and exported predictions follow
+the usual contract. Set each set's size with
+`dataset_reader_overrides.point_sets.<name>.count` (`geometry`, `supernodes`,
+`surface_anchors` or `volume_anchors`, and `interior`), and the supernode
+pooling radius, in the dataset's coordinate units, with
+`model.pooling_radius`. For inference on the full field, set the query
+count to `null`:
+
+```bash
+python src/infer.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface \
+    run_id=<the trained run_id> \
+    dataset_reader_overrides.point_sets.interior.count=null
+```
 
 ### Dataset config anatomy
 

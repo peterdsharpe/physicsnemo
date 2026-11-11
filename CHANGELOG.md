@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Unified external aero recipe: adds AB-UPT surface and volume configurations for
+  DrivAerML, built on a new `DomainMeshReader(point_sets=...)` option that draws
+  independently sampled point sets from each domain mesh.
+
 - Adds `physicsnemo.experimental.models.ab_upt.ABUPT`, an independent
   implementation with interacting surface/volume anchors, reusable query
   contexts, input scaling and chunked forward decoding, and a finite-difference
