@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Adds the reusable `physicsnemo.optim.Lion` optimizer and
+  `physicsnemo.optim.lr_scheduler.WarmupCosine` learning-rate schedule.
+
 - Unified external aero recipe: adds AB-UPT surface, volume, and joint
   configurations calling the library model directly, configurable independent
   point-set sampling in `DomainMeshReader`, and grouped tensor outputs for

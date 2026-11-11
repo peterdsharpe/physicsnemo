@@ -528,7 +528,7 @@ training:
 ```
 
 Muon/AdamW remains the default optimizer. Set `+training.optimizer._target_`
-for another optimizer (including `optimization.Lion`), removing incompatible
+for another optimizer (including `physicsnemo.optim.Lion`), removing incompatible
 inherited arguments with Hydra's `~` overrides. Optional
 `+training.grad_clip_norm=1.0` and `+training.ema_decay=0.9999` enable gradient
 clipping and EMA. Checkpoints retain optimizer, scheduler, and EMA state for
@@ -874,7 +874,6 @@ TensorBoard / JSONL files; no external tracker required.
 | `src/output_normalize.py` | `normalize_output_to_tensordict` (Mesh -> `point_data.select`, tensor -> per-target slicing via `split_concat_by_target`) and `require_output_type(cfg)`. Tensorboard-free so the unit tests can import it directly. |
 | `src/forces.py` | Integrated aerodynamic force/moment coefficients from surface predictions. `force_moment_coefficients` integrates the traction `-Cp*n + Cf` over the vehicle via `Mesh.integrate`, projected onto drag/lift/side + roll/pitch/yaw axes; `ForceContext` / `ForceAccumulator` wrap the per-run config + accumulation. |
 | `src/utils.py` | Shared helpers: `build_optimizer` (explicit Hydra optimizer or Muon/AdamW via `build_muon_optimizer`), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
-| `src/optimization.py` | Lion optimizer and per-update warmup/cosine schedule. |
 | `src/training_state.py` | EMA weights, AMP-aware optimizer updates, and gradient clipping. |
 | `src/train.py` | Training loop with DDP, mixed precision, checkpointing, TensorBoard + JSONL logging, I/O benchmarking (`benchmark_io=true`), and profiling. (Dataloader assembly now lives in `datasets.build_dataloaders`.) |
 | `src/infer.py` | Inference companion: loads a checkpoint, runs a split, writes physical-unit predictions back as native `.pdmsh` `DomainMesh`es, reports training-space metrics, and (surface cases) integrated CD/CL/CM force coefficients. Imports nothing from `train.py`. |
