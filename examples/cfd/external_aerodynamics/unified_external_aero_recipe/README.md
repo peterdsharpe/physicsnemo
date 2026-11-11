@@ -241,9 +241,9 @@ that follows a simple semantic contract:
   forward kwargs through as Mesh / DomainMesh / dict objects (for
   mesh-native models like GLOBE) or extracts and batch-stacks tensors
   (for transformer models like GeoTransolver).
-- `output_type: mesh | tensors | tensordict`. Controls how the model output is
-  unpacked for the loss: `Mesh.point_data` lookup, tensor channel splitting
-  by `target_config` order, or named `TensorDict` fields.
+- `output_type: mesh | tensors`. Controls how the model output is
+  unpacked for the loss: `Mesh.point_data` lookup vs. tensor channel
+  splitting by `target_config` order.
 - `forward_kwargs:`. A declarative spec mapping `model.forward()` kwarg
   names to paths into the DomainMesh.
 
@@ -321,9 +321,9 @@ keyed by the field names declared in the dataset YAML's `targets:` block.
 The collate produces the targets `TensorDict` (`batch_size=[N]` in
 mesh-input mode, `[1, N]` in tensor-input mode); the predictions
 `TensorDict` is built from the model output with matching `batch_size`.
-Joint tensor models declare `output_groups` to map each output tensor to its
-target fields. The normalizer uses batch size `[1]` for these fields so the
-point counts can differ. For each field, the loss type is applied per the field's type (`scalar`
+Joint tensor models use `output_groups` to map tensors with different point counts
+to their target fields.
+For each field, the loss type is applied per the field's type (`scalar`
 or `vector`); per-field losses are then weighted by the optional
 `training.field_weights` block in the model YAML and summed.
 
@@ -488,7 +488,7 @@ unified_external_aero_recipe/
 | Metrics list | `train.yaml` (`metrics`) |
 | Multi-dataset orchestration | `train.yaml` (`extra_datasets`) + Python in `datasets.build_dataloaders` |
 | Model + forward_kwargs | `conf/model/<name>.yaml` |
-| Training schedule (lr, scheduler, num_epochs, compile) | `train.yaml` defaults, with model-template and CLI overrides |
+| Training schedule (lr, scheduler, num_epochs, compile) | `train.yaml` |
 
 ### `conf/train.yaml`
 
@@ -573,10 +573,10 @@ Notes on the composition:
   computes from the chosen dataset's `targets:` block (sum of channel
   counts via `field_dim()`). GLOBE templates declare per-target
   `output_schema` instead and don't touch `out_dim`.
-- `conf/infer.yaml` merges `base`, then the model template, then `_self_`.
-  Its inference settings override the model template, and CLI overrides
-  take precedence. It supplies checkpoint and output paths instead of the
-  training schedule. Both entry points share `base.yaml`.
+- `conf/infer.yaml` follows the same shape:
+  `defaults: - base, - model: ???, - _self_` with checkpoint /
+  output-path knobs in place of the training schedule. `base.yaml` is
+  intentionally training-agnostic so both entry points can share it.
 
 ### Recipe Gallery
 
@@ -627,9 +627,7 @@ python src/train.py model=flare_volume dataset=drivaer_ml_volume \
 # AB-UPT: separate surface/volume jobs or joint training
 python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface
 python src/train.py model=ab_upt_volume dataset=drivaer_ml_ab_upt_volume
-python src/train.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
-    dataset_reader_overrides.point_sets.surface_queries.count=8192 \
-    dataset_reader_overrides.point_sets.interior.count=16384
+python src/train.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint
 
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
@@ -668,16 +666,12 @@ accepts an empty interior. Joint mode couples both branches; separate modes
 omit the inactive branch. Surface targets are pressure and wall shear stress;
 volume targets are velocity, pressure, and eddy viscosity.
 
-- `dataset_reader_overrides.point_sets.<name>.count` controls `geometry`,
-  `supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, and
-  `interior` independently. Validation samples stay fixed while training varies
-  by epoch.
-- `model.query_chunk_size` controls decoding chunks; `model.pooling_chunk_size`
-  controls geometry-message batches. `model.pooling_message_fp32=true` keeps the
-  message MLP in FP32 under autocast with FP32 model weights.
-- Coordinates and pooling radius use `L_ref` units before `model.coordinate_scale`
-  (default 1000). `+model.parameter_scale` divides conditioning values (default 1).
-  Reuse the training run's model settings from `resolved_config.yaml` at inference.
+`dataset_reader_overrides.point_sets.<name>.count` controls `geometry`,
+`supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, and
+`interior` independently. Validation samples stay fixed while training varies
+by epoch.
+
+Reuse the training run's model settings from `resolved_config.yaml` at inference.
 
 For anchor supervision, set `+model.train_on_anchors=true` and
 `+dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors`
@@ -873,7 +867,7 @@ TensorBoard / JSONL files; no external tracker required.
 | `src/metrics.py` | `MetricCalculator` — TensorDict-based metrics (relative L1, relative L2, MAE) with optional distributed all-reduce; reports per-field and per-component (x/y/z) metrics for vector fields. `resolve_metrics(cfg)` reads the recipe-side `cfg.metrics`. |
 | `src/output_normalize.py` | `normalize_output_to_tensordict` (Mesh -> `point_data.select`, tensor -> per-target slicing via `split_concat_by_target`) and `require_output_type(cfg)`. Tensorboard-free so the unit tests can import it directly. |
 | `src/forces.py` | Integrated aerodynamic force/moment coefficients from surface predictions. `force_moment_coefficients` integrates the traction `-Cp*n + Cf` over the vehicle via `Mesh.integrate`, projected onto drag/lift/side + roll/pitch/yaw axes; `ForceContext` / `ForceAccumulator` wrap the per-run config + accumulation. |
-| `src/utils.py` | Shared helpers: `build_optimizer` (explicit Hydra optimizer or Muon/AdamW via `build_muon_optimizer`), `optimizer_update` (AMP, clipping, and EMA coordination), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
+| `src/utils.py` | Shared helpers: `build_muon_optimizer` (Muon+AdamW via `CombinedOptimizer`), `build_optimizer` (optional Hydra optimizer), `optimizer_update` (AMP, clipping, and EMA coordination), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
 | `src/train.py` | Training loop with DDP, mixed precision, checkpointing, TensorBoard + JSONL logging, I/O benchmarking (`benchmark_io=true`), and profiling. (Dataloader assembly now lives in `datasets.build_dataloaders`.) |
 | `src/infer.py` | Inference companion: loads a checkpoint, runs a split, writes physical-unit predictions back as native `.pdmsh` `DomainMesh`es, reports training-space metrics, and (surface cases) integrated CD/CL/CM force coefficients. Imports nothing from `train.py`. |
 
