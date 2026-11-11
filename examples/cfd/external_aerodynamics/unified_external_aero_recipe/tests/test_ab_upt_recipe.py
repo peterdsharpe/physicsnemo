@@ -39,6 +39,7 @@ from loss import LossCalculator
 from nondim import NonDimensionalizeByMetadata
 from omegaconf import OmegaConf
 from output_normalize import normalize_output_to_tensordict
+from utils import field_dim
 
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
@@ -129,7 +130,13 @@ def test_train_step_forces_and_export(native_case, mode, tmp_path):
     )
     batch = collate([(domain, meta)])
 
-    model = hydra.utils.instantiate(OmegaConf.merge(cfg.model, SMALL_MODEL))
+    # Production derives out_dim from the dataset's targets in build_dataloaders.
+    OmegaConf.update(
+        cfg, "out_dim", sum(field_dim(t) for t in targets.values()), force_add=True
+    )
+    model = hydra.utils.instantiate(
+        OmegaConf.merge(OmegaConf.to_container(cfg.model, resolve=True), SMALL_MODEL)
+    )
     output = model(**batch["forward_kwargs"])
     pred = normalize_output_to_tensordict(output, targets, "tensors")
     loss, _ = LossCalculator(targets, loss_type="mse")(pred, batch["targets"])
