@@ -528,8 +528,11 @@ training:
 ```
 
 Muon/AdamW remains the default optimizer. Set `+training.optimizer._target_`
-for another optimizer (including `physicsnemo.optim.Lion`), removing incompatible
-inherited arguments with Hydra's `~` overrides. Optional
+for another optimizer (including `timm.optim.Lion`), removing incompatible
+inherited arguments with Hydra's `~` overrides. For Lion, explicitly set
+`training.optimizer.lr=5e-5`, `+training.optimizer.betas=[0.9,0.99]`, and
+`+training.optimizer.weight_decay=0.05`. Use `+training.optimizer.foreach=true`
+when compiling Lion to preserve scheduled updates on CPU and CUDA. Optional
 `+training.grad_clip_norm=1.0` and `+training.ema_decay=0.9999` enable gradient
 clipping and EMA. Checkpoints retain optimizer, scheduler, and EMA state for
 resume; use `checkpoint_path=runs/<run_id>/checkpoints/ema` for EMA inference.

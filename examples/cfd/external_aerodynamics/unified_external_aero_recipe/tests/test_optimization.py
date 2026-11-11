@@ -21,8 +21,8 @@ from functools import partial
 
 import pytest
 import torch
+from timm.optim import Lion
 
-from physicsnemo.optim import Lion
 from physicsnemo.optim.lr_scheduler import WarmupCosine
 
 
@@ -45,7 +45,7 @@ from physicsnemo.optim.lr_scheduler import WarmupCosine
         (None, (2,), False, "eager"),
         (None, (2, 2), False, "eager"),
         (None, (2, 2), True, "eager"),
-        ("physicsnemo.optim.Lion", (2,), False, "inductor"),
+        ("timm.optim.Lion", (2,), False, "inductor"),
     ],
 )
 def test_compiled_optimizer_scheduler_updates_match_eager(
@@ -62,6 +62,10 @@ def test_compiled_optimizer_scheduler_updates_match_eager(
     config = {"lr": 0.1, "weight_decay": 0.01}
     if target is not None:
         config["_target_"] = target
+    if target == "timm.optim.Lion":
+        config["betas"] = [0.9, 0.99]
+        # The single-tensor CPU path can retain a stale LR under Inductor.
+        config["foreach"] = True
     cfg = OmegaConf.create({"training": {"optimizer": config}})
     model = torch.nn.Module()
     model.register_parameter(
@@ -74,9 +78,7 @@ def test_compiled_optimizer_scheduler_updates_match_eager(
     reference = copy.deepcopy(model)
     optimizer = build_optimizer(model, cfg, compile_optimizer=True)
     if target is not None:
-        expected_type = (
-            Lion if target == "physicsnemo.optim.Lion" else torch.optim.AdamW
-        )
+        expected_type = Lion if target == "timm.optim.Lion" else torch.optim.AdamW
         assert isinstance(optimizer, expected_type)
     reference_optimizer = build_optimizer(reference, cfg)
     scheduler = instantiate(
