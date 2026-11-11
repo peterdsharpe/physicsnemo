@@ -16,7 +16,6 @@ Here, you're able to train (and run inference with) the following models:
 - [Transolver](https://arxiv.org/abs/2402.02366)
 - [GeoTransolver](https://arxiv.org/abs/2512.20399), optionally using the [FLARE](https://arxiv.org/abs/2508.12594) attention mechanism backend
 - [GLOBE](https://arxiv.org/abs/2511.15856)
-- [AB-UPT](https://arxiv.org/abs/2502.09692v4) (experimental; surface, volume, or joint)
 
 We currently support the following datasets:
 - DrivaerML
@@ -65,7 +64,7 @@ python src/infer.py model=geotransolver_surface dataset=highlift_surface \
 ```
 
 For the canonical CLI invocations of every named recipe (FA variants,
-AB-UPT, GLOBE, multi-dataset Transolver, HiLift, DoMINO), see the
+GLOBE, multi-dataset Transolver, HiLift, DoMINO), see the
 [Recipe Gallery](#recipe-gallery) section below.
 
 ## Pipeline architecture
@@ -263,9 +262,7 @@ shape `(3,)` becomes `(1, 1, 3)` and lines up with per-element features
 shaped `(1, N, C)`). For mesh-input models, no batch dim is added at
 all.
 
-**Targets default to `interior.point_data.<name>`.**
-Datasets with fields on multiple meshes, such as joint AB-UPT, declare
-`target_sources` to map each target to its mesh and field.
+**Targets always live at `interior.point_data.<name>` by contract.**
 The dataset YAML's `targets:` block declares the names + types; the
 recipe's dataset builder also auto-injects those names into the
 `MeshToDomainMesh` transform so you don't have to list them twice.
@@ -302,8 +299,8 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `domino_{surface,volume}`, `ab_upt_{surface,volume,joint}` |
-| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface`, `drivaer_ml_ab_upt_{surface,volume,joint}` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `domino_{surface,volume}` |
+| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
 
 Pick one of each on the CLI:
 
@@ -321,8 +318,6 @@ keyed by the field names declared in the dataset YAML's `targets:` block.
 The collate produces the targets `TensorDict` (`batch_size=[N]` in
 mesh-input mode, `[1, N]` in tensor-input mode); the predictions
 `TensorDict` is built from the model output with matching `batch_size`.
-Joint tensor models use `output_groups` to map tensors with different point counts
-to their target fields.
 For each field, the loss type is applied per the field's type (`scalar`
 or `vector`); per-field losses are then weighted by the optional
 `training.field_weights` block in the model YAML and summed.
@@ -462,14 +457,12 @@ unified_external_aero_recipe/
       geotransolver_{surface,volume,volume_highlift}.yaml
       transolver_{surface,volume}.yaml
       flare_{surface,volume}.yaml
-      ab_upt_{surface,volume,joint}.yaml
       globe_{surface,volume}.yaml
       domino_{surface,volume}.yaml
   datasets/                    # one file per dataset (loaded at runtime
                                #  by load_dataset_config, NOT by Hydra)
     dataset_paths.yaml         # local disk paths (edit me)
     drivaer_ml_{surface,volume}.yaml
-    drivaer_ml_ab_upt_{surface,volume,joint}.yaml
     highlift_{surface,volume}.yaml
     shift_suv_{estate,fastback}_surface.yaml
   src/
@@ -495,8 +488,8 @@ unified_external_aero_recipe/
 ```yaml
 defaults:
   - base
-  - _self_
   - model: geotransolver_volume
+  - _self_
 
 # Dataset selection (a string naming a file in datasets/, no `.yaml`)
 dataset: drivaer_ml_volume
@@ -527,16 +520,6 @@ training:
     gamma: 0.1
 ```
 
-Muon/AdamW remains the default optimizer. Set `+training.optimizer._target_`
-for another optimizer (including `timm.optim.Lion`), removing incompatible
-inherited arguments with Hydra's `~` overrides. For Lion, explicitly set
-`training.optimizer.lr=5e-5`, `+training.optimizer.betas=[0.9,0.99]`, and
-`+training.optimizer.weight_decay=0.05`. Use `+training.optimizer.foreach=true`
-when compiling Lion to preserve scheduled updates on CPU and CUDA. Optional
-`+training.grad_clip_norm=1.0` and `+training.ema_decay=0.9999` enable gradient
-clipping and EMA. Checkpoints retain optimizer, scheduler, and EMA state for
-resume; use `checkpoint_path=runs/<run_id>/checkpoints/ema` for EMA inference.
-
 ### How the pieces compose
 
 ```mermaid
@@ -561,9 +544,9 @@ Notes on the composition:
   its contents merge at the global root rather than under the group
   name. This lets one model file declare `model:` AND
   `input_type` / `output_type` / `forward_kwargs:` together.
-- `train.yaml` merges `base`, then `_self_`, then the model template.
-  Model-template settings override the training defaults. CLI overrides
-  take precedence over both.
+- `_self_` is the LAST entry in `train.yaml`'s `defaults:` so any inline
+  `model:` / `training:` / `dataloader:` overrides win over the model
+  template values.
 - Forward kwargs live alongside the model in the same template because
   they are a property of the model class's forward signature, not an
   independent dimension.
@@ -627,11 +610,6 @@ python src/train.py model=flare_surface dataset=drivaer_ml_surface \
 python src/train.py model=flare_volume dataset=drivaer_ml_volume \
     training.optimizer.lr=1e-3 training.scheduler.gamma=0.5
 
-# AB-UPT: separate surface/volume jobs or joint training
-python src/train.py model=ab_upt_surface dataset=drivaer_ml_ab_upt_surface
-python src/train.py model=ab_upt_volume dataset=drivaer_ml_ab_upt_volume
-python src/train.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint
-
 # GLOBE (mesh-native)
 # ~143 GB/GPU at sampling_resolution=50000 in bf16; 200000 does not fit
 # 180 GB-class devices. First epoch includes ~90 s of torch.compile warmup.
@@ -659,37 +637,6 @@ python src/train.py model=domino_volume dataset=drivaer_ml_volume \
 Note the `+` prefix on `+model.attention_type=...` — Hydra requires `+`
 when the override key isn't already present in the model template (FA
 attention is opt-in, not the default).
-
-#### AB-UPT options
-
-Use the AB-UPT dataset templates shown in the gallery and set `drivaer_ml` in
-`datasets/dataset_paths.yaml` to the directory containing native
-`run_*/domain_*.pdmsh` files with a triangulated `vehicle` boundary and freestream metadata. Surface-only mode
-accepts an empty interior. Joint mode couples both branches; separate modes
-omit the inactive branch. Surface targets are pressure and wall shear stress;
-volume targets are velocity, pressure, and eddy viscosity.
-
-`dataset_reader_overrides.point_sets.<name>.count` controls `geometry`,
-`supernodes`, `surface_anchors`, `volume_anchors`, `surface_queries`, and
-`interior` independently. Validation samples stay fixed while training varies
-by epoch.
-
-Reuse the training run's model settings from `resolved_config.yaml` at inference.
-
-For anchor supervision, set `+model.train_on_anchors=true` and
-`+dataset_reader_overrides.point_sets.surface_queries.indices_from=surface_anchors`
-for the surface branch, and
-`+dataset_reader_overrides.point_sets.interior.indices_from=volume_anchors`
-for the volume branch. Validation and inference still decode independent queries.
-
-Use `null` query counts for full fields with the configured anchor budgets:
-
-```bash
-python src/infer.py model=ab_upt_joint dataset=drivaer_ml_ab_upt_joint \
-    checkpoint_path=/path/to/checkpoints run_id=YOUR_RUN_ID \
-    dataset_reader_overrides.point_sets.surface_queries.count=null \
-    dataset_reader_overrides.point_sets.interior.count=null rescale_geometry=true
-```
 
 ### Dataset config anatomy
 
@@ -870,7 +817,7 @@ TensorBoard / JSONL files; no external tracker required.
 | `src/metrics.py` | `MetricCalculator` — TensorDict-based metrics (relative L1, relative L2, MAE) with optional distributed all-reduce; reports per-field and per-component (x/y/z) metrics for vector fields. `resolve_metrics(cfg)` reads the recipe-side `cfg.metrics`. |
 | `src/output_normalize.py` | `normalize_output_to_tensordict` (Mesh -> `point_data.select`, tensor -> per-target slicing via `split_concat_by_target`) and `require_output_type(cfg)`. Tensorboard-free so the unit tests can import it directly. |
 | `src/forces.py` | Integrated aerodynamic force/moment coefficients from surface predictions. `force_moment_coefficients` integrates the traction `-Cp*n + Cf` over the vehicle via `Mesh.integrate`, projected onto drag/lift/side + roll/pitch/yaw axes; `ForceContext` / `ForceAccumulator` wrap the per-run config + accumulation. |
-| `src/utils.py` | Shared helpers: `build_muon_optimizer` (Muon+AdamW via `CombinedOptimizer`), `build_optimizer` (optional Hydra optimizer), `optimizer_update` (AMP, clipping, and EMA coordination), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
+| `src/utils.py` | Shared helpers: `build_muon_optimizer` (Muon+AdamW via `CombinedOptimizer`), `field_dim`, `align_scalar_shapes`, `validate_field_coverage`, `set_seed`, plus the cross-cutting runtime helpers `get_autocast_context` (+ `Precision`), `recursive_to_device`, `resolve_dict`, and `make_jsonl_logger`. |
 | `src/train.py` | Training loop with DDP, mixed precision, checkpointing, TensorBoard + JSONL logging, I/O benchmarking (`benchmark_io=true`), and profiling. (Dataloader assembly now lives in `datasets.build_dataloaders`.) |
 | `src/infer.py` | Inference companion: loads a checkpoint, runs a split, writes physical-unit predictions back as native `.pdmsh` `DomainMesh`es, reports training-space metrics, and (surface cases) integrated CD/CL/CM force coefficients. Imports nothing from `train.py`. |
 

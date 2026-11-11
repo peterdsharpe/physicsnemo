@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Single-branch AB-UPT ablation; the inactive stream is not constructed.
+# Surface-only AB-UPT; the volume stream is not constructed.
 input_type: tensors
 output_type: tensors
 compile: false
@@ -26,14 +26,14 @@ dataset_reader_overrides:
     geometry: {count: 65536}
     supernodes: {count: 16384}
     surface_anchors: {count: 16384}
-    surface_queries: {count: "${sampling_resolution}"}
+    interior: {count: "${sampling_resolution}"}
 
 forward_kwargs:
   geometry: boundaries.geometry.points
   supernodes: boundaries.supernodes.points
   surface_anchors: boundaries.surface_anchors.points
   parameters: global_data.U_inf
-  surface_queries: boundaries.surface_queries.points
+  surface_queries: interior.points
 
 model:
   _target_: physicsnemo.experimental.models.ab_upt.ABUPT
@@ -45,7 +45,7 @@ model:
   num_interaction_blocks: 2
   num_shared_layers: 1
   num_decoder_layers: 6
-  pooling_radius: 0.25
+  pooling_radius: 0.03125
   pooling_chunk_size: 4096
   pooling_message_fp32: false
   query_chunk_size: 4096
