@@ -35,3 +35,10 @@ WarmupCosine
 .. autoclass:: physicsnemo.optim.lr_scheduler.WarmupCosine
     :members:
     :show-inheritance:
+
+ModelEMA
+--------
+
+.. autoclass:: physicsnemo.optim.ModelEMA
+    :members:
+    :show-inheritance:

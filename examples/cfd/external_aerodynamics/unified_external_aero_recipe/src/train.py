@@ -52,7 +52,6 @@ from tabulate import tabulate
 from tensordict import TensorDict
 from torch.amp import GradScaler
 from torch.utils.tensorboard import SummaryWriter
-from training_state import ModelEMA, optimizer_update
 from utils import (
     FieldType,
     Phase,
@@ -61,6 +60,7 @@ from utils import (
     build_optimizer,
     get_autocast_context,
     make_jsonl_logger,
+    optimizer_update,
     recursive_to_device,
     resolve_dict,
     set_seed,
@@ -71,6 +71,7 @@ from physicsnemo.datapipes import DataLoader
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.domain_parallel import sync_module_over_mesh
 from physicsnemo.mesh import MESH_FIELD_ASSOCIATIONS, DomainMesh, Mesh
+from physicsnemo.optim import ModelEMA
 from physicsnemo.utils import load_checkpoint, save_checkpoint
 from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 from physicsnemo.utils.profiling import Profiler, profile

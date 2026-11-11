@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Optional clipping and checkpointable EMA; disabled in existing recipes."""
+"""Checkpointable exponential moving averages of model parameters."""
 
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
@@ -29,10 +29,22 @@ import torch
 class ModelEMA:
     """Average parameters after successful updates; copy the latest buffers.
 
-    Keep the original module, before DDP or compilation, so checkpoint keys
-    do not depend on wrappers. Parameter accumulators use at least float32.
-    Validation temporarily copies the average into existing parameter storage,
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Module to average. Pass the original module before DDP or compilation
+        so parameter names are independent of wrappers. Construct the average
+        after moving the model to its training device.
+    decay : float
+        Exponential decay coefficient in [0, 1).
+
+    Notes
+    -----
+    Call ``update()`` after successful optimizer updates. Parameters accumulate
+    in at least float32; buffers are copied from the latest model state.
+    ``average_parameters()`` temporarily copies averages into existing storage,
     preserving optimizer references, then restores raw weights even on error.
+    Save and restore ``state_dict()`` alongside the model and optimizer state.
     """
 
     def __init__(self, model: torch.nn.Module, decay: float):
@@ -111,46 +123,3 @@ class ModelEMA:
             with torch.no_grad():
                 for name, value in live.items():
                     value.copy_(backup[name])
-
-
-def optimizer_update(
-    loss: torch.Tensor,
-    optimizer: torch.optim.Optimizer,
-    parameters: Iterable[torch.nn.Parameter],
-    *,
-    scaler: Any | None = None,
-    grad_clip_norm: float | None = None,
-    ema: ModelEMA | None = None,
-) -> bool:
-    """Backpropagate, optionally clip unscaled gradients, and report updates.
-
-    AMP overflow skips both EMA and per-update scheduler advancement. The
-    caller advances the scheduler only when this function returns True.
-    """
-    if grad_clip_norm is not None and (
-        isinstance(grad_clip_norm, bool)
-        or not math.isfinite(grad_clip_norm)
-        or grad_clip_norm <= 0
-    ):
-        raise ValueError("grad_clip_norm must be finite and positive")
-    optimizer.zero_grad()
-    if scaler is not None:
-        previous_scale = scaler.get_scale()
-        scaler.scale(loss).backward()
-        if grad_clip_norm is not None:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(parameters, grad_clip_norm)
-        scaler.step(optimizer)
-        scaler.update()
-        updated = scaler.get_scale() >= previous_scale
-    else:
-        loss.backward()
-        if grad_clip_norm is not None:
-            torch.nn.utils.clip_grad_norm_(
-                parameters, grad_clip_norm, error_if_nonfinite=True
-            )
-        optimizer.step()
-        updated = True
-    if updated and ema is not None:
-        ema.update()
-    return updated

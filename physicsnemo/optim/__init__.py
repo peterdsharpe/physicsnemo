@@ -17,7 +17,8 @@
 """Optimizer utilities for PhysicsNeMo."""
 
 from physicsnemo.optim.combined_optimizer import CombinedOptimizer
+from physicsnemo.optim.ema import ModelEMA
 from physicsnemo.optim.lion import Lion
 from physicsnemo.optim.muon import Muon
 
-__all__ = ["CombinedOptimizer", "Lion", "Muon"]
+__all__ = ["CombinedOptimizer", "Lion", "ModelEMA", "Muon"]

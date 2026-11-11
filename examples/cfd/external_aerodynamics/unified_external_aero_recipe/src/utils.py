@@ -19,8 +19,9 @@
 from __future__ import annotations
 
 import json
+import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,7 +38,7 @@ from torch.amp import autocast
 from physicsnemo.datapipes.keys import as_nested_key
 from physicsnemo.distributed import DistributedManager
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.optim import CombinedOptimizer, Muon
+from physicsnemo.optim import CombinedOptimizer, ModelEMA, Muon
 
 if TYPE_CHECKING:
     from torch.distributed.device_mesh import DeviceMesh
@@ -108,6 +109,49 @@ def build_optimizer(
     if compile_optimizer:
         _compile_optimizer_step(optimizer)
     return optimizer
+
+
+def optimizer_update(
+    loss: torch.Tensor,
+    optimizer: torch.optim.Optimizer,
+    parameters: Iterable[torch.nn.Parameter],
+    *,
+    scaler: Any | None = None,
+    grad_clip_norm: float | None = None,
+    ema: ModelEMA | None = None,
+) -> bool:
+    """Backpropagate, optionally clip unscaled gradients, and report updates.
+
+    AMP overflow skips both EMA and per-update scheduler advancement. The
+    caller advances the scheduler only when this function returns True.
+    """
+    if grad_clip_norm is not None and (
+        isinstance(grad_clip_norm, bool)
+        or not math.isfinite(grad_clip_norm)
+        or grad_clip_norm <= 0
+    ):
+        raise ValueError("grad_clip_norm must be finite and positive")
+    optimizer.zero_grad()
+    if scaler is not None:
+        previous_scale = scaler.get_scale()
+        scaler.scale(loss).backward()
+        if grad_clip_norm is not None:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(parameters, grad_clip_norm)
+        scaler.step(optimizer)
+        scaler.update()
+        updated = scaler.get_scale() >= previous_scale
+    else:
+        loss.backward()
+        if grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(
+                parameters, grad_clip_norm, error_if_nonfinite=True
+            )
+        optimizer.step()
+        updated = True
+    if updated and ema is not None:
+        ema.update()
+    return updated
 
 
 def _compile_optimizer_step(optimizer: torch.optim.Optimizer) -> None:
